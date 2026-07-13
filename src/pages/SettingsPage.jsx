@@ -1,0 +1,381 @@
+import { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useData } from '../context/DataContext';
+import { useToast } from '../components/ui/Toast';
+import ColorPicker from '../components/ui/ColorPicker';
+import Badge from '../components/ui/Badge';
+import { ensureFreshToken, fetchConnectedEmail, disconnectGmail } from '../lib/gmail/gisClient';
+
+const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
+const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
+
+const TABS = [
+  { id: 'user', label: 'User Info' },
+  { id: 'business', label: 'Business Info' },
+  { id: 'email', label: 'Email' },
+  { id: 'fields', label: 'Custom Fields' },
+];
+
+export default function SettingsPage() {
+  const [tab, setTab] = useState('user');
+
+  return (
+    <div>
+      <h2 className="text-2xl font-bold text-slate-800 mb-4">Settings</h2>
+      <div className="flex border-b border-slate-200 mb-6">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px ${
+              tab === t.id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'user' && <UserInfoTab />}
+      {tab === 'business' && <BusinessInfoTab />}
+      {tab === 'email' && <EmailTab />}
+      {tab === 'fields' && <CustomFieldsTab />}
+    </div>
+  );
+}
+
+function UserInfoTab() {
+  const { currentUser, updateCurrentUser, changePassword } = useAuth();
+  const { showToast } = useToast();
+  const [firstName, setFirstName] = useState(currentUser.firstName);
+  const [lastName, setLastName] = useState(currentUser.lastName);
+  const [email, setEmail] = useState(currentUser.email);
+  const [phone, setPhone] = useState(currentUser.phone);
+
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [pwError, setPwError] = useState('');
+
+  function handleSaveProfile(e) {
+    e.preventDefault();
+    updateCurrentUser({ firstName, lastName, email: email.trim().toLowerCase(), phone });
+    showToast('Profile updated');
+  }
+
+  function handleChangePassword(e) {
+    e.preventDefault();
+    setPwError('');
+    if (newPassword !== confirmPassword) {
+      setPwError('New passwords do not match.');
+      return;
+    }
+    if (newPassword.length < 4) {
+      setPwError('New password is too short.');
+      return;
+    }
+    const result = changePassword({ currentPassword, newPassword });
+    if (!result.ok) {
+      setPwError(result.error);
+      return;
+    }
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    showToast('Password updated');
+  }
+
+  return (
+    <div className="max-w-lg space-y-8">
+      <form onSubmit={handleSaveProfile} className="space-y-3">
+        <h3 className="text-sm font-bold text-slate-700">Profile</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelClass}>First Name</label>
+            <input value={firstName} onChange={(e) => setFirstName(e.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <label className={labelClass}>Last Name</label>
+            <input value={lastName} onChange={(e) => setLastName(e.target.value)} className={inputClass} />
+          </div>
+        </div>
+        <div>
+          <label className={labelClass}>Email</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass}>Phone</label>
+          <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClass} />
+        </div>
+        <button type="submit" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
+          Save Profile
+        </button>
+      </form>
+
+      <form onSubmit={handleChangePassword} className="space-y-3 pt-6 border-t border-slate-100">
+        <h3 className="text-sm font-bold text-slate-700">Change Password</h3>
+        {pwError && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{pwError}</div>}
+        {currentUser.authProvider === 'password' && (
+          <input type="password" placeholder="Current password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className={inputClass} />
+        )}
+        <input type="password" placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className={inputClass} />
+        <input type="password" placeholder="Confirm new password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className={inputClass} />
+        <button type="submit" className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+          Update Password
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function BusinessInfoTab() {
+  const { currentUser, updateCurrentUser } = useAuth();
+  const { showToast } = useToast();
+  const [form, setForm] = useState({ ...currentUser.businessInfo });
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    updateCurrentUser({ businessInfo: form });
+    showToast('Business info saved');
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="max-w-lg space-y-3">
+      <div>
+        <label className={labelClass}>Business Name</label>
+        <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className={inputClass} />
+      </div>
+      <div>
+        <label className={labelClass}>Business Address</label>
+        <input value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} className={inputClass} />
+      </div>
+      <div>
+        <label className={labelClass}>Business Phone</label>
+        <input type="tel" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className={inputClass} />
+      </div>
+      <div>
+        <label className={labelClass}>Business Email</label>
+        <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className={inputClass} />
+      </div>
+      <button type="submit" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
+        Save Business Info
+      </button>
+    </form>
+  );
+}
+
+function EmailTab() {
+  const { currentUser, updateCurrentUser } = useAuth();
+  const { showToast } = useToast();
+  const [connecting, setConnecting] = useState(false);
+  const connection = currentUser.emailConnection;
+
+  async function handleConnect() {
+    setConnecting(true);
+    try {
+      const token = await ensureFreshToken({ interactive: true });
+      const email = await fetchConnectedEmail(token);
+      updateCurrentUser({ emailConnection: { connected: true, email } });
+      showToast('Google account connected');
+    } catch (err) {
+      showToast(err.message || 'Could not connect Google account', 'error');
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  function handleDisconnect() {
+    disconnectGmail();
+    updateCurrentUser({ emailConnection: { connected: false, email: '' } });
+    showToast('Google account disconnected');
+  }
+
+  return (
+    <div className="max-w-lg space-y-4">
+      <h3 className="text-sm font-bold text-slate-700">Send Emails As You</h3>
+      <p className="text-sm text-slate-500">
+        Connect a Google account so outreach and confirmation emails to contractors can be sent from your own address.
+      </p>
+      <div className="flex items-center justify-between border border-slate-200 rounded-xl px-4 py-3">
+        <div>
+          <div className="text-sm font-medium text-slate-700">
+            {connection.connected ? connection.email : 'Not connected'}
+          </div>
+          <div className="text-xs text-slate-400">
+            {connection.connected ? 'Connected via Google' : 'No account connected yet'}
+          </div>
+        </div>
+        {connection.connected ? (
+          <button type="button" onClick={handleDisconnect} className="px-3 py-1.5 rounded-lg border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+            Disconnect
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleConnect}
+            disabled={connecting}
+            className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
+          >
+            {connecting && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
+            Connect Google Account
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CustomFieldsTab() {
+  return (
+    <div className="space-y-10 max-w-2xl">
+      <SimpleListField title="Contractor Types" />
+      <EventTypeListField />
+      <ColorStatusListField title="Event Statuses" />
+      <InquiryStatusListField />
+    </div>
+  );
+}
+
+function SimpleListField({ title }) {
+  const { contractorTypes, addContractorType, removeContractorType } = useData();
+  const [value, setValue] = useState('');
+
+  function handleAdd(e) {
+    e.preventDefault();
+    if (!value.trim()) return;
+    addContractorType(value);
+    setValue('');
+  }
+
+  return (
+    <div>
+      <h3 className="text-sm font-bold text-slate-700 mb-2">{title}</h3>
+      <div className="flex flex-wrap gap-2 mb-3">
+        {contractorTypes.map((t) => (
+          <span key={t} className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-medium">
+            {t}
+            <button type="button" onClick={() => removeContractorType(t)} className="text-slate-400 hover:text-red-600 px-1" aria-label={`Remove ${t}`}>✕</button>
+          </span>
+        ))}
+      </div>
+      <form onSubmit={handleAdd} className="flex gap-2 max-w-sm">
+        <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="New contractor type" className={inputClass} />
+        <button type="submit" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">Add</button>
+      </form>
+    </div>
+  );
+}
+
+function EventTypeListField() {
+  const { eventTypes, addEventType, removeEventType } = useData();
+  const [value, setValue] = useState('');
+
+  function handleAdd(e) {
+    e.preventDefault();
+    if (!value.trim()) return;
+    addEventType(value);
+    setValue('');
+  }
+
+  return (
+    <div>
+      <h3 className="text-sm font-bold text-slate-700 mb-2">Event Types</h3>
+      <div className="flex flex-wrap gap-2 mb-3">
+        {eventTypes.map((t) => (
+          <span key={t} className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-medium">
+            {t}
+            <button type="button" onClick={() => removeEventType(t)} className="text-slate-400 hover:text-red-600 px-1" aria-label={`Remove ${t}`}>✕</button>
+          </span>
+        ))}
+      </div>
+      <form onSubmit={handleAdd} className="flex gap-2 max-w-sm">
+        <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="New event type" className={inputClass} />
+        <button type="submit" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">Add</button>
+      </form>
+    </div>
+  );
+}
+
+function ColorStatusListField({ title }) {
+  const { eventStatuses, addEventStatus, updateEventStatus, removeEventStatus } = useData();
+  const [label, setLabel] = useState('');
+  const [color, setColor] = useState('#6366f1');
+
+  function handleAdd(e) {
+    e.preventDefault();
+    if (!label.trim()) return;
+    addEventStatus({ label: label.trim(), color });
+    setLabel('');
+  }
+
+  return (
+    <div>
+      <h3 className="text-sm font-bold text-slate-700 mb-2">{title}</h3>
+      <div className="space-y-2 mb-3">
+        {eventStatuses.map((s) => (
+          <div key={s.id} className="flex items-center gap-3 border border-slate-200 rounded-lg px-3 py-2">
+            <Badge color={s.color}>{s.label}</Badge>
+            <div className="flex-1">
+              <ColorPicker value={s.color} onChange={(c) => updateEventStatus(s.id, { color: c })} />
+            </div>
+            <button type="button" onClick={() => removeEventStatus(s.id)} className="text-slate-400 hover:text-red-600 px-1" aria-label={`Remove ${s.label}`}>✕</button>
+          </div>
+        ))}
+      </div>
+      <form onSubmit={handleAdd} className="flex flex-col gap-2 max-w-sm">
+        <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="New event status" className={inputClass} />
+        <ColorPicker value={color} onChange={setColor} />
+        <button type="submit" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 self-start">Add Status</button>
+      </form>
+    </div>
+  );
+}
+
+function InquiryStatusListField() {
+  const { inquiryStatuses, addInquiryStatus, updateInquiryStatus, removeInquiryStatus } = useData();
+  const [label, setLabel] = useState('');
+  const [color, setColor] = useState('#6366f1');
+  const [isConfirmed, setIsConfirmed] = useState(false);
+
+  function handleAdd(e) {
+    e.preventDefault();
+    if (!label.trim()) return;
+    addInquiryStatus({ label: label.trim(), color, isConfirmed });
+    setLabel('');
+    setIsConfirmed(false);
+  }
+
+  return (
+    <div>
+      <h3 className="text-sm font-bold text-slate-700 mb-1">Contractor "Inquiry Status"</h3>
+      <p className="text-xs text-slate-400 mb-2">
+        Tracks the response after a contractor is contacted about a gig. Statuses marked "counts as confirmed" mark an event's vendor status Confirmed once every contractor on it reaches one.
+      </p>
+      <div className="space-y-2 mb-3">
+        {inquiryStatuses.map((s) => (
+          <div key={s.id} className="flex items-center gap-3 border border-slate-200 rounded-lg px-3 py-2">
+            <Badge color={s.color}>{s.label}</Badge>
+            <div className="flex-1">
+              <ColorPicker value={s.color} onChange={(c) => updateInquiryStatus(s.id, { color: c })} />
+            </div>
+            <label className="flex items-center gap-1.5 text-xs text-slate-500 whitespace-nowrap">
+              <input type="checkbox" checked={!!s.isConfirmed} onChange={(e) => updateInquiryStatus(s.id, { isConfirmed: e.target.checked })} />
+              Counts as confirmed
+            </label>
+            <button type="button" onClick={() => removeInquiryStatus(s.id)} className="text-slate-400 hover:text-red-600 px-1" aria-label={`Remove ${s.label}`}>✕</button>
+          </div>
+        ))}
+      </div>
+      <form onSubmit={handleAdd} className="flex flex-col gap-2 max-w-sm">
+        <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="New inquiry status" className={inputClass} />
+        <ColorPicker value={color} onChange={setColor} />
+        <label className="flex items-center gap-1.5 text-xs text-slate-500">
+          <input type="checkbox" checked={isConfirmed} onChange={(e) => setIsConfirmed(e.target.checked)} />
+          Counts as confirmed
+        </label>
+        <button type="submit" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 self-start">Add Status</button>
+      </form>
+    </div>
+  );
+}
