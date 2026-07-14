@@ -4,7 +4,6 @@ import { useData } from '../context/DataContext';
 import { useToast } from '../components/ui/Toast';
 import ColorPicker from '../components/ui/ColorPicker';
 import Badge from '../components/ui/Badge';
-import { ensureFreshToken, fetchConnectedEmail, disconnectGmail } from '../lib/gmail/gisClient';
 import UsersTab from './settings/UsersTab';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -16,7 +15,6 @@ export default function SettingsPage() {
   const TABS = [
     { id: 'user', label: 'User Info' },
     { id: 'business', label: 'Business Info' },
-    { id: 'email', label: 'Email' },
     { id: 'fields', label: 'Custom Fields' },
     ...(isAdminOrOwner ? [{ id: 'users', label: 'Users' }] : []),
   ];
@@ -42,7 +40,6 @@ export default function SettingsPage() {
 
       {tab === 'user' && <UserInfoTab />}
       {tab === 'business' && <BusinessInfoTab />}
-      {tab === 'email' && <EmailTab />}
       {tab === 'fields' && <CustomFieldsTab />}
       {tab === 'users' && isAdminOrOwner && <UsersTab />}
     </div>
@@ -165,67 +162,6 @@ function BusinessInfoTab() {
         Save Business Info
       </button>
     </form>
-  );
-}
-
-function EmailTab() {
-  const { currentUser, updateCurrentUser } = useAuth();
-  const { showToast } = useToast();
-  const [connecting, setConnecting] = useState(false);
-  const connection = currentUser.emailConnection;
-
-  async function handleConnect() {
-    setConnecting(true);
-    try {
-      const token = await ensureFreshToken({ interactive: true });
-      const email = await fetchConnectedEmail(token);
-      updateCurrentUser({ emailConnection: { connected: true, email } });
-      showToast('Google account connected');
-    } catch (err) {
-      showToast(err.message || 'Could not connect Google account', 'error');
-    } finally {
-      setConnecting(false);
-    }
-  }
-
-  function handleDisconnect() {
-    disconnectGmail();
-    updateCurrentUser({ emailConnection: { connected: false, email: '' } });
-    showToast('Google account disconnected');
-  }
-
-  return (
-    <div className="max-w-lg space-y-4">
-      <h3 className="text-sm font-bold text-slate-700">Send Emails As You</h3>
-      <p className="text-sm text-slate-500">
-        Connect a Google account so outreach and confirmation emails to contractors can be sent from your own address.
-      </p>
-      <div className="flex items-center justify-between border border-slate-200 rounded-xl px-4 py-3">
-        <div>
-          <div className="text-sm font-medium text-slate-700">
-            {connection.connected ? connection.email : 'Not connected'}
-          </div>
-          <div className="text-xs text-slate-400">
-            {connection.connected ? 'Connected via Google' : 'No account connected yet'}
-          </div>
-        </div>
-        {connection.connected ? (
-          <button type="button" onClick={handleDisconnect} className="px-3 py-1.5 rounded-lg border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50">
-            Disconnect
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={handleConnect}
-            disabled={connecting}
-            className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
-          >
-            {connecting && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
-            Connect Google Account
-          </button>
-        )}
-      </div>
-    </div>
   );
 }
 

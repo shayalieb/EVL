@@ -5,7 +5,7 @@ import ContractorModal from '../components/ContractorModal';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/Toast';
-import { sendEmail } from '../lib/gmail/sendEmail';
+import { sendEmail } from '../lib/email/sendEmail';
 import { renderEmailTemplate } from '../lib/mergeFields';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -48,7 +48,7 @@ export default function EventFormPage() {
     events, eventTypes, addEventType, eventStatuses, inquiryStatuses, emailTemplates,
     contractors, clients, addEvent, updateEvent, computeDurationHours,
   } = useData();
-  const { can } = useAuth();
+  const { can, currentUser } = useAuth();
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -138,7 +138,13 @@ export default function EventFormPage() {
     const template = emailTemplates.find((t) => t.id === templateId);
     if (!contractor || !template) return;
     const rendered = renderEmailTemplate({ template, event: form, contractor });
-    await sendEmail({ to: contractor.email, subject: rendered.subject, bodyText: rendered.body });
+    await sendEmail({
+      to: contractor.email,
+      subject: rendered.subject,
+      bodyText: rendered.body,
+      fromName: currentUser.businessInfo?.name || `${currentUser.firstName} ${currentUser.lastName}`,
+      replyTo: currentUser.businessInfo?.email || currentUser.email,
+    });
     const emailedStatus = inquiryStatuses.find((s) => s.label === 'Emailed');
     if (emailedStatus) changeBookingStatus(contractor.id, emailedStatus.id);
   }

@@ -6,6 +6,7 @@ import { PrismaSessionStore } from '@quixo3/prisma-session-store';
 import { prisma } from './lib/prisma.js';
 import authRouter from './routes/auth.js';
 import teamRouter from './routes/team.js';
+import emailRouter from './routes/email.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -45,6 +46,7 @@ app.use(session({
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRouter);
 app.use('/api/team', teamRouter);
+app.use('/api/email', emailRouter);
 
 app.use((err, req, res, next) => {
   if (res.headersSent) return next(err);
