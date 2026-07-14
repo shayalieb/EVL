@@ -4,6 +4,7 @@ import { DataProvider } from './context/DataContext';
 import { ToastProvider } from './components/ui/Toast';
 import AuthPage from './pages/AuthPage';
 import AppLayout from './layouts/AppLayout';
+import HomePage from './pages/HomePage';
 import ContractorsPage from './pages/ContractorsPage';
 import ClientsPage from './pages/ClientsPage';
 import EventsPage from './pages/EventsPage';
@@ -25,7 +26,7 @@ function ProtectedArea() {
 function AuthGate({ children }) {
   const { currentUser, authLoading } = useAuth();
   if (authLoading) return null;
-  if (currentUser) return <Navigate to="/contractors" replace />;
+  if (currentUser) return <Navigate to="/home" replace />;
   return children;
 }
 
@@ -34,7 +35,8 @@ function AppRoutes() {
     <Routes>
       <Route path="/auth" element={<AuthGate><AuthPage /></AuthGate>} />
       <Route path="/" element={<ProtectedArea />}>
-        <Route index element={<Navigate to="/contractors" replace />} />
+        <Route index element={<Navigate to="/home" replace />} />
+        <Route path="home" element={<HomePage />} />
         <Route path="contractors" element={<ContractorsPage />} />
         <Route path="clients" element={<ClientsPage />} />
         <Route path="events" element={<EventsPage />} />

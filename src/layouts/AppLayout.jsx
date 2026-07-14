@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Logo from '../components/ui/Logo';
 
 const NAV_ITEMS = [
+  { to: '/home', label: 'Home', icon: '🏠' },
   { to: '/clients', label: 'Clients', icon: '👤' },
   { to: '/events', label: 'Events', icon: '📅' },
   { to: '/contractors', label: 'Contractors', icon: '🎧' },
@@ -36,9 +37,9 @@ export default function AppLayout() {
           >
             ☰
           </button>
-          <div className="flex items-center gap-2">
+          <Link to="/home" className="flex items-center gap-2">
             <Logo className="h-14 w-auto" />
-          </div>
+          </Link>
         </div>
 
         <div className="hidden sm:block text-lg font-bold text-slate-500">
