@@ -32,7 +32,10 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    sameSite: 'lax',
+    // Frontend and backend are always on different origins, so the session
+    // cookie needs SameSite=None to survive cross-site fetch() calls —
+    // which in turn requires Secure, hence gating both on NODE_ENV.
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     secure: process.env.NODE_ENV === 'production',
     maxAge: 7 * 24 * 60 * 60 * 1000,
   },
