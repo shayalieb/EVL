@@ -89,6 +89,40 @@ export function buildSeedUserData() {
     },
   ];
 
+  const cl1 = uid('cli');
+  const cl2 = uid('cli');
+
+  const clients = [
+    {
+      id: cl1,
+      firstName: 'Harper',
+      lastName: 'Morgan',
+      phone: '(512) 555-0199',
+      email: 'harper.morgan@example.com',
+      address1: '410 Willow Creek Dr',
+      address2: '',
+      city: 'Austin',
+      state: 'TX',
+      zip: '78704',
+      notes: 'Prefers text over email for last-minute updates.',
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: cl2,
+      firstName: 'Priya',
+      lastName: 'Shah',
+      phone: '(512) 555-0164',
+      email: 'events@riversidecorp.example',
+      address1: '88 Riverside Ave',
+      address2: 'Suite 300',
+      city: 'Austin',
+      state: 'TX',
+      zip: '78701',
+      notes: '',
+      createdAt: new Date().toISOString(),
+    },
+  ];
+
   const sampleDate = new Date();
   sampleDate.setDate(sampleDate.getDate() + 21);
 
@@ -105,6 +139,7 @@ export function buildSeedUserData() {
       startTime: '17:00',
       endTime: '23:00',
       eventStatus: eventStatuses[1].id,
+      clientId: cl1,
       contractorBookings: [
         { contractorId: c1, inquiryStatusId: inquiryStatuses[3].id },
         { contractorId: c2, inquiryStatusId: inquiryStatuses[1].id },
@@ -113,5 +148,5 @@ export function buildSeedUserData() {
     },
   ];
 
-  return { contractorTypes, eventTypes, eventStatuses, inquiryStatuses, emailTemplates, contractors, events };
+  return { contractorTypes, eventTypes, eventStatuses, inquiryStatuses, emailTemplates, contractors, clients, events };
 }

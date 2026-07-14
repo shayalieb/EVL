@@ -1,162 +1,139 @@
-import { createContext, useCallback, useContext, useState } from 'react';
-import { loadDB, saveDB, getSession, setSession, clearSession, uid } from '../lib/storage';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { loadUserData, saveUserData } from '../lib/storage';
 import { buildSeedUserData } from '../lib/seed';
 
+const API_BASE = import.meta.env.VITE_API_BASE;
 const AuthContext = createContext(null);
 
-// Prototype-only obfuscation, not real cryptography.
-function simpleHash(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = (Math.imul(31, hash) + str.charCodeAt(i)) | 0;
+async function apiFetch(path, options = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    ...options,
+  });
+  let body = null;
+  try {
+    body = await res.json();
+  } catch {
+    // empty body, fine
   }
-  return String(hash);
+  if (!res.ok) throw new Error(body?.error || 'Something went wrong. Please try again.');
+  return body;
 }
 
-function newUserRecord({ firstName, lastName, email, phone, passwordHash, authProvider, googleId }) {
+function seedBlob(profile) {
   return {
-    id: uid('user'),
-    firstName,
-    lastName,
-    email,
-    phone: phone || '',
-    passwordHash: passwordHash || null,
-    authProvider,
-    googleId: googleId || null,
+    firstName: profile.firstName,
+    lastName: profile.lastName,
+    phone: profile.phone || '',
     businessInfo: { name: '', address: '', phone: '', email: '' },
     emailConnection: { connected: false, email: '' },
-    createdAt: new Date().toISOString(),
     ...buildSeedUserData(),
   };
 }
 
 export function AuthProvider({ children }) {
-  const [db, setDb] = useState(() => loadDB());
-  const [session, setSessionState] = useState(() => getSession());
-  // Holds a fake Google profile between "Continue with Google" and the
-  // complete-profile step, so we don't create the user until that's filled in.
-  const [pendingGoogleProfile, setPendingGoogleProfile] = useState(null);
+  const [serverUser, setServerUser] = useState(null);
+  const [localBlob, setLocalBlob] = useState(null);
   const [authError, setAuthError] = useState('');
+  const [authLoading, setAuthLoading] = useState(true);
 
-  const persist = useCallback((nextDb) => {
-    setDb(nextDb);
-    saveDB(nextDb);
+  const hydrate = useCallback((user) => {
+    let blob = loadUserData(user.id);
+    if (!blob) {
+      blob = seedBlob(user);
+      saveUserData(user.id, blob);
+    }
+    setServerUser(user);
+    setLocalBlob(blob);
   }, []);
 
-  const currentUser = session ? db.users[session.userId] : null;
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await apiFetch('/auth/me');
+        hydrate(data.user);
+      } catch {
+        setServerUser(null);
+        setLocalBlob(null);
+      } finally {
+        setAuthLoading(false);
+      }
+    })();
+  }, [hydrate]);
 
-  const signUp = useCallback(({ firstName, lastName, email, phone, password }) => {
+  const currentUser = serverUser && localBlob
+    ? { ...localBlob, id: serverUser.id, email: serverUser.email }
+    : null;
+
+  const signUp = useCallback(async ({ firstName, lastName, email, phone, password }) => {
     setAuthError('');
-    const normalizedEmail = email.trim().toLowerCase();
-    const exists = Object.values(db.users).some((u) => u.email === normalizedEmail);
-    if (exists) {
-      setAuthError('An account with that email already exists.');
+    try {
+      const data = await apiFetch('/auth/signup', {
+        method: 'POST',
+        body: JSON.stringify({ firstName, lastName, email: email.trim().toLowerCase(), phone, password }),
+      });
+      hydrate(data.user);
+      return true;
+    } catch (err) {
+      setAuthError(err.message);
       return false;
     }
-    const user = newUserRecord({
-      firstName,
-      lastName,
-      email: normalizedEmail,
-      phone,
-      passwordHash: simpleHash(password),
-      authProvider: 'password',
-    });
-    const nextDb = { ...db, users: { ...db.users, [user.id]: user } };
-    persist(nextDb);
-    setSession(user.id);
-    setSessionState({ userId: user.id });
-    return true;
-  }, [db, persist]);
+  }, [hydrate]);
 
-  const signIn = useCallback(({ email, password }) => {
+  const signIn = useCallback(async ({ email, password }) => {
     setAuthError('');
-    const normalizedEmail = email.trim().toLowerCase();
-    const user = Object.values(db.users).find((u) => u.email === normalizedEmail);
-    if (!user || user.passwordHash !== simpleHash(password)) {
-      setAuthError('Incorrect email or password.');
+    try {
+      const data = await apiFetch('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+      });
+      hydrate(data.user);
+      return true;
+    } catch (err) {
+      setAuthError(err.message);
       return false;
     }
-    setSession(user.id);
-    setSessionState({ userId: user.id });
-    return true;
-  }, [db]);
+  }, [hydrate]);
 
-  // Simulates the Google OAuth round trip: no real network/auth call, just a
-  // short delay returning a fake profile. Existing accounts sign straight in;
-  // new ones go to the complete-profile step to collect a phone number.
-  const startSimulatedGoogleSignIn = useCallback(() => {
-    setAuthError('');
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const fakeProfile = {
-          googleId: 'google-sim-user',
-          firstName: 'Taylor',
-          lastName: 'Morgan',
-          email: 'taylor.morgan@gmail.com',
-        };
-        const existing = Object.values(db.users).find((u) => u.email === fakeProfile.email);
-        if (existing) {
-          setSession(existing.id);
-          setSessionState({ userId: existing.id });
-          resolve({ status: 'signed_in' });
-        } else {
-          setPendingGoogleProfile(fakeProfile);
-          resolve({ status: 'needs_profile', profile: fakeProfile });
-        }
-      }, 700);
-    });
-  }, [db]);
-
-  const completeGoogleProfile = useCallback(({ phone }) => {
-    if (!pendingGoogleProfile) return false;
-    const user = newUserRecord({
-      firstName: pendingGoogleProfile.firstName,
-      lastName: pendingGoogleProfile.lastName,
-      email: pendingGoogleProfile.email,
-      phone,
-      passwordHash: null,
-      authProvider: 'google',
-      googleId: pendingGoogleProfile.googleId,
-    });
-    const nextDb = { ...db, users: { ...db.users, [user.id]: user } };
-    persist(nextDb);
-    setSession(user.id);
-    setSessionState({ userId: user.id });
-    setPendingGoogleProfile(null);
-    return true;
-  }, [db, persist, pendingGoogleProfile]);
-
-  const logout = useCallback(() => {
-    clearSession();
-    setSessionState(null);
+  const logout = useCallback(async () => {
+    try {
+      await apiFetch('/auth/logout', { method: 'POST' });
+    } catch {
+      // best effort — clear local state regardless
+    }
+    setServerUser(null);
+    setLocalBlob(null);
   }, []);
 
   const updateCurrentUser = useCallback((patch) => {
-    if (!currentUser) return;
-    const updated = { ...currentUser, ...patch };
-    persist({ ...db, users: { ...db.users, [currentUser.id]: updated } });
-  }, [currentUser, db, persist]);
+    if (!serverUser || !localBlob) return;
+    // id/email are server-authoritative and not locally patchable.
+    const { id: _id, email: _email, ...safePatch } = patch;
+    const updated = { ...localBlob, ...safePatch };
+    setLocalBlob(updated);
+    saveUserData(serverUser.id, updated);
+  }, [serverUser, localBlob]);
 
-  const changePassword = useCallback(({ currentPassword, newPassword }) => {
-    if (!currentUser) return { ok: false, error: 'Not signed in.' };
-    if (currentUser.authProvider === 'password' && currentUser.passwordHash !== simpleHash(currentPassword)) {
-      return { ok: false, error: 'Current password is incorrect.' };
+  const changePassword = useCallback(async ({ currentPassword, newPassword }) => {
+    if (!serverUser) return { ok: false, error: 'Not signed in.' };
+    try {
+      await apiFetch('/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
     }
-    updateCurrentUser({ passwordHash: simpleHash(newPassword), authProvider: 'password' });
-    return { ok: true };
-  }, [currentUser, updateCurrentUser]);
+  }, [serverUser]);
 
   const value = {
-    db,
-    persist,
-    session,
     currentUser,
     authError,
-    pendingGoogleProfile,
+    authLoading,
     signUp,
     signIn,
-    startSimulatedGoogleSignIn,
-    completeGoogleProfile,
     logout,
     updateCurrentUser,
     changePassword,

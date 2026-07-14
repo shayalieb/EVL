@@ -1,32 +1,25 @@
-const DB_KEY = 'evl_db_v1';
-const SESSION_KEY = 'evl_session_v1';
+const USERDATA_KEY = 'evl_userdata_v1';
 
-export function loadDB() {
+function loadStore() {
   try {
-    return JSON.parse(localStorage.getItem(DB_KEY)) || { users: {} };
+    return JSON.parse(localStorage.getItem(USERDATA_KEY)) || {};
   } catch {
-    return { users: {} };
+    return {};
   }
 }
 
-export function saveDB(db) {
-  localStorage.setItem(DB_KEY, JSON.stringify(db));
+function saveStore(store) {
+  localStorage.setItem(USERDATA_KEY, JSON.stringify(store));
 }
 
-export function getSession() {
-  try {
-    return JSON.parse(localStorage.getItem(SESSION_KEY));
-  } catch {
-    return null;
-  }
+export function loadUserData(userId) {
+  return loadStore()[userId] || null;
 }
 
-export function setSession(userId) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify({ userId }));
-}
-
-export function clearSession() {
-  localStorage.removeItem(SESSION_KEY);
+export function saveUserData(userId, data) {
+  const store = loadStore();
+  store[userId] = data;
+  saveStore(store);
 }
 
 export function uid(prefix = 'id') {

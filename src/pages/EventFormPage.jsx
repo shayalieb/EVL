@@ -31,6 +31,7 @@ function dayOfWeekFromDate(dateStr) {
 function emptyForm() {
   return {
     name: '', eventType: '', eventDate: '', eventDayOfTheWeek: '',
+    clientId: '',
     venue: { name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '' },
     contactPhone: '', contactPhoneExt: '', contactEmail: '',
     startTime: '', endTime: '',
@@ -44,7 +45,7 @@ export default function EventFormPage() {
   const navigate = useNavigate();
   const {
     events, eventTypes, addEventType, eventStatuses, inquiryStatuses, emailTemplates,
-    contractors, addEvent, updateEvent, computeDurationHours,
+    contractors, clients, addEvent, updateEvent, computeDurationHours,
   } = useData();
   const { showToast } = useToast();
 
@@ -71,6 +72,7 @@ export default function EventFormPage() {
       setForm({
         name: event.name, eventType: event.eventType, eventDate: event.eventDate,
         eventDayOfTheWeek: event.eventDayOfTheWeek || dayOfWeekFromDate(event.eventDate),
+        clientId: event.clientId || '',
         venue: { ...event.venue },
         contactPhone: event.contactPhone, contactPhoneExt: event.contactPhoneExt || '', contactEmail: event.contactEmail,
         startTime: event.startTime, endTime: event.endTime,
@@ -283,7 +285,7 @@ export default function EventFormPage() {
           >
             ←
           </button>
-          <h2 className="text-2xl font-bold text-slate-800 truncate">{isEditing ? 'Edit Event' : 'Add Event'}</h2>
+          <h2 className="text-2xl font-bold text-slate-800 truncate">{isEditing ? event.name : 'Add Event'}</h2>
         </div>
         <div className="flex gap-2 shrink-0">
           <button type="button" onClick={() => navigate('/events')} className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">
@@ -314,6 +316,14 @@ export default function EventFormPage() {
               <div>
                 <label className={labelClass}>Event Name *</label>
                 <input required value={form.name} onChange={(e) => update('name', e.target.value)} className={inputClass} />
+              </div>
+
+              <div>
+                <label className={labelClass}>Client</label>
+                <select value={form.clientId} onChange={(e) => update('clientId', e.target.value)} className={inputClass}>
+                  <option value="">No client linked</option>
+                  {clients.map((c) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

@@ -4,7 +4,14 @@ import { useData } from '../context/DataContext';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Tooltip from '../components/ui/Tooltip';
 import Badge from '../components/ui/Badge';
+import Tabs from '../components/ui/Tabs';
 import { useToast } from '../components/ui/Toast';
+import EventsCalendarView from '../components/events/EventsCalendarView';
+
+const VIEW_TABS = [
+  { id: 'list', label: 'List View' },
+  { id: 'calendar', label: 'Calendar View' },
+];
 
 function currency(n) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
@@ -22,6 +29,7 @@ export default function EventsPage() {
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [activeTab, setActiveTab] = useState('list');
 
   function handleDelete() {
     deleteEvent(deleteTarget.id);
@@ -42,6 +50,17 @@ export default function EventsPage() {
         </button>
       </div>
 
+      <div className="mb-4">
+        <Tabs tabs={VIEW_TABS} activeTab={activeTab} onChange={setActiveTab} />
+      </div>
+
+      {activeTab === 'calendar' ? (
+        <EventsCalendarView
+          events={events}
+          eventStatuses={eventStatuses}
+          onSelectEvent={(evt) => navigate(`/events/${evt.id}`)}
+        />
+      ) : (
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -166,6 +185,7 @@ export default function EventsPage() {
           </table>
         </div>
       </div>
+      )}
 
       <ConfirmDialog
         open={!!deleteTarget}

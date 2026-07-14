@@ -6,6 +6,7 @@ const DataContext = createContext(null);
 
 const LIST_FIELDS = {
   contractors: 'contractors',
+  clients: 'clients',
   events: 'events',
   contractorTypes: 'contractorTypes',
   eventTypes: 'eventTypes',
@@ -43,6 +44,28 @@ export function DataProvider({ children }) {
       ...e,
       contractorBookings: e.contractorBookings.filter((b) => b.contractorId !== id),
     })));
+  }, [currentUser, patchList]);
+
+  // ---- Clients ----
+  const addClient = useCallback((client) => {
+    if (!currentUser) return;
+    const record = { id: uid('cli'), createdAt: new Date().toISOString(), ...client };
+    patchList(LIST_FIELDS.clients, [...(currentUser.clients || []), record]);
+    return record;
+  }, [currentUser, patchList]);
+
+  const updateClient = useCallback((id, patch) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.clients, (currentUser.clients || []).map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  }, [currentUser, patchList]);
+
+  const deleteClient = useCallback((id) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.clients, (currentUser.clients || []).filter((c) => c.id !== id));
+    // Unlink this client from any events that referenced it.
+    patchList(LIST_FIELDS.events, currentUser.events.map((e) => (
+      e.clientId === id ? { ...e, clientId: null } : e
+    )));
   }, [currentUser, patchList]);
 
   // ---- Custom field lists (simple string lists) ----
@@ -155,6 +178,19 @@ export function DataProvider({ children }) {
     }, 0);
   }, [getContractorById]);
 
+  const computeClientEventCounts = useCallback((clientId) => {
+    const clientEvents = (currentUser?.events || []).filter((e) => e.clientId === clientId);
+    const counts = { pending: 0, confirmed: 0, declined: 0 };
+    for (const e of clientEvents) {
+      const status = currentUser?.eventStatuses.find((s) => s.id === e.eventStatus);
+      const label = (status?.label || '').toLowerCase();
+      if (label === 'cancelled' || label === 'declined') counts.declined++;
+      else if (label === 'confirmed' || label === 'completed') counts.confirmed++;
+      else counts.pending++;
+    }
+    return counts;
+  }, [currentUser]);
+
   const computeVendorStatus = useCallback((event) => {
     if (!event.contractorBookings.length) return { status: 'none', pending: [], confirmed: [] };
     const pending = [];
@@ -171,6 +207,7 @@ export function DataProvider({ children }) {
 
   const value = useMemo(() => ({
     contractors: currentUser?.contractors || [],
+    clients: currentUser?.clients || [],
     events: currentUser?.events || [],
     contractorTypes: currentUser?.contractorTypes || [],
     eventTypes: currentUser?.eventTypes || [],
@@ -180,6 +217,10 @@ export function DataProvider({ children }) {
     addContractor,
     updateContractor,
     deleteContractor,
+    addClient,
+    updateClient,
+    deleteClient,
+    computeClientEventCounts,
     addContractorType,
     removeContractorType,
     addEventType,
@@ -203,6 +244,7 @@ export function DataProvider({ children }) {
   }), [
     currentUser,
     addContractor, updateContractor, deleteContractor,
+    addClient, updateClient, deleteClient, computeClientEventCounts,
     addContractorType, removeContractorType,
     addEventType, removeEventType,
     addEventStatus, updateEventStatus, removeEventStatus,

@@ -3,16 +3,17 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
 import { ToastProvider } from './components/ui/Toast';
 import AuthPage from './pages/AuthPage';
-import CompleteProfilePage from './pages/CompleteProfilePage';
 import AppLayout from './layouts/AppLayout';
 import ContractorsPage from './pages/ContractorsPage';
+import ClientsPage from './pages/ClientsPage';
 import EventsPage from './pages/EventsPage';
 import EventFormPage from './pages/EventFormPage';
 import EmailTemplatesPage from './pages/EmailTemplatesPage';
 import SettingsPage from './pages/SettingsPage';
 
 function ProtectedArea() {
-  const { currentUser } = useAuth();
+  const { currentUser, authLoading } = useAuth();
+  if (authLoading) return null;
   if (!currentUser) return <Navigate to="/auth" replace />;
   return (
     <DataProvider>
@@ -22,7 +23,8 @@ function ProtectedArea() {
 }
 
 function AuthGate({ children }) {
-  const { currentUser } = useAuth();
+  const { currentUser, authLoading } = useAuth();
+  if (authLoading) return null;
   if (currentUser) return <Navigate to="/contractors" replace />;
   return children;
 }
@@ -31,10 +33,10 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/auth" element={<AuthGate><AuthPage /></AuthGate>} />
-      <Route path="/complete-profile" element={<CompleteProfilePage />} />
       <Route path="/" element={<ProtectedArea />}>
         <Route index element={<Navigate to="/contractors" replace />} />
         <Route path="contractors" element={<ContractorsPage />} />
+        <Route path="clients" element={<ClientsPage />} />
         <Route path="events" element={<EventsPage />} />
         <Route path="events/new" element={<EventFormPage />} />
         <Route path="events/:eventId" element={<EventFormPage />} />

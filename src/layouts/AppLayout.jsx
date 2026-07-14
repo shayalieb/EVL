@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import Logo from '../components/ui/Logo';
 
 const NAV_ITEMS = [
-  { to: '/contractors', label: 'Contractors', icon: '🎧' },
+  { to: '/clients', label: 'Clients', icon: '👤' },
   { to: '/events', label: 'Events', icon: '📅' },
+  { to: '/contractors', label: 'Contractors', icon: '🎧' },
   { to: '/email-templates', label: 'Email Templates', icon: '✉️' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ];
@@ -15,8 +17,8 @@ export default function AppLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const navigate = useNavigate();
 
-  function handleLogout() {
-    logout();
+  async function handleLogout() {
+    await logout();
     navigate('/auth');
   }
 
@@ -24,7 +26,7 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      <header className="h-16 border-b border-slate-200 bg-white flex items-center justify-between px-4 sm:px-6 shrink-0">
+      <header className="h-20 border-b border-slate-200 bg-white flex items-center justify-between px-4 sm:px-6 shrink-0">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -35,9 +37,12 @@ export default function AppLayout() {
             ☰
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white font-bold flex items-center justify-center">E</div>
-            <span className="font-bold text-slate-800">EVL</span>
+            <Logo className="h-14 w-auto" />
           </div>
+        </div>
+
+        <div className="hidden sm:block text-lg font-bold text-slate-500">
+          Event and Gig Management
         </div>
 
         <div className="relative">

@@ -50,7 +50,6 @@ function UserInfoTab() {
   const { showToast } = useToast();
   const [firstName, setFirstName] = useState(currentUser.firstName);
   const [lastName, setLastName] = useState(currentUser.lastName);
-  const [email, setEmail] = useState(currentUser.email);
   const [phone, setPhone] = useState(currentUser.phone);
 
   const [currentPassword, setCurrentPassword] = useState('');
@@ -60,11 +59,11 @@ function UserInfoTab() {
 
   function handleSaveProfile(e) {
     e.preventDefault();
-    updateCurrentUser({ firstName, lastName, email: email.trim().toLowerCase(), phone });
+    updateCurrentUser({ firstName, lastName, phone });
     showToast('Profile updated');
   }
 
-  function handleChangePassword(e) {
+  async function handleChangePassword(e) {
     e.preventDefault();
     setPwError('');
     if (newPassword !== confirmPassword) {
@@ -75,7 +74,7 @@ function UserInfoTab() {
       setPwError('New password is too short.');
       return;
     }
-    const result = changePassword({ currentPassword, newPassword });
+    const result = await changePassword({ currentPassword, newPassword });
     if (!result.ok) {
       setPwError(result.error);
       return;
@@ -102,7 +101,8 @@ function UserInfoTab() {
         </div>
         <div>
           <label className={labelClass}>Email</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
+          <input type="email" value={currentUser.email} disabled className={`${inputClass} bg-slate-50 text-slate-400 cursor-not-allowed`} />
+          <p className="mt-1 text-xs text-slate-400">Email can't be changed yet.</p>
         </div>
         <div>
           <label className={labelClass}>Phone</label>
@@ -116,9 +116,7 @@ function UserInfoTab() {
       <form onSubmit={handleChangePassword} className="space-y-3 pt-6 border-t border-slate-100">
         <h3 className="text-sm font-bold text-slate-700">Change Password</h3>
         {pwError && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{pwError}</div>}
-        {currentUser.authProvider === 'password' && (
-          <input type="password" placeholder="Current password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className={inputClass} />
-        )}
+        <input type="password" placeholder="Current password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className={inputClass} />
         <input type="password" placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className={inputClass} />
         <input type="password" placeholder="Confirm new password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className={inputClass} />
         <button type="submit" className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50">
