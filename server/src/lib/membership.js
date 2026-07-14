@@ -32,8 +32,29 @@ export function effectivePermissions(membership) {
   return sanitizePermissions(membership.permissions);
 }
 
-export function getMembershipWithAccount(userId) {
-  return prisma.membership.findUnique({ where: { userId }, include: { account: true } });
+// Users created before Accounts/Memberships existed have no Membership row.
+// Rather than locking them out, give them an owner Membership on an account
+// of their own the first time they're seen — preserves prior behavior
+// (every existing user effectively owned their own data already).
+export async function getMembershipWithAccount(userId) {
+  const existing = await prisma.membership.findUnique({ where: { userId }, include: { account: true } });
+  if (existing) return existing;
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const account = await tx.account.create({ data: {} });
+      return tx.membership.create({
+        data: { userId, accountId: account.id, role: 'owner', permissions: allPermissions() },
+        include: { account: true },
+      });
+    });
+  } catch (err) {
+    // Concurrent request already created it — just return that one.
+    if (err.code === 'P2002') {
+      return prisma.membership.findUnique({ where: { userId }, include: { account: true } });
+    }
+    throw err;
+  }
 }
 
 export function serializeMembership(membership) {
