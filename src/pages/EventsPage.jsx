@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Tooltip from '../components/ui/Tooltip';
 import Badge from '../components/ui/Badge';
@@ -26,6 +27,8 @@ function formatDateWithWeekday(dateStr) {
 
 export default function EventsPage() {
   const { events, eventStatuses, deleteEvent, computeEventTotalCost, computeVendorStatus, getContractorById } = useData();
+  const { can } = useAuth();
+  const canEdit = can('manageEvents');
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -44,7 +47,8 @@ export default function EventsPage() {
         <button
           type="button"
           onClick={() => navigate('/events/new')}
-          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
+          disabled={!canEdit}
+          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           + Add Event
         </button>
@@ -95,13 +99,17 @@ export default function EventsPage() {
                       {status && <Badge color={status.color}>{status.label}</Badge>}
                     </td>
                     <td className="px-4 py-3 font-medium text-slate-800">
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/events/${evt.id}`)}
-                        className="hover:text-indigo-600 hover:underline text-left"
-                      >
-                        {evt.name}
-                      </button>
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/events/${evt.id}`)}
+                          className="hover:text-indigo-600 hover:underline text-left"
+                        >
+                          {evt.name}
+                        </button>
+                      ) : (
+                        <span>{evt.name}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-slate-600">{formatDateWithWeekday(evt.eventDate)}</td>
                     <td className="px-4 py-3">
@@ -159,24 +167,26 @@ export default function EventsPage() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex justify-end gap-1">
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/events/${evt.id}`)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
-                          aria-label="Edit event"
-                        >
-                          ✎
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteTarget(evt)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
-                          aria-label="Delete event"
-                        >
-                          🗑
-                        </button>
-                      </div>
+                      {canEdit && (
+                        <div className="flex justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/events/${evt.id}`)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                            aria-label="Edit event"
+                          >
+                            ✎
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTarget(evt)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
+                            aria-label="Delete event"
+                          >
+                            🗑
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );

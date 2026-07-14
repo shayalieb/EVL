@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import ContractorPickerRow from '../components/ContractorPickerRow';
 import ContractorModal from '../components/ContractorModal';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/Toast';
 import { sendEmail } from '../lib/gmail/sendEmail';
 import { renderEmailTemplate } from '../lib/mergeFields';
@@ -47,7 +48,12 @@ export default function EventFormPage() {
     events, eventTypes, addEventType, eventStatuses, inquiryStatuses, emailTemplates,
     contractors, clients, addEvent, updateEvent, computeDurationHours,
   } = useData();
+  const { can } = useAuth();
   const { showToast } = useToast();
+
+  useEffect(() => {
+    if (!can('manageEvents')) navigate('/events', { replace: true });
+  }, [can, navigate]);
 
   const isEditing = !!eventId;
   const event = isEditing ? events.find((e) => e.id === eventId) : null;

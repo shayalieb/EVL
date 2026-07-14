@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/Toast';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -91,7 +92,7 @@ function MergeFieldReference() {
   );
 }
 
-function TemplateCard({ template, onSave, onDelete }) {
+function TemplateCard({ template, onSave, onDelete, canEdit }) {
   const { showToast } = useToast();
   const [name, setName] = useState(template.name);
   const [subject, setSubject] = useState(template.subject);
@@ -132,13 +133,15 @@ function TemplateCard({ template, onSave, onDelete }) {
       </div>
 
       <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-        <button
-          type="button"
-          onClick={() => onDelete(template.id)}
-          className="text-sm text-slate-400 hover:text-red-600"
-        >
-          Delete Template
-        </button>
+        {canEdit && (
+          <button
+            type="button"
+            onClick={() => onDelete(template.id)}
+            className="text-sm text-slate-400 hover:text-red-600"
+          >
+            Delete Template
+          </button>
+        )}
         <div className="flex gap-2">
           {dirty && (
             <button
@@ -152,7 +155,7 @@ function TemplateCard({ template, onSave, onDelete }) {
           <button
             type="button"
             onClick={handleSave}
-            disabled={!dirty}
+            disabled={!dirty || !canEdit}
             className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40"
           >
             Save
@@ -165,6 +168,8 @@ function TemplateCard({ template, onSave, onDelete }) {
 
 export default function EmailTemplatesPage() {
   const { emailTemplates, addEmailTemplate, updateEmailTemplate, removeEmailTemplate } = useData();
+  const { can } = useAuth();
+  const canEdit = can('manageEmailTemplates');
   const { showToast } = useToast();
 
   function handleAdd() {
@@ -183,7 +188,8 @@ export default function EmailTemplatesPage() {
         <button
           type="button"
           onClick={handleAdd}
-          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
+          disabled={!canEdit}
+          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           + New Template
         </button>
@@ -209,6 +215,7 @@ export default function EmailTemplatesPage() {
                 template={t}
                 onSave={(patch) => updateEmailTemplate(t.id, patch)}
                 onDelete={handleDelete}
+                canEdit={canEdit}
               />
             ))}
           </div>

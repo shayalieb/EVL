@@ -5,7 +5,7 @@ import { buildSeedUserData } from '../lib/seed';
 const API_BASE = import.meta.env.VITE_API_BASE;
 const AuthContext = createContext(null);
 
-async function apiFetch(path, options = {}) {
+export async function apiFetch(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
@@ -63,7 +63,14 @@ export function AuthProvider({ children }) {
   }, [hydrate]);
 
   const currentUser = serverUser && localBlob
-    ? { ...localBlob, id: serverUser.id, email: serverUser.email }
+    ? {
+        ...localBlob,
+        id: serverUser.id,
+        email: serverUser.email,
+        accountId: serverUser.accountId,
+        role: serverUser.role,
+        permissions: serverUser.permissions,
+      }
     : null;
 
   const signUp = useCallback(async ({ firstName, lastName, email, phone, password }) => {
@@ -108,12 +115,18 @@ export function AuthProvider({ children }) {
 
   const updateCurrentUser = useCallback((patch) => {
     if (!serverUser || !localBlob) return;
-    // id/email are server-authoritative and not locally patchable.
-    const { id: _id, email: _email, ...safePatch } = patch;
+    // id/email/accountId/role/permissions are server-authoritative and not locally patchable.
+    const { id: _id, email: _email, accountId: _accountId, role: _role, permissions: _permissions, ...safePatch } = patch;
     const updated = { ...localBlob, ...safePatch };
     setLocalBlob(updated);
     saveUserData(serverUser.id, updated);
   }, [serverUser, localBlob]);
+
+  const can = useCallback((key) => {
+    if (!serverUser) return false;
+    if (serverUser.role === 'owner' || serverUser.role === 'admin') return true;
+    return !!serverUser.permissions?.[key];
+  }, [serverUser]);
 
   const changePassword = useCallback(async ({ currentPassword, newPassword }) => {
     if (!serverUser) return { ok: false, error: 'Not signed in.' };
@@ -130,6 +143,8 @@ export function AuthProvider({ children }) {
 
   const value = {
     currentUser,
+    role: serverUser?.role ?? null,
+    can,
     authError,
     authLoading,
     signUp,

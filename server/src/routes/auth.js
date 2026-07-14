@@ -3,13 +3,14 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import { allPermissions, getMembershipWithAccount, serializeMembership } from '../lib/membership.js';
 
 const router = Router();
 const SALT_ROUNDS = 12;
 
-function sanitize(user) {
+function sanitize(user, membership) {
   const { passwordHash: _passwordHash, ...safe } = user;
-  return safe;
+  return { ...safe, ...serializeMembership(membership) };
 }
 
 router.post('/signup', asyncHandler(async (req, res) => {
@@ -22,11 +23,18 @@ router.post('/signup', asyncHandler(async (req, res) => {
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
   try {
-    const user = await prisma.user.create({
-      data: { firstName: firstName.trim(), lastName: lastName.trim(), email: normalizedEmail, phone: phone || null, passwordHash },
+    const { user, membership } = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: { firstName: firstName.trim(), lastName: lastName.trim(), email: normalizedEmail, phone: phone || null, passwordHash },
+      });
+      const account = await tx.account.create({ data: {} });
+      const membership = await tx.membership.create({
+        data: { userId: user.id, accountId: account.id, role: 'owner', permissions: allPermissions() },
+      });
+      return { user, membership };
     });
     req.session.userId = user.id;
-    res.status(201).json({ user: sanitize(user) });
+    res.status(201).json({ user: sanitize(user, membership) });
   } catch (err) {
     if (err.code === 'P2002') {
       return res.status(409).json({ error: 'An account with that email already exists.' });
@@ -49,7 +57,8 @@ router.post('/login', asyncHandler(async (req, res) => {
   }
 
   req.session.userId = user.id;
-  res.json({ user: sanitize(user) });
+  const membership = await getMembershipWithAccount(user.id);
+  res.json({ user: sanitize(user, membership) });
 }));
 
 router.post('/logout', (req, res) => {
@@ -67,7 +76,8 @@ router.get('/me', asyncHandler(async (req, res) => {
   if (!user) {
     return res.status(401).json({ error: 'Not authenticated.' });
   }
-  res.json({ user: sanitize(user) });
+  const membership = await getMembershipWithAccount(user.id);
+  res.json({ user: sanitize(user, membership) });
 }));
 
 router.post('/change-password', requireAuth, asyncHandler(async (req, res) => {

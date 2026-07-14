@@ -5,6 +5,7 @@ import { ToastProvider } from './components/ui/Toast';
 import AuthPage from './pages/AuthPage';
 import AppLayout from './layouts/AppLayout';
 import HomePage from './pages/HomePage';
+import NoAccountAccessPage from './pages/NoAccountAccessPage';
 import ContractorsPage from './pages/ContractorsPage';
 import ClientsPage from './pages/ClientsPage';
 import EventsPage from './pages/EventsPage';
@@ -16,6 +17,7 @@ function ProtectedArea() {
   const { currentUser, authLoading } = useAuth();
   if (authLoading) return null;
   if (!currentUser) return <Navigate to="/auth" replace />;
+  if (!currentUser.accountId) return <NoAccountAccessPage />;
   return (
     <DataProvider>
       <AppLayout />

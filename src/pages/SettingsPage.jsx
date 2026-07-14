@@ -5,18 +5,21 @@ import { useToast } from '../components/ui/Toast';
 import ColorPicker from '../components/ui/ColorPicker';
 import Badge from '../components/ui/Badge';
 import { ensureFreshToken, fetchConnectedEmail, disconnectGmail } from '../lib/gmail/gisClient';
+import UsersTab from './settings/UsersTab';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 
-const TABS = [
-  { id: 'user', label: 'User Info' },
-  { id: 'business', label: 'Business Info' },
-  { id: 'email', label: 'Email' },
-  { id: 'fields', label: 'Custom Fields' },
-];
-
 export default function SettingsPage() {
+  const { role } = useAuth();
+  const isAdminOrOwner = role === 'owner' || role === 'admin';
+  const TABS = [
+    { id: 'user', label: 'User Info' },
+    { id: 'business', label: 'Business Info' },
+    { id: 'email', label: 'Email' },
+    { id: 'fields', label: 'Custom Fields' },
+    ...(isAdminOrOwner ? [{ id: 'users', label: 'Users' }] : []),
+  ];
   const [tab, setTab] = useState('user');
 
   return (
@@ -41,6 +44,7 @@ export default function SettingsPage() {
       {tab === 'business' && <BusinessInfoTab />}
       {tab === 'email' && <EmailTab />}
       {tab === 'fields' && <CustomFieldsTab />}
+      {tab === 'users' && isAdminOrOwner && <UsersTab />}
     </div>
   );
 }
@@ -128,7 +132,8 @@ function UserInfoTab() {
 }
 
 function BusinessInfoTab() {
-  const { currentUser, updateCurrentUser } = useAuth();
+  const { currentUser, updateCurrentUser, can } = useAuth();
+  const canEdit = can('manageSettings');
   const { showToast } = useToast();
   const [form, setForm] = useState({ ...currentUser.businessInfo });
 
@@ -156,7 +161,7 @@ function BusinessInfoTab() {
         <label className={labelClass}>Business Email</label>
         <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className={inputClass} />
       </div>
-      <button type="submit" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
+      <button type="submit" disabled={!canEdit} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed">
         Save Business Info
       </button>
     </form>
@@ -225,17 +230,19 @@ function EmailTab() {
 }
 
 function CustomFieldsTab() {
+  const { can } = useAuth();
+  const canEdit = can('manageSettings');
   return (
     <div className="space-y-10 max-w-2xl">
-      <SimpleListField title="Contractor Types" />
-      <EventTypeListField />
-      <ColorStatusListField title="Event Statuses" />
-      <InquiryStatusListField />
+      <SimpleListField title="Contractor Types" canEdit={canEdit} />
+      <EventTypeListField canEdit={canEdit} />
+      <ColorStatusListField title="Event Statuses" canEdit={canEdit} />
+      <InquiryStatusListField canEdit={canEdit} />
     </div>
   );
 }
 
-function SimpleListField({ title }) {
+function SimpleListField({ title, canEdit }) {
   const { contractorTypes, addContractorType, removeContractorType } = useData();
   const [value, setValue] = useState('');
 
@@ -253,19 +260,23 @@ function SimpleListField({ title }) {
         {contractorTypes.map((t) => (
           <span key={t} className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-medium">
             {t}
-            <button type="button" onClick={() => removeContractorType(t)} className="text-slate-400 hover:text-red-600 px-1" aria-label={`Remove ${t}`}>✕</button>
+            {canEdit && (
+              <button type="button" onClick={() => removeContractorType(t)} className="text-slate-400 hover:text-red-600 px-1" aria-label={`Remove ${t}`}>✕</button>
+            )}
           </span>
         ))}
       </div>
-      <form onSubmit={handleAdd} className="flex gap-2 max-w-sm">
-        <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="New contractor type" className={inputClass} />
-        <button type="submit" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">Add</button>
-      </form>
+      {canEdit && (
+        <form onSubmit={handleAdd} className="flex gap-2 max-w-sm">
+          <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="New contractor type" className={inputClass} />
+          <button type="submit" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">Add</button>
+        </form>
+      )}
     </div>
   );
 }
 
-function EventTypeListField() {
+function EventTypeListField({ canEdit }) {
   const { eventTypes, addEventType, removeEventType } = useData();
   const [value, setValue] = useState('');
 
@@ -283,19 +294,23 @@ function EventTypeListField() {
         {eventTypes.map((t) => (
           <span key={t} className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-medium">
             {t}
-            <button type="button" onClick={() => removeEventType(t)} className="text-slate-400 hover:text-red-600 px-1" aria-label={`Remove ${t}`}>✕</button>
+            {canEdit && (
+              <button type="button" onClick={() => removeEventType(t)} className="text-slate-400 hover:text-red-600 px-1" aria-label={`Remove ${t}`}>✕</button>
+            )}
           </span>
         ))}
       </div>
-      <form onSubmit={handleAdd} className="flex gap-2 max-w-sm">
-        <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="New event type" className={inputClass} />
-        <button type="submit" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">Add</button>
-      </form>
+      {canEdit && (
+        <form onSubmit={handleAdd} className="flex gap-2 max-w-sm">
+          <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="New event type" className={inputClass} />
+          <button type="submit" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">Add</button>
+        </form>
+      )}
     </div>
   );
 }
 
-function ColorStatusListField({ title }) {
+function ColorStatusListField({ title, canEdit }) {
   const { eventStatuses, addEventStatus, updateEventStatus, removeEventStatus } = useData();
   const [label, setLabel] = useState('');
   const [color, setColor] = useState('#6366f1');
@@ -317,20 +332,24 @@ function ColorStatusListField({ title }) {
             <div className="flex-1">
               <ColorPicker value={s.color} onChange={(c) => updateEventStatus(s.id, { color: c })} />
             </div>
-            <button type="button" onClick={() => removeEventStatus(s.id)} className="text-slate-400 hover:text-red-600 px-1" aria-label={`Remove ${s.label}`}>✕</button>
+            {canEdit && (
+              <button type="button" onClick={() => removeEventStatus(s.id)} className="text-slate-400 hover:text-red-600 px-1" aria-label={`Remove ${s.label}`}>✕</button>
+            )}
           </div>
         ))}
       </div>
-      <form onSubmit={handleAdd} className="flex flex-col gap-2 max-w-sm">
-        <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="New event status" className={inputClass} />
-        <ColorPicker value={color} onChange={setColor} />
-        <button type="submit" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 self-start">Add Status</button>
-      </form>
+      {canEdit && (
+        <form onSubmit={handleAdd} className="flex flex-col gap-2 max-w-sm">
+          <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="New event status" className={inputClass} />
+          <ColorPicker value={color} onChange={setColor} />
+          <button type="submit" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 self-start">Add Status</button>
+        </form>
+      )}
     </div>
   );
 }
 
-function InquiryStatusListField() {
+function InquiryStatusListField({ canEdit }) {
   const { inquiryStatuses, addInquiryStatus, updateInquiryStatus, removeInquiryStatus } = useData();
   const [label, setLabel] = useState('');
   const [color, setColor] = useState('#6366f1');
@@ -361,19 +380,23 @@ function InquiryStatusListField() {
               <input type="checkbox" checked={!!s.isConfirmed} onChange={(e) => updateInquiryStatus(s.id, { isConfirmed: e.target.checked })} />
               Counts as confirmed
             </label>
-            <button type="button" onClick={() => removeInquiryStatus(s.id)} className="text-slate-400 hover:text-red-600 px-1" aria-label={`Remove ${s.label}`}>✕</button>
+            {canEdit && (
+              <button type="button" onClick={() => removeInquiryStatus(s.id)} className="text-slate-400 hover:text-red-600 px-1" aria-label={`Remove ${s.label}`}>✕</button>
+            )}
           </div>
         ))}
       </div>
-      <form onSubmit={handleAdd} className="flex flex-col gap-2 max-w-sm">
-        <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="New inquiry status" className={inputClass} />
-        <ColorPicker value={color} onChange={setColor} />
-        <label className="flex items-center gap-1.5 text-xs text-slate-500">
-          <input type="checkbox" checked={isConfirmed} onChange={(e) => setIsConfirmed(e.target.checked)} />
-          Counts as confirmed
-        </label>
-        <button type="submit" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 self-start">Add Status</button>
-      </form>
+      {canEdit && (
+        <form onSubmit={handleAdd} className="flex flex-col gap-2 max-w-sm">
+          <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="New inquiry status" className={inputClass} />
+          <ColorPicker value={color} onChange={setColor} />
+          <label className="flex items-center gap-1.5 text-xs text-slate-500">
+            <input type="checkbox" checked={isConfirmed} onChange={(e) => setIsConfirmed(e.target.checked)} />
+            Counts as confirmed
+          </label>
+          <button type="submit" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 self-start">Add Status</button>
+        </form>
+      )}
     </div>
   );
 }
