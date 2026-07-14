@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { resend } from '../lib/resend.js';
+import { getResendClient } from '../lib/resend.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -12,7 +12,15 @@ router.post('/send', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Recipient, subject, and body are required.' });
   }
 
-  const from = `${(fromName || 'GigWorks').trim()} <${process.env.RESEND_FROM_EMAIL}>`;
+  let resend;
+  try {
+    resend = getResendClient();
+  } catch {
+    return res.status(503).json({ error: 'Email sending is not configured yet.' });
+  }
+
+  const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+  const from = `${(fromName || 'GigWorks').trim()} <${fromEmail}>`;
   const { data, error } = await resend.emails.send({
     from,
     to,
