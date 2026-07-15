@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/Toast';
@@ -39,6 +39,7 @@ const MERGE_FIELD_GROUPS = [
       { token: '{{VenueCity}}', description: 'Venue city' },
       { token: '{{VenueState}}', description: 'Venue state' },
       { token: '{{VenueZip}}', description: 'Venue zip code' },
+      { token: '{{VenueFullAddress}}', description: 'Venue name + address, multi-line' },
       { token: '{{LocationNote}}', description: 'Location note' },
       { token: '{{LoadInInfo}}', description: 'Load in info' },
       { token: '{{ContactPhone}}', description: 'Day-of contact phone' },
@@ -97,12 +98,30 @@ function TemplateCard({ template, onSave, onDelete, canEdit }) {
   const [name, setName] = useState(template.name);
   const [subject, setSubject] = useState(template.subject);
   const [body, setBody] = useState(template.body);
+  // 'visual' lets non-technical users format text without seeing HTML; 'html'
+  // is the raw source for anyone who wants to hand-edit markup directly.
+  const [mode, setMode] = useState('visual');
+  const bodyRef = useRef(null);
+  const skipNextSyncRef = useRef(false);
 
   useEffect(() => {
     setName(template.name);
     setSubject(template.subject);
     setBody(template.body);
   }, [template]);
+
+  // Keep the contentEditable in sync with `body` for external changes (Reset,
+  // switching into Visual mode, template reload) — but skip the sync right
+  // after the editor itself produced the change, or every keystroke would
+  // reset the cursor to the start.
+  useEffect(() => {
+    if (mode !== 'visual') return;
+    if (skipNextSyncRef.current) {
+      skipNextSyncRef.current = false;
+      return;
+    }
+    if (bodyRef.current) bodyRef.current.innerHTML = body;
+  }, [body, mode]);
 
   const dirty = name !== template.name || subject !== template.subject || body !== template.body;
 
@@ -117,6 +136,18 @@ function TemplateCard({ template, onSave, onDelete, canEdit }) {
     setBody(template.body);
   }
 
+  function handleBodyInput() {
+    skipNextSyncRef.current = true;
+    setBody(bodyRef.current.innerHTML);
+  }
+
+  function applyFormat(command, value) {
+    if (!bodyRef.current) return;
+    bodyRef.current.focus();
+    document.execCommand(command, false, value);
+    handleBodyInput();
+  }
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
       <div>
@@ -128,8 +159,47 @@ function TemplateCard({ template, onSave, onDelete, canEdit }) {
         <input value={subject} onChange={(e) => setSubject(e.target.value)} className={inputClass} />
       </div>
       <div>
-        <label className={labelClass}>Body</label>
-        <textarea rows={6} value={body} onChange={(e) => setBody(e.target.value)} className={inputClass} />
+        <div className="flex items-center justify-between mb-1">
+          <label className={`${labelClass} mb-0`}>Body</label>
+          <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setMode('visual')}
+              className={`px-2.5 py-1 ${mode === 'visual' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+            >
+              Visual
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('html')}
+              className={`px-2.5 py-1 ${mode === 'html' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+            >
+              HTML
+            </button>
+          </div>
+        </div>
+
+        {mode === 'visual' ? (
+          <>
+            <div className="flex items-center gap-1 mb-1.5">
+              <button type="button" title="Bold" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('bold')} className="w-7 h-7 rounded hover:bg-slate-100 font-bold text-sm text-slate-700">B</button>
+              <button type="button" title="Italic" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('italic')} className="w-7 h-7 rounded hover:bg-slate-100 italic text-sm text-slate-700">I</button>
+              <button type="button" title="Underline" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('underline')} className="w-7 h-7 rounded hover:bg-slate-100 underline text-sm text-slate-700">U</button>
+              <div className="w-px h-4 bg-slate-200 mx-1" />
+              <button type="button" title="Smaller text" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('fontSize', '2')} className="w-7 h-7 rounded hover:bg-slate-100 text-xs text-slate-700">A-</button>
+              <button type="button" title="Larger text" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('fontSize', '5')} className="w-7 h-7 rounded hover:bg-slate-100 text-base text-slate-700">A+</button>
+            </div>
+            <div
+              ref={bodyRef}
+              contentEditable
+              suppressContentEditableWarning
+              onInput={handleBodyInput}
+              className={`${inputClass} min-h-[150px] bg-white`}
+            />
+          </>
+        ) : (
+          <textarea rows={7} value={body} onChange={(e) => setBody(e.target.value)} className={`${inputClass} font-mono text-xs`} />
+        )}
       </div>
 
       <div className="flex items-center justify-between pt-2 border-t border-slate-100">

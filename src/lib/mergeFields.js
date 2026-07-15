@@ -5,6 +5,9 @@ import { getTierPrice } from './pricingTiers';
 // Templates "Insert Fields" reference panel.
 function buildFieldMap({ event, contractor, pricingTierId }) {
   const eventDate = formatDate(event.eventDate);
+  const venue = event.venue || {};
+  const cityStateZip = venue.city && venue.state ? `${venue.city}, ${venue.state}${venue.zip ? ` ${venue.zip}` : ''}` : '';
+  const venueFullAddress = [venue.name, venue.address1, venue.address2, cityStateZip].filter(Boolean).join('<br>');
   return {
     ContractorFirstName: contractor.firstName || '',
     ContractorLastName: contractor.lastName || '',
@@ -28,6 +31,7 @@ function buildFieldMap({ event, contractor, pricingTierId }) {
     VenueCity: event.venue?.city || '',
     VenueState: event.venue?.state || '',
     VenueZip: event.venue?.zip || '',
+    VenueFullAddress: venueFullAddress,
     LocationNote: event.venue?.locationNote || '',
     LoadInInfo: event.venue?.loadInInfo || '',
     ContactPhone: event.contactPhone || '',
