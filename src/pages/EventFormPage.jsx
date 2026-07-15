@@ -753,7 +753,7 @@ export default function EventFormPage() {
             <div className="flex items-center gap-3 px-3 pb-2">
               <span className="cursor-grab text-slate-300 select-none invisible" aria-hidden="true">⠿</span>
               <div className="flex-1 min-w-0 text-xs font-semibold text-slate-500">Bulk send</div>
-              <div className="shrink-0 w-7" aria-hidden="true" />
+              <div className="shrink-0 w-12" aria-hidden="true" />
               <select
                 value={bulkTemplateId}
                 onChange={(e) => setBulkTemplateId(e.target.value)}
