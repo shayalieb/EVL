@@ -174,7 +174,6 @@ function CustomFieldsTab() {
       <EventTypeListField canEdit={canEdit} />
       <ColorStatusListField title="Event Statuses" canEdit={canEdit} />
       <InquiryStatusListField canEdit={canEdit} />
-      <ContractorGroupListField canEdit={canEdit} />
     </div>
   );
 }
@@ -332,81 +331,6 @@ function InquiryStatusListField({ canEdit }) {
             Counts as confirmed
           </label>
           <button type="submit" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 self-start">Add Status</button>
-        </form>
-      )}
-    </div>
-  );
-}
-
-function ContractorGroupListField({ canEdit }) {
-  const { contractorGroups, contractors, addContractorGroup, updateContractorGroup, removeContractorGroup } = useData();
-  const [label, setLabel] = useState('');
-  const [color, setColor] = useState('#6366f1');
-  const [expandedId, setExpandedId] = useState(null);
-
-  function handleAdd(e) {
-    e.preventDefault();
-    if (!label.trim()) return;
-    const record = addContractorGroup({ label: label.trim(), color });
-    setLabel('');
-    if (record) setExpandedId(record.id);
-  }
-
-  function toggleMember(group, contractorId) {
-    const has = group.contractorIds.includes(contractorId);
-    const nextIds = has ? group.contractorIds.filter((id) => id !== contractorId) : [...group.contractorIds, contractorId];
-    updateContractorGroup(group.id, { contractorIds: nextIds });
-  }
-
-  return (
-    <div>
-      <h3 className="text-sm font-bold text-slate-700 mb-1">Contractor Groups</h3>
-      <p className="text-xs text-slate-400 mb-2">
-        Group contractors (e.g. by role or team). On an event's Contractors tab, each group gets its own tab, and only that group's members can be added to it.
-      </p>
-      <div className="space-y-2 mb-3">
-        {contractorGroups.map((g) => (
-          <div key={g.id} className="border border-slate-200 rounded-lg">
-            <div className="flex items-center gap-3 px-3 py-2">
-              <Badge color={g.color}>{g.label}</Badge>
-              <div className="flex-1">
-                <ColorPicker value={g.color} onChange={(c) => updateContractorGroup(g.id, { color: c })} />
-              </div>
-              <button
-                type="button"
-                onClick={() => setExpandedId(expandedId === g.id ? null : g.id)}
-                className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 whitespace-nowrap"
-              >
-                {g.contractorIds.length} member{g.contractorIds.length === 1 ? '' : 's'} {expandedId === g.id ? '▲' : '▼'}
-              </button>
-              {canEdit && (
-                <button type="button" onClick={() => removeContractorGroup(g.id)} className="text-slate-400 hover:text-red-600 px-1" aria-label={`Remove ${g.label}`}>✕</button>
-              )}
-            </div>
-            {expandedId === g.id && (
-              <div className="border-t border-slate-100 px-3 py-2 grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto">
-                {contractors.length === 0 && <div className="text-xs text-slate-400 col-span-2">No contractors yet.</div>}
-                {contractors.map((c) => (
-                  <label key={c.id} className="flex items-center gap-1.5 text-xs text-slate-600">
-                    <input
-                      type="checkbox"
-                      checked={g.contractorIds.includes(c.id)}
-                      onChange={() => toggleMember(g, c.id)}
-                      disabled={!canEdit}
-                    />
-                    {c.firstName} {c.lastName}
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-      {canEdit && (
-        <form onSubmit={handleAdd} className="flex flex-col gap-2 max-w-sm">
-          <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="New group name" className={inputClass} />
-          <ColorPicker value={color} onChange={setColor} />
-          <button type="submit" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 self-start">Add Group</button>
         </form>
       )}
     </div>

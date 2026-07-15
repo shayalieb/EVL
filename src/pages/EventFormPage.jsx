@@ -53,7 +53,7 @@ export default function EventFormPage() {
   const navigate = useNavigate();
   const {
     events, eventTypes, addEventType, eventStatuses, inquiryStatuses, addInquiryStatus, emailTemplates,
-    contractors, contractorGroups, clients, addEvent, updateEvent, computeDurationHours,
+    contractors, contractorTypes, clients, addEvent, updateEvent, computeDurationHours,
   } = useData();
   const { can, currentUser } = useAuth();
   const { showToast } = useToast();
@@ -80,16 +80,15 @@ export default function EventFormPage() {
   const [threadSummaries, setThreadSummaries] = useState({});
   const [openThreadContractorId, setOpenThreadContractorId] = useState(null);
   const [activeTab, setActiveTab] = useState('details');
-  const [activeGroupTab, setActiveGroupTab] = useState(contractorGroups[0]?.id || 'ungrouped');
+  const [activeCategoryTab, setActiveCategoryTab] = useState(contractorTypes[0] || '');
 
-  const hasGroups = contractorGroups.length > 0;
+  const hasCategories = contractorTypes.length > 0;
 
   useEffect(() => {
-    if (activeGroupTab === 'ungrouped') return;
-    if (!contractorGroups.some((g) => g.id === activeGroupTab)) {
-      setActiveGroupTab(contractorGroups[0]?.id || 'ungrouped');
+    if (!contractorTypes.includes(activeCategoryTab)) {
+      setActiveCategoryTab(contractorTypes[0] || '');
     }
-  }, [contractorGroups, activeGroupTab]);
+  }, [contractorTypes, activeCategoryTab]);
 
   const draftStatus = eventStatuses.find((s) => s.label.toLowerCase() === 'draft') || eventStatuses[0];
 
@@ -145,22 +144,18 @@ export default function EventFormPage() {
   const duration = computeDurationHours(form.startTime, form.endTime);
   const availableContractors = contractors.filter((c) => !form.contractorBookings.some((b) => b.contractorId === c.id));
 
-  function contractorGroupIdsFor(contractorId) {
-    return contractorGroups.filter((g) => g.contractorIds.includes(contractorId)).map((g) => g.id);
-  }
-
-  function matchesActiveGroupTab(contractorId) {
-    if (!hasGroups) return true;
-    if (activeGroupTab === 'ungrouped') return contractorGroupIdsFor(contractorId).length === 0;
-    return contractorGroupIdsFor(contractorId).includes(activeGroupTab);
+  function matchesActiveCategoryTab(contractorId) {
+    if (!hasCategories) return true;
+    const contractor = contractors.find((c) => c.id === contractorId);
+    return contractor?.contractorType1 === activeCategoryTab;
   }
 
   // Original indices are kept (not the filtered position) so drag-and-drop
   // still splices the real contractorBookings array correctly.
   const visibleEntries = form.contractorBookings
     .map((booking, index) => ({ booking, index }))
-    .filter(({ booking }) => matchesActiveGroupTab(booking.contractorId));
-  const availableContractorsForActiveTab = availableContractors.filter((c) => matchesActiveGroupTab(c.id));
+    .filter(({ booking }) => matchesActiveCategoryTab(booking.contractorId));
+  const availableContractorsForActiveTab = availableContractors.filter((c) => matchesActiveCategoryTab(c.id));
 
   const totalCost = form.contractorBookings.reduce((sum, b) => {
     const c = contractors.find((x) => x.id === b.contractorId);
@@ -345,7 +340,7 @@ export default function EventFormPage() {
           <div className="absolute right-0 mt-1 w-72 max-h-64 overflow-y-auto bg-white rounded-lg shadow-lg border border-slate-100 z-20">
             {availableContractorsForActiveTab.length === 0 && (
               <div className="px-3 py-3 text-xs text-slate-400">
-                {hasGroups ? 'No available contractors in this group.' : 'All contractors already added.'}
+                {hasCategories ? 'No available contractors in this category.' : 'All contractors already added.'}
               </div>
             )}
             {availableContractorsForActiveTab.map((c) => (
@@ -633,29 +628,20 @@ export default function EventFormPage() {
             {!showBulkRow && addContractorButton}
           </div>
 
-          {hasGroups && (
+          {hasCategories && (
             <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-slate-100 mb-4 flex-wrap">
-              {contractorGroups.map((g) => (
+              {contractorTypes.map((type) => (
                 <button
-                  key={g.id}
+                  key={type}
                   type="button"
-                  onClick={() => setActiveGroupTab(g.id)}
+                  onClick={() => setActiveCategoryTab(type)}
                   className={`px-3.5 py-1.5 rounded-md text-sm font-semibold transition-colors ${
-                    activeGroupTab === g.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    activeCategoryTab === type ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                   }`}
                 >
-                  {g.label}
+                  {type}
                 </button>
               ))}
-              <button
-                type="button"
-                onClick={() => setActiveGroupTab('ungrouped')}
-                className={`px-3.5 py-1.5 rounded-md text-sm font-semibold transition-colors ${
-                  activeGroupTab === 'ungrouped' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                Ungrouped
-              </button>
             </div>
           )}
 
@@ -689,7 +675,7 @@ export default function EventFormPage() {
 
           {visibleEntries.length === 0 ? (
             <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
-              {hasGroups ? 'No contractors in this group yet.' : 'No contractors added yet.'}
+              {hasCategories ? 'No contractors in this category yet.' : 'No contractors added yet.'}
             </div>
           ) : (
             <div className="space-y-2">

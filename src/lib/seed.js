@@ -149,5 +149,5 @@ export function buildSeedUserData() {
     },
   ];
 
-  return { contractorTypes, eventTypes, eventStatuses, inquiryStatuses, emailTemplates, contractorGroups: [], contractors, clients, events };
+  return { contractorTypes, eventTypes, eventStatuses, inquiryStatuses, emailTemplates, contractors, clients, events };
 }
