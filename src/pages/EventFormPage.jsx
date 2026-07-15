@@ -129,10 +129,18 @@ export default function EventFormPage() {
     setPickerOpen(false);
   }, [eventId, event, contractors]);
 
+  const latestSummariesEventIdRef = useRef(null);
+
   const refreshThreadSummaries = useCallback(async (eventIdForSummaries) => {
+    latestSummariesEventIdRef.current = eventIdForSummaries;
     try {
       const summaries = await getThreadSummaries(eventIdForSummaries);
-      setThreadSummaries(summaries);
+      // form.id transitions from a throwaway draft id to the real event id
+      // once data hydrates — discard responses for whichever id is no longer
+      // current so a slow, stale request can't clobber the correct result.
+      if (latestSummariesEventIdRef.current === eventIdForSummaries) {
+        setThreadSummaries(summaries);
+      }
     } catch {
       // best-effort — history icons just show no badge if this fails
     }

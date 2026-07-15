@@ -46,13 +46,13 @@ export default function ContractorPickerRow({
       <button
         type="button"
         onClick={() => onOpenThread(booking.contractorId)}
-        className="relative shrink-0 w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+        className="relative shrink-0 w-10 h-10 flex items-center justify-center rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
         aria-label="View email history"
         title="Email history"
       >
-        <span aria-hidden="true">✉</span>
+        <span aria-hidden="true" className="text-xl leading-none">✉</span>
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+          <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center">
             {unreadCount}
           </span>
         )}
