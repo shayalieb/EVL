@@ -13,6 +13,7 @@ const LIST_FIELDS = {
   eventStatuses: 'eventStatuses',
   inquiryStatuses: 'inquiryStatuses',
   emailTemplates: 'emailTemplates',
+  contractorGroups: 'contractorGroups',
 };
 
 export function DataProvider({ children }) {
@@ -43,6 +44,11 @@ export function DataProvider({ children }) {
     patchList(LIST_FIELDS.events, currentUser.events.map((e) => ({
       ...e,
       contractorBookings: e.contractorBookings.filter((b) => b.contractorId !== id),
+    })));
+    // ...and from any contractor groups they were assigned to.
+    patchList(LIST_FIELDS.contractorGroups, (currentUser.contractorGroups || []).map((g) => ({
+      ...g,
+      contractorIds: g.contractorIds.filter((cid) => cid !== id),
     })));
   }, [currentUser, patchList]);
 
@@ -123,6 +129,24 @@ export function DataProvider({ children }) {
   const removeInquiryStatus = useCallback((id) => {
     if (!currentUser) return;
     patchList(LIST_FIELDS.inquiryStatuses, currentUser.inquiryStatuses.filter((s) => s.id !== id));
+  }, [currentUser, patchList]);
+
+  // ---- Contractor groups (color-coded, own a set of member contractor ids) ----
+  const addContractorGroup = useCallback((group) => {
+    if (!currentUser) return;
+    const record = { id: uid('cgrp'), contractorIds: [], ...group };
+    patchList(LIST_FIELDS.contractorGroups, [...(currentUser.contractorGroups || []), record]);
+    return record;
+  }, [currentUser, patchList]);
+
+  const updateContractorGroup = useCallback((id, patch) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.contractorGroups, (currentUser.contractorGroups || []).map((g) => (g.id === id ? { ...g, ...patch } : g)));
+  }, [currentUser, patchList]);
+
+  const removeContractorGroup = useCallback((id) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.contractorGroups, (currentUser.contractorGroups || []).filter((g) => g.id !== id));
   }, [currentUser, patchList]);
 
   // ---- Email templates ----
@@ -216,6 +240,7 @@ export function DataProvider({ children }) {
     eventStatuses: currentUser?.eventStatuses || [],
     inquiryStatuses: currentUser?.inquiryStatuses || [],
     emailTemplates: currentUser?.emailTemplates || [],
+    contractorGroups: currentUser?.contractorGroups || [],
     addContractor,
     updateContractor,
     deleteContractor,
@@ -236,6 +261,9 @@ export function DataProvider({ children }) {
     addEmailTemplate,
     updateEmailTemplate,
     removeEmailTemplate,
+    addContractorGroup,
+    updateContractorGroup,
+    removeContractorGroup,
     addEvent,
     updateEvent,
     deleteEvent,
@@ -252,6 +280,7 @@ export function DataProvider({ children }) {
     addEventStatus, updateEventStatus, removeEventStatus,
     addInquiryStatus, updateInquiryStatus, removeInquiryStatus,
     addEmailTemplate, updateEmailTemplate, removeEmailTemplate,
+    addContractorGroup, updateContractorGroup, removeContractorGroup,
     addEvent, updateEvent, deleteEvent,
     getContractorById, computeDurationHours, computeEventTotalCost, computeVendorStatus,
   ]);
