@@ -19,6 +19,8 @@ const MERGE_FIELD_GROUPS = [
       { token: '{{ContractorType2}}', description: 'Role' },
       { token: '{{ContractorPrice}}', description: 'Agreed price' },
       { token: '{{ContractorPriceNotes}}', description: 'Price notes' },
+      { token: '{{ContractorStartTime}}', description: "This contractor's own call time (falls back to event start time)" },
+      { token: '{{ContractorEndTime}}', description: "This contractor's own end time (falls back to event end time)" },
     ],
   },
   {
@@ -45,6 +47,7 @@ const MERGE_FIELD_GROUPS = [
       { token: '{{ContactPhone}}', description: 'Day-of contact phone' },
       { token: '{{ContactPhoneExt}}', description: 'Contact phone extension' },
       { token: '{{ContactEmail}}', description: 'Day-of contact email' },
+      { token: '{{CrewList}}', description: 'Name — role for each contractor in the Prep tab\'s crew groups' },
     ],
   },
 ];

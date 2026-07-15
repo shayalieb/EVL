@@ -464,7 +464,8 @@ export default function EventFormPage() {
     const contractor = contractors.find((c) => c.id === contractorId);
     const template = emailTemplates.find((t) => t.id === templateId);
     if (!contractor || !template) return;
-    const rendered = renderEmailTemplate({ template, event: form, contractor, pricingTierId: getBookingTierId(contractorId) });
+    const booking = form.contractorBookings.find((b) => b.contractorId === contractorId);
+    const rendered = renderEmailTemplate({ template, event: form, contractor, booking, contractors, pricingTierId: getBookingTierId(contractorId) });
     setPreviewState({ mode: 'single', contractorId, templateId, subject: rendered.subject, body: rendered.body });
   }
 
@@ -498,7 +499,8 @@ export default function EventFormPage() {
         let successCount = 0;
         for (const contractor of recipients) {
           try {
-            const rendered = renderEmailTemplate({ template: { subject, body }, event: form, contractor, pricingTierId: getBookingTierId(contractor.id) });
+            const booking = form.contractorBookings.find((b) => b.contractorId === contractor.id);
+            const rendered = renderEmailTemplate({ template: { subject, body }, event: form, contractor, booking, contractors, pricingTierId: getBookingTierId(contractor.id) });
             // eslint-disable-next-line no-await-in-loop
             await sendAndMarkEmailed(contractor, previewState.templateId, rendered.subject, rendered.body);
             successCount++;
