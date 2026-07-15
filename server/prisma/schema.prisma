@@ -21,9 +21,10 @@ model User {
 }
 
 model Account {
-  id          String       @id @default(cuid())
-  createdAt   DateTime     @default(now())
-  memberships Membership[]
+  id           String        @id @default(cuid())
+  createdAt    DateTime      @default(now())
+  memberships  Membership[]
+  emailThreads EmailThread[]
 }
 
 model Membership {
@@ -45,4 +46,55 @@ model Session {
   sid       String   @unique
   data      String
   expiresAt DateTime
+}
+
+// Contractors/events themselves still live in the frontend's localStorage
+// (see server/README.md) — eventId/contractorId below are opaque strings
+// from that blob, not real FKs. accountId is the only real relation, and is
+// what scopes every read so different EVL accounts never see each other's
+// threads.
+model EmailThread {
+  id              String   @id @default(cuid())
+  accountId       String
+  account         Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  eventId         String
+  contractorId    String
+  contractorEmail String
+
+  // "reply+<this.id>@<RESEND_INBOUND_DOMAIN>" — null until a domain is
+  // configured. Set once and never recomputed, since a contractor's mail
+  // client keeps replying to whatever address a past email actually had.
+  replyToAlias    String?
+  subjectHint     String?
+  lastMessageAt   DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  messages        EmailMessage[]
+
+  @@unique([accountId, eventId, contractorId])
+  @@index([accountId])
+}
+
+model EmailMessage {
+  id              String      @id @default(cuid())
+  threadId        String
+  thread          EmailThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  direction       String      // 'outbound' | 'inbound'
+  fromAddress     String
+  toAddress       String
+  subject         String
+  body            String      @db.Text
+
+  templateId      String?
+  sentByUserId    String?
+  resendMessageId String?     @unique
+  inReplyTo       String?
+  references      String?
+
+  readAt          DateTime?   // inbound-only; null = unread
+  createdAt       DateTime    @default(now())
+
+  @@index([threadId, createdAt])
 }

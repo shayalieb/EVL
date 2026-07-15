@@ -5,24 +5,19 @@ function currency(n) {
 }
 
 export default function ContractorPickerRow({
-  booking, contractor, inquiryStatuses, index, emailTemplates,
-  onStatusChange, onRemove, onSendEmail, onOpenContractor,
+  booking, contractor, inquiryStatuses, index, emailTemplates, threadSummary,
+  onStatusChange, onRemove, onRequestSend, onOpenContractor, onOpenThread,
   onDragStart, onDragOver, onDrop, isDragging,
 }) {
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
-  const [sending, setSending] = useState(false);
 
   if (!contractor) return null;
   const status = inquiryStatuses.find((s) => s.id === booking.inquiryStatusId);
+  const unreadCount = threadSummary?.unreadCount || 0;
 
-  async function handleSend() {
-    if (!selectedTemplateId || sending) return;
-    setSending(true);
-    try {
-      await onSendEmail(booking.contractorId, selectedTemplateId);
-    } finally {
-      setSending(false);
-    }
+  function handleSend() {
+    if (!selectedTemplateId) return;
+    onRequestSend(booking.contractorId, selectedTemplateId);
   }
 
   return (
@@ -48,6 +43,21 @@ export default function ContractorPickerRow({
         </div>
       </button>
 
+      <button
+        type="button"
+        onClick={() => onOpenThread(booking.contractorId)}
+        className="relative shrink-0 w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+        aria-label="View email history"
+        title="Email history"
+      >
+        <span aria-hidden="true">✉</span>
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+            {unreadCount}
+          </span>
+        )}
+      </button>
+
       {emailTemplates.length > 0 && (
         <>
           <select
@@ -62,10 +72,9 @@ export default function ContractorPickerRow({
           <button
             type="button"
             onClick={handleSend}
-            disabled={!contractor.email || !selectedTemplateId || sending}
+            disabled={!contractor.email || !selectedTemplateId}
             className={`shrink-0 px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 ${contractor.email ? '' : 'invisible'}`}
           >
-            {sending && <span className="w-3 h-3 rounded-full border-2 border-indigo-300/40 border-t-indigo-600 animate-spin" />}
             Send Email
           </button>
         </>

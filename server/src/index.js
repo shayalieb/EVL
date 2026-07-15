@@ -7,6 +7,8 @@ import { prisma } from './lib/prisma.js';
 import authRouter from './routes/auth.js';
 import teamRouter from './routes/team.js';
 import emailRouter from './routes/email.js';
+import emailThreadsRouter from './routes/emailThreads.js';
+import emailWebhooksRouter from './routes/emailWebhooks.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -25,6 +27,10 @@ app.use(cors({
   },
   credentials: true,
 }));
+// Mounted before express.json() — Svix signature verification needs the
+// exact raw request bytes, not a parsed/re-serialized body.
+app.use('/api/webhooks', express.raw({ type: '*/*' }), emailWebhooksRouter);
+
 app.use(express.json());
 
 app.use(session({
@@ -46,6 +52,7 @@ app.use(session({
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRouter);
 app.use('/api/team', teamRouter);
+app.use('/api/email/threads', emailThreadsRouter);
 app.use('/api/email', emailRouter);
 
 app.use((err, req, res, next) => {

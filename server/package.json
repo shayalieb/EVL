@@ -19,7 +19,8 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-session": "^1.18.0",
-    "resend": "^4.0.0"
+    "resend": "^4.0.0",
+    "svix": "^1.96.1"
   },
   "devDependencies": {
     "prisma": "^5.20.0"

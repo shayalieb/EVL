@@ -110,7 +110,9 @@ export function DataProvider({ children }) {
   // ---- Inquiry statuses (color-coded + isConfirmed flag) ----
   const addInquiryStatus = useCallback((status) => {
     if (!currentUser) return;
-    patchList(LIST_FIELDS.inquiryStatuses, [...currentUser.inquiryStatuses, { id: uid('inq'), ...status }]);
+    const record = { id: uid('inq'), ...status };
+    patchList(LIST_FIELDS.inquiryStatuses, [...currentUser.inquiryStatuses, record]);
+    return record;
   }, [currentUser, patchList]);
 
   const updateInquiryStatus = useCallback((id, patch) => {

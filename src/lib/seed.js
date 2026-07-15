@@ -14,6 +14,7 @@ export function buildSeedUserData() {
   ];
 
   const inquiryStatuses = [
+    { id: uid('inq'), label: 'Added', color: '#94a3b8', isConfirmed: false },
     { id: uid('inq'), label: 'Not Contacted', color: '#94a3b8', isConfirmed: false },
     { id: uid('inq'), label: 'Emailed', color: '#eab308', isConfirmed: false },
     { id: uid('inq'), label: 'Called', color: '#eab308', isConfirmed: false },
@@ -141,8 +142,8 @@ export function buildSeedUserData() {
       eventStatus: eventStatuses[1].id,
       clientId: cl1,
       contractorBookings: [
-        { contractorId: c1, inquiryStatusId: inquiryStatuses[3].id },
-        { contractorId: c2, inquiryStatusId: inquiryStatuses[1].id },
+        { contractorId: c1, inquiryStatusId: inquiryStatuses[4].id },
+        { contractorId: c2, inquiryStatusId: inquiryStatuses[2].id },
       ],
       createdAt: new Date().toISOString(),
     },

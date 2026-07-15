@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ContractorPickerRow from '../components/ContractorPickerRow';
 import ContractorModal from '../components/ContractorModal';
+import EmailPreviewModal from '../components/EmailPreviewModal';
+import EmailThreadModal from '../components/EmailThreadModal';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/Toast';
-import { sendEmail } from '../lib/email/sendEmail';
+import { getThreadSummaries, sendThreadedEmail } from '../lib/email/threads';
 import { renderEmailTemplate } from '../lib/mergeFields';
+import { uid } from '../lib/storage';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -31,6 +34,10 @@ function dayOfWeekFromDate(dateStr) {
 
 function emptyForm() {
   return {
+    // Generated up front (not left to addEvent()) so contractor emails sent
+    // while composing a brand-new, not-yet-saved event still have a stable
+    // eventId to log against — addEvent() preserves a pre-supplied id.
+    id: uid('evt'),
     name: '', eventType: '', eventDate: '', eventDayOfTheWeek: '',
     clientId: '',
     venue: { name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '' },
@@ -45,7 +52,7 @@ export default function EventFormPage() {
   const { eventId } = useParams();
   const navigate = useNavigate();
   const {
-    events, eventTypes, addEventType, eventStatuses, inquiryStatuses, emailTemplates,
+    events, eventTypes, addEventType, eventStatuses, inquiryStatuses, addInquiryStatus, emailTemplates,
     contractors, clients, addEvent, updateEvent, computeDurationHours,
   } = useData();
   const { can, currentUser } = useAuth();
@@ -64,18 +71,21 @@ export default function EventFormPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [editingContractor, setEditingContractor] = useState(null);
   const [bulkTemplateId, setBulkTemplateId] = useState('');
-  const [bulkSending, setBulkSending] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const dragIndex = useRef(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
+  const [previewState, setPreviewState] = useState(null);
+  const [previewSending, setPreviewSending] = useState(false);
+  const [threadSummaries, setThreadSummaries] = useState({});
+  const [openThreadContractorId, setOpenThreadContractorId] = useState(null);
 
   const draftStatus = eventStatuses.find((s) => s.label.toLowerCase() === 'draft') || eventStatuses[0];
-  const defaultInquiryStatus = inquiryStatuses[0];
 
   useEffect(() => {
     if (event) {
       setForm({
+        id: event.id,
         name: event.name, eventType: event.eventType, eventDate: event.eventDate,
         eventDayOfTheWeek: event.eventDayOfTheWeek || dayOfWeekFromDate(event.eventDate),
         clientId: event.clientId || '',
@@ -92,6 +102,19 @@ export default function EventFormPage() {
     setAddingType(false);
     setPickerOpen(false);
   }, [eventId, event]);
+
+  const refreshThreadSummaries = useCallback(async (eventIdForSummaries) => {
+    try {
+      const summaries = await getThreadSummaries(eventIdForSummaries);
+      setThreadSummaries(summaries);
+    } catch {
+      // best-effort — history icons just show no badge if this fails
+    }
+  }, []);
+
+  useEffect(() => {
+    if (form.id) refreshThreadSummaries(form.id);
+  }, [form.id, refreshThreadSummaries]);
 
   function update(field, val) {
     setForm((f) => ({ ...f, [field]: val }));
@@ -115,10 +138,16 @@ export default function EventFormPage() {
     return sum + (c ? Number(c.price) || 0 : 0);
   }, 0);
 
+  function getOrCreateInquiryStatus(label, color) {
+    const existing = inquiryStatuses.find((s) => s.label.toLowerCase() === label.toLowerCase());
+    return existing || addInquiryStatus({ label, color, isConfirmed: false });
+  }
+
   function addContractorToEvent(contractorId) {
+    const addedStatus = getOrCreateInquiryStatus('Added', '#94a3b8');
     setForm((f) => ({
       ...f,
-      contractorBookings: [...f.contractorBookings, { contractorId, inquiryStatusId: defaultInquiryStatus?.id }],
+      contractorBookings: [...f.contractorBookings, { contractorId, inquiryStatusId: addedStatus?.id }],
     }));
     setPickerOpen(false);
   }
@@ -134,57 +163,75 @@ export default function EventFormPage() {
     }));
   }
 
-  async function sendTemplateToContractor(contractor, templateId) {
-    const template = emailTemplates.find((t) => t.id === templateId);
-    if (!contractor || !template) return;
-    const rendered = renderEmailTemplate({ template, event: form, contractor });
-    await sendEmail({
-      to: contractor.email,
-      subject: rendered.subject,
-      bodyText: rendered.body,
-      fromName: currentUser.businessInfo?.name || `${currentUser.firstName} ${currentUser.lastName}`,
-      replyTo: currentUser.businessInfo?.email || currentUser.email,
+  const fromName = currentUser.businessInfo?.name || `${currentUser.firstName} ${currentUser.lastName}`;
+
+  async function sendAndMarkEmailed(contractor, templateId, subject, body) {
+    await sendThreadedEmail({
+      eventId: form.id,
+      contractorId: contractor.id,
+      contractorEmail: contractor.email,
+      subject, body, templateId, fromName,
     });
-    const emailedStatus = inquiryStatuses.find((s) => s.label === 'Emailed');
+    const emailedStatus = getOrCreateInquiryStatus('Emailed', '#eab308');
     if (emailedStatus) changeBookingStatus(contractor.id, emailedStatus.id);
   }
 
-  async function handleSendEmail(contractorId, templateId) {
+  function handleRequestSend(contractorId, templateId) {
     const contractor = contractors.find((c) => c.id === contractorId);
-    if (!contractor) return;
-    try {
-      await sendTemplateToContractor(contractor, templateId);
-      showToast(`Email sent to ${contractor.firstName} ${contractor.lastName}`);
-    } catch (err) {
-      showToast(err.message || 'Failed to send email', 'error');
-    }
+    const template = emailTemplates.find((t) => t.id === templateId);
+    if (!contractor || !template) return;
+    const rendered = renderEmailTemplate({ template, event: form, contractor });
+    setPreviewState({ mode: 'single', contractorId, templateId, subject: rendered.subject, body: rendered.body });
   }
 
-  async function handleSendToAll(templateId) {
-    const recipients = form.contractorBookings
+  function openBulkPreview() {
+    const template = emailTemplates.find((t) => t.id === bulkTemplateId);
+    if (!template) return;
+    const recipientCount = form.contractorBookings
       .map((b) => contractors.find((c) => c.id === b.contractorId))
-      .filter((c) => c && c.email);
-
-    if (recipients.length === 0) {
+      .filter((c) => c && c.email).length;
+    if (recipientCount === 0) {
       showToast('No contractors with an email address to send to', 'error');
       return;
     }
+    setPreviewState({ mode: 'bulk', templateId: bulkTemplateId, subject: template.subject, body: template.body, recipientCount });
+  }
 
-    let successCount = 0;
-    for (const contractor of recipients) {
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        await sendTemplateToContractor(contractor, templateId);
-        successCount++;
-      } catch {
-        // keep going — failures are reflected in the summary toast below
+  async function confirmPreviewSend({ subject, body }) {
+    if (!previewState) return;
+    setPreviewSending(true);
+    try {
+      if (previewState.mode === 'single') {
+        const contractor = contractors.find((c) => c.id === previewState.contractorId);
+        await sendAndMarkEmailed(contractor, previewState.templateId, subject, body);
+        showToast(`Email sent to ${contractor.firstName} ${contractor.lastName}`);
+      } else {
+        const recipients = form.contractorBookings
+          .map((b) => contractors.find((c) => c.id === b.contractorId))
+          .filter((c) => c && c.email);
+        let successCount = 0;
+        for (const contractor of recipients) {
+          try {
+            const rendered = renderEmailTemplate({ template: { subject, body }, event: form, contractor });
+            // eslint-disable-next-line no-await-in-loop
+            await sendAndMarkEmailed(contractor, previewState.templateId, rendered.subject, rendered.body);
+            successCount++;
+          } catch {
+            // keep going — failures are reflected in the summary toast below
+          }
+        }
+        if (successCount === recipients.length) {
+          showToast(`Emailed ${successCount} contractor${successCount === 1 ? '' : 's'}`);
+        } else {
+          showToast(`Sent ${successCount} of ${recipients.length} emails — some failed`, 'error');
+        }
       }
-    }
-
-    if (successCount === recipients.length) {
-      showToast(`Emailed ${successCount} contractor${successCount === 1 ? '' : 's'}`);
-    } else {
-      showToast(`Sent ${successCount} of ${recipients.length} emails — some failed`, 'error');
+      setPreviewState(null);
+      refreshThreadSummaries(form.id);
+    } catch (err) {
+      showToast(err.message || 'Failed to send email', 'error');
+    } finally {
+      setPreviewSending(false);
     }
   }
 
@@ -531,6 +578,7 @@ export default function EventFormPage() {
             <div className="flex items-center gap-3 px-3 pb-2">
               <span className="cursor-grab text-slate-300 select-none invisible" aria-hidden="true">⠿</span>
               <div className="flex-1 min-w-0 text-xs font-semibold text-slate-500">Bulk send</div>
+              <div className="shrink-0 w-7" aria-hidden="true" />
               <select
                 value={bulkTemplateId}
                 onChange={(e) => setBulkTemplateId(e.target.value)}
@@ -541,18 +589,10 @@ export default function EventFormPage() {
               </select>
               <button
                 type="button"
-                onClick={async () => {
-                  setBulkSending(true);
-                  try {
-                    await handleSendToAll(bulkTemplateId);
-                  } finally {
-                    setBulkSending(false);
-                  }
-                }}
-                disabled={!bulkTemplateId || bulkSending}
+                onClick={openBulkPreview}
+                disabled={!bulkTemplateId}
                 className="shrink-0 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
               >
-                {bulkSending && <span className="w-3 h-3 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
                 Send to All
               </button>
               <div className="shrink-0 ml-3 w-32" aria-hidden="true" />
@@ -576,10 +616,12 @@ export default function EventFormPage() {
                   contractor={contractors.find((c) => c.id === b.contractorId)}
                   inquiryStatuses={inquiryStatuses}
                   emailTemplates={emailTemplates}
+                  threadSummary={threadSummaries[b.contractorId]}
                   onStatusChange={changeBookingStatus}
                   onRemove={removeContractorFromEvent}
-                  onSendEmail={handleSendEmail}
+                  onRequestSend={handleRequestSend}
                   onOpenContractor={setEditingContractor}
+                  onOpenThread={setOpenThreadContractorId}
                   onDragStart={(idx) => { dragIndex.current = idx; }}
                   onDragOver={(idx) => setDragOverIndex(idx)}
                   onDrop={handleDrop}
@@ -601,6 +643,36 @@ export default function EventFormPage() {
         open={!!editingContractor}
         onClose={() => setEditingContractor(null)}
         contractor={editingContractor}
+      />
+
+      <EmailPreviewModal
+        open={!!previewState}
+        onClose={() => setPreviewState(null)}
+        recipientLabel={previewState?.mode === 'single'
+          ? (() => {
+              const c = contractors.find((x) => x.id === previewState.contractorId);
+              return c ? `${c.firstName} ${c.lastName}` : '';
+            })()
+          : previewState?.mode === 'bulk' ? `${previewState.recipientCount} contractors` : ''}
+        note={previewState?.mode === 'bulk' ? 'Merge fields (like {{ContractorFirstName}}) will be filled in per recipient when sent.' : undefined}
+        initialSubject={previewState?.subject}
+        initialBody={previewState?.body}
+        sending={previewSending}
+        onConfirm={confirmPreviewSend}
+      />
+
+      <EmailThreadModal
+        open={!!openThreadContractorId}
+        onClose={() => setOpenThreadContractorId(null)}
+        eventId={form.id}
+        contractorId={openThreadContractorId}
+        contractorEmail={contractors.find((c) => c.id === openThreadContractorId)?.email}
+        contractorLabel={(() => {
+          const c = contractors.find((x) => x.id === openThreadContractorId);
+          return c ? `${c.firstName} ${c.lastName}` : '';
+        })()}
+        fromName={fromName}
+        onChanged={() => refreshThreadSummaries(form.id)}
       />
     </div>
   );
