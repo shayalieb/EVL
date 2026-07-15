@@ -10,3 +10,11 @@ export function formatPhoneNumber(value) {
 export function formatEmailInput(value) {
   return value.trim().toLowerCase();
 }
+
+export function formatCurrency(n, { maximumFractionDigits } = {}) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    ...(maximumFractionDigits !== undefined ? { maximumFractionDigits } : {}),
+  }).format(n || 0);
+}

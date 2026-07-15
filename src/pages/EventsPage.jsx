@@ -8,15 +8,12 @@ import Badge from '../components/ui/Badge';
 import Tabs from '../components/ui/Tabs';
 import { useToast } from '../components/ui/Toast';
 import EventsCalendarView from '../components/events/EventsCalendarView';
+import { formatCurrency as currency } from '../lib/format';
 
 const VIEW_TABS = [
   { id: 'list', label: 'List View' },
   { id: 'calendar', label: 'Calendar View' },
 ];
-
-function currency(n) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
-}
 
 function formatDateWithWeekday(dateStr) {
   if (!dateStr) return '—';

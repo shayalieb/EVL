@@ -2,9 +2,10 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import Badge from '../components/ui/Badge';
+import { formatCurrency } from '../lib/format';
 
 function currency(n) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n || 0);
+  return formatCurrency(n, { maximumFractionDigits: 0 });
 }
 
 function formatShortDate(dateStr) {

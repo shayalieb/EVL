@@ -5,10 +5,8 @@ import ContractorModal from '../components/ContractorModal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Tooltip from '../components/ui/Tooltip';
 import { useToast } from '../components/ui/Toast';
-
-function currency(n) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
-}
+import { formatCurrency as currency } from '../lib/format';
+import { getPricingTiers } from '../lib/pricingTiers';
 
 export default function ContractorsPage() {
   const { contractors, deleteContractor } = useData();
@@ -91,7 +89,21 @@ export default function ContractorsPage() {
                   <td className="px-4 py-3 text-slate-500">{c.phone || '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{c.contractorType1}</td>
                   <td className="px-4 py-3 text-slate-500">{c.contractorType2 || '—'}</td>
-                  <td className="px-4 py-3 text-slate-700">{currency(c.price)}</td>
+                  <td className="px-4 py-3 text-slate-700">
+                    {(() => {
+                      const tiers = getPricingTiers(c);
+                      return (
+                        <div className="flex items-center gap-1.5">
+                          <span>{currency(tiers[0]?.price)}</span>
+                          {tiers.length > 1 && (
+                            <Tooltip content={tiers.map((t) => `${t.name}: ${currency(t.price)}`).join(' · ')}>
+                              <span className="text-xs text-slate-400 cursor-default">+{tiers.length - 1}</span>
+                            </Tooltip>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </td>
                   <td className="px-4 py-3 text-center">
                     {c.priceNotes ? (
                       <Tooltip content={c.priceNotes}>

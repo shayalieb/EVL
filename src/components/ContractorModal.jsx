@@ -1,14 +1,23 @@
 import { useEffect, useState } from 'react';
 import Modal from './ui/Modal';
+import ConfirmDialog from './ui/ConfirmDialog';
+import CurrencyInput from './ui/CurrencyInput';
 import { useData } from '../context/DataContext';
+import { uid } from '../lib/storage';
+import { getPricingTiers } from '../lib/pricingTiers';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 
+function emptyPricingTiers() {
+  return [{ id: uid('tier'), name: 'Standard', price: '' }];
+}
+
 const emptyForm = {
   firstName: '', middleName: '', lastName: '',
   contractorType1: '', contractorType2: '',
-  price: '', priceNotes: '',
+  pricingTiers: emptyPricingTiers(),
+  priceNotes: '',
 };
 
 export default function ContractorModal({ open, onClose, contractor }) {
@@ -17,6 +26,7 @@ export default function ContractorModal({ open, onClose, contractor }) {
   const [addingType, setAddingType] = useState(false);
   const [newTypeLabel, setNewTypeLabel] = useState('');
   const [error, setError] = useState('');
+  const [tierPendingDelete, setTierPendingDelete] = useState(null);
 
   useEffect(() => {
     if (open) {
@@ -26,19 +36,33 @@ export default function ContractorModal({ open, onClose, contractor }) {
         lastName: contractor.lastName,
         contractorType1: contractor.contractorType1,
         contractorType2: contractor.contractorType2 || '',
-        price: contractor.price,
+        pricingTiers: getPricingTiers(contractor).map((t) => ({ ...t, id: t.id === 'legacy' ? uid('tier') : t.id, price: String(t.price) })),
         priceNotes: contractor.priceNotes || '',
         email: contractor.email || '',
         phone: contractor.phone || '',
-      } : { ...emptyForm, email: '', phone: '' });
+      } : { ...emptyForm, pricingTiers: emptyPricingTiers(), email: '', phone: '' });
       setError('');
       setAddingType(false);
       setNewTypeLabel('');
+      setTierPendingDelete(null);
     }
   }, [open, contractor]);
 
   function update(field, val) {
     setForm((f) => ({ ...f, [field]: val }));
+  }
+
+  function updateTier(id, patch) {
+    setForm((f) => ({ ...f, pricingTiers: f.pricingTiers.map((t) => (t.id === id ? { ...t, ...patch } : t)) }));
+  }
+
+  function addTier() {
+    setForm((f) => ({ ...f, pricingTiers: [...f.pricingTiers, { id: uid('tier'), name: '', price: '' }] }));
+  }
+
+  function confirmDeleteTier() {
+    setForm((f) => ({ ...f, pricingTiers: f.pricingTiers.filter((t) => t.id !== tierPendingDelete) }));
+    setTierPendingDelete(null);
   }
 
   function handleAddType() {
@@ -57,7 +81,7 @@ export default function ContractorModal({ open, onClose, contractor }) {
     }
     const payload = {
       ...form,
-      price: Number(form.price) || 0,
+      pricingTiers: form.pricingTiers.map((t) => ({ ...t, name: t.name.trim() || 'Standard', price: Number(t.price) || 0 })),
     };
     if (contractor) updateContractor(contractor.id, payload);
     else addContractor(payload);
@@ -65,6 +89,7 @@ export default function ContractorModal({ open, onClose, contractor }) {
   }
 
   return (
+    <>
     <Modal open={open} onClose={onClose} title={contractor ? 'Edit Contractor' : 'Add Contractor'}>
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
@@ -126,8 +151,35 @@ export default function ContractorModal({ open, onClose, contractor }) {
         </div>
 
         <div>
-          <label className={labelClass}>Contractor Price</label>
-          <input type="number" min="0" step="0.01" value={form.price} onChange={(e) => update('price', e.target.value)} className={inputClass} />
+          <div className="flex items-center justify-between mb-1">
+            <label className={`${labelClass} mb-0`}>Pricing Tiers</label>
+            <button type="button" onClick={addTier} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">
+              + Add Tier
+            </button>
+          </div>
+          <div className="space-y-2">
+            {form.pricingTiers.map((tier) => (
+              <div key={tier.id} className="flex items-center gap-2">
+                <input
+                  value={tier.name}
+                  onChange={(e) => updateTier(tier.id, { name: e.target.value })}
+                  placeholder="e.g. Full Band"
+                  className={`${inputClass} flex-1`}
+                />
+                <CurrencyInput value={tier.price} onChange={(v) => updateTier(tier.id, { price: v })} className="w-28" />
+                {form.pricingTiers.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setTierPendingDelete(tier.id)}
+                    className="shrink-0 w-8 h-8 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
+                    aria-label="Remove pricing tier"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
 
         <div>
@@ -143,5 +195,14 @@ export default function ContractorModal({ open, onClose, contractor }) {
         </div>
       </form>
     </Modal>
+
+    <ConfirmDialog
+      open={!!tierPendingDelete}
+      onClose={() => setTierPendingDelete(null)}
+      onConfirm={confirmDeleteTier}
+      title="Remove pricing tier?"
+      description="This will remove this pricing tier from the contractor. This can't be undone."
+    />
+    </>
   );
 }

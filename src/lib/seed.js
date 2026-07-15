@@ -47,6 +47,9 @@ export function buildSeedUserData() {
   const c1 = uid('con');
   const c2 = uid('con');
   const c3 = uid('con');
+  const c1Tier = uid('tier');
+  const c2Tier = uid('tier');
+  const c3Tier = uid('tier');
 
   const contractors = [
     {
@@ -58,7 +61,7 @@ export function buildSeedUserData() {
       phone: '512-555-0110',
       contractorType1: 'Musician',
       contractorType2: 'Guitar',
-      price: 450,
+      pricingTiers: [{ id: c1Tier, name: 'Standard', price: 450 }],
       priceNotes: 'Requires load-in access 1hr before start.',
       createdAt: new Date().toISOString(),
     },
@@ -71,7 +74,7 @@ export function buildSeedUserData() {
       phone: '512-555-0133',
       contractorType1: 'Supporting Photographer',
       contractorType2: '',
-      price: 350,
+      pricingTiers: [{ id: c2Tier, name: 'Standard', price: 350 }],
       priceNotes: '',
       createdAt: new Date().toISOString(),
     },
@@ -84,7 +87,7 @@ export function buildSeedUserData() {
       phone: '512-555-0177',
       contractorType1: 'DJ',
       contractorType2: '',
-      price: 600,
+      pricingTiers: [{ id: c3Tier, name: 'Standard', price: 600 }],
       priceNotes: 'Owns full PA system, no rental needed.',
       createdAt: new Date().toISOString(),
     },
@@ -142,8 +145,8 @@ export function buildSeedUserData() {
       eventStatus: eventStatuses[1].id,
       clientId: cl1,
       contractorBookings: [
-        { contractorId: c1, inquiryStatusId: inquiryStatuses[4].id },
-        { contractorId: c2, inquiryStatusId: inquiryStatuses[2].id },
+        { contractorId: c1, inquiryStatusId: inquiryStatuses[4].id, pricingTierId: c1Tier },
+        { contractorId: c2, inquiryStatusId: inquiryStatuses[2].id, pricingTierId: c2Tier },
       ],
       createdAt: new Date().toISOString(),
     },

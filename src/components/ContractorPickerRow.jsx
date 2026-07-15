@@ -1,12 +1,10 @@
 import { useState } from 'react';
-
-function currency(n) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
-}
+import { formatCurrency as currency } from '../lib/format';
+import { getPricingTier, getPricingTiers } from '../lib/pricingTiers';
 
 export default function ContractorPickerRow({
   booking, contractor, inquiryStatuses, index, emailTemplates, threadSummary,
-  onStatusChange, onRemove, onRequestSend, onOpenContractor, onOpenThread,
+  onStatusChange, onRemove, onRequestSend, onOpenContractor, onOpenThread, onTierChange,
   onDragStart, onDragOver, onDrop, isDragging,
 }) {
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
@@ -14,6 +12,8 @@ export default function ContractorPickerRow({
   if (!contractor) return null;
   const status = inquiryStatuses.find((s) => s.id === booking.inquiryStatusId);
   const unreadCount = threadSummary?.unreadCount || 0;
+  const tiers = getPricingTiers(contractor);
+  const activeTier = getPricingTier(contractor, booking.pricingTierId);
 
   function handleSend() {
     if (!selectedTemplateId) return;
@@ -89,8 +89,18 @@ export default function ContractorPickerRow({
         {inquiryStatuses.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
       </select>
 
+      {tiers.length > 1 && (
+        <select
+          value={activeTier?.id || ''}
+          onChange={(e) => onTierChange(booking.contractorId, e.target.value)}
+          className="shrink-0 w-24 px-1.5 py-1.5 rounded-lg border border-slate-300 text-xs"
+        >
+          {tiers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+      )}
+
       <div className="w-20 text-right text-sm font-semibold text-slate-700 shrink-0">
-        {currency(contractor.price)}
+        {currency(activeTier?.price)}
       </div>
 
       <button

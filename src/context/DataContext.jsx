@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { uid } from '../lib/storage';
+import { getTierPrice } from '../lib/pricingTiers';
 
 const DataContext = createContext(null);
 
@@ -176,7 +177,7 @@ export function DataProvider({ children }) {
   const computeEventTotalCost = useCallback((event) => {
     return event.contractorBookings.reduce((sum, b) => {
       const contractor = getContractorById(b.contractorId);
-      return sum + (contractor ? Number(contractor.price) || 0 : 0);
+      return sum + (contractor ? getTierPrice(contractor, b.pricingTierId) : 0);
     }, 0);
   }, [getContractorById]);
 

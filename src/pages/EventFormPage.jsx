@@ -4,21 +4,20 @@ import ContractorPickerRow from '../components/ContractorPickerRow';
 import ContractorModal from '../components/ContractorModal';
 import EmailPreviewModal from '../components/EmailPreviewModal';
 import EmailThreadModal from '../components/EmailThreadModal';
+import Modal from '../components/ui/Modal';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/Toast';
 import { getThreadSummaries, sendThreadedEmail } from '../lib/email/threads';
 import { renderEmailTemplate } from '../lib/mergeFields';
 import { uid } from '../lib/storage';
+import { formatCurrency as currency } from '../lib/format';
+import { getPricingTiers, getTierPrice } from '../lib/pricingTiers';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 const cardClass = 'bg-white rounded-2xl border border-slate-200 p-6';
 const cardTitleClass = 'text-base font-bold text-slate-800 mb-5';
-
-function currency(n) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
-}
 
 function tomorrowISO() {
   const d = new Date();
@@ -72,6 +71,7 @@ export default function EventFormPage() {
   const [addingType, setAddingType] = useState(false);
   const [newTypeLabel, setNewTypeLabel] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [tierPickerContractor, setTierPickerContractor] = useState(null);
   const [editingContractor, setEditingContractor] = useState(null);
   const [bulkTemplateId, setBulkTemplateId] = useState('');
   const [error, setError] = useState('');
@@ -194,7 +194,7 @@ export default function EventFormPage() {
 
   const totalCost = form.contractorBookings.reduce((sum, b) => {
     const c = contractors.find((x) => x.id === b.contractorId);
-    return sum + (c ? Number(c.price) || 0 : 0);
+    return sum + (c ? getTierPrice(c, b.pricingTierId) : 0);
   }, 0);
 
   function getOrCreateInquiryStatus(label, color) {
@@ -202,13 +202,29 @@ export default function EventFormPage() {
     return existing || addInquiryStatus({ label, color, isConfirmed: false });
   }
 
-  function addContractorToEvent(contractorId) {
+  function addContractorToEvent(contractorId, pricingTierId) {
     const addedStatus = getOrCreateInquiryStatus('Added', '#94a3b8');
     setForm((f) => ({
       ...f,
-      contractorBookings: [...f.contractorBookings, { contractorId, inquiryStatusId: addedStatus?.id }],
+      contractorBookings: [...f.contractorBookings, { contractorId, inquiryStatusId: addedStatus?.id, pricingTierId }],
     }));
     setPickerOpen(false);
+  }
+
+  function handlePickContractorToAdd(contractor) {
+    const tiers = getPricingTiers(contractor);
+    setPickerOpen(false);
+    if (tiers.length <= 1) {
+      addContractorToEvent(contractor.id, tiers[0]?.id);
+    } else {
+      setTierPickerContractor(contractor);
+    }
+  }
+
+  function confirmTierPick(tierId) {
+    if (!tierPickerContractor) return;
+    addContractorToEvent(tierPickerContractor.id, tierId);
+    setTierPickerContractor(null);
   }
 
   function removeContractorFromEvent(contractorId) {
@@ -219,6 +235,13 @@ export default function EventFormPage() {
     setForm((f) => ({
       ...f,
       contractorBookings: f.contractorBookings.map((b) => (b.contractorId === contractorId ? { ...b, inquiryStatusId } : b)),
+    }));
+  }
+
+  function changeBookingTier(contractorId, pricingTierId) {
+    setForm((f) => ({
+      ...f,
+      contractorBookings: f.contractorBookings.map((b) => (b.contractorId === contractorId ? { ...b, pricingTierId } : b)),
     }));
   }
 
@@ -235,11 +258,15 @@ export default function EventFormPage() {
     if (emailedStatus) changeBookingStatus(contractor.id, emailedStatus.id);
   }
 
+  function getBookingTierId(contractorId) {
+    return form.contractorBookings.find((b) => b.contractorId === contractorId)?.pricingTierId;
+  }
+
   function handleRequestSend(contractorId, templateId) {
     const contractor = contractors.find((c) => c.id === contractorId);
     const template = emailTemplates.find((t) => t.id === templateId);
     if (!contractor || !template) return;
-    const rendered = renderEmailTemplate({ template, event: form, contractor });
+    const rendered = renderEmailTemplate({ template, event: form, contractor, pricingTierId: getBookingTierId(contractorId) });
     setPreviewState({ mode: 'single', contractorId, templateId, subject: rendered.subject, body: rendered.body });
   }
 
@@ -273,7 +300,7 @@ export default function EventFormPage() {
         let successCount = 0;
         for (const contractor of recipients) {
           try {
-            const rendered = renderEmailTemplate({ template: { subject, body }, event: form, contractor });
+            const rendered = renderEmailTemplate({ template: { subject, body }, event: form, contractor, pricingTierId: getBookingTierId(contractor.id) });
             // eslint-disable-next-line no-await-in-loop
             await sendAndMarkEmailed(contractor, previewState.templateId, rendered.subject, rendered.body);
             successCount++;
@@ -382,7 +409,7 @@ export default function EventFormPage() {
               <button
                 key={c.id}
                 type="button"
-                onClick={() => addContractorToEvent(c.id)}
+                onClick={() => handlePickContractorToAdd(c)}
                 className="block w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
               >
                 <div className="font-medium text-slate-700">{c.firstName} {c.lastName}</div>
@@ -762,6 +789,7 @@ export default function EventFormPage() {
                   emailTemplates={emailTemplates}
                   threadSummary={threadSummaries[b.contractorId]}
                   onStatusChange={changeBookingStatus}
+                  onTierChange={changeBookingTier}
                   onRemove={removeContractorFromEvent}
                   onRequestSend={handleRequestSend}
                   onOpenContractor={setEditingContractor}
@@ -788,6 +816,27 @@ export default function EventFormPage() {
         onClose={() => setEditingContractor(null)}
         contractor={editingContractor}
       />
+
+      <Modal
+        open={!!tierPickerContractor}
+        onClose={() => setTierPickerContractor(null)}
+        title={tierPickerContractor ? `Choose pricing tier — ${tierPickerContractor.firstName} ${tierPickerContractor.lastName}` : ''}
+        widthClass="max-w-sm"
+      >
+        <div className="space-y-2">
+          {tierPickerContractor && getPricingTiers(tierPickerContractor).map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => confirmTierPick(t.id)}
+              className="w-full flex items-center justify-between px-4 py-3 rounded-lg border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 text-left"
+            >
+              <span className="text-sm font-medium text-slate-700">{t.name}</span>
+              <span className="text-sm font-semibold text-slate-800">{currency(t.price)}</span>
+            </button>
+          ))}
+        </div>
+      </Modal>
 
       <EmailPreviewModal
         open={!!previewState}

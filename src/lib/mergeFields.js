@@ -1,6 +1,5 @@
-function currency(n) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
-}
+import { formatCurrency } from './format';
+import { getTierPrice } from './pricingTiers';
 
 function formatDate(dateStr) {
   if (!dateStr) return '';
@@ -16,7 +15,7 @@ function formatTime(timeStr) {
 
 // Field names here must match the {{Token}} names shown in the Email
 // Templates "Insert Fields" reference panel.
-function buildFieldMap({ event, contractor }) {
+function buildFieldMap({ event, contractor, pricingTierId }) {
   const eventDate = formatDate(event.eventDate);
   return {
     ContractorFirstName: contractor.firstName || '',
@@ -25,7 +24,7 @@ function buildFieldMap({ event, contractor }) {
     ContractorPhone: contractor.phone || '',
     ContractorType1: contractor.contractorType1 || '',
     ContractorType2: contractor.contractorType2 || '',
-    ContractorPrice: contractor.price ? currency(contractor.price) : '',
+    ContractorPrice: formatCurrency(getTierPrice(contractor, pricingTierId)),
     ContractorPriceNotes: contractor.priceNotes || '',
     EventName: event.name || '',
     EventType: event.eventType || '',
@@ -55,8 +54,8 @@ function substitute(text, fieldMap) {
   ));
 }
 
-export function renderEmailTemplate({ template, event, contractor }) {
-  const fieldMap = buildFieldMap({ event, contractor });
+export function renderEmailTemplate({ template, event, contractor, pricingTierId }) {
+  const fieldMap = buildFieldMap({ event, contractor, pricingTierId });
   return {
     subject: substitute(template.subject, fieldMap),
     body: substitute(template.body, fieldMap),
