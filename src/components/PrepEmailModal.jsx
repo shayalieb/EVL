@@ -1,8 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Modal from './ui/Modal';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
+// The body is HTML (the rendered prep sheet) — edit it as a rendered
+// WYSIWYG preview via contentEditable rather than showing raw markup in a
+// textarea, which non-technical users can't be expected to hand-edit.
+const bodyEditableClass = 'w-full min-h-[220px] max-h-[420px] overflow-y-auto px-3.5 py-3 rounded-lg border border-slate-300 text-sm bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -12,18 +16,24 @@ function formatSize(bytes) {
 
 export default function PrepEmailModal({ open, onClose, prepContractors, documents, initialSubject, initialBody, sending, onConfirm }) {
   const [subject, setSubject] = useState('');
-  const [body, setBody] = useState('');
+  const [hasBody, setHasBody] = useState(false);
+  const bodyRef = useRef(null);
   const [recipientIds, setRecipientIds] = useState([]);
   const [documentIds, setDocumentIds] = useState([]);
 
   useEffect(() => {
     if (open) {
       setSubject(initialSubject || '');
-      setBody(initialBody || '');
+      if (bodyRef.current) bodyRef.current.innerHTML = initialBody || '';
+      setHasBody(!!initialBody?.trim());
       setRecipientIds([]);
       setDocumentIds([]);
     }
   }, [open, initialSubject, initialBody]);
+
+  function handleBodyInput() {
+    setHasBody(!!bodyRef.current?.textContent?.trim());
+  }
 
   function toggleRecipient(id) {
     setRecipientIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
@@ -36,7 +46,7 @@ export default function PrepEmailModal({ open, onClose, prepContractors, documen
   function handleSubmit(e) {
     e.preventDefault();
     if (recipientIds.length === 0) return;
-    onConfirm({ subject, body, recipientIds, documentIds });
+    onConfirm({ subject, body: bodyRef.current?.innerHTML || '', recipientIds, documentIds });
   }
 
   return (
@@ -75,7 +85,13 @@ export default function PrepEmailModal({ open, onClose, prepContractors, documen
 
         <div>
           <label className={labelClass}>Body</label>
-          <textarea rows={10} value={body} onChange={(e) => setBody(e.target.value)} className={inputClass} />
+          <div
+            ref={bodyRef}
+            contentEditable
+            suppressContentEditableWarning
+            onInput={handleBodyInput}
+            className={bodyEditableClass}
+          />
         </div>
 
         {documents.length > 0 && (
@@ -98,7 +114,7 @@ export default function PrepEmailModal({ open, onClose, prepContractors, documen
           </button>
           <button
             type="submit"
-            disabled={sending || !subject.trim() || !body.trim() || recipientIds.length === 0}
+            disabled={sending || !subject.trim() || !hasBody || recipientIds.length === 0}
             className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
           >
             {sending && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}

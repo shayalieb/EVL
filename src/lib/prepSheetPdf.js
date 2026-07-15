@@ -129,5 +129,9 @@ export async function generatePrepSheetPdf(form, prepContractors, requests) {
 // attachment without a round-trip through document storage.
 export async function generatePrepSheetPdfAttachment(form, prepContractors, requests) {
   const { doc, filename } = await buildPrepSheetDoc(form, prepContractors, requests);
-  return { filename, contentType: 'application/pdf', base64: doc.output('base64') };
+  // jsPDF has no plain "base64" output type (only 'datauristring' and
+  // friends) — passing 'base64' silently returns null with no error.
+  const dataUri = doc.output('datauristring', filename);
+  const base64 = dataUri.slice(dataUri.indexOf(',') + 1);
+  return { filename, contentType: 'application/pdf', base64 };
 }
