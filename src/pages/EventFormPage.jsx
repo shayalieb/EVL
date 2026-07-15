@@ -14,7 +14,7 @@ import { useToast } from '../components/ui/Toast';
 import { getThreadSummaries, sendThreadedEmail } from '../lib/email/threads';
 import { renderEmailTemplate } from '../lib/mergeFields';
 import { uid } from '../lib/storage';
-import { formatCurrency as currency } from '../lib/format';
+import { formatCurrency as currency, formatEventDate, formatEventTime } from '../lib/format';
 import { getPricingTiers, getTierPrice } from '../lib/pricingTiers';
 import { getPrepContractors, renderPrepSheetEmail } from '../lib/prepSheet';
 import { generatePrepSheetPdf } from '../lib/prepSheetPdf';
@@ -1008,10 +1008,10 @@ export default function EventFormPage() {
               <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Event Details</h4>
               <p className="font-semibold text-slate-800">{form.name || 'Untitled event'}</p>
               <p className="text-slate-500">
-                {form.eventDate ? new Date(`${form.eventDate}T00:00:00`).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '—'}
+                {formatEventDate(form.eventDate) || '—'}
                 {form.eventDayOfTheWeek ? ` (${form.eventDayOfTheWeek})` : ''}
               </p>
-              <p className="text-slate-500">{form.startTime || '—'} – {form.endTime || '—'}</p>
+              <p className="text-slate-500">{formatEventTime(form.startTime) || '—'} – {formatEventTime(form.endTime) || '—'}</p>
               {form.contactPhone && <p className="text-slate-500">{form.contactPhone}{form.contactPhoneExt ? ` ext. ${form.contactPhoneExt}` : ''}</p>}
               {form.contactEmail && <p className="text-slate-500">{form.contactEmail}</p>}
             </div>
@@ -1034,7 +1034,7 @@ export default function EventFormPage() {
               <div className="space-y-1 text-sm">
                 {form.schedule.filter((s) => s.time || s.name || s.details).map((s) => (
                   <div key={s.id} className="flex gap-3">
-                    <span className="w-16 shrink-0 text-slate-400">{s.time || '—'}</span>
+                    <span className="w-20 shrink-0 text-slate-400">{formatEventTime(s.time) || '—'}</span>
                     <span className="w-40 shrink-0 font-medium text-slate-700">{s.name}</span>
                     <span className="text-slate-500">{s.details}</span>
                   </div>
@@ -1062,7 +1062,7 @@ export default function EventFormPage() {
                   <div key={c.contractorId} className="flex gap-3 px-1 py-1">
                     <span className="w-40 shrink-0 font-medium text-slate-700">{c.name}</span>
                     <span className="w-40 shrink-0 text-slate-500">{c.role}</span>
-                    <span className="text-slate-500">{c.startTime || '—'} – {c.endTime || '—'}</span>
+                    <span className="text-slate-500">{formatEventTime(c.startTime) || '—'} – {formatEventTime(c.endTime) || '—'}</span>
                   </div>
                 ))}
               </div>

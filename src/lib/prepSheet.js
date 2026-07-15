@@ -1,14 +1,4 @@
-function formatDate(dateStr) {
-  if (!dateStr) return '';
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-}
-
-function formatTime(timeStr) {
-  if (!timeStr) return '';
-  const [h, m] = timeStr.split(':').map(Number);
-  return new Date(2000, 0, 1, h, m).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-}
+import { formatEventDate as formatDate, formatEventTime as formatTime } from './format';
 
 // Deliberately reads only name/role/time off each contractor+booking —
 // never email or pricing/tier info, since the prep sheet is meant to be

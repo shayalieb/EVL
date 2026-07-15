@@ -18,3 +18,15 @@ export function formatCurrency(n, { maximumFractionDigits } = {}) {
     ...(maximumFractionDigits !== undefined ? { maximumFractionDigits } : {}),
   }).format(n || 0);
 }
+
+export function formatEventDate(dateStr) {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+export function formatEventTime(timeStr) {
+  if (!timeStr) return '';
+  const [h, m] = timeStr.split(':').map(Number);
+  return new Date(2000, 0, 1, h, m).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
