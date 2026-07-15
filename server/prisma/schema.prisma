@@ -21,10 +21,11 @@ model User {
 }
 
 model Account {
-  id           String        @id @default(cuid())
-  createdAt    DateTime      @default(now())
-  memberships  Membership[]
-  emailThreads EmailThread[]
+  id             String          @id @default(cuid())
+  createdAt      DateTime        @default(now())
+  memberships    Membership[]
+  emailThreads   EmailThread[]
+  eventDocuments EventDocument[]
 }
 
 model Membership {
@@ -97,4 +98,23 @@ model EmailMessage {
   createdAt       DateTime    @default(now())
 
   @@index([threadId, createdAt])
+}
+
+// Uploaded reference documents (stage plots, floor plans, contracts) for an
+// event's prep sheet. Stored directly in Postgres (Bytes) rather than an
+// external object store — no new service to configure, fine at this scale.
+model EventDocument {
+  id          String   @id @default(cuid())
+  accountId   String
+  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  eventId     String   // opaque localStorage id, same non-FK pattern as EmailThread
+  filename    String
+  contentType String
+  size        Int
+  data        Bytes
+
+  createdAt   DateTime @default(now())
+
+  @@index([accountId, eventId])
 }

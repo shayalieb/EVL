@@ -9,6 +9,7 @@ import teamRouter from './routes/team.js';
 import emailRouter from './routes/email.js';
 import emailThreadsRouter from './routes/emailThreads.js';
 import emailWebhooksRouter from './routes/emailWebhooks.js';
+import eventDocumentsRouter from './routes/eventDocuments.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -54,6 +55,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/team', teamRouter);
 app.use('/api/email/threads', emailThreadsRouter);
 app.use('/api/email', emailRouter);
+app.use('/api/documents', eventDocumentsRouter);
 
 app.use((err, req, res, next) => {
   if (res.headersSent) return next(err);

@@ -24,12 +24,22 @@ function serializeMessage(m) {
 }
 
 router.post('/send', asyncHandler(async (req, res) => {
-  const { eventId, contractorId, contractorEmail, subject, body, templateId, fromName } = req.body || {};
+  const { eventId, contractorId, contractorEmail, subject, body, templateId, fromName, documentIds } = req.body || {};
   if (!eventId?.trim() || !contractorId?.trim() || !contractorEmail?.trim() || !subject?.trim() || !body?.trim()) {
     return res.status(400).json({ error: 'eventId, contractorId, contractorEmail, subject, and body are required.' });
   }
 
   const { accountId } = req.membership;
+
+  let attachments;
+  if (documentIds?.length) {
+    const documents = await prisma.eventDocument.findMany({ where: { id: { in: documentIds }, accountId } });
+    attachments = documents.map((d) => ({
+      content: d.data.toString('base64'),
+      filename: d.filename,
+      contentType: d.contentType,
+    }));
+  }
   let thread = await prisma.emailThread.upsert({
     where: { accountId_eventId_contractorId: { accountId, eventId, contractorId } },
     update: { contractorEmail },
@@ -55,7 +65,7 @@ router.post('/send', asyncHandler(async (req, res) => {
 
   let sent;
   try {
-    sent = await sendMail({ from: fromAddress, to: contractorEmail, subject, html: body, replyTo: thread.replyToAlias, headers });
+    sent = await sendMail({ from: fromAddress, to: contractorEmail, subject, html: body, replyTo: thread.replyToAlias, headers, attachments });
   } catch {
     return res.status(503).json({ error: 'Email sending is not configured yet.' });
   }

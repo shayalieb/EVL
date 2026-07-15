@@ -7,7 +7,7 @@ export function buildFromHeader(fromName) {
 
 // Throws if RESEND_API_KEY isn't configured — callers catch and respond 503,
 // matching the existing lazy-init behavior in resend.js.
-export async function sendMail({ from, to, subject, html, replyTo, headers }) {
+export async function sendMail({ from, to, subject, html, replyTo, headers, attachments }) {
   const resend = getResendClient();
   // NOTE: the SDK's own field is `replyTo` (camelCase) — it maps this to the
   // API's `reply_to` internally. Passing `reply_to` here is silently dropped.
@@ -18,5 +18,6 @@ export async function sendMail({ from, to, subject, html, replyTo, headers }) {
     html,
     ...(replyTo ? { replyTo } : {}),
     ...(headers ? { headers } : {}),
+    ...(attachments?.length ? { attachments } : {}),
   });
 }

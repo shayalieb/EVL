@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { loadUserData, saveUserData } from '../lib/storage';
 import { buildSeedUserData } from '../lib/seed';
 
-const API_BASE = import.meta.env.VITE_API_BASE;
+export const API_BASE = import.meta.env.VITE_API_BASE;
 const AuthContext = createContext(null);
 
 export async function apiFetch(path, options = {}) {

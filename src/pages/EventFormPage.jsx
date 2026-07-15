@@ -4,6 +4,9 @@ import ContractorPickerRow from '../components/ContractorPickerRow';
 import ContractorModal from '../components/ContractorModal';
 import EmailPreviewModal from '../components/EmailPreviewModal';
 import EmailThreadModal from '../components/EmailThreadModal';
+import PrepEmailModal from '../components/PrepEmailModal';
+import GroupChipSelector from '../components/GroupChipSelector';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Modal from '../components/ui/Modal';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
@@ -13,6 +16,9 @@ import { renderEmailTemplate } from '../lib/mergeFields';
 import { uid } from '../lib/storage';
 import { formatCurrency as currency } from '../lib/format';
 import { getPricingTiers, getTierPrice } from '../lib/pricingTiers';
+import { getPrepContractors, renderPrepSheetEmail } from '../lib/prepSheet';
+import { generatePrepSheetPdf } from '../lib/prepSheetPdf';
+import { listDocuments, uploadDocument, deleteDocument, documentDownloadUrl } from '../lib/documents';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -48,6 +54,10 @@ function emptyForm() {
     // tab — starts empty; tabs are added explicitly via the selector.
     categoryTabs: [],
     schedule: [emptyScheduleItem()],
+    // Which category groups are included on the Prep tab's crew list —
+    // independent of categoryTabs above (that's about Contractors-tab UI).
+    prepGroups: [],
+    prepNotes: '',
   };
 }
 
@@ -89,7 +99,11 @@ export default function EventFormPage() {
   const [openThreadContractorId, setOpenThreadContractorId] = useState(null);
   const [activeTab, setActiveTab] = useState('details');
   const [activeCategoryTab, setActiveCategoryTab] = useState('');
-  const [selectedCategoryToAdd, setSelectedCategoryToAdd] = useState('');
+  const [documents, setDocuments] = useState([]);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [docPendingDelete, setDocPendingDelete] = useState(null);
+  const [prepEmailModalOpen, setPrepEmailModalOpen] = useState(false);
+  const [sendingPrepEmail, setSendingPrepEmail] = useState(false);
 
   const hasCategories = contractorTypes.length > 0;
 
@@ -126,6 +140,8 @@ export default function EventFormPage() {
         contractorBookings: [...event.contractorBookings],
         categoryTabs,
         schedule: event.schedule || [emptyScheduleItem()],
+        prepGroups: event.prepGroups || [],
+        prepNotes: event.prepNotes || '',
       });
     } else {
       setForm(emptyForm());
@@ -156,6 +172,25 @@ export default function EventFormPage() {
     if (form.id) refreshThreadSummaries(form.id);
   }, [form.id, refreshThreadSummaries]);
 
+  const latestDocumentsEventIdRef = useRef(null);
+
+  const refreshDocuments = useCallback(async (eventIdForDocuments) => {
+    latestDocumentsEventIdRef.current = eventIdForDocuments;
+    try {
+      const docs = await listDocuments(eventIdForDocuments);
+      // Same stale-request guard as refreshThreadSummaries above.
+      if (latestDocumentsEventIdRef.current === eventIdForDocuments) {
+        setDocuments(docs);
+      }
+    } catch {
+      // best-effort — documents list just stays empty if this fails
+    }
+  }, []);
+
+  useEffect(() => {
+    if (form.id) refreshDocuments(form.id);
+  }, [form.id, refreshDocuments]);
+
   function update(field, val) {
     setForm((f) => ({ ...f, [field]: val }));
   }
@@ -173,9 +208,9 @@ export default function EventFormPage() {
 
   const duration = computeDurationHours(form.startTime, form.endTime);
   const availableContractors = contractors.filter((c) => !form.contractorBookings.some((b) => b.contractorId === c.id));
+  const prepContractors = getPrepContractors(form, contractors);
+  const prepEmailDraft = renderPrepSheetEmail(form, prepContractors);
 
-  // Categories not yet added as a tab on this event.
-  const availableCategoryOptions = contractorTypes.filter((t) => !form.categoryTabs.includes(t));
   // If categories exist system-wide, at least one tab must be added before
   // any contractor can be added — otherwise (no categories defined at all)
   // fall back to the fully open, unrestricted behavior.
@@ -192,11 +227,19 @@ export default function EventFormPage() {
     if (!type || form.categoryTabs.includes(type)) return;
     setForm((f) => ({ ...f, categoryTabs: [...f.categoryTabs, type] }));
     setActiveCategoryTab(type);
-    setSelectedCategoryToAdd('');
   }
 
   function removeCategoryTab(type) {
     setForm((f) => ({ ...f, categoryTabs: f.categoryTabs.filter((t) => t !== type) }));
+  }
+
+  function addPrepGroup(type) {
+    if (!type || form.prepGroups.includes(type)) return;
+    setForm((f) => ({ ...f, prepGroups: [...f.prepGroups, type] }));
+  }
+
+  function removePrepGroup(type) {
+    setForm((f) => ({ ...f, prepGroups: f.prepGroups.filter((t) => t !== type) }));
   }
 
   // Original indices are kept (not the filtered position) so drag-and-drop
@@ -292,6 +335,75 @@ export default function EventFormPage() {
     });
     const emailedStatus = getOrCreateInquiryStatus('Emailed', '#eab308');
     if (emailedStatus) changeBookingStatus(contractor.id, emailedStatus.id);
+  }
+
+  async function handleUploadDocument(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingDocument(true);
+    try {
+      await uploadDocument(form.id, file);
+      await refreshDocuments(form.id);
+      showToast('Document uploaded');
+    } catch (err) {
+      showToast(err.message || 'Failed to upload document', 'error');
+    } finally {
+      setUploadingDocument(false);
+      e.target.value = '';
+    }
+  }
+
+  async function confirmDeleteDocument() {
+    if (!docPendingDelete) return;
+    try {
+      await deleteDocument(docPendingDelete.id);
+      await refreshDocuments(form.id);
+      showToast('Document deleted');
+    } catch (err) {
+      showToast(err.message || 'Failed to delete document', 'error');
+    } finally {
+      setDocPendingDelete(null);
+    }
+  }
+
+  async function handleDownloadPdf() {
+    try {
+      await generatePrepSheetPdf(form, prepContractors);
+    } catch (err) {
+      showToast(err.message || 'Failed to generate PDF', 'error');
+    }
+  }
+
+  async function handleSendPrepEmail({ subject, body, recipientIds, documentIds }) {
+    setSendingPrepEmail(true);
+    try {
+      let successCount = 0;
+      for (const contractorId of recipientIds) {
+        const contractor = contractors.find((c) => c.id === contractorId);
+        if (!contractor?.email) continue;
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          await sendThreadedEmail({
+            eventId: form.id, contractorId, contractorEmail: contractor.email,
+            subject, body, fromName, documentIds,
+          });
+          successCount++;
+        } catch {
+          // keep going — failures reflected in the summary toast below
+        }
+      }
+      if (successCount === recipientIds.length) {
+        showToast(`Sent to ${successCount} contractor${successCount === 1 ? '' : 's'}`);
+      } else {
+        showToast(`Sent ${successCount} of ${recipientIds.length} emails — some failed`, 'error');
+      }
+      setPrepEmailModalOpen(false);
+      refreshThreadSummaries(form.id);
+    } catch (err) {
+      showToast(err.message || 'Failed to send prep sheet email', 'error');
+    } finally {
+      setSendingPrepEmail(false);
+    }
   }
 
   function getBookingTierId(contractorId) {
@@ -514,6 +626,15 @@ export default function EventFormPage() {
               {form.contractorBookings.length}
             </span>
           )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('prep')}
+          className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px ${
+            activeTab === 'prep' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          Prep
         </button>
       </div>
 
@@ -779,54 +900,15 @@ export default function EventFormPage() {
           </div>
 
           {hasCategories && (
-            <div className="flex items-center gap-2 mb-4 flex-wrap">
-              <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-slate-100 flex-wrap">
-                {form.categoryTabs.length === 0 && (
-                  <span className="px-3.5 py-1.5 text-sm text-slate-400">No group tabs yet</span>
-                )}
-                {form.categoryTabs.map((type) => (
-                  <span key={type} className="inline-flex items-center">
-                    <button
-                      type="button"
-                      onClick={() => setActiveCategoryTab(type)}
-                      className={`pl-3.5 pr-1.5 py-1.5 rounded-md text-sm font-semibold transition-colors ${
-                        activeCategoryTab === type ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                      }`}
-                    >
-                      {type}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeCategoryTab(type)}
-                      className="pr-2.5 text-slate-300 hover:text-red-600"
-                      aria-label={`Remove ${type} tab`}
-                    >
-                      ✕
-                    </button>
-                  </span>
-                ))}
-              </div>
-              {availableCategoryOptions.length > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <select
-                    value={selectedCategoryToAdd}
-                    onChange={(e) => setSelectedCategoryToAdd(e.target.value)}
-                    className="px-2 py-1.5 rounded-lg border border-slate-300 text-xs"
-                  >
-                    <option value="">Add group…</option>
-                    {availableCategoryOptions.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => addCategoryTab(selectedCategoryToAdd)}
-                    disabled={!selectedCategoryToAdd}
-                    className="px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    + Add
-                  </button>
-                </div>
-              )}
-            </div>
+            <GroupChipSelector
+              groups={form.categoryTabs}
+              allOptions={contractorTypes}
+              activeGroup={activeCategoryTab}
+              onSelectGroup={setActiveCategoryTab}
+              onAddGroup={addCategoryTab}
+              onRemoveGroup={removeCategoryTab}
+              emptyLabel="No group tabs yet"
+            />
           )}
 
           {showBulkRow && (
@@ -898,6 +980,140 @@ export default function EventFormPage() {
             </div>
           )}
         </div>
+
+        <div className={activeTab === 'prep' ? cardClass : 'hidden'}>
+          <div className="flex items-center justify-between mb-5">
+            <h3 className={`${cardTitleClass} mb-0`}>Prep Sheet</h3>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-50"
+              >
+                Download PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => setPrepEmailModalOpen(true)}
+                disabled={prepContractors.length === 0}
+                className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Email Prep Sheet
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <div className="text-sm space-y-1">
+              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Event Details</h4>
+              <p className="font-semibold text-slate-800">{form.name || 'Untitled event'}</p>
+              <p className="text-slate-500">
+                {form.eventDate ? new Date(`${form.eventDate}T00:00:00`).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '—'}
+                {form.eventDayOfTheWeek ? ` (${form.eventDayOfTheWeek})` : ''}
+              </p>
+              <p className="text-slate-500">{form.startTime || '—'} – {form.endTime || '—'}</p>
+              {form.contactPhone && <p className="text-slate-500">{form.contactPhone}{form.contactPhoneExt ? ` ext. ${form.contactPhoneExt}` : ''}</p>}
+              {form.contactEmail && <p className="text-slate-500">{form.contactEmail}</p>}
+            </div>
+            <div className="text-sm space-y-1">
+              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Location</h4>
+              {form.venue.name && <p className="font-semibold text-slate-800">{form.venue.name}</p>}
+              <p className="text-slate-500">
+                {[form.venue.address1, form.venue.address2].filter(Boolean).join(', ')}
+                {form.venue.city ? <br /> : null}
+                {[form.venue.city, form.venue.state, form.venue.zip].filter(Boolean).join(' ')}
+              </p>
+              {form.venue.locationNote && <p className="text-slate-500">{form.venue.locationNote}</p>}
+              {form.venue.loadInInfo && <p className="text-slate-500"><em>Load-in:</em> {form.venue.loadInInfo}</p>}
+            </div>
+          </div>
+
+          {form.schedule.some((s) => s.time || s.name || s.details) && (
+            <div className="mb-6">
+              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Schedule</h4>
+              <div className="space-y-1 text-sm">
+                {form.schedule.filter((s) => s.time || s.name || s.details).map((s) => (
+                  <div key={s.id} className="flex gap-3">
+                    <span className="w-16 shrink-0 text-slate-400">{s.time || '—'}</span>
+                    <span className="w-40 shrink-0 font-medium text-slate-700">{s.name}</span>
+                    <span className="text-slate-500">{s.details}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="mb-6">
+            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Crew</h4>
+            <GroupChipSelector
+              groups={form.prepGroups}
+              allOptions={contractorTypes}
+              onAddGroup={addPrepGroup}
+              onRemoveGroup={removePrepGroup}
+              emptyLabel="No groups added yet"
+            />
+            {prepContractors.length === 0 ? (
+              <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
+                Add a group above to include its contractors here.
+              </div>
+            ) : (
+              <div className="space-y-1 text-sm">
+                {prepContractors.map((c) => (
+                  <div key={c.contractorId} className="flex gap-3 px-1 py-1">
+                    <span className="w-40 shrink-0 font-medium text-slate-700">{c.name}</span>
+                    <span className="w-40 shrink-0 text-slate-500">{c.role}</span>
+                    <span className="text-slate-500">{c.startTime || '—'} – {c.endTime || '—'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="mb-6">
+            <label className={labelClass}>Notes</label>
+            <textarea
+              rows={3}
+              placeholder="Notes for the crew or day-of prep…"
+              value={form.prepNotes}
+              onChange={(e) => update('prepNotes', e.target.value)}
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className={`${labelClass} mb-0`}>Documents</label>
+              <label className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 cursor-pointer">
+                {uploadingDocument ? 'Uploading…' : '+ Upload Document'}
+                <input type="file" onChange={handleUploadDocument} disabled={uploadingDocument} className="hidden" />
+              </label>
+            </div>
+            {documents.length === 0 ? (
+              <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
+                No documents uploaded yet.
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {documents.map((d) => (
+                  <div key={d.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-slate-200 text-sm">
+                    <a href={documentDownloadUrl(d.id)} target="_blank" rel="noreferrer" className="flex-1 min-w-0 truncate text-indigo-600 hover:underline">
+                      {d.filename}
+                    </a>
+                    <span className="text-xs text-slate-400 shrink-0">{(d.size / 1024).toFixed(0)} KB</span>
+                    <button
+                      type="button"
+                      onClick={() => setDocPendingDelete(d)}
+                      className="shrink-0 w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
+                      aria-label={`Remove ${d.filename}`}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </form>
 
       <ContractorModal
@@ -955,6 +1171,25 @@ export default function EventFormPage() {
         })()}
         fromName={fromName}
         onChanged={() => refreshThreadSummaries(form.id)}
+      />
+
+      <PrepEmailModal
+        open={prepEmailModalOpen}
+        onClose={() => setPrepEmailModalOpen(false)}
+        prepContractors={prepContractors}
+        documents={documents}
+        initialSubject={prepEmailDraft.subject}
+        initialBody={prepEmailDraft.body}
+        sending={sendingPrepEmail}
+        onConfirm={handleSendPrepEmail}
+      />
+
+      <ConfirmDialog
+        open={!!docPendingDelete}
+        onClose={() => setDocPendingDelete(null)}
+        onConfirm={confirmDeleteDocument}
+        title="Remove document?"
+        description={`This will remove "${docPendingDelete?.filename}" from this event. This can't be undone.`}
       />
     </div>
   );
