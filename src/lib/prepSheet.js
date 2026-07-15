@@ -19,7 +19,7 @@ export function getPrepContractors(form, contractors) {
     .sort((a, b) => (a.startTime || '99:99').localeCompare(b.startTime || '99:99'));
 }
 
-export function renderPrepSheetEmail(form, prepContractors, attachedDocs = []) {
+export function renderPrepSheetEmail(form, prepContractors, requests = [], attachedDocs = []) {
   const eventDate = formatDate(form.eventDate);
   const venue = form.venue || {};
   const address = [venue.address1, venue.address2, venue.city && venue.state ? `${venue.city}, ${venue.state} ${venue.zip || ''}` : '']
@@ -32,6 +32,16 @@ export function renderPrepSheetEmail(form, prepContractors, attachedDocs = []) {
 
   const contractorRows = prepContractors
     .map((c) => `<tr><td style="padding:4px 12px 4px 0;font-weight:600;">${c.name}</td><td style="padding:4px 12px 4px 0;color:#475569;">${c.role}</td><td style="padding:4px 0;color:#475569;white-space:nowrap;">${formatTime(c.startTime)} – ${formatTime(c.endTime)}</td></tr>`)
+    .join('');
+
+  const requestRows = (requests || [])
+    .filter((r) => r.name || r.details || r.link || r.documentName)
+    .map((r) => {
+      const extras = [];
+      if (r.link) extras.push(`<a href="${r.link}" style="color:#4f46e5;">${r.link}</a>`);
+      if (r.documentName) extras.push(`Attached: ${r.documentName}`);
+      return `<tr><td style="padding:4px 12px 4px 0;font-weight:600;vertical-align:top;">${r.name || ''}</td><td style="padding:4px 12px 4px 0;color:#475569;vertical-align:top;">${r.details || ''}</td><td style="padding:4px 0;color:#475569;vertical-align:top;">${extras.join('<br>')}</td></tr>`;
+    })
     .join('');
 
   const body = `
@@ -54,6 +64,11 @@ export function renderPrepSheetEmail(form, prepContractors, attachedDocs = []) {
       ${contractorRows ? `
       <h3 style="margin:16px 0 4px;font-size:14px;text-transform:uppercase;letter-spacing:0.03em;color:#64748b;">Crew</h3>
       <table style="border-collapse:collapse;font-size:14px;">${contractorRows}</table>
+      ` : ''}
+
+      ${requestRows ? `
+      <h3 style="margin:16px 0 4px;font-size:14px;text-transform:uppercase;letter-spacing:0.03em;color:#64748b;">Requests</h3>
+      <table style="border-collapse:collapse;font-size:14px;">${requestRows}</table>
       ` : ''}
 
       ${form.prepNotes ? `

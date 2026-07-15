@@ -17,7 +17,7 @@ import { uid } from '../lib/storage';
 import { formatCurrency as currency, formatEventDate, formatEventTime } from '../lib/format';
 import { getPricingTiers, getTierPrice } from '../lib/pricingTiers';
 import { getPrepContractors, renderPrepSheetEmail } from '../lib/prepSheet';
-import { generatePrepSheetPdf } from '../lib/prepSheetPdf';
+import { generatePrepSheetPdf, generatePrepSheetPdfAttachment } from '../lib/prepSheetPdf';
 import { listDocuments, uploadDocument, deleteDocument, documentDownloadUrl } from '../lib/documents';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -58,11 +58,16 @@ function emptyForm() {
     // independent of categoryTabs above (that's about Contractors-tab UI).
     prepGroups: [],
     prepNotes: '',
+    requests: [emptyRequestItem()],
   };
 }
 
 function emptyScheduleItem() {
   return { id: uid('sched'), time: '', name: '', details: '' };
+}
+
+function emptyRequestItem() {
+  return { id: uid('req'), name: '', details: '', link: '', documentId: null, documentName: null };
 }
 
 export default function EventFormPage() {
@@ -104,6 +109,7 @@ export default function EventFormPage() {
   const [docPendingDelete, setDocPendingDelete] = useState(null);
   const [prepEmailModalOpen, setPrepEmailModalOpen] = useState(false);
   const [sendingPrepEmail, setSendingPrepEmail] = useState(false);
+  const [uploadingRequestId, setUploadingRequestId] = useState(null);
 
   const hasCategories = contractorTypes.length > 0;
 
@@ -142,6 +148,7 @@ export default function EventFormPage() {
         schedule: event.schedule || [emptyScheduleItem()],
         prepGroups: event.prepGroups || [],
         prepNotes: event.prepNotes || '',
+        requests: event.requests || [emptyRequestItem()],
       });
     } else {
       setForm(emptyForm());
@@ -209,7 +216,11 @@ export default function EventFormPage() {
   const duration = computeDurationHours(form.startTime, form.endTime);
   const availableContractors = contractors.filter((c) => !form.contractorBookings.some((b) => b.contractorId === c.id));
   const prepContractors = getPrepContractors(form, contractors);
-  const prepEmailDraft = renderPrepSheetEmail(form, prepContractors);
+  const prepEmailDraft = renderPrepSheetEmail(form, prepContractors, form.requests);
+  // Documents attached directly to a request are shown inline on that
+  // request's row, not duplicated in the general Documents widget/picker.
+  const requestDocumentIds = new Set(form.requests.map((r) => r.documentId).filter(Boolean));
+  const generalDocuments = documents.filter((d) => !requestDocumentIds.has(d.id));
 
   // If categories exist system-wide, at least one tab must be added before
   // any contractor can be added — otherwise (no categories defined at all)
@@ -324,6 +335,22 @@ export default function EventFormPage() {
     setForm((f) => ({ ...f, schedule: f.schedule.filter((s) => s.id !== id) }));
   }
 
+  function addRequestItem() {
+    setForm((f) => ({ ...f, requests: [...f.requests, emptyRequestItem()] }));
+  }
+
+  function updateRequestItem(id, patch) {
+    setForm((f) => ({ ...f, requests: f.requests.map((r) => (r.id === id ? { ...r, ...patch } : r)) }));
+  }
+
+  function removeRequestItem(id) {
+    const item = form.requests.find((r) => r.id === id);
+    setForm((f) => ({ ...f, requests: f.requests.filter((r) => r.id !== id) }));
+    if (item?.documentId) {
+      deleteDocument(item.documentId).then(() => refreshDocuments(form.id)).catch(() => {});
+    }
+  }
+
   const fromName = currentUser.businessInfo?.name || `${currentUser.firstName} ${currentUser.lastName}`;
 
   async function sendAndMarkEmailed(contractor, templateId, subject, body) {
@@ -353,6 +380,24 @@ export default function EventFormPage() {
     }
   }
 
+  async function handleUploadRequestDocument(id, file) {
+    if (!file) return;
+    setUploadingRequestId(id);
+    try {
+      const existing = form.requests.find((r) => r.id === id);
+      if (existing?.documentId) {
+        await deleteDocument(existing.documentId).catch(() => {});
+      }
+      const doc = await uploadDocument(form.id, file);
+      updateRequestItem(id, { documentId: doc.id, documentName: doc.filename });
+      await refreshDocuments(form.id);
+    } catch (err) {
+      showToast(err.message || 'Failed to upload document', 'error');
+    } finally {
+      setUploadingRequestId(null);
+    }
+  }
+
   async function confirmDeleteDocument() {
     if (!docPendingDelete) return;
     try {
@@ -368,7 +413,7 @@ export default function EventFormPage() {
 
   async function handleDownloadPdf() {
     try {
-      await generatePrepSheetPdf(form, prepContractors);
+      await generatePrepSheetPdf(form, prepContractors, form.requests);
     } catch (err) {
       showToast(err.message || 'Failed to generate PDF', 'error');
     }
@@ -377,6 +422,11 @@ export default function EventFormPage() {
   async function handleSendPrepEmail({ subject, body, recipientIds, documentIds }) {
     setSendingPrepEmail(true);
     try {
+      // Documents attached to individual requests ride along automatically —
+      // they were never offered as a separate checkbox in the modal.
+      const requestDocIds = form.requests.map((r) => r.documentId).filter(Boolean);
+      const mergedDocumentIds = Array.from(new Set([...documentIds, ...requestDocIds]));
+      const pdfAttachment = await generatePrepSheetPdfAttachment(form, prepContractors, form.requests);
       let successCount = 0;
       for (const contractorId of recipientIds) {
         const contractor = contractors.find((c) => c.id === contractorId);
@@ -385,7 +435,7 @@ export default function EventFormPage() {
           // eslint-disable-next-line no-await-in-loop
           await sendThreadedEmail({
             eventId: form.id, contractorId, contractorEmail: contractor.email,
-            subject, body, fromName, documentIds,
+            subject, body, fromName, documentIds: mergedDocumentIds, pdfAttachment,
           });
           successCount++;
         } catch {
@@ -1070,6 +1120,81 @@ export default function EventFormPage() {
           </div>
 
           <div className="mb-6">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Requests</h4>
+              <button type="button" onClick={addRequestItem} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">
+                + Add Request
+              </button>
+            </div>
+            {form.requests.length === 0 ? (
+              <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
+                No requests added yet.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {form.requests.map((r) => (
+                  <div key={r.id} className="border border-slate-200 rounded-lg p-3 space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        placeholder="Name"
+                        value={r.name}
+                        onChange={(e) => updateRequestItem(r.id, { name: e.target.value })}
+                        className={inputClass}
+                      />
+                      <input
+                        placeholder="Link (optional)"
+                        value={r.link}
+                        onChange={(e) => updateRequestItem(r.id, { link: e.target.value })}
+                        className={inputClass}
+                      />
+                    </div>
+                    <textarea
+                      rows={2}
+                      placeholder="Request details…"
+                      value={r.details}
+                      onChange={(e) => updateRequestItem(r.id, { details: e.target.value })}
+                      className={inputClass}
+                    />
+                    <div className="flex items-center justify-between">
+                      {r.documentId ? (
+                        <a
+                          href={documentDownloadUrl(r.documentId)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex-1 min-w-0 truncate text-xs text-indigo-600 hover:underline"
+                        >
+                          {r.documentName}
+                        </a>
+                      ) : (
+                        <span className="text-xs text-slate-400">No document attached</span>
+                      )}
+                      <div className="flex items-center gap-3 shrink-0">
+                        <label className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 cursor-pointer">
+                          {uploadingRequestId === r.id ? 'Uploading…' : r.documentId ? 'Replace document' : '+ Attach document'}
+                          <input
+                            type="file"
+                            onChange={(e) => handleUploadRequestDocument(r.id, e.target.files?.[0])}
+                            disabled={uploadingRequestId === r.id}
+                            className="hidden"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => removeRequestItem(r.id)}
+                          className="w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
+                          aria-label="Remove request"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="mb-6">
             <label className={labelClass}>Notes</label>
             <textarea
               rows={3}
@@ -1088,13 +1213,13 @@ export default function EventFormPage() {
                 <input type="file" onChange={handleUploadDocument} disabled={uploadingDocument} className="hidden" />
               </label>
             </div>
-            {documents.length === 0 ? (
+            {generalDocuments.length === 0 ? (
               <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
                 No documents uploaded yet.
               </div>
             ) : (
               <div className="space-y-1.5">
-                {documents.map((d) => (
+                {generalDocuments.map((d) => (
                   <div key={d.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-slate-200 text-sm">
                     <a href={documentDownloadUrl(d.id)} target="_blank" rel="noreferrer" className="flex-1 min-w-0 truncate text-indigo-600 hover:underline">
                       {d.filename}
@@ -1177,7 +1302,7 @@ export default function EventFormPage() {
         open={prepEmailModalOpen}
         onClose={() => setPrepEmailModalOpen(false)}
         prepContractors={prepContractors}
-        documents={documents}
+        documents={generalDocuments}
         initialSubject={prepEmailDraft.subject}
         initialBody={prepEmailDraft.body}
         sending={sendingPrepEmail}

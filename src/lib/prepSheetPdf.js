@@ -2,7 +2,7 @@ import { formatEventDate as formatDate, formatEventTime as formatTime } from './
 
 // jsPDF pulls in html2canvas/DOMPurify (~450KB) even though we only use its
 // plain drawing API — lazy-load it so that weight isn't in the main bundle.
-export async function generatePrepSheetPdf(form, prepContractors) {
+async function buildPrepSheetDoc(form, prepContractors, requests) {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable'),
@@ -81,6 +81,30 @@ export async function generatePrepSheetPdf(form, prepContractors) {
     y = doc.lastAutoTable.finalY + 10;
   }
 
+  const requestRows = (requests || [])
+    .filter((r) => r.name || r.details || r.link || r.documentName)
+    .map((r) => [
+      r.name || '',
+      r.details || '',
+      [r.link, r.documentName ? `Attached: ${r.documentName}` : ''].filter(Boolean).join('\n'),
+    ]);
+  if (requestRows.length) {
+    doc.setFontSize(13);
+    doc.setTextColor(30);
+    doc.text('Requests', marginX, y);
+    y += 4;
+    autoTable(doc, {
+      startY: y,
+      margin: { left: marginX },
+      head: [['Name', 'Details', 'Link / Attachment']],
+      body: requestRows,
+      theme: 'striped',
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [79, 70, 229] },
+    });
+    y = doc.lastAutoTable.finalY + 10;
+  }
+
   if (form.prepNotes) {
     doc.setFontSize(13);
     doc.setTextColor(30);
@@ -93,5 +117,17 @@ export async function generatePrepSheetPdf(form, prepContractors) {
   }
 
   const filename = `${(form.name || 'Event').replace(/[^a-z0-9]+/gi, '-')}-Prep.pdf`;
+  return { doc, filename };
+}
+
+export async function generatePrepSheetPdf(form, prepContractors, requests) {
+  const { doc, filename } = await buildPrepSheetDoc(form, prepContractors, requests);
   doc.save(filename);
+}
+
+// Returns the same PDF as a base64 string so it can be sent as an email
+// attachment without a round-trip through document storage.
+export async function generatePrepSheetPdfAttachment(form, prepContractors, requests) {
+  const { doc, filename } = await buildPrepSheetDoc(form, prepContractors, requests);
+  return { filename, contentType: 'application/pdf', base64: doc.output('base64') };
 }

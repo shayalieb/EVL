@@ -24,7 +24,7 @@ function serializeMessage(m) {
 }
 
 router.post('/send', asyncHandler(async (req, res) => {
-  const { eventId, contractorId, contractorEmail, subject, body, templateId, fromName, documentIds } = req.body || {};
+  const { eventId, contractorId, contractorEmail, subject, body, templateId, fromName, documentIds, pdfAttachment } = req.body || {};
   if (!eventId?.trim() || !contractorId?.trim() || !contractorEmail?.trim() || !subject?.trim() || !body?.trim()) {
     return res.status(400).json({ error: 'eventId, contractorId, contractorEmail, subject, and body are required.' });
   }
@@ -39,6 +39,15 @@ router.post('/send', asyncHandler(async (req, res) => {
       filename: d.filename,
       contentType: d.contentType,
     }));
+  }
+  // Ad hoc attachment (e.g. a freshly generated prep-sheet PDF) that isn't
+  // stored as an EventDocument — sent as base64 straight from the client.
+  if (pdfAttachment?.base64) {
+    attachments = [...(attachments || []), {
+      content: pdfAttachment.base64,
+      filename: pdfAttachment.filename || 'prep-sheet.pdf',
+      contentType: pdfAttachment.contentType || 'application/pdf',
+    }];
   }
   let thread = await prisma.emailThread.upsert({
     where: { accountId_eventId_contractorId: { accountId, eventId, contractorId } },
