@@ -45,6 +45,9 @@ function emptyForm() {
     startTime: '', endTime: '',
     eventNote: '',
     contractorBookings: [],
+    // Which category/group tabs have been added to this event's Contractors
+    // tab — starts empty; tabs are added explicitly via the selector.
+    categoryTabs: [],
   };
 }
 
@@ -80,20 +83,32 @@ export default function EventFormPage() {
   const [threadSummaries, setThreadSummaries] = useState({});
   const [openThreadContractorId, setOpenThreadContractorId] = useState(null);
   const [activeTab, setActiveTab] = useState('details');
-  const [activeCategoryTab, setActiveCategoryTab] = useState(contractorTypes[0] || '');
+  const [activeCategoryTab, setActiveCategoryTab] = useState('');
+  const [selectedCategoryToAdd, setSelectedCategoryToAdd] = useState('');
 
   const hasCategories = contractorTypes.length > 0;
 
   useEffect(() => {
-    if (!contractorTypes.includes(activeCategoryTab)) {
-      setActiveCategoryTab(contractorTypes[0] || '');
+    if (form.categoryTabs.length === 0) {
+      if (activeCategoryTab !== '') setActiveCategoryTab('');
+      return;
     }
-  }, [contractorTypes, activeCategoryTab]);
+    if (!form.categoryTabs.includes(activeCategoryTab)) {
+      setActiveCategoryTab(form.categoryTabs[0]);
+    }
+  }, [form.categoryTabs, activeCategoryTab]);
 
   const draftStatus = eventStatuses.find((s) => s.label.toLowerCase() === 'draft') || eventStatuses[0];
 
   useEffect(() => {
     if (event) {
+      // Older saved events predate categoryTabs — derive an initial set from
+      // whichever categories are already booked so nothing disappears.
+      const categoryTabs = event.categoryTabs || Array.from(new Set(
+        event.contractorBookings
+          .map((b) => contractors.find((c) => c.id === b.contractorId)?.contractorType1)
+          .filter(Boolean)
+      ));
       setForm({
         id: event.id,
         name: event.name, eventType: event.eventType, eventDate: event.eventDate,
@@ -104,6 +119,7 @@ export default function EventFormPage() {
         startTime: event.startTime, endTime: event.endTime,
         eventNote: event.eventNote || '',
         contractorBookings: [...event.contractorBookings],
+        categoryTabs,
       });
     } else {
       setForm(emptyForm());
@@ -111,7 +127,7 @@ export default function EventFormPage() {
     setError('');
     setAddingType(false);
     setPickerOpen(false);
-  }, [eventId, event]);
+  }, [eventId, event, contractors]);
 
   const refreshThreadSummaries = useCallback(async (eventIdForSummaries) => {
     try {
@@ -144,10 +160,29 @@ export default function EventFormPage() {
   const duration = computeDurationHours(form.startTime, form.endTime);
   const availableContractors = contractors.filter((c) => !form.contractorBookings.some((b) => b.contractorId === c.id));
 
+  // Categories not yet added as a tab on this event.
+  const availableCategoryOptions = contractorTypes.filter((t) => !form.categoryTabs.includes(t));
+  // If categories exist system-wide, at least one tab must be added before
+  // any contractor can be added — otherwise (no categories defined at all)
+  // fall back to the fully open, unrestricted behavior.
+  const canAddContractor = !hasCategories || form.categoryTabs.length > 0;
+
   function matchesActiveCategoryTab(contractorId) {
-    if (!hasCategories) return true;
+    if (!hasCategories) return true; // no categories defined system-wide — fully flat, unrestricted
+    if (form.categoryTabs.length === 0) return false; // categories exist, but none added to this event yet
     const contractor = contractors.find((c) => c.id === contractorId);
     return contractor?.contractorType1 === activeCategoryTab;
+  }
+
+  function addCategoryTab(type) {
+    if (!type || form.categoryTabs.includes(type)) return;
+    setForm((f) => ({ ...f, categoryTabs: [...f.categoryTabs, type] }));
+    setActiveCategoryTab(type);
+    setSelectedCategoryToAdd('');
+  }
+
+  function removeCategoryTab(type) {
+    setForm((f) => ({ ...f, categoryTabs: f.categoryTabs.filter((t) => t !== type) }));
   }
 
   // Original indices are kept (not the filtered position) so drag-and-drop
@@ -625,23 +660,57 @@ export default function EventFormPage() {
         <div className={activeTab === 'contractors' ? cardClass : 'hidden'}>
           <div className="flex items-center justify-between mb-5">
             <h3 className={`${cardTitleClass} mb-0`}>Contractors</h3>
-            {!showBulkRow && addContractorButton}
+            {!showBulkRow && canAddContractor && addContractorButton}
           </div>
 
           {hasCategories && (
-            <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-slate-100 mb-4 flex-wrap">
-              {contractorTypes.map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => setActiveCategoryTab(type)}
-                  className={`px-3.5 py-1.5 rounded-md text-sm font-semibold transition-colors ${
-                    activeCategoryTab === type ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  {type}
-                </button>
-              ))}
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+              <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-slate-100 flex-wrap">
+                {form.categoryTabs.length === 0 && (
+                  <span className="px-3.5 py-1.5 text-sm text-slate-400">No group tabs yet</span>
+                )}
+                {form.categoryTabs.map((type) => (
+                  <span key={type} className="inline-flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => setActiveCategoryTab(type)}
+                      className={`pl-3.5 pr-1.5 py-1.5 rounded-md text-sm font-semibold transition-colors ${
+                        activeCategoryTab === type ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      {type}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeCategoryTab(type)}
+                      className="pr-2.5 text-slate-300 hover:text-red-600"
+                      aria-label={`Remove ${type} tab`}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+              {availableCategoryOptions.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <select
+                    value={selectedCategoryToAdd}
+                    onChange={(e) => setSelectedCategoryToAdd(e.target.value)}
+                    className="px-2 py-1.5 rounded-lg border border-slate-300 text-xs"
+                  >
+                    <option value="">Add group…</option>
+                    {availableCategoryOptions.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => addCategoryTab(selectedCategoryToAdd)}
+                    disabled={!selectedCategoryToAdd}
+                    className="px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    + Add
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -669,11 +738,15 @@ export default function EventFormPage() {
               <div className="shrink-0 ml-3 w-32" aria-hidden="true" />
               <div className="w-20 shrink-0" aria-hidden="true" />
               <div className="shrink-0 w-6" aria-hidden="true" />
-              {addContractorButton}
+              {canAddContractor && addContractorButton}
             </div>
           )}
 
-          {visibleEntries.length === 0 ? (
+          {!canAddContractor ? (
+            <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
+              Add a group tab above to start adding contractors.
+            </div>
+          ) : visibleEntries.length === 0 ? (
             <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
               {hasCategories ? 'No contractors in this category yet.' : 'No contractors added yet.'}
             </div>
