@@ -214,7 +214,10 @@ export default function EventFormPage() {
     const addedStatus = getOrCreateInquiryStatus('Added', '#94a3b8');
     setForm((f) => ({
       ...f,
-      contractorBookings: [...f.contractorBookings, { contractorId, inquiryStatusId: addedStatus?.id, pricingTierId }],
+      contractorBookings: [...f.contractorBookings, {
+        contractorId, inquiryStatusId: addedStatus?.id, pricingTierId,
+        startTime: f.startTime, endTime: f.endTime,
+      }],
     }));
     setPickerOpen(false);
   }
@@ -250,6 +253,13 @@ export default function EventFormPage() {
     setForm((f) => ({
       ...f,
       contractorBookings: f.contractorBookings.map((b) => (b.contractorId === contractorId ? { ...b, pricingTierId } : b)),
+    }));
+  }
+
+  function changeBookingTime(contractorId, field, value) {
+    setForm((f) => ({
+      ...f,
+      contractorBookings: f.contractorBookings.map((b) => (b.contractorId === contractorId ? { ...b, [field]: value } : b)),
     }));
   }
 
@@ -798,6 +808,7 @@ export default function EventFormPage() {
                   threadSummary={threadSummaries[b.contractorId]}
                   onStatusChange={changeBookingStatus}
                   onTierChange={changeBookingTier}
+                  onTimeChange={changeBookingTime}
                   onRemove={removeContractorFromEvent}
                   onRequestSend={handleRequestSend}
                   onOpenContractor={setEditingContractor}
