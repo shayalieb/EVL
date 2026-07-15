@@ -47,7 +47,12 @@ function emptyForm() {
     // Which category/group tabs have been added to this event's Contractors
     // tab — starts empty; tabs are added explicitly via the selector.
     categoryTabs: [],
+    schedule: [emptyScheduleItem()],
   };
+}
+
+function emptyScheduleItem() {
+  return { id: uid('sched'), time: '', name: '', details: '' };
 }
 
 export default function EventFormPage() {
@@ -120,6 +125,7 @@ export default function EventFormPage() {
         eventNote: event.eventNote || '',
         contractorBookings: [...event.contractorBookings],
         categoryTabs,
+        schedule: event.schedule || [emptyScheduleItem()],
       });
     } else {
       setForm(emptyForm());
@@ -261,6 +267,18 @@ export default function EventFormPage() {
       ...f,
       contractorBookings: f.contractorBookings.map((b) => (b.contractorId === contractorId ? { ...b, [field]: value } : b)),
     }));
+  }
+
+  function addScheduleItem() {
+    setForm((f) => ({ ...f, schedule: [...f.schedule, emptyScheduleItem()] }));
+  }
+
+  function updateScheduleItem(id, patch) {
+    setForm((f) => ({ ...f, schedule: f.schedule.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
+  }
+
+  function removeScheduleItem(id) {
+    setForm((f) => ({ ...f, schedule: f.schedule.filter((s) => s.id !== id) }));
   }
 
   const fromName = currentUser.businessInfo?.name || `${currentUser.firstName} ${currentUser.lastName}`;
@@ -700,6 +718,58 @@ export default function EventFormPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div className={activeTab === 'details' ? cardClass : 'hidden'}>
+          <div className="flex items-center justify-between mb-5">
+            <h3 className={`${cardTitleClass} mb-0`}>Event Schedule</h3>
+            <button
+              type="button"
+              onClick={addScheduleItem}
+              className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+            >
+              + Add Line
+            </button>
+          </div>
+
+          {form.schedule.length === 0 ? (
+            <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
+              No schedule lines yet.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {form.schedule.map((item) => (
+                <div key={item.id} className="flex items-start gap-2">
+                  <input
+                    type="time"
+                    value={item.time}
+                    onChange={(e) => updateScheduleItem(item.id, { time: e.target.value })}
+                    className="shrink-0 w-32 px-2.5 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                  <input
+                    value={item.name}
+                    onChange={(e) => updateScheduleItem(item.id, { name: e.target.value })}
+                    placeholder="e.g. Ceremony"
+                    className="shrink-0 w-48 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                  <input
+                    value={item.details}
+                    onChange={(e) => updateScheduleItem(item.id, { details: e.target.value })}
+                    placeholder="Details…"
+                    className="flex-1 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeScheduleItem(item.id)}
+                    className="shrink-0 w-9 h-9 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
+                    aria-label="Remove schedule line"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className={activeTab === 'contractors' ? cardClass : 'hidden'}>
