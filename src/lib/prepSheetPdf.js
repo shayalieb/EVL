@@ -81,13 +81,11 @@ async function buildPrepSheetDoc(form, prepContractors, requests) {
     y = doc.lastAutoTable.finalY + 10;
   }
 
+  // Link and attachment are email-only (the recipient gets the actual file
+  // and a clickable link there) — the PDF just lists name and details.
   const requestRows = (requests || [])
     .filter((r) => r.name || r.details || r.link || r.documentName)
-    .map((r) => [
-      r.name || '',
-      r.details || '',
-      [r.link, r.documentName ? `Attached: ${r.documentName}` : ''].filter(Boolean).join('\n'),
-    ]);
+    .map((r) => [r.name || '', r.details || '']);
   if (requestRows.length) {
     doc.setFontSize(13);
     doc.setTextColor(30);
@@ -96,7 +94,7 @@ async function buildPrepSheetDoc(form, prepContractors, requests) {
     autoTable(doc, {
       startY: y,
       margin: { left: marginX },
-      head: [['Name', 'Details', 'Link / Attachment']],
+      head: [['Name', 'Details']],
       body: requestRows,
       theme: 'striped',
       styles: { fontSize: 9 },
