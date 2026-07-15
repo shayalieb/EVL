@@ -79,6 +79,7 @@ export default function EventFormPage() {
   const [previewSending, setPreviewSending] = useState(false);
   const [threadSummaries, setThreadSummaries] = useState({});
   const [openThreadContractorId, setOpenThreadContractorId] = useState(null);
+  const [activeTab, setActiveTab] = useState('details');
 
   const draftStatus = eventStatuses.find((s) => s.label.toLowerCase() === 'draft') || eventStatuses[0];
 
@@ -263,7 +264,7 @@ export default function EventFormPage() {
 
   function handleSaveDraft() {
     const err = validate();
-    if (err) { setError(err); return; }
+    if (err) { setError(err); setActiveTab('details'); return; }
     persistEvent(draftStatus?.id);
     showToast('Saved as draft');
     navigate('/events');
@@ -272,7 +273,7 @@ export default function EventFormPage() {
   function handleSubmit(e) {
     e.preventDefault();
     const err = validate();
-    if (err) { setError(err); return; }
+    if (err) { setError(err); setActiveTab('details'); return; }
     setSaving(true);
     setTimeout(() => {
       const confirmedStatus = eventStatuses.find((s) => s.label.toLowerCase() === 'confirmed');
@@ -365,10 +366,36 @@ export default function EventFormPage() {
         </div>
       </div>
 
+      <div className="flex border-b border-slate-200 mb-6">
+        <button
+          type="button"
+          onClick={() => setActiveTab('details')}
+          className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px ${
+            activeTab === 'details' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          Details
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('contractors')}
+          className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px flex items-center gap-2 ${
+            activeTab === 'contractors' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          Contractors
+          {form.contractorBookings.length > 0 && (
+            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">
+              {form.contractorBookings.length}
+            </span>
+          )}
+        </button>
+      </div>
+
       {error && <div className="mb-6 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
       <form id="event-form" onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className={activeTab === 'details' ? 'grid grid-cols-1 lg:grid-cols-2 gap-6' : 'hidden'}>
           <div className={cardClass}>
             <h3 className={cardTitleClass}>Event Details</h3>
             <div className="space-y-5">
@@ -568,7 +595,7 @@ export default function EventFormPage() {
           </div>
         </div>
 
-        <div className={cardClass}>
+        <div className={activeTab === 'contractors' ? cardClass : 'hidden'}>
           <div className="flex items-center justify-between mb-5">
             <h3 className={`${cardTitleClass} mb-0`}>Contractors</h3>
             {!showBulkRow && addContractorButton}
