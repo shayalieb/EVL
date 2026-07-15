@@ -52,7 +52,7 @@ export default function ContractorModal({ open, onClose, contractor }) {
   function handleSubmit(e) {
     e.preventDefault();
     if (!form.firstName.trim() || !form.lastName.trim() || !form.contractorType1) {
-      setError('First name, last name, and contractor type are required.');
+      setError('First name, last name, and category are required.');
       return;
     }
     const payload = {
@@ -96,11 +96,11 @@ export default function ContractorModal({ open, onClose, contractor }) {
         </div>
 
         <div>
-          <label className={labelClass}>Contractor Type 1 *</label>
+          <label className={labelClass}>Category *</label>
           {!addingType ? (
             <div className="flex gap-2">
               <select required value={form.contractorType1} onChange={(e) => update('contractorType1', e.target.value)} className={inputClass}>
-                <option value="">Select a type…</option>
+                <option value="">Select a category…</option>
                 {contractorTypes.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
               <button type="button" onClick={() => setAddingType(true)} className="shrink-0 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50">
@@ -109,7 +109,7 @@ export default function ContractorModal({ open, onClose, contractor }) {
             </div>
           ) : (
             <div className="flex gap-2">
-              <input autoFocus value={newTypeLabel} onChange={(e) => setNewTypeLabel(e.target.value)} placeholder="New contractor type" className={inputClass} />
+              <input autoFocus value={newTypeLabel} onChange={(e) => setNewTypeLabel(e.target.value)} placeholder="New category" className={inputClass} />
               <button type="button" onClick={handleAddType} className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
                 Save
               </button>
@@ -121,7 +121,7 @@ export default function ContractorModal({ open, onClose, contractor }) {
         </div>
 
         <div>
-          <label className={labelClass}>Contractor Type 2 <span className="font-normal text-slate-400">(optional — e.g. instrument)</span></label>
+          <label className={labelClass}>Role <span className="font-normal text-slate-400">(optional — e.g. instrument)</span></label>
           <input value={form.contractorType2} onChange={(e) => update('contractorType2', e.target.value)} className={inputClass} />
         </div>
 

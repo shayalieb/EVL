@@ -57,8 +57,8 @@ export default function ContractorsPage() {
                 <th className="px-4 py-3">Full Name</th>
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Phone</th>
-                <th className="px-4 py-3">Type 1</th>
-                <th className="px-4 py-3">Type 2</th>
+                <th className="px-4 py-3">Category</th>
+                <th className="px-4 py-3">Role</th>
                 <th className="px-4 py-3">Price</th>
                 <th className="px-4 py-3 text-center">Notes</th>
                 <th className="px-4 py-3 text-right">Actions</th>

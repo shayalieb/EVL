@@ -170,7 +170,7 @@ function CustomFieldsTab() {
   const canEdit = can('manageSettings');
   return (
     <div className="space-y-10 max-w-2xl">
-      <SimpleListField title="Contractor Types" canEdit={canEdit} />
+      <SimpleListField title="Categories" canEdit={canEdit} />
       <EventTypeListField canEdit={canEdit} />
       <ColorStatusListField title="Event Statuses" canEdit={canEdit} />
       <InquiryStatusListField canEdit={canEdit} />
@@ -205,7 +205,7 @@ function SimpleListField({ title, canEdit }) {
       </div>
       {canEdit && (
         <form onSubmit={handleAdd} className="flex gap-2 max-w-sm">
-          <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="New contractor type" className={inputClass} />
+          <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="New category" className={inputClass} />
           <button type="submit" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">Add</button>
         </form>
       )}
