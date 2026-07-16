@@ -8,12 +8,13 @@ function buildFieldMap({ event, contractor, booking, contractors, pricingTierId 
   const venue = event.venue || {};
   const cityStateZip = venue.city && venue.state ? `${venue.city}, ${venue.state}${venue.zip ? ` ${venue.zip}` : ''}` : '';
   const venueFullAddress = [venue.name, venue.address1, venue.address2, cityStateZip].filter(Boolean).join('<br>');
-  // Every contractor booked to the event, regardless of Prep tab group
-  // selection — CrewList is meant to always reflect the whole crew.
+  // Every other contractor booked to the event in the same category as this
+  // email's recipient (e.g. a musician's email lists the rest of the band,
+  // not the photographers) — "that group" is the recipient's own category.
   const crewRows = (event.contractorBookings || [])
     .map((b) => (contractors || []).find((c) => c.id === b.contractorId))
-    .filter(Boolean)
-    .map((c) => `<li>${c.firstName} ${c.lastName} — ${c.contractorType2 || c.contractorType1}</li>`)
+    .filter((c) => c && c.contractorType1 === contractor.contractorType1)
+    .map((c) => `<li>${c.contractorType2 || c.contractorType1} - ${c.firstName} ${c.lastName}</li>`)
     .join('');
   // list-style is set inline (not left to the browser default) because this
   // HTML also gets rendered inside the app itself (template preview, send

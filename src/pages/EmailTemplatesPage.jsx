@@ -49,7 +49,7 @@ const MERGE_FIELD_GROUPS = [
       { token: '{{ContactPhone}}', description: 'Day-of contact phone' },
       { token: '{{ContactPhoneExt}}', description: 'Contact phone extension' },
       { token: '{{ContactEmail}}', description: 'Day-of contact email' },
-      { token: '{{CrewList}}', description: 'Bulleted list of name — role for every contractor booked to the event' },
+      { token: '{{CrewList}}', description: "Bulleted list of role - name for every contractor in the recipient's own category (e.g. their band)" },
     ],
   },
 ];
