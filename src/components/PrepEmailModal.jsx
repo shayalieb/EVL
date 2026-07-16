@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Modal from './ui/Modal';
+import RichTextToolbar from './ui/RichTextToolbar';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -85,6 +86,7 @@ export default function PrepEmailModal({ open, onClose, prepContractors, documen
 
         <div>
           <label className={labelClass}>Body</label>
+          <RichTextToolbar editorRef={bodyRef} onFormat={handleBodyInput} />
           <div
             ref={bodyRef}
             contentEditable

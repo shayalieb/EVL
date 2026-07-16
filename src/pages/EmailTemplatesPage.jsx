@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/Toast';
 import { ChevronDownIcon, SearchIcon } from '../components/ui/icons';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import RichTextToolbar from '../components/ui/RichTextToolbar';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -173,13 +174,6 @@ function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, can
     setBody(bodyRef.current.innerHTML);
   }
 
-  function applyFormat(command, value) {
-    if (!bodyRef.current) return;
-    bodyRef.current.focus();
-    document.execCommand(command, false, value);
-    handleBodyInput();
-  }
-
   return (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
       <button
@@ -227,14 +221,7 @@ function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, can
 
             {mode === 'visual' ? (
               <>
-                <div className="flex items-center gap-1 mb-1.5">
-                  <button type="button" title="Bold" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('bold')} className="w-7 h-7 rounded hover:bg-slate-100 font-bold text-sm text-slate-700">B</button>
-                  <button type="button" title="Italic" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('italic')} className="w-7 h-7 rounded hover:bg-slate-100 italic text-sm text-slate-700">I</button>
-                  <button type="button" title="Underline" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('underline')} className="w-7 h-7 rounded hover:bg-slate-100 underline text-sm text-slate-700">U</button>
-                  <div className="w-px h-4 bg-slate-200 mx-1" />
-                  <button type="button" title="Smaller text" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('fontSize', '2')} className="w-7 h-7 rounded hover:bg-slate-100 text-xs text-slate-700">A-</button>
-                  <button type="button" title="Larger text" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('fontSize', '5')} className="w-7 h-7 rounded hover:bg-slate-100 text-base text-slate-700">A+</button>
-                </div>
+                <RichTextToolbar editorRef={bodyRef} onFormat={handleBodyInput} />
                 <div
                   ref={bodyRef}
                   contentEditable
