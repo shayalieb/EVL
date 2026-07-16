@@ -1,6 +1,5 @@
 import { formatCurrency, formatEventDate as formatDate, formatEventTime as formatTime } from './format';
 import { getTierPrice } from './pricingTiers';
-import { getPrepContractors } from './prepSheet';
 
 // Field names here must match the {{Token}} names shown in the Email
 // Templates "Insert Fields" reference panel.
@@ -9,12 +8,19 @@ function buildFieldMap({ event, contractor, booking, contractors, pricingTierId 
   const venue = event.venue || {};
   const cityStateZip = venue.city && venue.state ? `${venue.city}, ${venue.state}${venue.zip ? ` ${venue.zip}` : ''}` : '';
   const venueFullAddress = [venue.name, venue.address1, venue.address2, cityStateZip].filter(Boolean).join('<br>');
-  // Reuses the Prep tab's crew-group selection (event.prepGroups) so the same
-  // "who's included" choice drives both the internal prep sheet and this
-  // contractor-facing list — no separate picker to keep in sync.
-  const crewList = getPrepContractors(event, contractors || [])
-    .map((c) => `${c.name} — ${c.role}`)
-    .join('<br>');
+  // Every contractor booked to the event, regardless of Prep tab group
+  // selection — CrewList is meant to always reflect the whole crew.
+  const crewRows = (event.contractorBookings || [])
+    .map((b) => (contractors || []).find((c) => c.id === b.contractorId))
+    .filter(Boolean)
+    .map((c) => `<li>${c.firstName} ${c.lastName} — ${c.contractorType2 || c.contractorType1}</li>`)
+    .join('');
+  // list-style is set inline (not left to the browser default) because this
+  // HTML also gets rendered inside the app itself (template preview, send
+  // preview, sent-message thread view), where Tailwind's preflight resets
+  // `ul { list-style: none }` — without this the bullets vanish in-app even
+  // though they'd show fine in a real email client.
+  const crewList = crewRows ? `<ul style="margin:0;padding-left:18px;list-style-type:disc;">${crewRows}</ul>` : '';
   return {
     ContractorFirstName: contractor.firstName || '',
     ContractorLastName: contractor.lastName || '',
