@@ -19,11 +19,35 @@ import { getPricingTiers, getTierPrice } from '../lib/pricingTiers';
 import { getPrepContractors, renderPrepSheetEmail } from '../lib/prepSheet';
 import { generatePrepSheetPdf, generatePrepSheetPdfAttachment } from '../lib/prepSheetPdf';
 import { listDocuments, uploadDocument, deleteDocument, documentDownloadUrl } from '../lib/documents';
+import { InfoIcon, MapPinIcon, ClockIcon, UsersIcon, ClipboardIcon, NoteIcon, FileIcon } from '../components/ui/icons';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 const cardClass = 'bg-white rounded-2xl border border-slate-200 p-6';
 const cardTitleClass = 'text-base font-bold text-slate-800 mb-5';
+
+// Gives each Prep tab widget (Event Details, Location, Schedule, Crew,
+// Requests, Notes, Documents) its own color + icon so they read as distinct
+// widgets instead of one undifferentiated stack of sections.
+function PrepSection({ title, color, icon, action, children }) {
+  return (
+    <div className="relative rounded-xl border border-slate-200 overflow-hidden">
+      <span className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: color }} />
+      <div className="p-4 pt-5">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}1a`, color }}>
+              {icon}
+            </div>
+            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{title}</h4>
+          </div>
+          {action}
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 function tomorrowISO() {
   const d = new Date();
@@ -1055,166 +1079,179 @@ export default function EventFormPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            <div className="text-sm space-y-1">
-              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Event Details</h4>
-              <p className="font-semibold text-slate-800">{form.name || 'Untitled event'}</p>
-              <p className="text-slate-500">
-                {formatEventDate(form.eventDate) || '—'}
-                {form.eventDayOfTheWeek ? ` (${form.eventDayOfTheWeek})` : ''}
-              </p>
-              <p className="text-slate-500">{formatEventTime(form.startTime) || '—'} – {formatEventTime(form.endTime) || '—'}</p>
-              {form.contactPhone && <p className="text-slate-500">{form.contactPhone}{form.contactPhoneExt ? ` ext. ${form.contactPhoneExt}` : ''}</p>}
-              {form.contactEmail && <p className="text-slate-500">{form.contactEmail}</p>}
-            </div>
-            <div className="text-sm space-y-1">
-              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Location</h4>
-              {form.venue.name && <p className="font-semibold text-slate-800">{form.venue.name}</p>}
-              <p className="text-slate-500">
-                {[form.venue.address1, form.venue.address2].filter(Boolean).join(', ')}
-                {form.venue.city ? <br /> : null}
-                {[form.venue.city, form.venue.state, form.venue.zip].filter(Boolean).join(' ')}
-              </p>
-              {form.venue.locationNote && <p className="text-slate-500">{form.venue.locationNote}</p>}
-              {form.venue.loadInInfo && <p className="text-slate-500"><em>Load-in:</em> {form.venue.loadInInfo}</p>}
-            </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <PrepSection title="Event Details" color="#64748b" icon={<InfoIcon className="w-3.5 h-3.5" />}>
+              <div className="text-sm space-y-1">
+                <p className="font-semibold text-slate-800">{form.name || 'Untitled event'}</p>
+                <p className="text-slate-500">
+                  {formatEventDate(form.eventDate) || '—'}
+                  {form.eventDayOfTheWeek ? ` (${form.eventDayOfTheWeek})` : ''}
+                </p>
+                <p className="text-slate-500">{formatEventTime(form.startTime) || '—'} – {formatEventTime(form.endTime) || '—'}</p>
+                {form.contactPhone && <p className="text-slate-500">{form.contactPhone}{form.contactPhoneExt ? ` ext. ${form.contactPhoneExt}` : ''}</p>}
+                {form.contactEmail && <p className="text-slate-500">{form.contactEmail}</p>}
+              </div>
+            </PrepSection>
+            <PrepSection title="Location" color="#2563eb" icon={<MapPinIcon className="w-3.5 h-3.5" />}>
+              <div className="text-sm space-y-1">
+                {form.venue.name && <p className="font-semibold text-slate-800">{form.venue.name}</p>}
+                <p className="text-slate-500">
+                  {[form.venue.address1, form.venue.address2].filter(Boolean).join(', ')}
+                  {form.venue.city ? <br /> : null}
+                  {[form.venue.city, form.venue.state, form.venue.zip].filter(Boolean).join(' ')}
+                </p>
+                {form.venue.locationNote && <p className="text-slate-500">{form.venue.locationNote}</p>}
+                {form.venue.loadInInfo && <p className="text-slate-500"><em>Load-in:</em> {form.venue.loadInInfo}</p>}
+              </div>
+            </PrepSection>
           </div>
 
           {form.schedule.some((s) => s.time || s.name || s.details) && (
-            <div className="mb-6">
-              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Schedule</h4>
-              <div className="space-y-1 text-sm">
-                {form.schedule.filter((s) => s.time || s.name || s.details).map((s) => (
-                  <div key={s.id} className="flex gap-3">
-                    <span className="w-20 shrink-0 text-slate-400">{formatEventTime(s.time) || '—'}</span>
-                    <span className="w-40 shrink-0 font-medium text-slate-700">{s.name}</span>
-                    <span className="text-slate-500">{s.details}</span>
-                  </div>
-                ))}
-              </div>
+            <div className="mb-4">
+              <PrepSection title="Schedule" color="#0d9488" icon={<ClockIcon className="w-3.5 h-3.5" />}>
+                <div className="space-y-1 text-sm">
+                  {form.schedule.filter((s) => s.time || s.name || s.details).map((s) => (
+                    <div key={s.id} className="flex gap-3">
+                      <span className="w-20 shrink-0 text-slate-400">{formatEventTime(s.time) || '—'}</span>
+                      <span className="w-40 shrink-0 font-medium text-slate-700">{s.name}</span>
+                      <span className="text-slate-500">{s.details}</span>
+                    </div>
+                  ))}
+                </div>
+              </PrepSection>
             </div>
           )}
 
-          <div className="mb-6">
-            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Crew</h4>
-            <GroupChipSelector
-              groups={form.prepGroups}
-              allOptions={contractorTypes}
-              onAddGroup={addPrepGroup}
-              onRemoveGroup={removePrepGroup}
-              emptyLabel="No groups added yet"
-            />
-            {prepContractors.length === 0 ? (
-              <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
-                Add a group above to include its contractors here.
-              </div>
-            ) : (
-              <div className="space-y-1 text-sm">
-                {prepContractors.map((c) => (
-                  <div key={c.contractorId} className="flex gap-3 px-1 py-1">
-                    <span className="w-40 shrink-0 font-medium text-slate-700">{c.name}</span>
-                    <span className="w-40 shrink-0 text-slate-500">{c.role}</span>
-                    <span className="text-slate-500">{formatEventTime(c.startTime) || '—'} – {formatEventTime(c.endTime) || '—'}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+          <div className="mb-4">
+            <PrepSection title="Crew" color="#7c3aed" icon={<UsersIcon className="w-3.5 h-3.5" />}>
+              <GroupChipSelector
+                groups={form.prepGroups}
+                allOptions={contractorTypes}
+                onAddGroup={addPrepGroup}
+                onRemoveGroup={removePrepGroup}
+                emptyLabel="No groups added yet"
+              />
+              {prepContractors.length === 0 ? (
+                <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
+                  Add a group above to include its contractors here.
+                </div>
+              ) : (
+                <div className="space-y-1 text-sm">
+                  {prepContractors.map((c) => (
+                    <div key={c.contractorId} className="flex gap-3 px-1 py-1">
+                      <span className="w-40 shrink-0 font-medium text-slate-700">{c.name}</span>
+                      <span className="w-40 shrink-0 text-slate-500">{c.role}</span>
+                      <span className="text-slate-500">{formatEventTime(c.startTime) || '—'} – {formatEventTime(c.endTime) || '—'}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </PrepSection>
           </div>
 
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Requests</h4>
-              <button type="button" onClick={addRequestItem} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">
-                + Add Request
-              </button>
-            </div>
-            {form.requests.length === 0 ? (
-              <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
-                No requests added yet.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {form.requests.map((r) => (
-                  <div key={r.id} className="border border-slate-200 rounded-lg p-3 space-y-2">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <input
-                        placeholder="Name"
-                        value={r.name}
-                        onChange={(e) => updateRequestItem(r.id, { name: e.target.value })}
+          <div className="mb-4">
+            <PrepSection
+              title="Requests"
+              color="#d97706"
+              icon={<ClipboardIcon className="w-3.5 h-3.5" />}
+              action={(
+                <button type="button" onClick={addRequestItem} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">
+                  + Add Request
+                </button>
+              )}
+            >
+              {form.requests.length === 0 ? (
+                <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
+                  No requests added yet.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {form.requests.map((r) => (
+                    <div key={r.id} className="border border-slate-200 rounded-lg p-3 space-y-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input
+                          placeholder="Name"
+                          value={r.name}
+                          onChange={(e) => updateRequestItem(r.id, { name: e.target.value })}
+                          className={inputClass}
+                        />
+                        <input
+                          placeholder="Link (optional)"
+                          value={r.link}
+                          onChange={(e) => updateRequestItem(r.id, { link: e.target.value })}
+                          className={inputClass}
+                        />
+                      </div>
+                      <textarea
+                        rows={2}
+                        placeholder="Request details…"
+                        value={r.details}
+                        onChange={(e) => updateRequestItem(r.id, { details: e.target.value })}
                         className={inputClass}
                       />
-                      <input
-                        placeholder="Link (optional)"
-                        value={r.link}
-                        onChange={(e) => updateRequestItem(r.id, { link: e.target.value })}
-                        className={inputClass}
-                      />
-                    </div>
-                    <textarea
-                      rows={2}
-                      placeholder="Request details…"
-                      value={r.details}
-                      onChange={(e) => updateRequestItem(r.id, { details: e.target.value })}
-                      className={inputClass}
-                    />
-                    <div className="flex items-center justify-between">
-                      {r.documentId ? (
-                        <a
-                          href={documentDownloadUrl(r.documentId)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex-1 min-w-0 truncate text-xs text-indigo-600 hover:underline"
-                        >
-                          {r.documentName}
-                        </a>
-                      ) : (
-                        <span className="text-xs text-slate-400">No document attached</span>
-                      )}
-                      <div className="flex items-center gap-3 shrink-0">
-                        <label className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 cursor-pointer">
-                          {uploadingRequestId === r.id ? 'Uploading…' : r.documentId ? 'Replace document' : '+ Attach document'}
-                          <input
-                            type="file"
-                            onChange={(e) => handleUploadRequestDocument(r.id, e.target.files?.[0])}
-                            disabled={uploadingRequestId === r.id}
-                            className="hidden"
-                          />
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => removeRequestItem(r.id)}
-                          className="w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
-                          aria-label="Remove request"
-                        >
-                          ✕
-                        </button>
+                      <div className="flex items-center justify-between">
+                        {r.documentId ? (
+                          <a
+                            href={documentDownloadUrl(r.documentId)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex-1 min-w-0 truncate text-xs text-indigo-600 hover:underline"
+                          >
+                            {r.documentName}
+                          </a>
+                        ) : (
+                          <span className="text-xs text-slate-400">No document attached</span>
+                        )}
+                        <div className="flex items-center gap-3 shrink-0">
+                          <label className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 cursor-pointer">
+                            {uploadingRequestId === r.id ? 'Uploading…' : r.documentId ? 'Replace document' : '+ Attach document'}
+                            <input
+                              type="file"
+                              onChange={(e) => handleUploadRequestDocument(r.id, e.target.files?.[0])}
+                              disabled={uploadingRequestId === r.id}
+                              className="hidden"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => removeRequestItem(r.id)}
+                            className="w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
+                            aria-label="Remove request"
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </PrepSection>
           </div>
 
-          <div className="mb-6">
-            <label className={labelClass}>Notes</label>
-            <textarea
-              rows={3}
-              placeholder="Notes for the crew or day-of prep…"
-              value={form.prepNotes}
-              onChange={(e) => update('prepNotes', e.target.value)}
-              className={inputClass}
-            />
+          <div className="mb-4">
+            <PrepSection title="Notes" color="#e11d48" icon={<NoteIcon className="w-3.5 h-3.5" />}>
+              <textarea
+                rows={3}
+                placeholder="Notes for the crew or day-of prep…"
+                value={form.prepNotes}
+                onChange={(e) => update('prepNotes', e.target.value)}
+                className={inputClass}
+              />
+            </PrepSection>
           </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className={`${labelClass} mb-0`}>Documents</label>
+          <PrepSection
+            title="Documents"
+            color="#059669"
+            icon={<FileIcon className="w-3.5 h-3.5" />}
+            action={(
               <label className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 cursor-pointer">
                 {uploadingDocument ? 'Uploading…' : '+ Upload Document'}
                 <input type="file" onChange={handleUploadDocument} disabled={uploadingDocument} className="hidden" />
               </label>
-            </div>
+            )}
+          >
             {generalDocuments.length === 0 ? (
               <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
                 No documents uploaded yet.
@@ -1239,7 +1276,7 @@ export default function EventFormPage() {
                 ))}
               </div>
             )}
-          </div>
+          </PrepSection>
         </div>
       </form>
 
