@@ -45,6 +45,7 @@ const MERGE_FIELD_GROUPS = [
       { token: '{{VenueState}}', description: 'Venue state' },
       { token: '{{VenueZip}}', description: 'Venue zip code' },
       { token: '{{VenueFullAddress}}', description: 'Venue name + address, multi-line' },
+      { token: '{{LocationBlock}}', description: 'Address + Google Maps/Waze links, plus location note and load-in info if set' },
       { token: '{{LocationNote}}', description: 'Location note' },
       { token: '{{LoadInInfo}}', description: 'Load in info' },
       { token: '{{ContactPhone}}', description: 'Day-of contact phone' },

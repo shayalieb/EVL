@@ -8,6 +8,21 @@ function buildFieldMap({ event, contractor, booking, contractors, pricingTierId 
   const venue = event.venue || {};
   const cityStateZip = venue.city && venue.state ? `${venue.city}, ${venue.state}${venue.zip ? ` ${venue.zip}` : ''}` : '';
   const venueFullAddress = [venue.name, venue.address1, venue.address2, cityStateZip].filter(Boolean).join('<br>');
+  // A ready-to-send location block: the address as a normal postal address,
+  // a Google Maps / Waze link built from that address, then the location
+  // note and load-in info as their own lines — but only when set, so a venue
+  // without either doesn't leave blank lines in the email.
+  const addressQuery = [venue.address1, venue.address2, cityStateZip].filter(Boolean).join(', ');
+  const mapsLinks = addressQuery
+    ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressQuery)}">Open in Google Maps</a> · <a href="https://waze.com/ul?q=${encodeURIComponent(addressQuery)}&navigate=yes">Open in Waze</a>`
+    : '';
+  const locationExtras = [
+    venue.locationNote,
+    venue.loadInInfo ? `Load-in: ${venue.loadInInfo}` : '',
+  ].filter(Boolean);
+  const locationBlock = [venue.name, venue.address1, venue.address2, cityStateZip, mapsLinks, ...locationExtras]
+    .filter(Boolean)
+    .join('<br>');
   // Every other contractor booked to the event in the same category as this
   // email's recipient (e.g. a musician's email lists the rest of the band,
   // not the photographers) — "that group" is the recipient's own category.
@@ -48,6 +63,7 @@ function buildFieldMap({ event, contractor, booking, contractors, pricingTierId 
     VenueState: event.venue?.state || '',
     VenueZip: event.venue?.zip || '',
     VenueFullAddress: venueFullAddress,
+    LocationBlock: locationBlock,
     LocationNote: event.venue?.locationNote || '',
     LoadInInfo: event.venue?.loadInInfo || '',
     ContactPhone: event.contactPhone || '',
