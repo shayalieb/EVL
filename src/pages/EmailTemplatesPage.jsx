@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/Toast';
+import { ChevronDownIcon, SearchIcon } from '../components/ui/icons';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -54,6 +56,7 @@ const MERGE_FIELD_GROUPS = [
 
 function MergeFieldReference() {
   const { showToast } = useToast();
+  const [query, setQuery] = useState('');
 
   async function handleCopy(token) {
     try {
@@ -64,39 +67,62 @@ function MergeFieldReference() {
     }
   }
 
+  const q = query.trim().toLowerCase();
+  const filteredGroups = MERGE_FIELD_GROUPS
+    .map((group) => ({
+      ...group,
+      fields: q
+        ? group.fields.filter((f) => f.token.toLowerCase().includes(q) || f.description.toLowerCase().includes(q))
+        : group.fields,
+    }))
+    .filter((group) => group.fields.length > 0);
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-6">
       <h3 className="text-base font-bold text-slate-800 mb-1">Insert Fields</h3>
-      <p className="text-sm text-slate-500 mb-5">
+      <p className="text-sm text-slate-500 mb-4">
         Click a field to copy it, then paste it into a Subject or Body. Fields are replaced with real values when an email is sent.
       </p>
-      <div className="space-y-6">
-        {MERGE_FIELD_GROUPS.map((group) => (
-          <div key={group.title}>
-            <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-0.5">{group.title}</h4>
-            <p className="text-xs text-slate-400 mb-3">{group.description}</p>
-            <div className="space-y-1">
-              {group.fields.map((f) => (
-                <button
-                  key={f.token}
-                  type="button"
-                  onClick={() => handleCopy(f.token)}
-                  className="w-full flex items-center justify-between gap-3 px-2.5 py-1.5 rounded-lg hover:bg-slate-50 text-left"
-                  title={`Copy ${f.token}`}
-                >
-                  <span className="font-mono text-xs text-indigo-600">{f.token}</span>
-                  <span className="text-xs text-slate-400 shrink-0">{f.description}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
+      <div className="relative mb-5">
+        <SearchIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search fields…"
+          className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+        />
       </div>
+      {filteredGroups.length === 0 ? (
+        <div className="text-sm text-slate-400 text-center py-6">No fields match “{query}”.</div>
+      ) : (
+        <div className="space-y-6">
+          {filteredGroups.map((group) => (
+            <div key={group.title}>
+              <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-0.5">{group.title}</h4>
+              <p className="text-xs text-slate-400 mb-3">{group.description}</p>
+              <div className="space-y-1">
+                {group.fields.map((f) => (
+                  <button
+                    key={f.token}
+                    type="button"
+                    onClick={() => handleCopy(f.token)}
+                    className="w-full flex items-center justify-between gap-3 px-2.5 py-1.5 rounded-lg hover:bg-slate-50 text-left"
+                    title={`Copy ${f.token}`}
+                  >
+                    <span className="font-mono text-xs text-indigo-600 shrink-0">{f.token}</span>
+                    <span className="text-xs text-slate-400 truncate min-w-0 flex-1 text-right">{f.description}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function TemplateCard({ template, onSave, onDelete, canEdit }) {
+function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, canEdit }) {
   const { showToast } = useToast();
   const [name, setName] = useState(template.name);
   const [subject, setSubject] = useState(template.subject);
@@ -116,24 +142,27 @@ function TemplateCard({ template, onSave, onDelete, canEdit }) {
   // Keep the contentEditable in sync with `body` for external changes (Reset,
   // switching into Visual mode, template reload) — but skip the sync right
   // after the editor itself produced the change, or every keystroke would
-  // reset the cursor to the start.
+  // reset the cursor to the start. Skipped entirely while collapsed since the
+  // ref isn't mounted then.
   useEffect(() => {
-    if (mode !== 'visual') return;
+    if (mode !== 'visual' || !expanded) return;
     if (skipNextSyncRef.current) {
       skipNextSyncRef.current = false;
       return;
     }
     if (bodyRef.current) bodyRef.current.innerHTML = body;
-  }, [body, mode]);
+  }, [body, mode, expanded]);
 
   const dirty = name !== template.name || subject !== template.subject || body !== template.body;
 
-  function handleSave() {
+  function handleSave(e) {
+    e.stopPropagation();
     onSave({ name, subject, body });
     showToast('Template saved');
   }
 
-  function handleReset() {
+  function handleReset(e) {
+    e.stopPropagation();
     setName(template.name);
     setSubject(template.subject);
     setBody(template.body);
@@ -152,89 +181,105 @@ function TemplateCard({ template, onSave, onDelete, canEdit }) {
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
-      <div>
-        <label className={labelClass}>Template Name</label>
-        <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
-      </div>
-      <div>
-        <label className={labelClass}>Subject</label>
-        <input value={subject} onChange={(e) => setSubject(e.target.value)} className={inputClass} />
-      </div>
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <label className={`${labelClass} mb-0`}>Body</label>
-          <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold">
-            <button
-              type="button"
-              onClick={() => setMode('visual')}
-              className={`px-2.5 py-1 ${mode === 'visual' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
-            >
-              Visual
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode('html')}
-              className={`px-2.5 py-1 ${mode === 'html' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
-            >
-              HTML
-            </button>
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggleExpand}
+        className="w-full flex items-center justify-between gap-4 px-6 py-4 text-left hover:bg-slate-50"
+      >
+        <div className="min-w-0">
+          <div className="text-sm font-bold text-slate-800 truncate">{template.name || 'Untitled template'}</div>
+          <div className="text-xs text-slate-400 truncate mt-0.5">{template.subject || 'No subject'}</div>
+        </div>
+        <ChevronDownIcon className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+      </button>
+
+      {expanded && (
+        <div className="px-6 pb-6 pt-1 space-y-4 border-t border-slate-100">
+          <div>
+            <label className={labelClass}>Template Name</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <label className={labelClass}>Subject</label>
+            <input value={subject} onChange={(e) => setSubject(e.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className={`${labelClass} mb-0`}>Body</label>
+              <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setMode('visual')}
+                  className={`px-2.5 py-1 ${mode === 'visual' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+                >
+                  Visual
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode('html')}
+                  className={`px-2.5 py-1 ${mode === 'html' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+                >
+                  HTML
+                </button>
+              </div>
+            </div>
+
+            {mode === 'visual' ? (
+              <>
+                <div className="flex items-center gap-1 mb-1.5">
+                  <button type="button" title="Bold" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('bold')} className="w-7 h-7 rounded hover:bg-slate-100 font-bold text-sm text-slate-700">B</button>
+                  <button type="button" title="Italic" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('italic')} className="w-7 h-7 rounded hover:bg-slate-100 italic text-sm text-slate-700">I</button>
+                  <button type="button" title="Underline" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('underline')} className="w-7 h-7 rounded hover:bg-slate-100 underline text-sm text-slate-700">U</button>
+                  <div className="w-px h-4 bg-slate-200 mx-1" />
+                  <button type="button" title="Smaller text" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('fontSize', '2')} className="w-7 h-7 rounded hover:bg-slate-100 text-xs text-slate-700">A-</button>
+                  <button type="button" title="Larger text" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('fontSize', '5')} className="w-7 h-7 rounded hover:bg-slate-100 text-base text-slate-700">A+</button>
+                </div>
+                <div
+                  ref={bodyRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onInput={handleBodyInput}
+                  className={`${inputClass} min-h-[150px] bg-white`}
+                />
+              </>
+            ) : (
+              <textarea rows={7} value={body} onChange={(e) => setBody(e.target.value)} className={`${inputClass} font-mono text-xs`} />
+            )}
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+            {canEdit && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                className="text-sm text-slate-400 hover:text-red-600"
+              >
+                Delete Template
+              </button>
+            )}
+            <div className="flex gap-2 ml-auto">
+              {dirty && (
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                >
+                  Reset
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={!dirty || !canEdit}
+                className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40"
+              >
+                Save
+              </button>
+            </div>
           </div>
         </div>
-
-        {mode === 'visual' ? (
-          <>
-            <div className="flex items-center gap-1 mb-1.5">
-              <button type="button" title="Bold" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('bold')} className="w-7 h-7 rounded hover:bg-slate-100 font-bold text-sm text-slate-700">B</button>
-              <button type="button" title="Italic" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('italic')} className="w-7 h-7 rounded hover:bg-slate-100 italic text-sm text-slate-700">I</button>
-              <button type="button" title="Underline" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('underline')} className="w-7 h-7 rounded hover:bg-slate-100 underline text-sm text-slate-700">U</button>
-              <div className="w-px h-4 bg-slate-200 mx-1" />
-              <button type="button" title="Smaller text" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('fontSize', '2')} className="w-7 h-7 rounded hover:bg-slate-100 text-xs text-slate-700">A-</button>
-              <button type="button" title="Larger text" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('fontSize', '5')} className="w-7 h-7 rounded hover:bg-slate-100 text-base text-slate-700">A+</button>
-            </div>
-            <div
-              ref={bodyRef}
-              contentEditable
-              suppressContentEditableWarning
-              onInput={handleBodyInput}
-              className={`${inputClass} min-h-[150px] bg-white`}
-            />
-          </>
-        ) : (
-          <textarea rows={7} value={body} onChange={(e) => setBody(e.target.value)} className={`${inputClass} font-mono text-xs`} />
-        )}
-      </div>
-
-      <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-        {canEdit && (
-          <button
-            type="button"
-            onClick={() => onDelete(template.id)}
-            className="text-sm text-slate-400 hover:text-red-600"
-          >
-            Delete Template
-          </button>
-        )}
-        <div className="flex gap-2">
-          {dirty && (
-            <button
-              type="button"
-              onClick={handleReset}
-              className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100"
-            >
-              Reset
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!dirty || !canEdit}
-            className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40"
-          >
-            Save
-          </button>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -244,13 +289,19 @@ export default function EmailTemplatesPage() {
   const { can } = useAuth();
   const canEdit = can('manageEmailTemplates');
   const { showToast } = useToast();
+  const [expandedId, setExpandedId] = useState(null);
+  const [templatePendingDelete, setTemplatePendingDelete] = useState(null);
 
   function handleAdd() {
-    addEmailTemplate({ name: 'New Template', subject: '', body: '' });
+    const record = addEmailTemplate({ name: 'New Template', subject: '', body: '' });
+    if (record) setExpandedId(record.id);
   }
 
-  function handleDelete(id) {
+  function confirmDelete() {
+    const id = templatePendingDelete.id;
     removeEmailTemplate(id);
+    setExpandedId((cur) => (cur === id ? null : cur));
+    setTemplatePendingDelete(null);
     showToast('Template deleted');
   }
 
@@ -281,19 +332,29 @@ export default function EmailTemplatesPage() {
             No email templates yet.
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {emailTemplates.map((t) => (
-              <TemplateCard
+              <TemplateRow
                 key={t.id}
                 template={t}
+                expanded={expandedId === t.id}
+                onToggleExpand={() => setExpandedId((cur) => (cur === t.id ? null : t.id))}
                 onSave={(patch) => updateEmailTemplate(t.id, patch)}
-                onDelete={handleDelete}
+                onDelete={() => setTemplatePendingDelete(t)}
                 canEdit={canEdit}
               />
             ))}
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!templatePendingDelete}
+        onClose={() => setTemplatePendingDelete(null)}
+        onConfirm={confirmDelete}
+        title="Delete template?"
+        description={`This will permanently delete "${templatePendingDelete?.name || 'this template'}". This can't be undone.`}
+      />
     </div>
   );
 }

@@ -17,3 +17,5 @@ export function MapPinIcon(props) { return <IconWrap {...props}><path d="M12 21s
 export function ClipboardIcon(props) { return <IconWrap {...props}><rect x="6" y="4" width="12" height="17" rx="2" /><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" /><path d="M9 10h6M9 13h6M9 16h4" /></IconWrap>; }
 export function NoteIcon(props) { return <IconWrap {...props}><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3Z" /><path d="M14 6l3 3" /></IconWrap>; }
 export function FileIcon(props) { return <IconWrap {...props}><path d="M7 3h7l4 4v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" /><path d="M14 3v4h4" /></IconWrap>; }
+export function ChevronDownIcon(props) { return <IconWrap {...props}><path d="M6 9l6 6 6-6" /></IconWrap>; }
+export function SearchIcon(props) { return <IconWrap {...props}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></IconWrap>; }
