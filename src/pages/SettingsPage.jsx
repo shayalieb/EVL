@@ -168,12 +168,24 @@ function BusinessInfoTab() {
 function CustomFieldsTab() {
   const { can } = useAuth();
   const canEdit = can('manageSettings');
+  const {
+    eventStatuses, addEventStatus, updateEventStatus, removeEventStatus,
+  } = useData();
   return (
     <div className="space-y-10 max-w-2xl">
       <SimpleListField title="Categories" canEdit={canEdit} />
       <EventTypeListField canEdit={canEdit} />
-      <ColorStatusListField title="Event Statuses" canEdit={canEdit} />
+      <ColorStatusListField
+        title="Event Statuses"
+        canEdit={canEdit}
+        items={eventStatuses}
+        onAdd={addEventStatus}
+        onUpdate={updateEventStatus}
+        onRemove={removeEventStatus}
+        placeholder="New event status"
+      />
       <InquiryStatusListField canEdit={canEdit} />
+      <BookingStatusListField canEdit={canEdit} />
     </div>
   );
 }
@@ -246,15 +258,14 @@ function EventTypeListField({ canEdit }) {
   );
 }
 
-function ColorStatusListField({ title, canEdit }) {
-  const { eventStatuses, addEventStatus, updateEventStatus, removeEventStatus } = useData();
+function ColorStatusListField({ title, canEdit, items, onAdd, onUpdate, onRemove, placeholder }) {
   const [label, setLabel] = useState('');
   const [color, setColor] = useState('#6366f1');
 
   function handleAdd(e) {
     e.preventDefault();
     if (!label.trim()) return;
-    addEventStatus({ label: label.trim(), color });
+    onAdd({ label: label.trim(), color });
     setLabel('');
   }
 
@@ -262,21 +273,21 @@ function ColorStatusListField({ title, canEdit }) {
     <div>
       <h3 className="text-sm font-bold text-slate-700 mb-2">{title}</h3>
       <div className="space-y-2 mb-3">
-        {eventStatuses.map((s) => (
+        {items.map((s) => (
           <div key={s.id} className="flex items-center gap-3 border border-slate-200 rounded-lg px-3 py-2">
             <Badge color={s.color}>{s.label}</Badge>
             <div className="flex-1">
-              <ColorPicker value={s.color} onChange={(c) => updateEventStatus(s.id, { color: c })} />
+              <ColorPicker value={s.color} onChange={(c) => onUpdate(s.id, { color: c })} />
             </div>
             {canEdit && (
-              <button type="button" onClick={() => removeEventStatus(s.id)} className="text-slate-400 hover:text-red-600 px-1" aria-label={`Remove ${s.label}`}>✕</button>
+              <button type="button" onClick={() => onRemove(s.id)} className="text-slate-400 hover:text-red-600 px-1" aria-label={`Remove ${s.label}`}>✕</button>
             )}
           </div>
         ))}
       </div>
       {canEdit && (
         <form onSubmit={handleAdd} className="flex flex-col gap-2 max-w-sm">
-          <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="New event status" className={inputClass} />
+          <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={placeholder} className={inputClass} />
           <ColorPicker value={color} onChange={setColor} />
           <button type="submit" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 self-start">Add Status</button>
         </form>
@@ -329,6 +340,58 @@ function InquiryStatusListField({ canEdit }) {
           <label className="flex items-center gap-1.5 text-xs text-slate-500">
             <input type="checkbox" checked={isConfirmed} onChange={(e) => setIsConfirmed(e.target.checked)} />
             Counts as confirmed
+          </label>
+          <button type="submit" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 self-start">Add Status</button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function BookingStatusListField({ canEdit }) {
+  const { bookingStatuses, addBookingStatus, updateBookingStatus, removeBookingStatus } = useData();
+  const [label, setLabel] = useState('');
+  const [color, setColor] = useState('#6366f1');
+  const [isBooked, setIsBooked] = useState(false);
+
+  function handleAdd(e) {
+    e.preventDefault();
+    if (!label.trim()) return;
+    addBookingStatus({ label: label.trim(), color, isBooked });
+    setLabel('');
+    setIsBooked(false);
+  }
+
+  return (
+    <div>
+      <h3 className="text-sm font-bold text-slate-700 mb-1">Booking Statuses</h3>
+      <p className="text-xs text-slate-400 mb-2">
+        Tracks a booking through the sales pipeline. Statuses marked "unlocks convert to event" make the "Convert to Event" action available on a booking.
+      </p>
+      <div className="space-y-2 mb-3">
+        {bookingStatuses.map((s) => (
+          <div key={s.id} className="flex items-center gap-3 border border-slate-200 rounded-lg px-3 py-2">
+            <Badge color={s.color}>{s.label}</Badge>
+            <div className="flex-1">
+              <ColorPicker value={s.color} onChange={(c) => updateBookingStatus(s.id, { color: c })} />
+            </div>
+            <label className="flex items-center gap-1.5 text-xs text-slate-500 whitespace-nowrap">
+              <input type="checkbox" checked={!!s.isBooked} onChange={(e) => updateBookingStatus(s.id, { isBooked: e.target.checked })} />
+              Unlocks convert to event
+            </label>
+            {canEdit && (
+              <button type="button" onClick={() => removeBookingStatus(s.id)} className="text-slate-400 hover:text-red-600 px-1" aria-label={`Remove ${s.label}`}>✕</button>
+            )}
+          </div>
+        ))}
+      </div>
+      {canEdit && (
+        <form onSubmit={handleAdd} className="flex flex-col gap-2 max-w-sm">
+          <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="New booking status" className={inputClass} />
+          <ColorPicker value={color} onChange={setColor} />
+          <label className="flex items-center gap-1.5 text-xs text-slate-500">
+            <input type="checkbox" checked={isBooked} onChange={(e) => setIsBooked(e.target.checked)} />
+            Unlocks convert to event
           </label>
           <button type="submit" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 self-start">Add Status</button>
         </form>

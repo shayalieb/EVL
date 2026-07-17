@@ -1,5 +1,17 @@
 import { uid } from './storage';
 
+// Also used to backfill accounts created before Bookings existed — see
+// AuthContext's hydrate().
+export function buildDefaultBookingStatuses() {
+  return [
+    { id: uid('bstatus'), label: 'Inquiry', color: '#94a3b8', isBooked: false },
+    { id: uid('bstatus'), label: 'Quoted', color: '#eab308', isBooked: false },
+    { id: uid('bstatus'), label: 'Booked', color: '#22c55e', isBooked: true },
+    { id: uid('bstatus'), label: 'Converted', color: '#3b82f6', isBooked: true },
+    { id: uid('bstatus'), label: 'Cancelled', color: '#ef4444', isBooked: false },
+  ];
+}
+
 // Sensible default custom-field lists + a couple of sample records so a
 // freshly-created account isn't a completely blank slate.
 export function buildSeedUserData() {
@@ -22,6 +34,8 @@ export function buildSeedUserData() {
     { id: uid('inq'), label: 'Not Available', color: '#ef4444', isConfirmed: false },
     { id: uid('inq'), label: 'Declined', color: '#ef4444', isConfirmed: false },
   ];
+
+  const bookingStatuses = buildDefaultBookingStatuses();
 
   const emailTemplates = [
     {
@@ -152,5 +166,8 @@ export function buildSeedUserData() {
     },
   ];
 
-  return { contractorTypes, eventTypes, eventStatuses, inquiryStatuses, emailTemplates, contractors, clients, events };
+  return {
+    contractorTypes, eventTypes, eventStatuses, inquiryStatuses, bookingStatuses,
+    emailTemplates, contractors, clients, events, bookings: [],
+  };
 }

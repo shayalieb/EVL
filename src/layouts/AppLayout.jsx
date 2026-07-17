@@ -6,6 +6,7 @@ import Logo from '../components/ui/Logo';
 const NAV_ITEMS = [
   { to: '/home', label: 'Home', icon: '🏠' },
   { to: '/clients', label: 'Clients', icon: '👤' },
+  { to: '/bookings', label: 'Bookings', icon: '🤝' },
   { to: '/events', label: 'Events', icon: '📅' },
   { to: '/contractors', label: 'Contractors', icon: '🎧' },
   { to: '/email-templates', label: 'Email Templates', icon: '✉️' },

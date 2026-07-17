@@ -12,7 +12,7 @@ const emptyForm = {
   notes: '',
 };
 
-export default function ClientModal({ open, onClose, client }) {
+export default function ClientModal({ open, onClose, client, onSaved }) {
   const { addClient, updateClient } = useData();
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
@@ -45,8 +45,9 @@ export default function ClientModal({ open, onClose, client }) {
       setError('First name and last name are required.');
       return;
     }
+    const record = client ? { ...client, ...form } : addClient(form);
     if (client) updateClient(client.id, form);
-    else addClient(form);
+    onSaved?.(record);
     onClose();
   }
 

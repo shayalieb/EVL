@@ -9,10 +9,12 @@ const LIST_FIELDS = {
   contractors: 'contractors',
   clients: 'clients',
   events: 'events',
+  bookings: 'bookings',
   contractorTypes: 'contractorTypes',
   eventTypes: 'eventTypes',
   eventStatuses: 'eventStatuses',
   inquiryStatuses: 'inquiryStatuses',
+  bookingStatuses: 'bookingStatuses',
   emailTemplates: 'emailTemplates',
 };
 
@@ -63,10 +65,47 @@ export function DataProvider({ children }) {
   const deleteClient = useCallback((id) => {
     if (!currentUser) return;
     patchList(LIST_FIELDS.clients, (currentUser.clients || []).filter((c) => c.id !== id));
-    // Unlink this client from any events that referenced it.
+    // Unlink this client from any events/bookings that referenced it.
     patchList(LIST_FIELDS.events, currentUser.events.map((e) => (
       e.clientId === id ? { ...e, clientId: null } : e
     )));
+    patchList(LIST_FIELDS.bookings, (currentUser.bookings || []).map((b) => (
+      b.clientId === id ? { ...b, clientId: null } : b
+    )));
+  }, [currentUser, patchList]);
+
+  // ---- Bookings ----
+  const addBooking = useCallback((booking) => {
+    if (!currentUser) return;
+    const record = { id: uid('bkg'), createdAt: new Date().toISOString(), convertedEventId: null, activityLog: [], ...booking };
+    patchList(LIST_FIELDS.bookings, [...(currentUser.bookings || []), record]);
+    return record;
+  }, [currentUser, patchList]);
+
+  const updateBooking = useCallback((id, patch) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.bookings, (currentUser.bookings || []).map((b) => (b.id === id ? { ...b, ...patch } : b)));
+  }, [currentUser, patchList]);
+
+  const deleteBooking = useCallback((id) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.bookings, (currentUser.bookings || []).filter((b) => b.id !== id));
+  }, [currentUser, patchList]);
+
+  // ---- Booking statuses (color-coded + isBooked flag) ----
+  const addBookingStatus = useCallback((status) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.bookingStatuses, [...(currentUser.bookingStatuses || []), { id: uid('bstatus'), ...status }]);
+  }, [currentUser, patchList]);
+
+  const updateBookingStatus = useCallback((id, patch) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.bookingStatuses, (currentUser.bookingStatuses || []).map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  }, [currentUser, patchList]);
+
+  const removeBookingStatus = useCallback((id) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.bookingStatuses, (currentUser.bookingStatuses || []).filter((s) => s.id !== id));
   }, [currentUser, patchList]);
 
   // ---- Custom field lists (simple string lists) ----
@@ -162,6 +201,29 @@ export function DataProvider({ children }) {
     patchList(LIST_FIELDS.events, currentUser.events.filter((e) => e.id !== id));
   }, [currentUser, patchList]);
 
+  // Spins up the linked Event once a booking is ready to move into staffing —
+  // carries over client/date/type and records the link back on the booking.
+  const convertBookingToEvent = useCallback((bookingId) => {
+    if (!currentUser) return;
+    const booking = (currentUser.bookings || []).find((b) => b.id === bookingId);
+    if (!booking || booking.convertedEventId) return;
+    const client = (currentUser.clients || []).find((c) => c.id === booking.clientId);
+    const name = [client ? `${client.firstName} ${client.lastName}` : '', booking.eventType]
+      .filter(Boolean).join(' ') || 'New Event';
+    const event = addEvent({
+      name,
+      eventType: booking.eventType || '',
+      eventDate: booking.eventDate || '',
+      clientId: booking.clientId || '',
+    });
+    const convertedStatus = (currentUser.bookingStatuses || []).find((s) => s.label.toLowerCase() === 'converted');
+    updateBooking(bookingId, {
+      convertedEventId: event.id,
+      ...(convertedStatus ? { bookingStatus: convertedStatus.id } : {}),
+    });
+    return event;
+  }, [currentUser, addEvent, updateBooking]);
+
   // ---- Derived helpers ----
   const getContractorById = useCallback((id) => currentUser?.contractors.find((c) => c.id === id), [currentUser]);
 
@@ -212,10 +274,12 @@ export function DataProvider({ children }) {
     contractors: currentUser?.contractors || [],
     clients: currentUser?.clients || [],
     events: currentUser?.events || [],
+    bookings: currentUser?.bookings || [],
     contractorTypes: currentUser?.contractorTypes || [],
     eventTypes: currentUser?.eventTypes || [],
     eventStatuses: currentUser?.eventStatuses || [],
     inquiryStatuses: currentUser?.inquiryStatuses || [],
+    bookingStatuses: currentUser?.bookingStatuses || [],
     emailTemplates: currentUser?.emailTemplates || [],
     addContractor,
     updateContractor,
@@ -224,6 +288,13 @@ export function DataProvider({ children }) {
     updateClient,
     deleteClient,
     computeClientEventCounts,
+    addBooking,
+    updateBooking,
+    deleteBooking,
+    convertBookingToEvent,
+    addBookingStatus,
+    updateBookingStatus,
+    removeBookingStatus,
     addContractorType,
     removeContractorType,
     addEventType,
@@ -248,6 +319,8 @@ export function DataProvider({ children }) {
     currentUser,
     addContractor, updateContractor, deleteContractor,
     addClient, updateClient, deleteClient, computeClientEventCounts,
+    addBooking, updateBooking, deleteBooking, convertBookingToEvent,
+    addBookingStatus, updateBookingStatus, removeBookingStatus,
     addContractorType, removeContractorType,
     addEventType, removeEventType,
     addEventStatus, updateEventStatus, removeEventStatus,

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { loadUserData, saveUserData } from '../lib/storage';
-import { buildSeedUserData } from '../lib/seed';
+import { buildSeedUserData, buildDefaultBookingStatuses } from '../lib/seed';
 
 export const API_BASE = import.meta.env.VITE_API_BASE;
 const AuthContext = createContext(null);
@@ -41,6 +41,11 @@ export function AuthProvider({ children }) {
     let blob = loadUserData(user.id);
     if (!blob) {
       blob = seedBlob(user);
+      saveUserData(user.id, blob);
+    } else if (!blob.bookingStatuses) {
+      // Backfill accounts created before Bookings existed so the status
+      // picker/pipeline isn't empty on first visit.
+      blob = { ...blob, bookingStatuses: buildDefaultBookingStatuses(), bookings: blob.bookings || [] };
       saveUserData(user.id, blob);
     }
     setServerUser(user);
@@ -113,13 +118,20 @@ export function AuthProvider({ children }) {
   }, []);
 
   const updateCurrentUser = useCallback((patch) => {
-    if (!serverUser || !localBlob) return;
+    if (!serverUser) return;
     // id/email/accountId/role/permissions are server-authoritative and not locally patchable.
     const { id: _id, email: _email, accountId: _accountId, role: _role, permissions: _permissions, ...safePatch } = patch;
-    const updated = { ...localBlob, ...safePatch };
-    setLocalBlob(updated);
-    saveUserData(serverUser.id, updated);
-  }, [serverUser, localBlob]);
+    // Functional form so back-to-back calls in the same handler (e.g.
+    // convertBookingToEvent's addEvent + updateBooking) each build on the
+    // latest state instead of a stale `localBlob` closure clobbering
+    // whichever call landed first.
+    setLocalBlob((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, ...safePatch };
+      saveUserData(serverUser.id, updated);
+      return updated;
+    });
+  }, [serverUser]);
 
   const can = useCallback((key) => {
     if (!serverUser) return false;
