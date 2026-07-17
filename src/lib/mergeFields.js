@@ -37,49 +37,36 @@ function buildFieldMap({ event, contractor, booking, contractors, pricingTierId 
   // `ul { list-style: none }` — without this the bullets vanish in-app even
   // though they'd show fine in a real email client.
   const crewList = crewRows ? `<ul style="margin:0;padding-left:18px;list-style-type:disc;">${crewRows}</ul>` : '';
-  // Two links, not one, because no single link both opens instantly *and*
-  // supports the update-in-place trick below:
-  // - Google Calendar's own "render" URL opens straight into Google
-  //   Calendar (browser or the mobile app, via its universal link) with no
-  //   download step — but it creates a disconnected event with no shared
-  //   ID, so a later resend can't update it; each click makes a new event.
-  // - The /calendar/invite.ics link (Apple Calendar, Outlook, Android's
-  //   default calendar app) carries a UID stable per event+contractor and a
-  //   sequence number set to the send time in epoch seconds (always higher
-  //   on a later send) — clicking it again from a later email (e.g. Gig
-  //   Info, after Gig Inquiry already added it) updates the existing
-  //   calendar entry instead of creating a duplicate, the same mechanism
-  //   real "meeting time changed" invite emails use. Google Calendar users
-  //   don't get that update-in-place behavior — accepted tradeoff for the
-  //   instant-open link.
+  // One link, used the same way in every email, because the update-in-place
+  // behavior depends on it: /calendar/invite.ics carries a UID stable per
+  // event+contractor and a sequence number set to the send time in epoch
+  // seconds (always higher on a later send). When the recipient adds it via
+  // this same link from a later email (e.g. Gig Info, after Gig Inquiry
+  // already added it), Google/Apple/Outlook Calendar all recognize the
+  // repeated UID and update the existing entry instead of creating a
+  // duplicate — the same mechanism real "meeting time changed" invites use.
+  // A separate Google "instant add" button was tried and dropped: it opens
+  // faster (no file to import) but creates a disconnected event with no
+  // shared UID, so a later resend can't update it on Google specifically —
+  // one universal link that updates everywhere beats a faster link that
+  // only creates.
   const bookingStart = booking?.startTime || event.startTime;
   const bookingEnd = booking?.endTime || event.endTime;
   let addToCalendar = '';
   if (event.id && event.eventDate && bookingStart && bookingEnd) {
     const toIcsDateTime = (time) => `${event.eventDate.replace(/-/g, '')}T${time.replace(':', '')}00`;
-    const start = toIcsDateTime(bookingStart);
-    const end = toIcsDateTime(bookingEnd);
-    const summary = event.name || 'Gig';
-
-    const gcalParams = new URLSearchParams({ action: 'TEMPLATE', text: summary, dates: `${start}/${end}` });
-    if (addressQuery) gcalParams.set('location', addressQuery);
-    if (event.eventNote) gcalParams.set('details', event.eventNote);
-    const googleCalendarUrl = `https://calendar.google.com/calendar/render?${gcalParams.toString()}`;
-
-    const icsParams = new URLSearchParams({
+    const params = new URLSearchParams({
       uid: `${event.id}-${contractor.id || 'contractor'}@gigworks.app`,
       sequence: String(Math.floor(Date.now() / 1000)),
-      summary,
-      start,
-      end,
+      summary: event.name || 'Gig',
+      start: toIcsDateTime(bookingStart),
+      end: toIcsDateTime(bookingEnd),
     });
-    if (addressQuery) icsParams.set('location', addressQuery);
-    if (event.eventNote) icsParams.set('description', event.eventNote);
-    if (contractor.email) icsParams.set('attendeeEmail', contractor.email);
-    if (contractor.firstName || contractor.lastName) icsParams.set('attendeeName', `${contractor.firstName} ${contractor.lastName}`.trim());
-    const icsUrl = `${import.meta.env.VITE_API_BASE}/calendar/invite.ics?${icsParams.toString()}`;
-
-    addToCalendar = `<a href="${googleCalendarUrl}">Add to Google Calendar</a> · <a href="${icsUrl}">Add to Apple/Outlook Calendar</a>`;
+    if (addressQuery) params.set('location', addressQuery);
+    if (event.eventNote) params.set('description', event.eventNote);
+    if (contractor.email) params.set('attendeeEmail', contractor.email);
+    if (contractor.firstName || contractor.lastName) params.set('attendeeName', `${contractor.firstName} ${contractor.lastName}`.trim());
+    addToCalendar = `<a href="${import.meta.env.VITE_API_BASE}/calendar/invite.ics?${params.toString()}">Add to Calendar</a>`;
   }
   return {
     ContractorFirstName: contractor.firstName || '',
