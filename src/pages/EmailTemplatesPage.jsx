@@ -52,7 +52,7 @@ const MERGE_FIELD_GROUPS = [
       { token: '{{ContactPhoneExt}}', description: 'Contact phone extension' },
       { token: '{{ContactEmail}}', description: 'Day-of contact email' },
       { token: '{{CrewList}}', description: "Bulleted list of role - name for every contractor in the recipient's own category (e.g. their band)" },
-      { token: '{{AddToCalendar}}', description: 'Link to add the gig to Google/Apple/Outlook — reusing it in a later email (e.g. Gig Info) updates the same calendar entry instead of duplicating it' },
+      { token: '{{AddToCalendar}}', description: 'Add to Google Calendar (opens instantly) + Apple/Outlook link (also updates in place if reused in a later email, e.g. Gig Info)' },
     ],
   },
 ];
