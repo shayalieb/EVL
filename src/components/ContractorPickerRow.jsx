@@ -28,9 +28,9 @@ export default function ContractorPickerRow({
       onDragStart={() => onDragStart(index)}
       onDragOver={(e) => { e.preventDefault(); onDragOver(index); }}
       onDrop={() => onDrop(index)}
-      className={`rounded-lg border bg-white ${isDragging ? 'opacity-40' : 'border-slate-200'}`}
+      className={`rounded-lg border-l-4 border-l-indigo-400 border border-slate-200 bg-white ${isDragging ? 'opacity-40' : ''}`}
     >
-      <div className="flex items-center gap-3 px-3 pt-2.5 pb-1.5">
+      <div className="flex items-center gap-3 px-3.5 pt-3.5 pb-2.5">
         <span className="cursor-grab text-slate-300 select-none" aria-hidden="true">⠿</span>
 
         <button
@@ -41,7 +41,7 @@ export default function ContractorPickerRow({
           <div className="text-sm font-medium text-slate-800 truncate hover:text-indigo-600 hover:underline">
             {contractor.firstName} {contractor.lastName}
           </div>
-          <div className="text-xs text-slate-400 truncate">
+          <div className="text-sm font-bold text-slate-600 truncate">
             {contractor.contractorType1}{contractor.contractorType2 ? ` · ${contractor.contractorType2}` : ''}
           </div>
         </button>
@@ -128,7 +128,7 @@ export default function ContractorPickerRow({
         </button>
       </div>
 
-      <div className="flex items-center gap-2 px-3 pb-2.5 pl-9">
+      <div className="flex items-center gap-2 px-3.5 pb-3.5 pl-9">
         <label className="text-xs font-semibold text-slate-400">Start</label>
         <input
           type="time"

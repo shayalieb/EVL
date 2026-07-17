@@ -1024,7 +1024,7 @@ export default function EventFormPage() {
               {hasCategories ? 'No contractors in this category yet.' : 'No contractors added yet.'}
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {visibleEntries.map(({ booking: b, index: i }) => (
                 <ContractorPickerRow
                   key={b.contractorId}
