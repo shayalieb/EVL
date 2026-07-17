@@ -10,6 +10,7 @@ import emailRouter from './routes/email.js';
 import emailThreadsRouter from './routes/emailThreads.js';
 import emailWebhooksRouter from './routes/emailWebhooks.js';
 import eventDocumentsRouter from './routes/eventDocuments.js';
+import calendarRouter from './routes/calendar.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -56,6 +57,9 @@ app.use('/api/team', teamRouter);
 app.use('/api/email/threads', emailThreadsRouter);
 app.use('/api/email', emailRouter);
 app.use('/api/documents', eventDocumentsRouter);
+// Public/unauthenticated — recipients click this link from an email, not
+// while logged into the app, and it's fully stateless (see calendar.js).
+app.use('/api/calendar', calendarRouter);
 
 app.use((err, req, res, next) => {
   if (res.headersSent) return next(err);

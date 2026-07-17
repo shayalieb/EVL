@@ -37,6 +37,33 @@ function buildFieldMap({ event, contractor, booking, contractors, pricingTierId 
   // `ul { list-style: none }` — without this the bullets vanish in-app even
   // though they'd show fine in a real email client.
   const crewList = crewRows ? `<ul style="margin:0;padding-left:18px;list-style-type:disc;">${crewRows}</ul>` : '';
+  // A calendar-invite link, not a "quick add" link to one specific provider
+  // — it points at our own /calendar/invite.ics endpoint, which returns a
+  // real .ics file that Google/Apple/Outlook all understand natively. The
+  // UID is stable per event+contractor, and the sequence number is the send
+  // time in epoch seconds (always higher on a later send) — that combination
+  // is what makes clicking this link again from a later email (e.g. Gig
+  // Info, after Gig Inquiry already added it) update the existing calendar
+  // entry instead of creating a duplicate, the same mechanism real
+  // "meeting time changed" invite emails use.
+  const bookingStart = booking?.startTime || event.startTime;
+  const bookingEnd = booking?.endTime || event.endTime;
+  let addToCalendar = '';
+  if (event.id && event.eventDate && bookingStart && bookingEnd) {
+    const toIcsDateTime = (time) => `${event.eventDate.replace(/-/g, '')}T${time.replace(':', '')}00`;
+    const params = new URLSearchParams({
+      uid: `${event.id}-${contractor.id || 'contractor'}@gigworks.app`,
+      sequence: String(Math.floor(Date.now() / 1000)),
+      summary: event.name || 'Gig',
+      start: toIcsDateTime(bookingStart),
+      end: toIcsDateTime(bookingEnd),
+    });
+    if (addressQuery) params.set('location', addressQuery);
+    if (event.eventNote) params.set('description', event.eventNote);
+    if (contractor.email) params.set('attendeeEmail', contractor.email);
+    if (contractor.firstName || contractor.lastName) params.set('attendeeName', `${contractor.firstName} ${contractor.lastName}`.trim());
+    addToCalendar = `<a href="${import.meta.env.VITE_API_BASE}/calendar/invite.ics?${params.toString()}">Add to Calendar</a>`;
+  }
   return {
     ContractorFirstName: contractor.firstName || '',
     ContractorLastName: contractor.lastName || '',
@@ -70,6 +97,7 @@ function buildFieldMap({ event, contractor, booking, contractors, pricingTierId 
     ContactPhoneExt: event.contactPhoneExt || '',
     ContactEmail: event.contactEmail || '',
     CrewList: crewList,
+    AddToCalendar: addToCalendar,
   };
 }
 
