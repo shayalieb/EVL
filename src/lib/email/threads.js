@@ -20,3 +20,10 @@ export async function sendThreadedEmail({ eventId, contractorId, contractorEmail
     body: JSON.stringify({ eventId, contractorId, contractorEmail, subject, body, templateId, fromName, documentIds, pdfAttachment }),
   });
 }
+
+export async function logManualContact({ eventId, contractorId, contractorEmail, channel, note }) {
+  return apiFetch('/email/threads/log', {
+    method: 'POST',
+    body: JSON.stringify({ eventId, contractorId, contractorEmail, channel, note }),
+  });
+}

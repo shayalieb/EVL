@@ -101,6 +101,41 @@ router.post('/send', asyncHandler(async (req, res) => {
   res.json({ ok: true, threadId: thread.id, messageId: message.id, resendId: sent.data?.id });
 }));
 
+// Logs a non-email touchpoint (phone call, text, in-person, etc.) into the
+// same thread as a manual EmailMessage — reuses the existing model instead
+// of a parallel table since `direction` is a plain string, not an enum.
+router.post('/log', asyncHandler(async (req, res) => {
+  const { eventId, contractorId, contractorEmail, channel, note } = req.body || {};
+  if (!eventId?.trim() || !contractorId?.trim() || !contractorEmail?.trim() || !note?.trim()) {
+    return res.status(400).json({ error: 'eventId, contractorId, contractorEmail, and note are required.' });
+  }
+
+  const { accountId } = req.membership;
+  const thread = await prisma.emailThread.upsert({
+    where: { accountId_eventId_contractorId: { accountId, eventId, contractorId } },
+    update: { contractorEmail },
+    create: { accountId, eventId, contractorId, contractorEmail },
+  });
+
+  const message = await prisma.emailMessage.create({
+    data: {
+      threadId: thread.id,
+      direction: 'manual',
+      fromAddress: 'internal',
+      toAddress: contractorEmail,
+      subject: channel?.trim() || 'Manual entry',
+      body: note.trim(),
+      sentByUserId: req.session.userId,
+    },
+  });
+  await prisma.emailThread.update({
+    where: { id: thread.id },
+    data: { lastMessageAt: new Date() },
+  });
+
+  res.json({ ok: true, threadId: thread.id, messageId: message.id });
+}));
+
 router.get('/', asyncHandler(async (req, res) => {
   const { eventId, contractorId } = req.query;
   if (!eventId || !contractorId) {
