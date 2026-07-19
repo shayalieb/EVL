@@ -111,12 +111,12 @@ export default function EmailThreadModal({ open, onClose, eventId, contractorId,
                 <div key={m.id} className={`flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
                   <div
                     className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
-                      m.direction === 'outbound' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-800'
+                      m.direction === 'outbound' ? 'bg-indigo-100 text-slate-800' : 'bg-slate-100 text-slate-800'
                     }`}
                   >
-                    <div className="text-xs font-semibold opacity-70 mb-1">{m.subject}</div>
+                    <div className={`text-xs font-semibold mb-1 ${m.direction === 'outbound' ? 'text-indigo-500' : 'opacity-70'}`}>{m.subject}</div>
                     <div className="whitespace-pre-wrap break-words" dangerouslySetInnerHTML={{ __html: m.body }} />
-                    <div className={`text-[10px] mt-1.5 ${m.direction === 'outbound' ? 'text-indigo-100' : 'text-slate-400'}`}>
+                    <div className={`text-[10px] mt-1.5 ${m.direction === 'outbound' ? 'text-indigo-400' : 'text-slate-400'}`}>
                       {formatTimestamp(m.createdAt)}
                     </div>
                   </div>
