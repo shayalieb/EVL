@@ -6,6 +6,7 @@ import { PrismaSessionStore } from '@quixo3/prisma-session-store';
 import { prisma } from './lib/prisma.js';
 import authRouter from './routes/auth.js';
 import teamRouter from './routes/team.js';
+import accountDataRouter from './routes/accountData.js';
 import emailRouter from './routes/email.js';
 import emailThreadsRouter from './routes/emailThreads.js';
 import emailWebhooksRouter from './routes/emailWebhooks.js';
@@ -54,6 +55,7 @@ app.use(session({
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRouter);
 app.use('/api/team', teamRouter);
+app.use('/api/account-data', accountDataRouter);
 app.use('/api/email/threads', emailThreadsRouter);
 app.use('/api/email', emailRouter);
 app.use('/api/documents', eventDocumentsRouter);

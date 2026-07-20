@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { loadUserData, saveUserData } from '../lib/storage';
+import { loadUserData } from '../lib/storage';
 import { buildSeedUserData, buildDefaultBookingStatuses } from '../lib/seed';
 
 export const API_BASE = import.meta.env.VITE_API_BASE;
@@ -37,16 +37,23 @@ export function AuthProvider({ children }) {
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(true);
 
-  const hydrate = useCallback((user) => {
-    let blob = loadUserData(user.id);
-    if (!blob) {
-      blob = seedBlob(user);
-      saveUserData(user.id, blob);
-    } else if (!blob.bookingStatuses) {
+  const hydrate = useCallback(async (user) => {
+    let blob;
+    const { data: remoteBlob } = await apiFetch('/account-data');
+    if (remoteBlob) {
+      blob = remoteBlob;
+    } else {
+      // No account-wide record yet — either a brand-new signup, or the
+      // first login since business data moved from this browser's
+      // localStorage into the shared account backend. In the latter case,
+      // reuse whatever was already entered here so it isn't lost.
+      blob = loadUserData(user.id) || seedBlob(user);
+      await apiFetch('/account-data', { method: 'PUT', body: JSON.stringify({ data: blob }) });
+    }
+    if (!blob.bookingStatuses) {
       // Backfill accounts created before Bookings existed so the status
       // picker/pipeline isn't empty on first visit.
       blob = { ...blob, bookingStatuses: buildDefaultBookingStatuses(), bookings: blob.bookings || [] };
-      saveUserData(user.id, blob);
     }
     setServerUser(user);
     setLocalBlob(blob);
@@ -56,7 +63,7 @@ export function AuthProvider({ children }) {
     (async () => {
       try {
         const data = await apiFetch('/auth/me');
-        hydrate(data.user);
+        await hydrate(data.user);
       } catch {
         setServerUser(null);
         setLocalBlob(null);
@@ -65,6 +72,19 @@ export function AuthProvider({ children }) {
       }
     })();
   }, [hydrate]);
+
+  // Teammates' changes only land here on next fetch — cheapest way to
+  // approximate shared state across the account without real-time sync.
+  useEffect(() => {
+    if (!serverUser) return;
+    const onFocus = () => {
+      apiFetch('/account-data')
+        .then(({ data }) => { if (data) setLocalBlob(data); })
+        .catch(() => {});
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [serverUser]);
 
   const currentUser = serverUser && localBlob
     ? {
@@ -84,7 +104,7 @@ export function AuthProvider({ children }) {
         method: 'POST',
         body: JSON.stringify({ firstName, lastName, email: email.trim().toLowerCase(), phone, password }),
       });
-      hydrate(data.user);
+      await hydrate(data.user);
       return true;
     } catch (err) {
       setAuthError(err.message);
@@ -99,7 +119,7 @@ export function AuthProvider({ children }) {
         method: 'POST',
         body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
       });
-      hydrate(data.user);
+      await hydrate(data.user);
       return true;
     } catch (err) {
       setAuthError(err.message);
@@ -128,7 +148,8 @@ export function AuthProvider({ children }) {
     setLocalBlob((prev) => {
       if (!prev) return prev;
       const updated = { ...prev, ...safePatch };
-      saveUserData(serverUser.id, updated);
+      apiFetch('/account-data', { method: 'PUT', body: JSON.stringify({ data: updated }) })
+        .catch((err) => console.error('Failed to save account data', err));
       return updated;
     });
   }, [serverUser]);

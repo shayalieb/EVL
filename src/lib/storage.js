@@ -8,18 +8,8 @@ function loadStore() {
   }
 }
 
-function saveStore(store) {
-  localStorage.setItem(USERDATA_KEY, JSON.stringify(store));
-}
-
 export function loadUserData(userId) {
   return loadStore()[userId] || null;
-}
-
-export function saveUserData(userId, data) {
-  const store = loadStore();
-  store[userId] = data;
-  saveStore(store);
 }
 
 export function uid(prefix = 'id') {

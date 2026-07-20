@@ -26,6 +26,7 @@ model Account {
   memberships    Membership[]
   emailThreads   EmailThread[]
   eventDocuments EventDocument[]
+  accountData    AccountData?
 }
 
 model Membership {
@@ -98,6 +99,18 @@ model EmailMessage {
   createdAt       DateTime    @default(now())
 
   @@index([threadId, createdAt])
+}
+
+// The team's shared contractors/clients/events/bookings/settings, as a
+// single JSON blob per account (mirrors the shape the frontend used to keep
+// in localStorage, keyed by userId — now shared across every member of the
+// account instead of siloed per browser).
+model AccountData {
+  id        String   @id @default(cuid())
+  accountId String   @unique
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  data      Json
+  updatedAt DateTime @updatedAt
 }
 
 // Uploaded reference documents (stage plots, floor plans, contracts) for an
