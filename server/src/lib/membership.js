@@ -71,6 +71,12 @@ export function serializeMembership(membership) {
 export async function attachMembership(req, res, next) {
   const membership = await getMembershipWithAccount(req.session.userId);
   if (!membership) return res.status(403).json({ error: 'No account access.' });
+  // A platform admin can disable an account (see admin.js) — this is the
+  // one choke point every account-scoped route already runs through, so
+  // it's enforced here rather than duplicated per route.
+  if (membership.account.disabledAt) {
+    return res.status(403).json({ error: 'This account has been disabled.' });
+  }
   req.membership = membership;
   next();
 }
@@ -82,4 +88,20 @@ export function requireRole(...roles) {
     }
     next();
   };
+}
+
+// For platform-admin routes (server/src/routes/admin.js), which aren't
+// scoped to — or dependent on — the caller's own business account.
+export async function attachUser(req, res, next) {
+  const user = await prisma.user.findUnique({ where: { id: req.session.userId } });
+  if (!user) return res.status(401).json({ error: 'Not authenticated.' });
+  req.user = user;
+  next();
+}
+
+export function requirePlatformAdmin(req, res, next) {
+  if (!req.user?.isPlatformAdmin) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
+  next();
 }

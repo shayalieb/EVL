@@ -8,26 +8,29 @@ datasource db {
 }
 
 model User {
-  id           String      @id @default(cuid())
-  firstName    String
-  lastName     String
-  email        String      @unique
-  phone        String?
-  passwordHash String?
-  googleId     String?     @unique
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  membership   Membership?
+  id             String      @id @default(cuid())
+  firstName      String
+  lastName       String
+  email          String      @unique
+  phone          String?
+  passwordHash   String?
+  googleId       String?     @unique
+  isPlatformAdmin Boolean    @default(false) // app operator, not settable via any API — flipped manually
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  membership     Membership?
   passwordResetTokens PasswordResetToken[]
 }
 
 model Account {
   id             String          @id @default(cuid())
   createdAt      DateTime        @default(now())
+  disabledAt     DateTime?       // set by a platform admin; blocks all account access when non-null
   memberships    Membership[]
   emailThreads   EmailThread[]
   eventDocuments EventDocument[]
   accountData    AccountData?
+  supportThreads SupportThread[]
 }
 
 model Membership {
@@ -127,6 +130,40 @@ model AccountData {
   account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   data      Json
   updatedAt DateTime @updatedAt
+}
+
+// Two-way support conversation between an account and the platform admin —
+// deliberately mirrors EmailThread/EmailMessage's shape (direction as a
+// plain string, accountId scoping, lastMessageAt/readAt) since that's this
+// codebase's established pattern for threaded messages.
+model SupportThread {
+  id            String   @id @default(cuid())
+  accountId     String
+  account       Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  subject       String
+  status        String   @default("open") // 'open' | 'closed'
+  lastMessageAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  messages      SupportMessage[]
+
+  @@index([accountId])
+}
+
+model SupportMessage {
+  id           String        @id @default(cuid())
+  threadId     String
+  thread       SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  direction    String        // 'user' | 'admin'
+  senderUserId String
+  body         String        @db.Text
+
+  readAt       DateTime?     // null = unread by the other side
+  createdAt    DateTime      @default(now())
+
+  @@index([threadId, createdAt])
 }
 
 // Uploaded reference documents (stage plots, floor plans, contracts) for an

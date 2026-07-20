@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { to: '/events', label: 'Events', icon: '📅' },
   { to: '/contractors', label: 'Contractors', icon: '🎧' },
   { to: '/email-templates', label: 'Email Templates', icon: '✉️' },
+  { to: '/help', label: 'Help', icon: '💬' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 
@@ -18,6 +19,9 @@ export default function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const navigate = useNavigate();
+  const navItems = currentUser?.isPlatformAdmin
+    ? [...NAV_ITEMS, { to: '/admin', label: 'Admin', icon: '🛡️' }]
+    : NAV_ITEMS;
 
   async function handleLogout() {
     await logout();
@@ -89,7 +93,7 @@ export default function AppLayout() {
           className={`${mobileNavOpen ? 'block' : 'hidden'} sm:block w-full sm:w-56 shrink-0 border-r border-slate-200 bg-white sm:min-h-0`}
         >
           <div className="p-3 space-y-1">
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}

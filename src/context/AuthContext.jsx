@@ -94,6 +94,7 @@ export function AuthProvider({ children }) {
         accountId: serverUser.accountId,
         role: serverUser.role,
         permissions: serverUser.permissions,
+        isPlatformAdmin: serverUser.isPlatformAdmin,
       }
     : null;
 

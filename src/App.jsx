@@ -14,6 +14,10 @@ import EventsPage from './pages/EventsPage';
 import EventFormPage from './pages/EventFormPage';
 import EmailTemplatesPage from './pages/EmailTemplatesPage';
 import SettingsPage from './pages/SettingsPage';
+import SupportPage from './pages/SupportPage';
+import AdminLayout from './layouts/AdminLayout';
+import AdminAccountsPage from './pages/admin/AdminAccountsPage';
+import AdminSupportPage from './pages/admin/AdminSupportPage';
 
 function ProtectedArea() {
   const { currentUser, authLoading } = useAuth();
@@ -34,6 +38,14 @@ function AuthGate({ children }) {
   return children;
 }
 
+function PlatformAdminArea() {
+  const { currentUser, authLoading } = useAuth();
+  if (authLoading) return null;
+  if (!currentUser) return <Navigate to="/auth" replace />;
+  if (!currentUser.isPlatformAdmin) return <Navigate to="/home" replace />;
+  return <AdminLayout />;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -50,6 +62,12 @@ function AppRoutes() {
         <Route path="events/:eventId" element={<EventFormPage />} />
         <Route path="email-templates" element={<EmailTemplatesPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="help" element={<SupportPage />} />
+      </Route>
+      <Route path="/admin" element={<PlatformAdminArea />}>
+        <Route index element={<Navigate to="accounts" replace />} />
+        <Route path="accounts" element={<AdminAccountsPage />} />
+        <Route path="support" element={<AdminSupportPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -2,9 +2,10 @@
 
 Express + Prisma + PostgreSQL backend. Handles authentication
 (signup/login/logout/session/change-password/forgot-password), team
-membership, email threads, and the shared account data (contractors/
-clients/events/bookings/settings) that used to live only in the frontend's
-localStorage.
+membership, email threads, the shared account data (contractors/clients/
+events/bookings/settings) that used to live only in the frontend's
+localStorage, and a two-way support inbox between accounts and the
+platform admin (`server/src/routes/support.js` + `admin.js`).
 
 ## Local dev
 
@@ -32,8 +33,9 @@ No deploy config files needed — Railway auto-detects Node via
    (reference variable), `SESSION_SECRET` (long random string), `NODE_ENV=production`,
    `EXTRA_CLIENT_ORIGINS` (comma-separated deployed frontend origins,
    localhost is always allowed automatically), `FRONTEND_URL` (the deployed
-   frontend's base URL, used to build password-reset email links). Leave
-   `PORT` unset.
+   frontend's base URL, used to build password-reset/invite email links),
+   `SUPPORT_NOTIFICATION_EMAIL` (where new support messages notify the
+   platform admin). Leave `PORT` unset.
 4. Deploy, then confirm `GET https://<service>.up.railway.app/api/health`
    returns `{"ok":true}`.
 

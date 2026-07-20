@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
 import { rateLimit } from 'express-rate-limit';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { allPermissions, getMembershipWithAccount, serializeMembership } from '../lib/membership.js';
 import { sendMail, buildFromHeader } from '../lib/mailer.js';
+import { hashToken, generateToken } from '../lib/resetToken.js';
 
 const router = Router();
 const SALT_ROUNDS = 12;
@@ -33,10 +33,6 @@ const passwordResetLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many attempts. Please try again later.' },
 });
-
-function hashToken(token) {
-  return crypto.createHash('sha256').update(token).digest('hex');
-}
 
 function sanitize(user, membership) {
   const { passwordHash: _passwordHash, ...safe } = user;
@@ -136,7 +132,7 @@ router.post('/forgot-password', passwordResetLimiter, asyncHandler(async (req, r
   const normalizedEmail = email.trim().toLowerCase();
   const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (user) {
-    const token = crypto.randomBytes(32).toString('hex');
+    const token = generateToken();
     await prisma.passwordResetToken.deleteMany({ where: { userId: user.id, usedAt: null } });
     await prisma.passwordResetToken.create({
       data: { userId: user.id, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS) },
