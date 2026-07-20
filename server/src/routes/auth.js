@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import { rateLimit } from 'express-rate-limit';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -11,6 +12,28 @@ const router = Router();
 const SALT_ROUNDS = 12;
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
+// Keyed by IP (via `trust proxy`, set in index.js, so this reads the real
+// client IP behind Railway's proxy rather than Railway's own address).
+// Generous enough that a real user mistyping a password a few times never
+// notices, tight enough to make brute-forcing credentials impractical.
+const credentialsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts. Please try again later.' },
+});
+
+// Stricter — bounds both reset-token guessing and using someone else's
+// inbox as a spam target via repeated forgot-password requests.
+const passwordResetLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts. Please try again later.' },
+});
+
 function hashToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
@@ -20,7 +43,7 @@ function sanitize(user, membership) {
   return { ...safe, ...serializeMembership(membership) };
 }
 
-router.post('/signup', asyncHandler(async (req, res) => {
+router.post('/signup', credentialsLimiter, asyncHandler(async (req, res) => {
   const { firstName, lastName, email, phone, password } = req.body || {};
   if (!firstName?.trim() || !lastName?.trim() || !email?.trim() || !password) {
     return res.status(400).json({ error: 'First name, last name, email, and password are required.' });
@@ -50,7 +73,7 @@ router.post('/signup', asyncHandler(async (req, res) => {
   }
 }));
 
-router.post('/login', asyncHandler(async (req, res) => {
+router.post('/login', credentialsLimiter, asyncHandler(async (req, res) => {
   const { email, password } = req.body || {};
   if (!email?.trim() || !password) {
     return res.status(400).json({ error: 'Email and password are required.' });
@@ -104,7 +127,7 @@ router.post('/change-password', requireAuth, asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
-router.post('/forgot-password', asyncHandler(async (req, res) => {
+router.post('/forgot-password', passwordResetLimiter, asyncHandler(async (req, res) => {
   const { email } = req.body || {};
   if (!email?.trim()) {
     return res.status(400).json({ error: 'Email is required.' });
@@ -138,7 +161,7 @@ router.post('/forgot-password', asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
-router.post('/reset-password', asyncHandler(async (req, res) => {
+router.post('/reset-password', passwordResetLimiter, asyncHandler(async (req, res) => {
   const { token, newPassword } = req.body || {};
   if (!token || !newPassword) {
     return res.status(400).json({ error: 'Token and new password are required.' });
