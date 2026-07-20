@@ -1,12 +1,19 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { allPermissions, getMembershipWithAccount, serializeMembership } from '../lib/membership.js';
+import { sendMail, buildFromHeader } from '../lib/mailer.js';
 
 const router = Router();
 const SALT_ROUNDS = 12;
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+
+function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
 
 function sanitize(user, membership) {
   const { passwordHash: _passwordHash, ...safe } = user;
@@ -94,6 +101,59 @@ router.post('/change-password', requireAuth, asyncHandler(async (req, res) => {
 
   const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+  res.json({ ok: true });
+}));
+
+router.post('/forgot-password', asyncHandler(async (req, res) => {
+  const { email } = req.body || {};
+  if (!email?.trim()) {
+    return res.status(400).json({ error: 'Email is required.' });
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  if (user) {
+    const token = crypto.randomBytes(32).toString('hex');
+    await prisma.passwordResetToken.deleteMany({ where: { userId: user.id, usedAt: null } });
+    await prisma.passwordResetToken.create({
+      data: { userId: user.id, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS) },
+    });
+
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${token}`;
+    try {
+      await sendMail({
+        from: buildFromHeader(),
+        to: normalizedEmail,
+        subject: 'Reset your GigWorks password',
+        html: `<p>Click below to reset your password. This link expires in 1 hour.</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>If you didn't request this, you can ignore this email.</p>`,
+      });
+    } catch {
+      // best effort — don't let a mail-provider hiccup change the response
+      // below, which must stay identical whether or not the email matched.
+    }
+  }
+
+  // Always the same response, whether or not the email matched an account —
+  // avoids leaking which emails have accounts.
+  res.json({ ok: true });
+}));
+
+router.post('/reset-password', asyncHandler(async (req, res) => {
+  const { token, newPassword } = req.body || {};
+  if (!token || !newPassword) {
+    return res.status(400).json({ error: 'Token and new password are required.' });
+  }
+
+  const record = await prisma.passwordResetToken.findUnique({ where: { tokenHash: hashToken(token) } });
+  if (!record || record.usedAt || record.expiresAt < new Date()) {
+    return res.status(400).json({ error: 'This reset link is invalid or has expired.' });
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: record.userId }, data: { passwordHash } }),
+    prisma.passwordResetToken.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
+  ]);
   res.json({ ok: true });
 }));
 

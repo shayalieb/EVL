@@ -173,6 +173,30 @@ export function AuthProvider({ children }) {
     }
   }, [serverUser]);
 
+  const requestPasswordReset = useCallback(async (email) => {
+    try {
+      await apiFetch('/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }, []);
+
+  const resetPassword = useCallback(async ({ token, newPassword }) => {
+    try {
+      await apiFetch('/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ token, newPassword }),
+      });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }, []);
+
   const value = {
     currentUser,
     role: serverUser?.role ?? null,
@@ -184,6 +208,8 @@ export function AuthProvider({ children }) {
     logout,
     updateCurrentUser,
     changePassword,
+    requestPasswordReset,
+    resetPassword,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

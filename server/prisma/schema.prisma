@@ -18,6 +18,7 @@ model User {
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
   membership   Membership?
+  passwordResetTokens PasswordResetToken[]
 }
 
 model Account {
@@ -41,6 +42,21 @@ model Membership {
   updatedAt   DateTime @updatedAt
 
   @@index([accountId])
+}
+
+// Raw token is emailed to the user and never stored — only its hash, so a
+// DB read alone can't be replayed to take over an account (same reasoning
+// as passwordHash on User).
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model Session {

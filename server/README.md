@@ -1,9 +1,10 @@
 # EVL Server
 
-Express + Prisma + PostgreSQL backend. Currently handles authentication only
-(signup/login/logout/session/change-password) — all other app data
-(contractors/clients/events/etc.) still lives in the frontend's own
-localStorage, per the same phased approach used by the sibling GigWorks app.
+Express + Prisma + PostgreSQL backend. Handles authentication
+(signup/login/logout/session/change-password/forgot-password), team
+membership, email threads, and the shared account data (contractors/
+clients/events/bookings/settings) that used to live only in the frontend's
+localStorage.
 
 ## Local dev
 
@@ -30,7 +31,9 @@ No deploy config files needed — Railway auto-detects Node via
 3. Set env vars on that service: `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`
    (reference variable), `SESSION_SECRET` (long random string), `NODE_ENV=production`,
    `EXTRA_CLIENT_ORIGINS` (comma-separated deployed frontend origins,
-   localhost is always allowed automatically). Leave `PORT` unset.
+   localhost is always allowed automatically), `FRONTEND_URL` (the deployed
+   frontend's base URL, used to build password-reset email links). Leave
+   `PORT` unset.
 4. Deploy, then confirm `GET https://<service>.up.railway.app/api/health`
    returns `{"ok":true}`.
 
