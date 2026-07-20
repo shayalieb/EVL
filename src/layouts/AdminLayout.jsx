@@ -4,6 +4,7 @@ import Logo from '../components/ui/Logo';
 const NAV_ITEMS = [
   { to: '/admin/accounts', label: 'Accounts', icon: '🏢' },
   { to: '/admin/support', label: 'Support', icon: '💬' },
+  { to: '/admin/admins', label: 'Admins', icon: '🔑' },
 ];
 
 export default function AdminLayout() {

@@ -177,4 +177,50 @@ router.patch('/support/threads/:id', asyncHandler(async (req, res) => {
   res.json({ ok: true, status: thread.status });
 }));
 
+function serializeAdmin(user) {
+  return {
+    id: user.id,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+    isPlatformOwner: user.isPlatformOwner,
+    createdAt: user.createdAt,
+  };
+}
+
+router.get('/platform-admins', asyncHandler(async (req, res) => {
+  const admins = await prisma.user.findMany({
+    where: { isPlatformAdmin: true },
+    orderBy: { isPlatformOwner: 'desc' },
+  });
+  res.json({ admins: admins.map(serializeAdmin) });
+}));
+
+// This app's operators aren't a mass-signup feature — granting requires the
+// email to already belong to an existing user (created normally or via
+// POST /accounts above), never creates one on the fly.
+router.post('/platform-admins', asyncHandler(async (req, res) => {
+  const { email } = req.body || {};
+  if (!email?.trim()) return res.status(400).json({ error: 'Email is required.' });
+
+  const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+  if (!user) return res.status(404).json({ error: 'No account exists with that email yet.' });
+
+  const updated = await prisma.user.update({ where: { id: user.id }, data: { isPlatformAdmin: true } });
+  res.status(201).json({ admin: serializeAdmin(updated) });
+}));
+
+router.delete('/platform-admins/:id', asyncHandler(async (req, res) => {
+  const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!target) return res.status(404).json({ error: 'User not found.' });
+  // The owner is permanently protected — checked on the target, not the
+  // caller, so this holds no matter who's attempting the revoke.
+  if (target.isPlatformOwner) {
+    return res.status(403).json({ error: "The owner's access can't be removed." });
+  }
+
+  await prisma.user.update({ where: { id: target.id }, data: { isPlatformAdmin: false } });
+  res.json({ ok: true });
+}));
+
 export default router;

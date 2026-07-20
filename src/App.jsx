@@ -18,6 +18,7 @@ import SupportPage from './pages/SupportPage';
 import AdminLayout from './layouts/AdminLayout';
 import AdminAccountsPage from './pages/admin/AdminAccountsPage';
 import AdminSupportPage from './pages/admin/AdminSupportPage';
+import AdminAdminsPage from './pages/admin/AdminAdminsPage';
 
 function ProtectedArea() {
   const { currentUser, authLoading } = useAuth();
@@ -68,6 +69,7 @@ function AppRoutes() {
         <Route index element={<Navigate to="accounts" replace />} />
         <Route path="accounts" element={<AdminAccountsPage />} />
         <Route path="support" element={<AdminSupportPage />} />
+        <Route path="admins" element={<AdminAdminsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

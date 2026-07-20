@@ -15,7 +15,12 @@ model User {
   phone          String?
   passwordHash   String?
   googleId       String?     @unique
-  isPlatformAdmin Boolean    @default(false) // app operator, not settable via any API — flipped manually
+  // App operators, not signup-settable. isPlatformAdmin is grantable/revocable
+  // by existing admins (server/src/routes/admin.js); isPlatformOwner is the
+  // one admin who can never be revoked by anyone else — flipped manually,
+  // never through any API.
+  isPlatformAdmin Boolean    @default(false)
+  isPlatformOwner Boolean    @default(false)
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
   membership     Membership?
