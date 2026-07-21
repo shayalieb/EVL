@@ -26,7 +26,7 @@ function seedBlob(profile) {
     firstName: profile.firstName,
     lastName: profile.lastName,
     phone: profile.phone || '',
-    businessInfo: { name: '', address: '', phone: '', email: '' },
+    businessInfo: { name: '', address: '', phone: '', email: '', logo: '' },
     ...buildSeedUserData(),
   };
 }

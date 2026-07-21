@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
-import BookingModal, { PRIORITIES } from '../components/BookingModal';
+import { PRIORITIES } from './BookingFormPage';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Badge from '../components/ui/Badge';
 import Tooltip from '../components/ui/Tooltip';
@@ -26,18 +26,14 @@ export default function BookingsPage() {
   const canEdit = can('manageBookings');
   const { showToast } = useToast();
   const navigate = useNavigate();
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingBooking, setEditingBooking] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
   function openAdd() {
-    setEditingBooking(null);
-    setModalOpen(true);
+    navigate('/bookings/new');
   }
 
   function openEdit(booking) {
-    setEditingBooking(booking);
-    setModalOpen(true);
+    navigate(`/bookings/${booking.id}`);
   }
 
   function handleDelete() {
@@ -202,7 +198,6 @@ export default function BookingsPage() {
         </div>
       </div>
 
-      <BookingModal open={modalOpen} onClose={() => setModalOpen(false)} booking={editingBooking} />
       <ConfirmDialog
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}

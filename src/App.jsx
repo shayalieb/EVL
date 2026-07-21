@@ -4,12 +4,14 @@ import { DataProvider } from './context/DataContext';
 import { ToastProvider } from './components/ui/Toast';
 import AuthPage from './pages/AuthPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import ContractSignPage from './pages/ContractSignPage';
 import AppLayout from './layouts/AppLayout';
 import HomePage from './pages/HomePage';
 import NoAccountAccessPage from './pages/NoAccountAccessPage';
 import ContractorsPage from './pages/ContractorsPage';
 import ClientsPage from './pages/ClientsPage';
 import BookingsPage from './pages/BookingsPage';
+import BookingFormPage from './pages/BookingFormPage';
 import EventsPage from './pages/EventsPage';
 import EventFormPage from './pages/EventFormPage';
 import EmailTemplatesPage from './pages/EmailTemplatesPage';
@@ -52,12 +54,15 @@ function AppRoutes() {
     <Routes>
       <Route path="/auth" element={<AuthGate><AuthPage /></AuthGate>} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/sign/:token" element={<ContractSignPage />} />
       <Route path="/" element={<ProtectedArea />}>
         <Route index element={<Navigate to="/home" replace />} />
         <Route path="home" element={<HomePage />} />
         <Route path="contractors" element={<ContractorsPage />} />
         <Route path="clients" element={<ClientsPage />} />
         <Route path="bookings" element={<BookingsPage />} />
+        <Route path="bookings/new" element={<BookingFormPage />} />
+        <Route path="bookings/:bookingId" element={<BookingFormPage />} />
         <Route path="events" element={<EventsPage />} />
         <Route path="events/new" element={<EventFormPage />} />
         <Route path="events/:eventId" element={<EventFormPage />} />

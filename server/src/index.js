@@ -11,6 +11,8 @@ import emailRouter from './routes/email.js';
 import emailThreadsRouter from './routes/emailThreads.js';
 import emailWebhooksRouter from './routes/emailWebhooks.js';
 import eventDocumentsRouter from './routes/eventDocuments.js';
+import bookingDocumentsRouter from './routes/bookingDocuments.js';
+import contractsRouter, { publicContractsRouter } from './routes/contracts.js';
 import calendarRouter from './routes/calendar.js';
 import supportRouter from './routes/support.js';
 import adminRouter from './routes/admin.js';
@@ -61,6 +63,11 @@ app.use('/api/account-data', accountDataRouter);
 app.use('/api/email/threads', emailThreadsRouter);
 app.use('/api/email', emailRouter);
 app.use('/api/documents', eventDocumentsRouter);
+app.use('/api/booking-documents', bookingDocumentsRouter);
+app.use('/api/contracts', contractsRouter);
+// Public/unauthenticated — recipients click this link from an email, not
+// while logged into the app (same reasoning as calendar.js below).
+app.use('/api/contract-sign', publicContractsRouter);
 app.use('/api/support', supportRouter);
 app.use('/api/admin', adminRouter);
 // Public/unauthenticated — recipients click this link from an email, not

@@ -5,6 +5,7 @@ import { useToast } from '../components/ui/Toast';
 import ColorPicker from '../components/ui/ColorPicker';
 import Badge from '../components/ui/Badge';
 import UsersTab from './settings/UsersTab';
+import { resizeImageToDataUrl } from '../lib/resizeImage';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -133,6 +134,7 @@ function BusinessInfoTab() {
   const canEdit = can('manageSettings');
   const { showToast } = useToast();
   const [form, setForm] = useState({ ...currentUser.businessInfo });
+  const [resizingLogo, setResizingLogo] = useState(false);
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -140,8 +142,53 @@ function BusinessInfoTab() {
     showToast('Business info saved');
   }
 
+  async function handleLogoChange(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setResizingLogo(true);
+    try {
+      const dataUrl = await resizeImageToDataUrl(file, 200);
+      setForm((f) => ({ ...f, logo: dataUrl }));
+    } catch (err) {
+      showToast(err.message || 'Failed to load that image', 'error');
+    } finally {
+      setResizingLogo(false);
+    }
+  }
+
   return (
     <form onSubmit={handleSubmit} className="max-w-lg space-y-3">
+      <div>
+        <label className={labelClass}>Company Logo</label>
+        <div className="flex items-center gap-4">
+          <div className="w-20 h-20 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden shrink-0">
+            {form.logo ? (
+              <img src={form.logo} alt="Company logo" className="max-w-full max-h-full object-contain" />
+            ) : (
+              <span className="text-xs text-slate-300 text-center px-1">Your Logo Here</span>
+            )}
+          </div>
+          {canEdit && (
+            <div className="flex flex-col gap-1.5">
+              <label className="w-fit px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50 cursor-pointer">
+                {resizingLogo ? 'Processing…' : form.logo ? 'Replace logo' : 'Upload logo'}
+                <input type="file" accept="image/*" onChange={handleLogoChange} disabled={resizingLogo} className="hidden" />
+              </label>
+              {form.logo && (
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, logo: '' }))}
+                  className="text-xs text-slate-400 hover:text-red-600 text-left"
+                >
+                  Remove logo
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+        <p className="mt-1 text-xs text-slate-400">Displays next to the GigWorks logo in the header.</p>
+      </div>
       <div>
         <label className={labelClass}>Business Name</label>
         <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className={inputClass} />

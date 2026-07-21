@@ -59,8 +59,18 @@ export default function AppLayout() {
           >
             ☰
           </button>
-          <Link to="/home" className="flex items-center gap-2">
+          <Link to="/home" className="flex items-center gap-3">
             <Logo className="h-14 w-auto" />
+            {currentUser?.businessInfo?.logo && (
+              <>
+                <span className="h-8 w-px bg-slate-200" aria-hidden="true" />
+                <img
+                  src={currentUser.businessInfo.logo}
+                  alt={currentUser.businessInfo.name ? `${currentUser.businessInfo.name} logo` : 'Company logo'}
+                  className="h-10 w-auto max-w-[7rem] object-contain"
+                />
+              </>
+            )}
           </Link>
         </div>
 

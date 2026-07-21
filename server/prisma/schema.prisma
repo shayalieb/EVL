@@ -35,6 +35,8 @@ model Account {
   memberships    Membership[]
   emailThreads   EmailThread[]
   eventDocuments EventDocument[]
+  bookingDocuments BookingDocument[]
+  contracts      Contract[]
   accountData    AccountData?
   supportThreads SupportThread[]
 }
@@ -208,4 +210,65 @@ model EventDocument {
   createdAt   DateTime @default(now())
 
   @@index([accountId, eventId])
+}
+
+// Uploaded files for a booking's Proposal/Contract tabs — same non-FK
+// bookingId pattern as EventDocument.eventId above. category distinguishes
+// which tab a file belongs to.
+model BookingDocument {
+  id          String   @id @default(cuid())
+  accountId   String
+  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  bookingId   String   // opaque localStorage id, same non-FK pattern as EventDocument.eventId
+  category    String   // 'proposal' | 'contract'
+  filename    String
+  contentType String
+  size        Int
+  data        Bytes
+
+  createdAt   DateTime @default(now())
+
+  @@index([accountId, bookingId])
+}
+
+// A booking's proposal, moved into a contract for signature. snapshot is
+// frozen at send time (business/client/event details + line items) so later
+// edits to the booking or proposal don't retroactively change a contract
+// that's already out for signature. Client and owner each get their own
+// one-time sign token — only its hash is stored, same reasoning as
+// PasswordResetToken (a DB read alone can't be replayed into a signature).
+// The owner's token lets them sign from the emailed link even when signed
+// out (e.g. on the move); they can also sign in-app via requireAuth routes,
+// whichever comes first.
+model Contract {
+  id              String   @id @default(cuid())
+  accountId       String
+  account         Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  bookingId       String   // opaque localStorage id, same non-FK pattern as EventDocument.eventId
+
+  snapshot        Json
+  status          String   @default("sent") // 'sent' | 'client_signed' | 'fully_signed'
+
+  recipientEmail  String
+  recipientName   String?
+  ownerEmail      String
+
+  clientTokenHash String?  @unique
+  ownerTokenHash  String?  @unique
+
+  clientSignedAt       DateTime?
+  clientSignatureName  String?
+  clientSignatureImage String? @db.Text
+
+  ownerSignedAt        DateTime?
+  ownerSignatureName   String?
+  ownerSignatureImage  String? @db.Text
+
+  sentAt          DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([accountId, bookingId])
 }
