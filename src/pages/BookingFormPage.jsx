@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ClientModal from '../components/ClientModal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -8,13 +8,14 @@ import { useToast } from '../components/ui/Toast';
 import { uid } from '../lib/storage';
 import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, bookingDocumentDownloadUrl } from '../lib/bookingDocuments';
 import { generateProposalPdf, generateProposalPdfAttachment } from '../lib/proposalPdf';
-import { getContractForBooking, sendContract, ownerSignContract } from '../lib/contracts';
+import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms } from '../lib/contracts';
 import { generateContractPdf, getContractPdfDataUrl } from '../lib/contractPdf';
 import { sendEmail } from '../lib/email/send';
 import { formatCurrency as currency, formatEventDate } from '../lib/format';
 import { FileIcon } from '../components/ui/icons';
 import SignatureCanvas from '../components/SignatureCanvas';
 import ColorPicker from '../components/ui/ColorPicker';
+import MoneyInput from '../components/ui/MoneyInput';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -35,13 +36,21 @@ const TABS = [
 
 const DEFAULT_CONTRACT_ACCENT_COLOR = '#6366f1';
 
+// Mirrors EventFormPage's venue shape exactly — a booking's location carries
+// straight into the event created from it, so a partial object here would
+// leave that event's venue fields undefined (React controlled-input warnings).
+function emptyVenue() {
+  return { name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '' };
+}
+
 function emptyForm() {
   return {
     // Generated up front so document uploads on a not-yet-saved booking still
     // have a stable bookingId to attach to — mirrors EventFormPage.
     id: uid('bkg'),
     clientId: '', eventDate: '', eventType: '',
-    package: '', quotedTotal: '',
+    package: '',
+    venue: emptyVenue(),
     depositAmount: '', depositDueDate: '', depositPaid: false,
     bookingStatus: '', priority: '', nextFollowUpDate: '',
     contractSignedDate: '', referralSource: '', notes: '', activityLog: [],
@@ -132,24 +141,22 @@ function LineItemsEditor({ items, onChange }) {
       )}
       <div className="flex gap-2">
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Item name" className={inputClass} />
-        <input
-          type="number"
-          min="0"
-          step="0.01"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="Amount"
-          className="w-32 shrink-0 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-        />
+        <div className="w-32 shrink-0">
+          <MoneyInput
+            value={amount}
+            onChange={setAmount}
+            placeholder="Amount"
+            className="w-full py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+          />
+        </div>
         <button type="button" onClick={handleAdd} className="shrink-0 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50">+ Add</button>
       </div>
     </div>
   );
 }
 
-function computeGrandTotal(quotedTotal, lineItems) {
-  const itemsTotal = (lineItems || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-  return (Number(quotedTotal) || 0) + itemsTotal;
+function computeGrandTotal(lineItems) {
+  return (lineItems || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 }
 
 function CustomFieldsEditor({ fields, onChange }) {
@@ -244,8 +251,12 @@ export default function BookingFormPage() {
   const [ownerSignerName, setOwnerSignerName] = useState('');
   const [ownerSignatureImage, setOwnerSignatureImage] = useState('');
   const [signingOwner, setSigningOwner] = useState(false);
+  const [contractTerms, setContractTerms] = useState('');
 
   const client = clients.find((c) => c.id === form.clientId);
+  const autoSaveSkipRef = useRef(true);
+  const termsSkipRef = useRef(true);
+  const autoCreatedEventRef = useRef(false);
 
   useEffect(() => {
     if (booking) {
@@ -255,7 +266,7 @@ export default function BookingFormPage() {
         eventDate: booking.eventDate || '',
         eventType: booking.eventType || '',
         package: booking.package || '',
-        quotedTotal: booking.quotedTotal ?? '',
+        venue: { ...emptyVenue(), ...booking.venue },
         depositAmount: booking.depositAmount ?? '',
         depositDueDate: booking.depositDueDate || '',
         depositPaid: !!booking.depositPaid,
@@ -274,7 +285,23 @@ export default function BookingFormPage() {
     setError('');
     setAddingType(false);
     setNewActivityText('');
+    // The setForm above is a load, not an edit — the auto-save effect below
+    // would otherwise immediately re-persist the just-loaded data as if the
+    // user had typed something.
+    autoSaveSkipRef.current = true;
+    autoCreatedEventRef.current = false;
   }, [bookingId, booking, bookingStatuses]);
+
+  // Auto-saves an existing booking shortly after any field changes — no
+  // explicit "Save Changes" click needed. Only for bookings that already
+  // exist; a brand-new one still needs its first, deliberate "Add Booking".
+  useEffect(() => {
+    if (!booking) return;
+    if (autoSaveSkipRef.current) { autoSaveSkipRef.current = false; return; }
+    const timer = setTimeout(() => { persistBooking(); }, 800);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form]);
 
   const refreshDocs = useCallback(async (id) => {
     try {
@@ -323,8 +350,48 @@ export default function BookingFormPage() {
     setContractRecipientName((prev) => prev || `${client.firstName} ${client.lastName}`.trim());
   }, [client?.id]);
 
+  // Terms rides along in the initial send payload before a contract exists,
+  // then switches to auto-saving via PATCH below — same field either way, so
+  // the prep-panel text carries straight through instead of being retyped.
+  // Keyed on the booking too (not just the contract) so switching to a
+  // different not-yet-sent booking clears stale prep-panel text.
+  useEffect(() => {
+    setContractTerms(contract?.terms || '');
+    termsSkipRef.current = true;
+  }, [booking?.id, contract?.id]);
+
+  useEffect(() => {
+    if (!contract) return; // nothing to save to yet — value goes out with the send instead
+    if (termsSkipRef.current) { termsSkipRef.current = false; return; }
+    const timer = setTimeout(async () => {
+      try {
+        const updated = await updateContractTerms(contract.id, contractTerms);
+        setContract(updated);
+      } catch (err) {
+        showToast(err.message || 'Failed to save terms', 'error');
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contractTerms]);
+
+  // Once both signatures are in, the event is created automatically — no
+  // button to click. Guarded by a ref (not just booking.convertedEventId)
+  // so a re-render before that update lands can't fire this twice.
+  useEffect(() => {
+    if (contract?.status === 'fully_signed' && booking && !booking.convertedEventId && !autoCreatedEventRef.current) {
+      autoCreatedEventRef.current = true;
+      createEventFromContract(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contract?.status, booking?.convertedEventId]);
+
   function update(field, val) {
     setForm((f) => ({ ...f, [field]: val }));
+  }
+
+  function updateVenue(field, val) {
+    setForm((f) => ({ ...f, venue: { ...f.venue, [field]: val } }));
   }
 
   function handleAddActivity() {
@@ -350,7 +417,6 @@ export default function BookingFormPage() {
   function buildBookingPatch() {
     return {
       ...form,
-      quotedTotal: form.quotedTotal === '' ? null : Number(form.quotedTotal),
       depositAmount: form.depositAmount === '' ? null : Number(form.depositAmount),
     };
   }
@@ -433,7 +499,7 @@ export default function BookingFormPage() {
         eventType: form.eventType,
         eventDate: form.eventDate,
         package: form.package,
-        quotedTotal: form.quotedTotal === '' ? null : Number(form.quotedTotal),
+        venue: form.venue,
         depositAmount: form.depositAmount === '' ? null : Number(form.depositAmount),
         depositDueDate: form.depositDueDate,
         depositPaid: form.depositPaid,
@@ -455,6 +521,7 @@ export default function BookingFormPage() {
     try {
       const url = await getContractPdfDataUrl({
         snapshot: buildContractSnapshot(),
+        terms: contractTerms,
         clientSignature: null,
         ownerSignature: null,
       });
@@ -480,6 +547,7 @@ export default function BookingFormPage() {
         recipientEmail: contractRecipientEmail.trim(),
         recipientName: contractRecipientName.trim(),
         snapshot: buildContractSnapshot(),
+        terms: contractTerms,
       });
       setContract(created);
       setLastSignLink(signLink);
@@ -518,6 +586,7 @@ export default function BookingFormPage() {
     try {
       await generateContractPdf({
         snapshot: contract.snapshot,
+        terms: contract.terms,
         clientSignature: contract.clientSignedAt
           ? { name: contract.clientSignatureName, image: contract.clientSignatureImage, signedAt: contract.clientSignedAt }
           : null,
@@ -530,10 +599,13 @@ export default function BookingFormPage() {
     }
   }
 
-  function handleCreateEventFromContract() {
+  // Fires automatically once a contract is fully signed (see the effect
+  // above) — navigateAfter is only true for a future manual trigger, if one
+  // is ever added back; today it's always called silently.
+  function createEventFromContract(navigateAfter) {
     if (!booking || !contract) return;
     const contractBooking = contract.snapshot.booking || {};
-    const grandTotal = computeGrandTotal(contractBooking.quotedTotal, contract.snapshot.lineItems);
+    const grandTotal = computeGrandTotal(contract.snapshot.lineItems);
     const name = [client ? `${client.firstName} ${client.lastName}` : '', contractBooking.eventType].filter(Boolean).join(' ') || 'New Event';
     const noteLines = [
       'Created from a fully signed contract.',
@@ -545,13 +617,18 @@ export default function BookingFormPage() {
       eventType: contractBooking.eventType || '',
       eventDate: contractBooking.eventDate || '',
       clientId: booking.clientId || '',
+      venue: { ...emptyVenue(), ...(contractBooking.venue || booking.venue) },
       contactEmail: client?.email || '',
       contactPhone: client?.phone || '',
       eventNote: noteLines.join(' '),
     });
     updateBooking(booking.id, { convertedEventId: event.id });
-    showToast('Event created from signed contract');
-    navigate(`/events/${event.id}`);
+    if (navigateAfter) {
+      showToast('Event created from signed contract');
+      navigate(`/events/${event.id}`);
+    } else {
+      showToast('Contract fully signed — event created automatically');
+    }
   }
 
   async function handleUploadDoc(category, file) {
@@ -680,7 +757,8 @@ export default function BookingFormPage() {
       {error && <div className="mb-6 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
       <form id="booking-form" onSubmit={handleSubmit} className="space-y-6">
-        <div className={activeTab === 'info' ? 'grid grid-cols-1 lg:grid-cols-2 gap-6' : 'hidden'}>
+        <div className={activeTab === 'info' ? 'space-y-6' : 'hidden'}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className={cardClass}>
             <h3 className={cardTitleClass}>Booking Details</h3>
             <div className="space-y-5">
@@ -726,21 +804,15 @@ export default function BookingFormPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelClass}>Package / Pricing Tier</label>
-                  <input value={form.package} onChange={(e) => update('package', e.target.value)} className={inputClass} />
-                </div>
-                <div>
-                  <label className={labelClass}>Quoted Total</label>
-                  <input type="number" min="0" step="0.01" value={form.quotedTotal} onChange={(e) => update('quotedTotal', e.target.value)} className={inputClass} />
-                </div>
+              <div>
+                <label className={labelClass}>Package / Pricing Tier</label>
+                <input value={form.package} onChange={(e) => update('package', e.target.value)} className={inputClass} />
               </div>
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className={labelClass}>Deposit Amount</label>
-                  <input type="number" min="0" step="0.01" value={form.depositAmount} onChange={(e) => update('depositAmount', e.target.value)} className={inputClass} />
+                  <MoneyInput value={form.depositAmount} onChange={(v) => update('depositAmount', v)} className={inputClass} />
                 </div>
                 <div>
                   <label className={labelClass}>Deposit Due Date</label>
@@ -784,46 +856,104 @@ export default function BookingFormPage() {
           </div>
 
           <div className={cardClass}>
-            <h3 className={cardTitleClass}>Notes & Activity</h3>
+            <h3 className={cardTitleClass}>Location</h3>
+            <p className="text-xs text-slate-400 -mt-3 mb-5">Carries straight into the event once this booking converts.</p>
             <div className="space-y-5">
               <div>
-                <label className={labelClass}>Notes</label>
-                <textarea rows={3} value={form.notes} onChange={(e) => update('notes', e.target.value)} className={inputClass} />
+                <label className={labelClass}>Venue Name</label>
+                <input value={form.venue.name} onChange={(e) => updateVenue('name', e.target.value)} className={inputClass} />
               </div>
-
-              {booking && (
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelClass}>Activity Log</label>
-                  <div className="flex gap-2 mb-2">
-                    <input
-                      value={newActivityText}
-                      onChange={(e) => setNewActivityText(e.target.value)}
-                      placeholder="e.g. Called, left voicemail"
-                      className={inputClass}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddActivity(); } }}
-                    />
-                    <button type="button" onClick={handleAddActivity} className="shrink-0 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50">Add</button>
-                  </div>
-                  {form.activityLog.length > 0 ? (
-                    <div className="space-y-1.5 max-h-64 overflow-y-auto border border-slate-200 rounded-lg px-3 py-2">
-                      {form.activityLog.map((entry) => (
-                        <div key={entry.id} className="text-sm text-slate-600 flex gap-2">
-                          <span className="text-slate-400 shrink-0">
-                            {new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                          </span>
-                          <span>{entry.text}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
-                      No activity logged yet.
-                    </div>
-                  )}
+                  <label className={labelClass}>Address 1</label>
+                  <input value={form.venue.address1} onChange={(e) => updateVenue('address1', e.target.value)} className={inputClass} />
                 </div>
-              )}
+                <div>
+                  <label className={labelClass}>Address 2</label>
+                  <input value={form.venue.address2} onChange={(e) => updateVenue('address2', e.target.value)} className={inputClass} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass}>City</label>
+                  <input value={form.venue.city} onChange={(e) => updateVenue('city', e.target.value)} className={inputClass} />
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className={labelClass}>State</label>
+                    <input value={form.venue.state} onChange={(e) => updateVenue('state', e.target.value)} className={inputClass} />
+                  </div>
+                  <div className="w-24">
+                    <label className={labelClass}>Zip</label>
+                    <input value={form.venue.zip} onChange={(e) => updateVenue('zip', e.target.value)} className={inputClass} />
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label className={labelClass}>Location Note</label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Loading dock around back, no elevator access"
+                  value={form.venue.locationNote}
+                  onChange={(e) => updateVenue('locationNote', e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Load In Info</label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Load in through the back entrance, freight elevator to 2nd floor"
+                  value={form.venue.loadInInfo}
+                  onChange={(e) => updateVenue('loadInInfo', e.target.value)}
+                  className={inputClass}
+                />
+              </div>
             </div>
           </div>
+        </div>
+
+        <div className={cardClass}>
+          <h3 className={cardTitleClass}>Notes & Activity</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+              <label className={labelClass}>Notes</label>
+              <textarea rows={3} value={form.notes} onChange={(e) => update('notes', e.target.value)} className={inputClass} />
+            </div>
+
+            {booking && (
+              <div>
+                <label className={labelClass}>Activity Log</label>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    value={newActivityText}
+                    onChange={(e) => setNewActivityText(e.target.value)}
+                    placeholder="e.g. Called, left voicemail"
+                    className={inputClass}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddActivity(); } }}
+                  />
+                  <button type="button" onClick={handleAddActivity} className="shrink-0 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50">Add</button>
+                </div>
+                {form.activityLog.length > 0 ? (
+                  <div className="space-y-1.5 max-h-64 overflow-y-auto border border-slate-200 rounded-lg px-3 py-2">
+                    {form.activityLog.map((entry) => (
+                      <div key={entry.id} className="text-sm text-slate-600 flex gap-2">
+                        <span className="text-slate-400 shrink-0">
+                          {new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </span>
+                        <span>{entry.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
+                    No activity logged yet.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
         </div>
 
         <div className={activeTab === 'proposal' ? 'space-y-6' : 'hidden'}>
@@ -879,7 +1009,7 @@ export default function BookingFormPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className={labelClass}>Estimated Hours</label>
                     <input
@@ -890,12 +1020,6 @@ export default function BookingFormPage() {
                       onChange={(e) => update('proposal', { ...form.proposal, hours: e.target.value })}
                       className={inputClass}
                     />
-                  </div>
-                  <div>
-                    <div className={labelClass}>Quoted Total</div>
-                    <div className="px-3.5 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700">
-                      {form.quotedTotal ? currency(form.quotedTotal) : '—'}
-                    </div>
                   </div>
                   <div>
                     <div className={labelClass}>Deposit</div>
@@ -911,7 +1035,7 @@ export default function BookingFormPage() {
                     onChange={(items) => update('proposal', { ...form.proposal, lineItems: items })}
                   />
                   <div className="flex justify-end mt-3 text-sm font-bold text-slate-800">
-                    Grand Total: {currency(computeGrandTotal(form.quotedTotal, form.proposal.lineItems))}
+                    Grand Total: {currency(computeGrandTotal(form.proposal.lineItems))}
                   </div>
                 </div>
               </div>
@@ -993,11 +1117,22 @@ export default function BookingFormPage() {
               <div className="max-w-2xl mb-5">
                 <LineItemsEditor items={contractLineItems} onChange={setContractLineItems} />
                 <div className="flex justify-end mt-3 text-sm font-bold text-slate-800">
-                  Grand Total: {currency(computeGrandTotal(form.quotedTotal, contractLineItems))}
+                  Grand Total: {currency(computeGrandTotal(contractLineItems))}
                 </div>
               </div>
               <div className="max-w-2xl mb-5">
                 <CustomFieldsEditor fields={contractCustomFields} onChange={setContractCustomFields} />
+              </div>
+              <div className="max-w-2xl mb-5">
+                <label className={labelClass}>Terms</label>
+                <textarea
+                  rows={4}
+                  placeholder="e.g. Cancellation policy, payment schedule, rider requirements…"
+                  value={contractTerms}
+                  onChange={(e) => setContractTerms(e.target.value)}
+                  className={inputClass}
+                />
+                <p className="mt-1 text-xs text-slate-400">Stays editable after the contract is sent — everything else here locks.</p>
               </div>
               <div className="max-w-2xl mb-5">
                 <label className={labelClass}>Separator / Accent Color</label>
@@ -1083,6 +1218,18 @@ export default function BookingFormPage() {
                     )}
                   </div>
                 )}
+              </div>
+
+              <div className={cardClass}>
+                <h3 className={cardTitleClass}>Terms</h3>
+                <textarea
+                  rows={4}
+                  placeholder="e.g. Cancellation policy, payment schedule, rider requirements…"
+                  value={contractTerms}
+                  onChange={(e) => setContractTerms(e.target.value)}
+                  className={inputClass}
+                />
+                <p className="mt-1 text-xs text-slate-400">Editable any time, saves automatically.</p>
               </div>
 
               {contract.status !== 'fully_signed' && (
@@ -1175,13 +1322,7 @@ export default function BookingFormPage() {
                       View Event →
                     </button>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={handleCreateEventFromContract}
-                      className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
-                    >
-                      Create Event →
-                    </button>
+                    <p className="text-xs text-slate-400">Setting up your event…</p>
                   )}
                 </div>
               )}

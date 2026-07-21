@@ -98,11 +98,9 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
   });
   y = doc.lastAutoTable.finalY + 10;
 
-  const itemsTotal = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-  const grandTotal = (Number(booking.quotedTotal) || 0) + itemsTotal;
+  const grandTotal = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
   const investmentRows = [
-    ['Quoted Total', booking.quotedTotal ? currency(booking.quotedTotal) : '—'],
     ...lineItems.map((item) => [item.name || 'Item', currency(Number(item.amount) || 0)]),
     ['Grand Total', currency(grandTotal)],
     ['Deposit Amount', booking.depositAmount ? currency(booking.depositAmount) : '—'],

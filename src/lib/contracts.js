@@ -5,10 +5,10 @@ export async function getContractForBooking(bookingId) {
   return data.contract;
 }
 
-export async function sendContract({ bookingId, recipientEmail, recipientName, snapshot }) {
+export async function sendContract({ bookingId, recipientEmail, recipientName, snapshot, terms }) {
   return apiFetch('/contracts', {
     method: 'POST',
-    body: JSON.stringify({ bookingId, recipientEmail, recipientName, snapshot }),
+    body: JSON.stringify({ bookingId, recipientEmail, recipientName, snapshot, terms }),
   });
 }
 
@@ -16,6 +16,15 @@ export async function ownerSignContract(contractId, { signatureName, signatureIm
   const data = await apiFetch(`/contracts/${contractId}/owner-sign`, {
     method: 'POST',
     body: JSON.stringify({ signatureName, signatureImage }),
+  });
+  return data.contract;
+}
+
+// Editable at any point in the contract's lifecycle, independent of status.
+export async function updateContractTerms(contractId, terms) {
+  const data = await apiFetch(`/contracts/${contractId}/terms`, {
+    method: 'PATCH',
+    body: JSON.stringify({ terms }),
   });
   return data.contract;
 }

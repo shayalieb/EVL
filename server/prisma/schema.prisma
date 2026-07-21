@@ -249,7 +249,11 @@ model Contract {
   bookingId       String   // opaque localStorage id, same non-FK pattern as EventDocument.eventId
 
   snapshot        Json
-  status          String   @default("sent") // 'sent' | 'client_signed' | 'fully_signed'
+  // Unlike everything in snapshot (frozen at send time), terms stays live —
+  // editable at any point in the contract's lifecycle, independent of
+  // status, and always read fresh when rendering/viewing the PDF.
+  terms           String?  @db.Text
+  status          String   @default("sent") // 'sent' | 'client_signed' | 'owner_signed' | 'fully_signed'
 
   recipientEmail  String
   recipientName   String?

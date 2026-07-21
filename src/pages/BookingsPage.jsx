@@ -73,7 +73,6 @@ export default function BookingsPage() {
                 <th className="px-4 py-3">Follow-up</th>
                 <th className="px-4 py-3">Event Date</th>
                 <th className="px-4 py-3">Event Type</th>
-                <th className="px-4 py-3">Quoted Total</th>
                 <th className="px-4 py-3">Deposit</th>
                 <th className="px-4 py-3 text-center">Notes</th>
                 <th className="px-4 py-3 text-right">Actions</th>
@@ -82,7 +81,7 @@ export default function BookingsPage() {
             <tbody>
               {bookings.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-slate-400">
+                  <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
                     No bookings yet. Add an inquiry or quote to start tracking the sales pipeline.
                   </td>
                 </tr>
@@ -130,7 +129,6 @@ export default function BookingsPage() {
                     </td>
                     <td className="px-4 py-3 text-slate-600">{b.eventDate ? formatEventDate(b.eventDate) : '—'}</td>
                     <td className="px-4 py-3 text-slate-600">{b.eventType || '—'}</td>
-                    <td className="px-4 py-3 text-slate-700 font-medium">{b.quotedTotal ? currency(b.quotedTotal) : '—'}</td>
                     <td className="px-4 py-3">
                       {b.depositPaid ? (
                         <Badge color="#22c55e">Paid{b.depositAmount ? ` ${currency(b.depositAmount)}` : ''}</Badge>

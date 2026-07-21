@@ -215,6 +215,13 @@ export function DataProvider({ children }) {
       eventType: booking.eventType || '',
       eventDate: booking.eventDate || '',
       clientId: booking.clientId || '',
+      // Full shape (not just whatever keys the booking happens to have) —
+      // EventFormPage reads form.venue.<field> directly, so a partial object
+      // here would leave some fields undefined instead of controlled empty strings.
+      venue: {
+        name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '',
+        ...booking.venue,
+      },
     });
     const convertedStatus = (currentUser.bookingStatuses || []).find((s) => s.label.toLowerCase() === 'converted');
     updateBooking(bookingId, {

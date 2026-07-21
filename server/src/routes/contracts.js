@@ -17,6 +17,7 @@ function serializeForOwner(contract) {
     id: contract.id,
     bookingId: contract.bookingId,
     snapshot: contract.snapshot,
+    terms: contract.terms,
     status: contract.status,
     recipientEmail: contract.recipientEmail,
     recipientName: contract.recipientName,
@@ -35,6 +36,7 @@ function serializeForPublic(contract, role) {
   return {
     role,
     snapshot: contract.snapshot,
+    terms: contract.terms,
     status: contract.status,
     recipientName: contract.recipientName,
     clientSignedAt: contract.clientSignedAt,
@@ -72,7 +74,7 @@ function statusFor({ clientSigned, ownerSigned }) {
 }
 
 router.post('/', asyncHandler(async (req, res) => {
-  const { bookingId, recipientEmail, recipientName, snapshot } = req.body || {};
+  const { bookingId, recipientEmail, recipientName, snapshot, terms } = req.body || {};
   if (!bookingId?.trim() || !recipientEmail?.trim() || !snapshot) {
     return res.status(400).json({ error: 'bookingId, recipientEmail, and snapshot are required.' });
   }
@@ -89,6 +91,7 @@ router.post('/', asyncHandler(async (req, res) => {
       accountId: req.membership.accountId,
       bookingId,
       snapshot,
+      terms: terms || null,
       status: 'sent',
       recipientEmail,
       recipientName: recipientName || null,
@@ -144,6 +147,18 @@ router.post('/:id/owner-sign', asyncHandler(async (req, res) => {
       status: statusFor({ clientSigned: !!contract.clientSignedAt, ownerSigned: true }),
     },
   });
+  res.json({ contract: serializeForOwner(updated) });
+}));
+
+// Terms is deliberately editable regardless of status — unlike the frozen
+// snapshot, it's meant to be touched up any time (before or after signing).
+router.patch('/:id/terms', asyncHandler(async (req, res) => {
+  const { terms } = req.body || {};
+  const contract = await prisma.contract.findUnique({ where: { id: req.params.id } });
+  if (!contract || contract.accountId !== req.membership.accountId) {
+    return res.status(404).json({ error: 'Contract not found.' });
+  }
+  const updated = await prisma.contract.update({ where: { id: contract.id }, data: { terms: terms || null } });
   res.json({ contract: serializeForOwner(updated) });
 }));
 

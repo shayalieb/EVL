@@ -29,6 +29,7 @@ export default function ContractSignPage() {
     let cancelled = false;
     getContractPdfDataUrl({
       snapshot: contract.snapshot,
+      terms: contract.terms,
       clientSignature: toSignature(contract.clientSignatureName, contract.clientSignatureImage, contract.clientSignedAt),
       ownerSignature: toSignature(contract.ownerSignatureName, contract.ownerSignatureImage, contract.ownerSignedAt),
     }).then((url) => { if (!cancelled) setPdfUrl(url); });
@@ -111,8 +112,7 @@ export default function ContractSignPage() {
   const alreadySigned = role === 'client' ? !!contract.clientSignedAt : !!contract.ownerSignedAt;
   const canSignNow = !alreadySigned;
   const lineItems = snapshot.lineItems || [];
-  const itemsTotal = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-  const grandTotal = (Number(snapshot.booking?.quotedTotal) || 0) + itemsTotal;
+  const grandTotal = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-8">

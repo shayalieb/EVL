@@ -35,7 +35,7 @@ function signatureBlock(signature) {
 
 // jsPDF pulls in html2canvas/DOMPurify (~450KB) even though we only use its
 // plain drawing API — lazy-load it so that weight isn't in the main bundle.
-async function buildContractDoc({ snapshot, clientSignature, ownerSignature }) {
+async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignature }) {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable'),
@@ -117,11 +117,9 @@ async function buildContractDoc({ snapshot, clientSignature, ownerSignature }) {
   y = doc.lastAutoTable.finalY + 10;
 
   const lineItems = snapshot.lineItems || [];
-  const itemsTotal = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-  const grandTotal = (Number(booking.quotedTotal) || 0) + itemsTotal;
+  const grandTotal = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
   const pricingRows = [
-    ['Quoted Total', booking.quotedTotal ? currency(booking.quotedTotal) : '—'],
     ...lineItems.map((item) => [item.name || 'Item', currency(Number(item.amount) || 0)]),
     ['Grand Total', currency(grandTotal)],
     ['Deposit Amount', booking.depositAmount ? currency(booking.depositAmount) : '—'],
@@ -163,13 +161,25 @@ async function buildContractDoc({ snapshot, clientSignature, ownerSignature }) {
   if (booking.notes) {
     doc.setFontSize(11);
     doc.setTextColor(30);
-    doc.text('Additional Terms', marginX, y);
+    doc.text('Notes', marginX, y);
     y += 6;
     doc.setFontSize(10);
     doc.setTextColor(90);
     const notesLines = doc.splitTextToSize(booking.notes, pageWidth - marginX * 2);
     doc.text(notesLines, marginX, y);
     y += notesLines.length * 5 + 6;
+  }
+
+  if (terms) {
+    doc.setFontSize(11);
+    doc.setTextColor(30);
+    doc.text('Terms', marginX, y);
+    y += 6;
+    doc.setFontSize(10);
+    doc.setTextColor(90);
+    const termsLines = doc.splitTextToSize(terms, pageWidth - marginX * 2);
+    doc.text(termsLines, marginX, y);
+    y += termsLines.length * 5 + 6;
   }
 
   // Signatures — always on their own section near the bottom of the page,
