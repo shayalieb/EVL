@@ -11,6 +11,7 @@ export default function AdminAdminsPage() {
   const [admins, setAdmins] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [grantOpen, setGrantOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [revokeTarget, setRevokeTarget] = useState(null);
 
   function load() {
@@ -45,13 +46,22 @@ export default function AdminAdminsPage() {
             People who can access this Admin area. This isn't a self-serve feature — only existing admins can grant it.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setGrantOpen(true)}
-          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 shrink-0"
-        >
-          + Grant Access
-        </button>
+        <div className="flex gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setGrantOpen(true)}
+            className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Grant to Existing Account
+          </button>
+          <button
+            type="button"
+            onClick={() => setInviteOpen(true)}
+            className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
+          >
+            + Invite New Admin
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -103,6 +113,15 @@ export default function AdminAdminsPage() {
         }}
       />
 
+      <InviteAdminModal
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        onInvited={(admin) => {
+          setAdmins((prev) => [...prev, admin]);
+          setInviteOpen(false);
+        }}
+      />
+
       <ConfirmDialog
         open={!!revokeTarget}
         onClose={() => setRevokeTarget(null)}
@@ -151,12 +170,78 @@ function GrantAccessModal({ open, onClose, onGranted }) {
         <div>
           <label className="block text-xs font-semibold text-slate-500 mb-1">Email</label>
           <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
-          <p className="mt-1 text-xs text-slate-400">Must already have an account — create one under Accounts first if they don't.</p>
+          <p className="mt-1 text-xs text-slate-400">Must already have an account — use "Invite New Admin" instead if they don't.</p>
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
           <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
             {saving ? 'Granting…' : 'Grant Access'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function InviteAdminModal({ open, onClose, onInvited }) {
+  const [form, setForm] = useState({ firstName: '', lastName: '', email: '' });
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setForm({ firstName: '', lastName: '', email: '' });
+      setError('');
+    }
+  }, [open]);
+
+  function update(field, val) {
+    setForm((f) => ({ ...f, [field]: val }));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError('');
+    setSaving(true);
+    try {
+      const data = await apiFetch('/admin/platform-admins/invite', {
+        method: 'POST',
+        body: JSON.stringify({ ...form, email: form.email.trim().toLowerCase() }),
+      });
+      onInvited(data.admin);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Invite New Admin">
+      <form onSubmit={handleSubmit} className="space-y-3">
+        {error && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">First Name</label>
+            <input required value={form.firstName} onChange={(e) => update('firstName', e.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Last Name</label>
+            <input required value={form.lastName} onChange={(e) => update('lastName', e.target.value)} className={inputClass} />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-1">Email</label>
+          <input required type="email" value={form.email} onChange={(e) => update('email', e.target.value)} className={inputClass} />
+          <p className="mt-1 text-xs text-slate-400">Creates a new account with admin access already on, and emails them a link to set their password.</p>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+            {saving ? 'Sending…' : 'Send Invite'}
           </button>
         </div>
       </form>

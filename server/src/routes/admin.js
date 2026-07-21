@@ -43,18 +43,24 @@ router.get('/accounts', asyncHandler(async (req, res) => {
   });
 }));
 
-router.post('/accounts', asyncHandler(async (req, res) => {
-  const { firstName, lastName, email } = req.body || {};
-  if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) {
-    return res.status(400).json({ error: 'First name, last name, and email are required.' });
-  }
+// Shared by POST /accounts and POST /platform-admins/invite — both create a
+// brand-new User (+ their own Account/Membership, so they're never stuck on
+// NoAccountAccessPage) with no password, then email a set-your-password
+// link reusing the exact forgot-password reset mechanism.
+async function createInvitedUser({ firstName, lastName, email }, { grantAdmin = false } = {}) {
   const normalizedEmail = email.trim().toLowerCase();
 
   let user;
   try {
-    const created = await prisma.$transaction(async (tx) => {
+    user = await prisma.$transaction(async (tx) => {
       const newUser = await tx.user.create({
-        data: { firstName: firstName.trim(), lastName: lastName.trim(), email: normalizedEmail, passwordHash: null },
+        data: {
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: normalizedEmail,
+          passwordHash: null,
+          isPlatformAdmin: grantAdmin,
+        },
       });
       const account = await tx.account.create({ data: {} });
       await tx.membership.create({
@@ -62,10 +68,9 @@ router.post('/accounts', asyncHandler(async (req, res) => {
       });
       return newUser;
     });
-    user = created;
   } catch (err) {
     if (err.code === 'P2002') {
-      return res.status(409).json({ error: 'An account with that email already exists.' });
+      throw Object.assign(new Error('An account with that email already exists.'), { status: 409 });
     }
     throw err;
   }
@@ -79,13 +84,27 @@ router.post('/accounts', asyncHandler(async (req, res) => {
     await sendMail({
       from: buildFromHeader(),
       to: normalizedEmail,
-      subject: "You've been invited to GigWorks",
-      html: `<p>An account has been created for you. Click below to set your password and get started. This link expires in 1 hour.</p><p><a href="${setupUrl}">${setupUrl}</a></p>`,
+      subject: grantAdmin ? "You've been invited to GigWorks as an admin" : "You've been invited to GigWorks",
+      html: `<p>An account has been created for you${grantAdmin ? ' with admin access' : ''}. Click below to set your password and get started. This link expires in 1 hour.</p><p><a href="${setupUrl}">${setupUrl}</a></p>`,
     });
   } catch {
     // best effort — the account still exists even if the invite email fails to send
   }
 
+  return user;
+}
+
+router.post('/accounts', asyncHandler(async (req, res) => {
+  const { firstName, lastName, email } = req.body || {};
+  if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) {
+    return res.status(400).json({ error: 'First name, last name, and email are required.' });
+  }
+  try {
+    await createInvitedUser({ firstName, lastName, email });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
   res.status(201).json({ ok: true });
 }));
 
@@ -102,7 +121,18 @@ router.patch('/accounts/:id', asyncHandler(async (req, res) => {
 }));
 
 router.delete('/accounts/:id', asyncHandler(async (req, res) => {
-  await prisma.account.delete({ where: { id: req.params.id } });
+  // Deleting just the Account would cascade-remove its Memberships but leave
+  // the member Users behind — since User.email is unique, that silently
+  // blocks re-inviting the same email later. Delete the users first so their
+  // email frees up.
+  const memberships = await prisma.membership.findMany({
+    where: { accountId: req.params.id },
+    select: { userId: true },
+  });
+  await prisma.$transaction([
+    prisma.user.deleteMany({ where: { id: { in: memberships.map((m) => m.userId) } } }),
+    prisma.account.delete({ where: { id: req.params.id } }),
+  ]);
   res.json({ ok: true });
 }));
 
@@ -196,18 +226,34 @@ router.get('/platform-admins', asyncHandler(async (req, res) => {
   res.json({ admins: admins.map(serializeAdmin) });
 }));
 
-// This app's operators aren't a mass-signup feature — granting requires the
-// email to already belong to an existing user (created normally or via
-// POST /accounts above), never creates one on the fly.
+// Grants access to an email that already has an account — the account
+// itself still isn't self-serve creatable through this route.
 router.post('/platform-admins', asyncHandler(async (req, res) => {
   const { email } = req.body || {};
   if (!email?.trim()) return res.status(400).json({ error: 'Email is required.' });
 
   const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
-  if (!user) return res.status(404).json({ error: 'No account exists with that email yet.' });
+  if (!user) return res.status(404).json({ error: 'No account exists with that email yet. Use "Invite New Admin" instead.' });
 
   const updated = await prisma.user.update({ where: { id: user.id }, data: { isPlatformAdmin: true } });
   res.status(201).json({ admin: serializeAdmin(updated) });
+}));
+
+// Combines account creation + admin grant in one step, for someone who
+// doesn't have an account yet.
+router.post('/platform-admins/invite', asyncHandler(async (req, res) => {
+  const { firstName, lastName, email } = req.body || {};
+  if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) {
+    return res.status(400).json({ error: 'First name, last name, and email are required.' });
+  }
+  let user;
+  try {
+    user = await createInvitedUser({ firstName, lastName, email }, { grantAdmin: true });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+  res.status(201).json({ admin: serializeAdmin(user) });
 }));
 
 router.delete('/platform-admins/:id', asyncHandler(async (req, res) => {
