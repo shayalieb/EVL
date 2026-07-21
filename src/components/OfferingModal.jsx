@@ -11,7 +11,7 @@ const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 
 const emptyForm = { name: '', details: '', type: 'general', amount: '', unitCount: '', ratePerUnit: '' };
 
-export default function OfferingModal({ open, onClose, offering }) {
+export default function OfferingModal({ open, onClose, offering, onSaved }) {
   const { addOffering, updateOffering } = useData();
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
@@ -40,8 +40,9 @@ export default function OfferingModal({ open, onClose, offering }) {
       setError('Offering name is required.');
       return;
     }
+    const record = offering ? { ...offering, ...form } : addOffering(form);
     if (offering) updateOffering(offering.id, form);
-    else addOffering(form);
+    onSaved?.(record);
     onClose();
   }
 

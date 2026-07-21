@@ -133,7 +133,7 @@ function BusinessInfoTab() {
   const { currentUser, updateCurrentUser, can } = useAuth();
   const canEdit = can('manageSettings');
   const { showToast } = useToast();
-  const [form, setForm] = useState({ ...currentUser.businessInfo });
+  const [form, setForm] = useState({ accentColor: '#6366f1', ...currentUser.businessInfo });
   const [resizingLogo, setResizingLogo] = useState(false);
 
   function handleSubmit(e) {
@@ -204,6 +204,11 @@ function BusinessInfoTab() {
       <div>
         <label className={labelClass}>Business Email</label>
         <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className={inputClass} />
+      </div>
+      <div>
+        <label className={labelClass}>Contract Accent Color</label>
+        <ColorPicker value={form.accentColor} onChange={(c) => setForm((f) => ({ ...f, accentColor: c }))} />
+        <p className="mt-1 text-xs text-slate-400">Used for separators and headings on every proposal and contract PDF.</p>
       </div>
       <button type="submit" disabled={!canEdit} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed">
         Save Business Info

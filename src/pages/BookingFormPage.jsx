@@ -14,7 +14,6 @@ import { sendEmail } from '../lib/email/send';
 import { formatCurrency as currency, formatEventDate, formatVenueLine } from '../lib/format';
 import { FileIcon } from '../components/ui/icons';
 import SignatureCanvas from '../components/SignatureCanvas';
-import ColorPicker from '../components/ui/ColorPicker';
 import MoneyInput from '../components/ui/MoneyInput';
 import { useSavingIndicator } from '../components/ui/SavingIndicator';
 import OfferingPickerModal from '../components/OfferingPickerModal';
@@ -105,57 +104,10 @@ function DocumentSection({ category, docs, uploading, onUpload, onRequestDelete 
   );
 }
 
-function LineItemsEditor({ items, onChange }) {
-  const [name, setName] = useState('');
-  const [amount, setAmount] = useState('');
-
-  function handleAdd() {
-    if (!name.trim()) return;
-    onChange([...items, { id: uid('item'), name: name.trim(), amount: amount === '' ? 0 : Number(amount) }]);
-    setName('');
-    setAmount('');
-  }
-
-  function handleRemove(id) {
-    onChange(items.filter((i) => i.id !== id));
-  }
-
-  return (
-    <div>
-      <label className={labelClass}>Additional Items</label>
-      {items.length > 0 && (
-        <div className="space-y-1.5 mb-2">
-          {items.map((item) => (
-            <div key={item.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 text-sm">
-              <span className="flex-1 text-slate-700">{item.name}</span>
-              <span className="text-slate-600 font-medium">{currency(item.amount)}</span>
-              <button
-                type="button"
-                onClick={() => handleRemove(item.id)}
-                className="w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
-                aria-label={`Remove ${item.name}`}
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="flex gap-2">
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Item name" className={inputClass} />
-        <div className="w-32 shrink-0">
-          <MoneyInput
-            value={amount}
-            onChange={setAmount}
-            placeholder="Amount"
-            className="w-full py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-          />
-        </div>
-        <button type="button" onClick={handleAdd} className="shrink-0 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50">+ Add</button>
-      </div>
-    </div>
-  );
-}
+// Free-form line items are no longer user-addable (folded into Offerings —
+// see OfferingPickerModal's "+ One-time item"), but computeGrandTotal and
+// the PDF builders still read this field so proposals/contracts sent before
+// that change keep rendering their stored line items correctly.
 
 function computeGrandTotal(lineItems, offerings) {
   const itemsTotal = (lineItems || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
@@ -195,12 +147,12 @@ function OfferingsEditor({ offerings, onChange, onAddClick }) {
                   value={o.name}
                   onChange={(e) => handleUpdate(o.id, { name: e.target.value })}
                   placeholder="Offering name"
-                  className={`${inputClass} font-semibold`}
+                  className={`${inputClass} font-semibold flex-1 min-w-0`}
                 />
                 <select
                   value={o.type}
                   onChange={(e) => handleUpdate(o.id, { type: e.target.value })}
-                  className={`${inputClass} w-32 shrink-0`}
+                  className="px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 w-32 shrink-0"
                 >
                   <option value="general">General</option>
                   <option value="perUnit">Per Unit</option>
@@ -343,6 +295,77 @@ function SectionsEditor({ sections, onChange }) {
   );
 }
 
+// Collapses variable-length, often-empty blocks (pricing, custom sections)
+// so a booking with nothing in them doesn't force a long scroll past empty
+// state — starts open once there's something worth seeing.
+function CollapsibleSection({ title, subtitle, defaultOpen, badge, children, className = 'mt-6 pt-6 border-t border-slate-100' }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className={className}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-3 text-left"
+      >
+        <div>
+          <h4 className="text-sm font-bold text-slate-800">{title}</h4>
+          {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {badge}
+          <span className={`text-slate-400 text-xs transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
+        </div>
+      </button>
+      {open && <div className="mt-4">{children}</div>}
+    </div>
+  );
+}
+
+// Pure presentational read of state that already exists elsewhere on the
+// page (booking, proposal, contract, event) — no new data, just orientation.
+function pipelineSteps(booking, proposal, contract) {
+  const proposalSent = !!proposal?.sentAt;
+  const contractSent = !!contract;
+  const fullySigned = contract?.status === 'fully_signed';
+  const hasEvent = !!booking?.convertedEventId;
+  const state = (done, current) => (done ? 'done' : current ? 'current' : 'upcoming');
+  return [
+    { label: 'Booking', state: state(!!booking, !booking) },
+    { label: 'Proposal', state: state(proposalSent, !!booking && !proposalSent) },
+    { label: 'Contract', state: state(contractSent, proposalSent && !contractSent) },
+    { label: 'Signed', state: state(fullySigned, contractSent && !fullySigned) },
+    { label: 'Event', state: state(hasEvent, fullySigned && !hasEvent) },
+  ];
+}
+
+function PipelineStepper({ steps }) {
+  return (
+    <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mb-5">
+      {steps.map((step, i) => (
+        <div key={step.label} className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                step.state === 'done'
+                  ? 'bg-indigo-600 text-white'
+                  : step.state === 'current'
+                    ? 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-300'
+                    : 'bg-slate-100 text-slate-400'
+              }`}
+            >
+              {step.state === 'done' ? '✓' : i + 1}
+            </span>
+            <span className={`text-xs font-semibold ${step.state === 'upcoming' ? 'text-slate-400' : 'text-slate-700'}`}>
+              {step.label}
+            </span>
+          </div>
+          {i < steps.length - 1 && <span className="w-6 h-px bg-slate-200 shrink-0" />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function BookingFormPage() {
   const { bookingId } = useParams();
   const navigate = useNavigate();
@@ -383,7 +406,6 @@ export default function BookingFormPage() {
   const [contractTitle, setContractTitle] = useState('Event Contract');
   const [contractSections, setContractSections] = useState([]);
   const [contractOfferings, setContractOfferings] = useState([]);
-  const [contractAccentColor, setContractAccentColor] = useState(DEFAULT_CONTRACT_ACCENT_COLOR);
   const [proposalOfferingPickerOpen, setProposalOfferingPickerOpen] = useState(false);
   const [contractOfferingPickerOpen, setContractOfferingPickerOpen] = useState(false);
   const [contractPreviewUrl, setContractPreviewUrl] = useState('');
@@ -481,7 +503,6 @@ export default function BookingFormPage() {
     setContractHours(booking.proposal?.hours || '');
     setContractLineItems(booking.proposal?.lineItems || []);
     setContractOfferings(booking.proposal?.offerings || []);
-    setContractAccentColor(DEFAULT_CONTRACT_ACCENT_COLOR);
     setShowContractPreview(false);
     setContractPreviewUrl('');
     setLastSignLink('');
@@ -532,7 +553,12 @@ export default function BookingFormPage() {
       setContractSections(contract.snapshot?.sections || []);
     } else {
       setContractTitle(currentUser.contractTemplate?.title || 'Event Contract');
-      setContractSections(currentUser.contractTemplate?.sections || []);
+      // Prefer this specific proposal's own sections (same auto-carry as
+      // offerings/line items/hours below); only fall back to the account-wide
+      // default when the proposal doesn't have any of its own yet.
+      setContractSections(
+        booking?.proposal?.sections?.length ? booking.proposal.sections : (currentUser.contractTemplate?.sections || [])
+      );
     }
     contractTemplateSkipRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -694,7 +720,7 @@ export default function BookingFormPage() {
       offerings: contractOfferings,
       title: contractTitle,
       sections: contractSections,
-      style: { accentColor: contractAccentColor },
+      style: { accentColor: currentUser.businessInfo?.accentColor || DEFAULT_CONTRACT_ACCENT_COLOR },
     };
   }
 
@@ -916,6 +942,8 @@ export default function BookingFormPage() {
           </button>
         </div>
       )}
+
+      <PipelineStepper steps={pipelineSteps(booking, form.proposal, contract)} />
 
       <div className="flex border-b border-slate-200 mb-6">
         {TABS.map((t) => {
@@ -1217,14 +1245,11 @@ export default function BookingFormPage() {
                   </div>
                 </div>
 
-                <div className="mt-6 pt-6 border-t border-slate-100">
-                  <LineItemsEditor
-                    items={form.proposal.lineItems || []}
-                    onChange={(items) => update('proposal', { ...form.proposal, lineItems: items })}
-                  />
-                </div>
-
-                <div className="mt-6 pt-6 border-t border-slate-100">
+                <CollapsibleSection
+                  title="Pricing"
+                  defaultOpen={(form.proposal.offerings || []).length > 0}
+                  badge={<span className="text-sm font-bold text-slate-800">{currency(computeGrandTotal(form.proposal.lineItems, form.proposal.offerings))}</span>}
+                >
                   <OfferingsEditor
                     offerings={form.proposal.offerings || []}
                     onChange={(offerings) => update('proposal', { ...form.proposal, offerings })}
@@ -1233,14 +1258,21 @@ export default function BookingFormPage() {
                   <div className="flex justify-end mt-3 text-sm font-bold text-slate-800">
                     Grand Total: {currency(computeGrandTotal(form.proposal.lineItems, form.proposal.offerings))}
                   </div>
-                </div>
+                </CollapsibleSection>
 
-                <div className="mt-6 pt-6 border-t border-slate-100">
+                <CollapsibleSection
+                  title="Additional Sections"
+                  subtitle="Riders, policies, or any other custom content"
+                  defaultOpen={(form.proposal.sections || []).length > 0}
+                  badge={(form.proposal.sections || []).length > 0 ? (
+                    <span className="text-xs font-semibold text-slate-400">{form.proposal.sections.length}</span>
+                  ) : null}
+                >
                   <SectionsEditor
                     sections={form.proposal.sections || []}
                     onChange={(sections) => update('proposal', { ...form.proposal, sections })}
                   />
-                </div>
+                </CollapsibleSection>
               </div>
 
               <div className={cardClass}>
@@ -1322,10 +1354,12 @@ export default function BookingFormPage() {
                   <input type="number" min="0" step="0.5" value={contractHours} onChange={(e) => setContractHours(e.target.value)} className={inputClass} />
                 </div>
               </div>
-              <div className="max-w-2xl mb-5">
-                <LineItemsEditor items={contractLineItems} onChange={setContractLineItems} />
-              </div>
-              <div className="max-w-2xl mb-5">
+              <CollapsibleSection
+                className="max-w-2xl mb-5"
+                title="Pricing"
+                defaultOpen={contractOfferings.length > 0}
+                badge={<span className="text-sm font-bold text-slate-800">{currency(computeGrandTotal(contractLineItems, contractOfferings))}</span>}
+              >
                 <OfferingsEditor
                   offerings={contractOfferings}
                   onChange={setContractOfferings}
@@ -1334,11 +1368,16 @@ export default function BookingFormPage() {
                 <div className="flex justify-end mt-3 text-sm font-bold text-slate-800">
                   Grand Total: {currency(computeGrandTotal(contractLineItems, contractOfferings))}
                 </div>
-              </div>
-              <div className="max-w-2xl mb-5">
+              </CollapsibleSection>
+              <CollapsibleSection
+                className="max-w-2xl mb-5"
+                title="Additional Sections"
+                subtitle="Saved as your default sections for future contracts, until changed"
+                defaultOpen={contractSections.length > 0}
+                badge={contractSections.length > 0 ? <span className="text-xs font-semibold text-slate-400">{contractSections.length}</span> : null}
+              >
                 <SectionsEditor sections={contractSections} onChange={setContractSections} />
-                <p className="mt-1 text-xs text-slate-400">Saved as your default sections for future contracts, until changed.</p>
-              </div>
+              </CollapsibleSection>
               <div className="max-w-2xl mb-5">
                 <label className={labelClass}>Terms</label>
                 <textarea
@@ -1349,10 +1388,6 @@ export default function BookingFormPage() {
                   className={inputClass}
                 />
                 <p className="mt-1 text-xs text-slate-400">Stays editable after the contract is sent — everything else here locks.</p>
-              </div>
-              <div className="max-w-2xl mb-5">
-                <label className={labelClass}>Separator / Accent Color</label>
-                <ColorPicker value={contractAccentColor} onChange={setContractAccentColor} />
               </div>
               <div className="flex gap-2">
                 <button
@@ -1434,6 +1469,53 @@ export default function BookingFormPage() {
                     )}
                   </div>
                 )}
+              </div>
+
+              <div className={cardClass}>
+                <h3 className={cardTitleClass}>What Was Sent</h3>
+                <div className="space-y-4 text-sm">
+                  <div>
+                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Title</div>
+                    <div className="text-slate-700">{contract.snapshot.title || 'Event Contract'}</div>
+                  </div>
+                  {((contract.snapshot.lineItems || []).length > 0 || (contract.snapshot.offerings || []).length > 0) && (
+                    <div>
+                      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Pricing</div>
+                      <div className="space-y-1">
+                        {(contract.snapshot.lineItems || []).map((item) => (
+                          <div key={item.id} className="flex justify-between text-slate-600">
+                            <span>{item.name}</span>
+                            <span className="font-medium">{currency(item.amount)}</span>
+                          </div>
+                        ))}
+                        {(contract.snapshot.offerings || []).map((o) => (
+                          <div key={o.id} className="flex justify-between text-slate-600">
+                            <span>{o.name}</span>
+                            <span className="font-medium">{currency(computeOfferingTotal(o))}</span>
+                          </div>
+                        ))}
+                        <div className="flex justify-between font-bold text-slate-800 pt-1 mt-1 border-t border-slate-100">
+                          <span>Grand Total</span>
+                          <span>{currency(computeGrandTotal(contract.snapshot.lineItems, contract.snapshot.offerings))}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {(contract.snapshot.sections || []).length > 0 && (
+                    <div>
+                      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Additional Sections</div>
+                      <div className="space-y-2">
+                        {contract.snapshot.sections.map((s) => (
+                          <div key={s.id}>
+                            <div className="font-semibold text-slate-700">{s.title}</div>
+                            {s.value && <div className="text-slate-600">{s.value}</div>}
+                            {s.text && <div className="text-slate-500 whitespace-pre-wrap">{s.text}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className={cardClass}>
