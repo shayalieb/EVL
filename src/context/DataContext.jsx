@@ -16,6 +16,7 @@ const LIST_FIELDS = {
   inquiryStatuses: 'inquiryStatuses',
   bookingStatuses: 'bookingStatuses',
   emailTemplates: 'emailTemplates',
+  offerings: 'offerings',
 };
 
 export function DataProvider({ children }) {
@@ -183,6 +184,24 @@ export function DataProvider({ children }) {
     patchList(LIST_FIELDS.emailTemplates, (currentUser.emailTemplates || []).filter((t) => t.id !== id));
   }, [currentUser, patchList]);
 
+  // ---- Offerings (reusable line items for proposals/contracts) ----
+  const addOffering = useCallback((offering) => {
+    if (!currentUser) return;
+    const record = { id: uid('off'), createdAt: new Date().toISOString(), ...offering };
+    patchList(LIST_FIELDS.offerings, [...(currentUser.offerings || []), record]);
+    return record;
+  }, [currentUser, patchList]);
+
+  const updateOffering = useCallback((id, patch) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.offerings, (currentUser.offerings || []).map((o) => (o.id === id ? { ...o, ...patch } : o)));
+  }, [currentUser, patchList]);
+
+  const deleteOffering = useCallback((id) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.offerings, (currentUser.offerings || []).filter((o) => o.id !== id));
+  }, [currentUser, patchList]);
+
   // ---- Events ----
   const addEvent = useCallback((event) => {
     if (!currentUser) return;
@@ -288,6 +307,7 @@ export function DataProvider({ children }) {
     inquiryStatuses: currentUser?.inquiryStatuses || [],
     bookingStatuses: currentUser?.bookingStatuses || [],
     emailTemplates: currentUser?.emailTemplates || [],
+    offerings: currentUser?.offerings || [],
     addContractor,
     updateContractor,
     deleteContractor,
@@ -315,6 +335,9 @@ export function DataProvider({ children }) {
     addEmailTemplate,
     updateEmailTemplate,
     removeEmailTemplate,
+    addOffering,
+    updateOffering,
+    deleteOffering,
     addEvent,
     updateEvent,
     deleteEvent,
@@ -333,6 +356,7 @@ export function DataProvider({ children }) {
     addEventStatus, updateEventStatus, removeEventStatus,
     addInquiryStatus, updateInquiryStatus, removeInquiryStatus,
     addEmailTemplate, updateEmailTemplate, removeEmailTemplate,
+    addOffering, updateOffering, deleteOffering,
     addEvent, updateEvent, deleteEvent,
     getContractorById, computeDurationHours, computeEventTotalCost, computeVendorStatus,
   ]);

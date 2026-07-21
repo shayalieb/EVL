@@ -6,6 +6,7 @@ export const PERMISSION_KEYS = [
   'manageBookings',
   'manageEvents',
   'manageEmailTemplates',
+  'manageOfferings',
   'manageSettings',
 ];
 

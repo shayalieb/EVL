@@ -1,4 +1,5 @@
 import { formatCurrency as currency, formatEventDate, formatVenueLine } from './format';
+import { computeOfferingTotal, computeOfferingsTotal } from './offerings';
 
 function loadImageDimensions(dataUrl) {
   return new Promise((resolve) => {
@@ -18,6 +19,7 @@ function todayLabel() {
 async function buildProposalDoc({ booking, client, businessInfo }) {
   const hours = booking.proposal?.hours;
   const lineItems = booking.proposal?.lineItems || [];
+  const offeringsList = booking.proposal?.offerings || [];
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable'),
@@ -98,7 +100,7 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
   });
   y = doc.lastAutoTable.finalY + 10;
 
-  const grandTotal = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const grandTotal = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0) + computeOfferingsTotal(offeringsList);
 
   const investmentRows = [
     ...lineItems.map((item) => [item.name || 'Item', currency(Number(item.amount) || 0)]),
@@ -124,6 +126,27 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
     },
   });
   y = doc.lastAutoTable.finalY + 10;
+
+  if (offeringsList.length) {
+    const offeringRows = offeringsList.map((o) => {
+      const total = computeOfferingTotal(o);
+      const valueLine = o.type === 'perUnit'
+        ? `${o.unitCount || 0} × ${currency(o.ratePerUnit || 0)} = ${currency(total)}`
+        : currency(total);
+      return [o.name || 'Offering', o.details ? `${valueLine}\n${o.details}` : valueLine];
+    });
+    autoTable(doc, {
+      startY: y,
+      margin: { left: marginX, right: marginX },
+      head: [['Offerings', '']],
+      body: offeringRows,
+      theme: 'striped',
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [79, 70, 229] },
+      columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } },
+    });
+    y = doc.lastAutoTable.finalY + 10;
+  }
 
   const sections = (booking.proposal?.sections || []).filter((s) => s.title);
   for (const section of sections) {

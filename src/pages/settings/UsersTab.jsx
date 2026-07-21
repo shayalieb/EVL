@@ -13,6 +13,7 @@ const PERMISSION_FIELDS = [
   { key: 'manageBookings', label: 'Manage Bookings' },
   { key: 'manageEvents', label: 'Manage Events' },
   { key: 'manageEmailTemplates', label: 'Manage Email Templates' },
+  { key: 'manageOfferings', label: 'Manage Offerings' },
   { key: 'manageSettings', label: 'Manage Business Info & Custom Fields' },
 ];
 

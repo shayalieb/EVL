@@ -1,4 +1,5 @@
 import { formatCurrency as currency, formatEventDate, formatVenueLine } from './format';
+import { computeOfferingTotal, computeOfferingsTotal } from './offerings';
 
 const DEFAULT_ACCENT_COLOR = '#4f46e5';
 
@@ -157,7 +158,8 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
   y = doc.lastAutoTable.finalY + 10;
 
   const lineItems = snapshot.lineItems || [];
-  const grandTotal = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const offeringsList = snapshot.offerings || [];
+  const grandTotal = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0) + computeOfferingsTotal(offeringsList);
 
   const pricingRows = [
     ...lineItems.map((item) => [item.name || 'Item', currency(Number(item.amount) || 0)]),
@@ -182,6 +184,27 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
     },
   });
   y = doc.lastAutoTable.finalY + 10;
+
+  if (offeringsList.length) {
+    const offeringRows = offeringsList.map((o) => {
+      const total = computeOfferingTotal(o);
+      const valueLine = o.type === 'perUnit'
+        ? `${o.unitCount || 0} × ${currency(o.ratePerUnit || 0)} = ${currency(total)}`
+        : currency(total);
+      return [o.name || 'Offering', o.details ? `${valueLine}\n${o.details}` : valueLine];
+    });
+    autoTable(doc, {
+      startY: y,
+      margin: { left: marginX, right: marginX },
+      head: [['Offerings', '']],
+      body: offeringRows,
+      theme: 'striped',
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: accentRgb },
+      columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } },
+    });
+    y = doc.lastAutoTable.finalY + 10;
+  }
 
   // Custom sections — a colored title bar (tinted to the chosen accent)
   // followed by whichever of text/value the section was given.

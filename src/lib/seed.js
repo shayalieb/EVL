@@ -168,6 +168,6 @@ export function buildSeedUserData() {
 
   return {
     contractorTypes, eventTypes, eventStatuses, inquiryStatuses, bookingStatuses,
-    emailTemplates, contractors, clients, events, bookings: [],
+    emailTemplates, contractors, clients, events, bookings: [], offerings: [],
   };
 }

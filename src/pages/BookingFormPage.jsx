@@ -17,6 +17,8 @@ import SignatureCanvas from '../components/SignatureCanvas';
 import ColorPicker from '../components/ui/ColorPicker';
 import MoneyInput from '../components/ui/MoneyInput';
 import { useSavingIndicator } from '../components/ui/SavingIndicator';
+import OfferingPickerModal from '../components/OfferingPickerModal';
+import { computeOfferingTotal, computeOfferingsTotal } from '../lib/offerings';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -155,8 +157,110 @@ function LineItemsEditor({ items, onChange }) {
   );
 }
 
-function computeGrandTotal(lineItems) {
-  return (lineItems || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+function computeGrandTotal(lineItems, offerings) {
+  const itemsTotal = (lineItems || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  return itemsTotal + computeOfferingsTotal(offerings);
+}
+
+// Offerings are added via the picker (a saved template cloned in), then
+// edited in place here — the instance is independent of the saved template
+// from that point on.
+function OfferingsEditor({ offerings, onChange, onAddClick }) {
+  function handleUpdate(id, patch) {
+    onChange(offerings.map((o) => (o.id === id ? { ...o, ...patch } : o)));
+  }
+
+  function handleRemove(id) {
+    onChange(offerings.filter((o) => o.id !== id));
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <label className={labelClass}>Offerings</label>
+        <button type="button" onClick={onAddClick} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">
+          + Add Offering
+        </button>
+      </div>
+      {offerings.length === 0 ? (
+        <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
+          No offerings added yet.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {offerings.map((o) => (
+            <div key={o.id} className="border border-slate-200 rounded-lg p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <input
+                  value={o.name}
+                  onChange={(e) => handleUpdate(o.id, { name: e.target.value })}
+                  placeholder="Offering name"
+                  className={`${inputClass} font-semibold`}
+                />
+                <select
+                  value={o.type}
+                  onChange={(e) => handleUpdate(o.id, { type: e.target.value })}
+                  className={`${inputClass} w-32 shrink-0`}
+                >
+                  <option value="general">General</option>
+                  <option value="perUnit">Per Unit</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => handleRemove(o.id)}
+                  className="shrink-0 w-8 h-8 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
+                  aria-label={`Remove ${o.name || 'offering'}`}
+                >
+                  ✕
+                </button>
+              </div>
+              <textarea
+                rows={2}
+                value={o.details}
+                onChange={(e) => handleUpdate(o.id, { details: e.target.value })}
+                placeholder="Details (optional)"
+                className={`${inputClass} mb-2`}
+              />
+              {o.type === 'perUnit' ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">Unit Count</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={o.unitCount}
+                      onChange={(e) => handleUpdate(o.id, { unitCount: e.target.value })}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">$ Per Unit</label>
+                    <MoneyInput
+                      value={o.ratePerUnit}
+                      onChange={(v) => handleUpdate(o.id, { ratePerUnit: v })}
+                      className="w-full py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">Amount</label>
+                  <MoneyInput
+                    value={o.amount}
+                    onChange={(v) => handleUpdate(o.id, { amount: v })}
+                    className="w-full py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                </div>
+              )}
+              <div className="text-right text-xs font-semibold text-slate-600 mt-2">
+                Subtotal: {currency(computeOfferingTotal(o))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // A custom section = a title (rendered as a highlighted separator bar in the
@@ -278,7 +382,10 @@ export default function BookingFormPage() {
   const [contractLineItems, setContractLineItems] = useState([]);
   const [contractTitle, setContractTitle] = useState('Event Contract');
   const [contractSections, setContractSections] = useState([]);
+  const [contractOfferings, setContractOfferings] = useState([]);
   const [contractAccentColor, setContractAccentColor] = useState(DEFAULT_CONTRACT_ACCENT_COLOR);
+  const [proposalOfferingPickerOpen, setProposalOfferingPickerOpen] = useState(false);
+  const [contractOfferingPickerOpen, setContractOfferingPickerOpen] = useState(false);
   const [contractPreviewUrl, setContractPreviewUrl] = useState('');
   const [showContractPreview, setShowContractPreview] = useState(false);
   const [loadingContractPreview, setLoadingContractPreview] = useState(false);
@@ -373,6 +480,7 @@ export default function BookingFormPage() {
     if (!booking) return;
     setContractHours(booking.proposal?.hours || '');
     setContractLineItems(booking.proposal?.lineItems || []);
+    setContractOfferings(booking.proposal?.offerings || []);
     setContractAccentColor(DEFAULT_CONTRACT_ACCENT_COLOR);
     setShowContractPreview(false);
     setContractPreviewUrl('');
@@ -524,7 +632,7 @@ export default function BookingFormPage() {
   }
 
   function handlePushToProposal() {
-    const proposal = { hours: '', lineItems: [], sections: currentUser.proposalTemplate?.sections || [], sentAt: null, sentTo: null };
+    const proposal = { hours: '', lineItems: [], sections: currentUser.proposalTemplate?.sections || [], offerings: [], sentAt: null, sentTo: null };
     update('proposal', proposal);
     if (booking) updateBooking(booking.id, { proposal });
   }
@@ -583,6 +691,7 @@ export default function BookingFormPage() {
       },
       hours: contractHours,
       lineItems: contractLineItems,
+      offerings: contractOfferings,
       title: contractTitle,
       sections: contractSections,
       style: { accentColor: contractAccentColor },
@@ -682,7 +791,7 @@ export default function BookingFormPage() {
   function createEventFromContract(navigateAfter) {
     if (!booking || !contract) return;
     const contractBooking = contract.snapshot.booking || {};
-    const grandTotal = computeGrandTotal(contract.snapshot.lineItems);
+    const grandTotal = computeGrandTotal(contract.snapshot.lineItems, contract.snapshot.offerings);
     const name = [client ? `${client.firstName} ${client.lastName}` : '', contractBooking.eventType].filter(Boolean).join(' ') || 'New Event';
     const noteLines = [
       'Created from a fully signed contract.',
@@ -1113,8 +1222,16 @@ export default function BookingFormPage() {
                     items={form.proposal.lineItems || []}
                     onChange={(items) => update('proposal', { ...form.proposal, lineItems: items })}
                   />
+                </div>
+
+                <div className="mt-6 pt-6 border-t border-slate-100">
+                  <OfferingsEditor
+                    offerings={form.proposal.offerings || []}
+                    onChange={(offerings) => update('proposal', { ...form.proposal, offerings })}
+                    onAddClick={() => setProposalOfferingPickerOpen(true)}
+                  />
                   <div className="flex justify-end mt-3 text-sm font-bold text-slate-800">
-                    Grand Total: {currency(computeGrandTotal(form.proposal.lineItems))}
+                    Grand Total: {currency(computeGrandTotal(form.proposal.lineItems, form.proposal.offerings))}
                   </div>
                 </div>
 
@@ -1207,8 +1324,15 @@ export default function BookingFormPage() {
               </div>
               <div className="max-w-2xl mb-5">
                 <LineItemsEditor items={contractLineItems} onChange={setContractLineItems} />
+              </div>
+              <div className="max-w-2xl mb-5">
+                <OfferingsEditor
+                  offerings={contractOfferings}
+                  onChange={setContractOfferings}
+                  onAddClick={() => setContractOfferingPickerOpen(true)}
+                />
                 <div className="flex justify-end mt-3 text-sm font-bold text-slate-800">
-                  Grand Total: {currency(computeGrandTotal(contractLineItems))}
+                  Grand Total: {currency(computeGrandTotal(contractLineItems, contractOfferings))}
                 </div>
               </div>
               <div className="max-w-2xl mb-5">
@@ -1443,6 +1567,23 @@ export default function BookingFormPage() {
         onConfirm={confirmDeleteDocument}
         title="Remove document?"
         description={`This will remove "${docPendingDelete?.filename}" from this booking. This can't be undone.`}
+      />
+
+      <OfferingPickerModal
+        open={proposalOfferingPickerOpen}
+        onClose={() => setProposalOfferingPickerOpen(false)}
+        onSelect={(template) => {
+          const instance = { ...template, id: uid('offitem') };
+          update('proposal', { ...form.proposal, offerings: [...(form.proposal?.offerings || []), instance] });
+        }}
+      />
+      <OfferingPickerModal
+        open={contractOfferingPickerOpen}
+        onClose={() => setContractOfferingPickerOpen(false)}
+        onSelect={(template) => {
+          const instance = { ...template, id: uid('offitem') };
+          setContractOfferings((prev) => [...prev, instance]);
+        }}
       />
     </div>
   );

@@ -5,6 +5,7 @@ import SignatureCanvas from '../components/SignatureCanvas';
 import { viewContractByToken, submitContractSignature } from '../lib/contracts';
 import { getContractPdfDataUrl } from '../lib/contractPdf';
 import { formatCurrency as currency } from '../lib/format';
+import { computeOfferingsTotal } from '../lib/offerings';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -112,7 +113,7 @@ export default function ContractSignPage() {
   const alreadySigned = role === 'client' ? !!contract.clientSignedAt : !!contract.ownerSignedAt;
   const canSignNow = !alreadySigned;
   const lineItems = snapshot.lineItems || [];
-  const grandTotal = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const grandTotal = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0) + computeOfferingsTotal(snapshot.offerings);
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-8">
