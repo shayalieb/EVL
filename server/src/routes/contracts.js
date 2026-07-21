@@ -61,6 +61,16 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ contract: contract ? serializeForOwner(contract) : null });
 }));
 
+// Derives status purely from which signatures are present so either party
+// can sign in either order — a 'client_signed'/'owner_signed' gate would
+// otherwise block whichever party didn't go first.
+function statusFor({ clientSigned, ownerSigned }) {
+  if (clientSigned && ownerSigned) return 'fully_signed';
+  if (clientSigned) return 'client_signed';
+  if (ownerSigned) return 'owner_signed';
+  return 'sent';
+}
+
 router.post('/', asyncHandler(async (req, res) => {
   const { bookingId, recipientEmail, recipientName, snapshot } = req.body || {};
   if (!bookingId?.trim() || !recipientEmail?.trim() || !snapshot) {
@@ -69,6 +79,10 @@ router.post('/', asyncHandler(async (req, res) => {
 
   const owner = await prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } });
   const clientToken = generateToken();
+  // Generated up front (not only once the client signs) so the owner can
+  // grab their own sign-from-anywhere link immediately too, e.g. to sign
+  // right away before the client even opens theirs.
+  const ownerToken = generateToken();
 
   const contract = await prisma.contract.create({
     data: {
@@ -80,11 +94,13 @@ router.post('/', asyncHandler(async (req, res) => {
       recipientName: recipientName || null,
       ownerEmail: owner.email,
       clientTokenHash: hashToken(clientToken),
+      ownerTokenHash: hashToken(ownerToken),
       sentAt: new Date(),
     },
   });
 
   const signUrl = `${frontendUrl()}/sign/${clientToken}`;
+  const ownerSignUrl = `${frontendUrl()}/sign/${ownerToken}`;
   const fromName = snapshot.businessInfo?.name || 'GigWorks';
   // The client's raw token only ever exists here and in the email we're
   // about to send — only its hash is persisted (see model comment). If the
@@ -102,7 +118,7 @@ router.post('/', asyncHandler(async (req, res) => {
     emailError = 'Contract was created, but the email could not be sent — copy the link below to share it manually.';
   }
 
-  res.status(201).json({ contract: serializeForOwner(contract), signLink: signUrl, emailError });
+  res.status(201).json({ contract: serializeForOwner(contract), signLink: signUrl, ownerSignLink: ownerSignUrl, emailError });
 }));
 
 router.post('/:id/owner-sign', asyncHandler(async (req, res) => {
@@ -115,8 +131,8 @@ router.post('/:id/owner-sign', asyncHandler(async (req, res) => {
   if (!contract || contract.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Contract not found.' });
   }
-  if (contract.status !== 'client_signed') {
-    return res.status(400).json({ error: 'The client needs to sign before you can countersign.' });
+  if (contract.ownerSignedAt) {
+    return res.status(400).json({ error: "You've already signed this contract." });
   }
 
   const updated = await prisma.contract.update({
@@ -125,7 +141,7 @@ router.post('/:id/owner-sign', asyncHandler(async (req, res) => {
       ownerSignedAt: new Date(),
       ownerSignatureName: signatureName.trim(),
       ownerSignatureImage: signatureImage,
-      status: 'fully_signed',
+      status: statusFor({ clientSigned: !!contract.clientSignedAt, ownerSigned: true }),
     },
   });
   res.json({ contract: serializeForOwner(updated) });
@@ -179,40 +195,48 @@ publicContractsRouter.post('/:token/submit', asyncHandler(async (req, res) => {
   }
 
   if (role === 'client') {
-    if (contract.status !== 'sent') {
-      return res.status(400).json({ error: 'This contract has already been signed.' });
+    if (contract.clientSignedAt) {
+      return res.status(400).json({ error: "You've already signed this contract." });
     }
-    const ownerToken = generateToken();
+    const ownerAlreadySigned = !!contract.ownerSignedAt;
     const updated = await prisma.contract.update({
       where: { id: contract.id },
       data: {
         clientSignedAt: new Date(),
         clientSignatureName: signatureName.trim(),
         clientSignatureImage: signatureImage,
-        status: 'client_signed',
-        ownerTokenHash: hashToken(ownerToken),
+        status: statusFor({ clientSigned: true, ownerSigned: ownerAlreadySigned }),
       },
     });
 
-    const fromName = contract.snapshot?.businessInfo?.name || 'GigWorks';
-    const ownerSignUrl = `${frontendUrl()}/sign/${ownerToken}`;
-    try {
-      await sendMail({
-        from: buildFromHeader(fromName),
-        to: contract.ownerEmail,
-        subject: `${contract.recipientName || contract.recipientEmail} signed your contract — your signature is next`,
-        html: `<p>Good news — ${contract.recipientName || contract.recipientEmail} just signed the contract.</p><p>Countersign it in the app, or from this link:</p><p><a href="${ownerSignUrl}">${ownerSignUrl}</a></p>`,
-      });
-    } catch {
-      // best effort — the owner can still countersign in-app even if this notification fails to send
+    // Only nudge the owner if they haven't already signed — nothing to do
+    // once both signatures are in. Their sign token was generated at send
+    // time but only its hash was ever persisted (never emailed), so a fresh
+    // one has to be issued here to put a working link in this notification.
+    if (!ownerAlreadySigned) {
+      const ownerToken = generateToken();
+      await prisma.contract.update({ where: { id: contract.id }, data: { ownerTokenHash: hashToken(ownerToken) } });
+
+      const fromName = contract.snapshot?.businessInfo?.name || 'GigWorks';
+      const ownerSignUrl = `${frontendUrl()}/sign/${ownerToken}`;
+      try {
+        await sendMail({
+          from: buildFromHeader(fromName),
+          to: contract.ownerEmail,
+          subject: `${contract.recipientName || contract.recipientEmail} signed your contract — your signature is next`,
+          html: `<p>Good news — ${contract.recipientName || contract.recipientEmail} just signed the contract.</p><p>Countersign it in the app, or from this link:</p><p><a href="${ownerSignUrl}">${ownerSignUrl}</a></p>`,
+        });
+      } catch {
+        // best effort — the owner can still countersign in-app even if this notification fails to send
+      }
     }
 
     return res.json({ contract: serializeForPublic(updated, role) });
   }
 
   // role === 'owner'
-  if (contract.status !== 'client_signed') {
-    return res.status(400).json({ error: 'The client needs to sign before you can countersign.' });
+  if (contract.ownerSignedAt) {
+    return res.status(400).json({ error: "You've already signed this contract." });
   }
   const updated = await prisma.contract.update({
     where: { id: contract.id },
@@ -220,7 +244,7 @@ publicContractsRouter.post('/:token/submit', asyncHandler(async (req, res) => {
       ownerSignedAt: new Date(),
       ownerSignatureName: signatureName.trim(),
       ownerSignatureImage: signatureImage,
-      status: 'fully_signed',
+      status: statusFor({ clientSigned: !!contract.clientSignedAt, ownerSigned: true }),
     },
   });
   res.json({ contract: serializeForPublic(updated, role) });

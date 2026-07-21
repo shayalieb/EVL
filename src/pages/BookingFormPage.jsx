@@ -9,11 +9,12 @@ import { uid } from '../lib/storage';
 import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, bookingDocumentDownloadUrl } from '../lib/bookingDocuments';
 import { generateProposalPdf, generateProposalPdfAttachment } from '../lib/proposalPdf';
 import { getContractForBooking, sendContract, ownerSignContract } from '../lib/contracts';
-import { generateContractPdf } from '../lib/contractPdf';
+import { generateContractPdf, getContractPdfDataUrl } from '../lib/contractPdf';
 import { sendEmail } from '../lib/email/send';
 import { formatCurrency as currency, formatEventDate } from '../lib/format';
 import { FileIcon } from '../components/ui/icons';
 import SignatureCanvas from '../components/SignatureCanvas';
+import ColorPicker from '../components/ui/ColorPicker';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -31,6 +32,8 @@ const TABS = [
   { id: 'proposal', label: 'Proposal' },
   { id: 'contract', label: 'Contract' },
 ];
+
+const DEFAULT_CONTRACT_ACCENT_COLOR = '#6366f1';
 
 function emptyForm() {
   return {
@@ -149,6 +152,51 @@ function computeGrandTotal(quotedTotal, lineItems) {
   return (Number(quotedTotal) || 0) + itemsTotal;
 }
 
+function CustomFieldsEditor({ fields, onChange }) {
+  const [label, setLabel] = useState('');
+  const [value, setValue] = useState('');
+
+  function handleAdd() {
+    if (!label.trim()) return;
+    onChange([...fields, { id: uid('field'), label: label.trim(), value: value.trim() }]);
+    setLabel('');
+    setValue('');
+  }
+
+  function handleRemove(id) {
+    onChange(fields.filter((f) => f.id !== id));
+  }
+
+  return (
+    <div>
+      <label className={labelClass}>Custom Fields</label>
+      {fields.length > 0 && (
+        <div className="space-y-1.5 mb-2">
+          {fields.map((f) => (
+            <div key={f.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 text-sm">
+              <span className="font-semibold text-slate-700 w-1/3 truncate">{f.label}</span>
+              <span className="flex-1 text-slate-600 truncate">{f.value || '—'}</span>
+              <button
+                type="button"
+                onClick={() => handleRemove(f.id)}
+                className="w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
+                aria-label={`Remove ${f.label}`}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Field name" className={inputClass} />
+        <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Value" className={inputClass} />
+        <button type="button" onClick={handleAdd} className="shrink-0 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50">+ Add</button>
+      </div>
+    </div>
+  );
+}
+
 export default function BookingFormPage() {
   const { bookingId } = useParams();
   const navigate = useNavigate();
@@ -185,8 +233,14 @@ export default function BookingFormPage() {
   const [contractRecipientName, setContractRecipientName] = useState('');
   const [contractHours, setContractHours] = useState('');
   const [contractLineItems, setContractLineItems] = useState([]);
+  const [contractCustomFields, setContractCustomFields] = useState([]);
+  const [contractAccentColor, setContractAccentColor] = useState(DEFAULT_CONTRACT_ACCENT_COLOR);
+  const [contractPreviewUrl, setContractPreviewUrl] = useState('');
+  const [showContractPreview, setShowContractPreview] = useState(false);
+  const [loadingContractPreview, setLoadingContractPreview] = useState(false);
   const [sendingContract, setSendingContract] = useState(false);
   const [lastSignLink, setLastSignLink] = useState('');
+  const [lastOwnerSignLink, setLastOwnerSignLink] = useState('');
   const [ownerSignerName, setOwnerSignerName] = useState('');
   const [ownerSignatureImage, setOwnerSignatureImage] = useState('');
   const [signingOwner, setSigningOwner] = useState(false);
@@ -253,7 +307,12 @@ export default function BookingFormPage() {
     if (!booking) return;
     setContractHours(booking.proposal?.hours || '');
     setContractLineItems(booking.proposal?.lineItems || []);
+    setContractCustomFields([]);
+    setContractAccentColor(DEFAULT_CONTRACT_ACCENT_COLOR);
+    setShowContractPreview(false);
+    setContractPreviewUrl('');
     setLastSignLink('');
+    setLastOwnerSignLink('');
     setOwnerSignerName('');
     setOwnerSignatureImage('');
   }, [booking?.id]);
@@ -382,7 +441,30 @@ export default function BookingFormPage() {
       },
       hours: contractHours,
       lineItems: contractLineItems,
+      customFields: contractCustomFields,
+      style: { accentColor: contractAccentColor },
     };
+  }
+
+  async function handleTogglePreview() {
+    if (showContractPreview) {
+      setShowContractPreview(false);
+      return;
+    }
+    setLoadingContractPreview(true);
+    try {
+      const url = await getContractPdfDataUrl({
+        snapshot: buildContractSnapshot(),
+        clientSignature: null,
+        ownerSignature: null,
+      });
+      setContractPreviewUrl(url);
+      setShowContractPreview(true);
+    } catch (err) {
+      showToast(err.message || 'Failed to build preview', 'error');
+    } finally {
+      setLoadingContractPreview(false);
+    }
   }
 
   async function handleSendContract() {
@@ -393,7 +475,7 @@ export default function BookingFormPage() {
     setSendingContract(true);
     try {
       persistBooking();
-      const { contract: created, signLink, emailError } = await sendContract({
+      const { contract: created, signLink, ownerSignLink, emailError } = await sendContract({
         bookingId: booking.id,
         recipientEmail: contractRecipientEmail.trim(),
         recipientName: contractRecipientName.trim(),
@@ -401,6 +483,7 @@ export default function BookingFormPage() {
       });
       setContract(created);
       setLastSignLink(signLink);
+      setLastOwnerSignLink(ownerSignLink);
       if (emailError) showToast(emailError, 'error');
       else showToast(`Contract sent to ${contractRecipientEmail.trim()}`);
     } catch (err) {
@@ -913,15 +996,38 @@ export default function BookingFormPage() {
                   Grand Total: {currency(computeGrandTotal(form.quotedTotal, contractLineItems))}
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={handleSendContract}
-                disabled={sendingContract || !contractRecipientEmail.trim()}
-                className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {sendingContract && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
-                Send Contract for Signature
-              </button>
+              <div className="max-w-2xl mb-5">
+                <CustomFieldsEditor fields={contractCustomFields} onChange={setContractCustomFields} />
+              </div>
+              <div className="max-w-2xl mb-5">
+                <label className={labelClass}>Separator / Accent Color</label>
+                <ColorPicker value={contractAccentColor} onChange={setContractAccentColor} />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleTogglePreview}
+                  disabled={loadingContractPreview}
+                  className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60 flex items-center gap-2"
+                >
+                  {loadingContractPreview && <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 border-t-slate-600 animate-spin" />}
+                  {showContractPreview ? 'Hide Preview' : 'Preview'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendContract}
+                  disabled={sendingContract || !contractRecipientEmail.trim()}
+                  className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {sendingContract && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
+                  Send Contract for Signature
+                </button>
+              </div>
+              {showContractPreview && contractPreviewUrl && (
+                <div className="mt-5 rounded-xl border border-slate-200 overflow-hidden">
+                  <iframe title="Contract preview" src={contractPreviewUrl} className="w-full h-[70vh]" />
+                </div>
+              )}
             </div>
           ) : (
             <>
@@ -929,8 +1035,9 @@ export default function BookingFormPage() {
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <div>
                     <div className="text-sm font-semibold text-slate-700">
-                      {contract.status === 'sent' && 'Waiting on client signature'}
+                      {contract.status === 'sent' && 'Waiting on signatures'}
                       {contract.status === 'client_signed' && 'Client signed — your turn to countersign'}
+                      {contract.status === 'owner_signed' && "You've signed — waiting on the client"}
                       {contract.status === 'fully_signed' && 'Fully signed by both parties'}
                     </div>
                     <div className="text-xs text-slate-400 mt-0.5">
@@ -946,54 +1053,92 @@ export default function BookingFormPage() {
                     Download PDF
                   </button>
                 </div>
-                {lastSignLink && (
-                  <div className="mt-4 flex items-center gap-2 text-xs bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-lg px-3 py-2">
-                    <span className="flex-1 truncate">{lastSignLink}</span>
-                    <button
-                      type="button"
-                      onClick={() => { navigator.clipboard.writeText(lastSignLink); showToast('Link copied'); }}
-                      className="font-semibold hover:underline shrink-0"
-                    >
-                      Copy
-                    </button>
+                {(lastSignLink || lastOwnerSignLink) && (
+                  <div className="mt-4 space-y-2">
+                    {lastSignLink && (
+                      <div className="flex items-center gap-2 text-xs bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-lg px-3 py-2">
+                        <span className="font-semibold shrink-0">Client link:</span>
+                        <span className="flex-1 truncate">{lastSignLink}</span>
+                        <button
+                          type="button"
+                          onClick={() => { navigator.clipboard.writeText(lastSignLink); showToast('Link copied'); }}
+                          className="font-semibold hover:underline shrink-0"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    )}
+                    {lastOwnerSignLink && (
+                      <div className="flex items-center gap-2 text-xs bg-slate-50 border border-slate-200 text-slate-600 rounded-lg px-3 py-2">
+                        <span className="font-semibold shrink-0">Your link:</span>
+                        <span className="flex-1 truncate">{lastOwnerSignLink}</span>
+                        <button
+                          type="button"
+                          onClick={() => { navigator.clipboard.writeText(lastOwnerSignLink); showToast('Link copied'); }}
+                          className="font-semibold hover:underline shrink-0"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
 
-              {contract.status === 'client_signed' && (
-                <div className={cardClass}>
-                  <h3 className={cardTitleClass}>Client Signature</h3>
-                  <div className="flex items-center gap-4 mb-6 pb-6 border-b border-slate-100">
-                    {contract.clientSignatureImage && (
-                      <img src={contract.clientSignatureImage} alt="Client signature" className="h-14 border border-slate-200 rounded-lg bg-white px-2" />
-                    )}
-                    <div className="text-sm">
-                      <div className="font-semibold text-slate-700">{contract.clientSignatureName}</div>
-                      <div className="text-xs text-slate-400">
-                        Signed {new Date(contract.clientSignedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              {contract.status !== 'fully_signed' && (
+                <>
+                  {contract.clientSignedAt && (
+                    <div className={cardClass}>
+                      <h3 className={cardTitleClass}>Client Signature</h3>
+                      <div className="flex items-center gap-4">
+                        {contract.clientSignatureImage && (
+                          <img src={contract.clientSignatureImage} alt="Client signature" className="h-14 border border-slate-200 rounded-lg bg-white px-2" />
+                        )}
+                        <div className="text-sm">
+                          <div className="font-semibold text-slate-700">{contract.clientSignatureName}</div>
+                          <div className="text-xs text-slate-400">
+                            Signed {new Date(contract.clientSignedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
-                  <h3 className={cardTitleClass}>Your Signature</h3>
-                  <div className="space-y-4 max-w-md">
-                    <div>
-                      <label className={labelClass}>Full Legal Name</label>
-                      <input value={ownerSignerName} onChange={(e) => setOwnerSignerName(e.target.value)} className={inputClass} />
-                    </div>
-                    <SignatureCanvas onChange={setOwnerSignatureImage} />
-                    <button
-                      type="button"
-                      onClick={handleOwnerSign}
-                      disabled={signingOwner}
-                      className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
-                    >
-                      {signingOwner && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
-                      Sign Contract
-                    </button>
-                    <p className="text-xs text-slate-400">On the move? You were also emailed a secure link to sign from your phone.</p>
+                  <div className={cardClass}>
+                    <h3 className={cardTitleClass}>Your Signature</h3>
+                    {contract.ownerSignedAt ? (
+                      <div className="flex items-center gap-4">
+                        {contract.ownerSignatureImage && (
+                          <img src={contract.ownerSignatureImage} alt="Your signature" className="h-14 border border-slate-200 rounded-lg bg-white px-2" />
+                        )}
+                        <div className="text-sm">
+                          <div className="font-semibold text-slate-700">{contract.ownerSignatureName}</div>
+                          <div className="text-xs text-slate-400">
+                            Signed {new Date(contract.ownerSignedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · waiting on the client
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4 max-w-md">
+                        <div>
+                          <label className={labelClass}>Full Legal Name</label>
+                          <input value={ownerSignerName} onChange={(e) => setOwnerSignerName(e.target.value)} className={inputClass} />
+                        </div>
+                        <SignatureCanvas onChange={setOwnerSignatureImage} />
+                        <button
+                          type="button"
+                          onClick={handleOwnerSign}
+                          disabled={signingOwner}
+                          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
+                        >
+                          {signingOwner && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
+                          Sign Contract
+                        </button>
+                        <p className="text-xs text-slate-400">On the move? You were also emailed a secure link to sign from your phone.</p>
+                      </div>
+                    )}
                   </div>
-                </div>
+                </>
               )}
 
               {contract.status === 'fully_signed' && (

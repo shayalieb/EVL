@@ -1,5 +1,22 @@
 import { formatCurrency as currency, formatEventDate } from './format';
 
+const DEFAULT_ACCENT_COLOR = '#4f46e5';
+
+function hexToRgb(hex) {
+  const clean = (hex || '').replace('#', '');
+  const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean;
+  const num = Number.parseInt(full, 16);
+  if (Number.isNaN(num) || full.length !== 6) return [79, 70, 229];
+  return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+}
+
+// Blends a color most of the way to white — used for subtle row highlights
+// (e.g. the Grand Total line) that should tint with the chosen accent color
+// rather than always being the same fixed light-indigo.
+function lightenRgb([r, g, b], amount = 0.9) {
+  return [r, g, b].map((c) => Math.round(c + (255 - c) * amount));
+}
+
 function loadImageDimensions(dataUrl) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -29,6 +46,7 @@ async function buildContractDoc({ snapshot, clientSignature, ownerSignature }) {
   const businessInfo = snapshot.businessInfo || {};
   const client = snapshot.client || {};
   const booking = snapshot.booking || {};
+  const accentRgb = hexToRgb(snapshot.style?.accentColor || DEFAULT_ACCENT_COLOR);
   let y = 18;
 
   let textX = marginX;
@@ -54,8 +72,10 @@ async function buildContractDoc({ snapshot, clientSignature, ownerSignature }) {
   }
 
   y = Math.max(y, 28) + 4;
-  doc.setDrawColor(225);
+  doc.setDrawColor(...accentRgb);
+  doc.setLineWidth(0.6);
   doc.line(marginX, y, pageWidth - marginX, y);
+  doc.setLineWidth(0.2);
   y += 11;
 
   doc.setFontSize(20);
@@ -91,7 +111,7 @@ async function buildContractDoc({ snapshot, clientSignature, ownerSignature }) {
     body: eventRows,
     theme: 'striped',
     styles: { fontSize: 10 },
-    headStyles: { fillColor: [79, 70, 229] },
+    headStyles: { fillColor: accentRgb },
     columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } },
   });
   y = doc.lastAutoTable.finalY + 10;
@@ -114,16 +134,31 @@ async function buildContractDoc({ snapshot, clientSignature, ownerSignature }) {
     body: pricingRows,
     theme: 'striped',
     styles: { fontSize: 10 },
-    headStyles: { fillColor: [79, 70, 229] },
+    headStyles: { fillColor: accentRgb },
     columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } },
     didParseCell: (data) => {
       if (data.section === 'body' && data.row.raw[0] === 'Grand Total') {
         data.cell.styles.fontStyle = 'bold';
-        data.cell.styles.fillColor = [238, 242, 255];
+        data.cell.styles.fillColor = lightenRgb(accentRgb);
       }
     },
   });
   y = doc.lastAutoTable.finalY + 10;
+
+  const customFields = (snapshot.customFields || []).filter((f) => f.label);
+  if (customFields.length) {
+    autoTable(doc, {
+      startY: y,
+      margin: { left: marginX, right: marginX },
+      head: [['Additional Details', '']],
+      body: customFields.map((f) => [f.label, f.value || '—']),
+      theme: 'striped',
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: accentRgb },
+      columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } },
+    });
+    y = doc.lastAutoTable.finalY + 10;
+  }
 
   if (booking.notes) {
     doc.setFontSize(11);
@@ -140,8 +175,10 @@ async function buildContractDoc({ snapshot, clientSignature, ownerSignature }) {
   // Signatures — always on their own section near the bottom of the page,
   // regardless of how much content preceded it.
   const sigY = Math.max(y + 6, 235);
-  doc.setDrawColor(225);
+  doc.setDrawColor(...accentRgb);
+  doc.setLineWidth(0.6);
   doc.line(marginX, sigY, pageWidth - marginX, sigY);
+  doc.setLineWidth(0.2);
 
   const colWidth = (pageWidth - marginX * 2 - 10) / 2;
   const leftX = marginX;

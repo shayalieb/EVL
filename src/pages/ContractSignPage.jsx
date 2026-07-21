@@ -109,8 +109,7 @@ export default function ContractSignPage() {
 
   const { role, status, snapshot } = contract;
   const alreadySigned = role === 'client' ? !!contract.clientSignedAt : !!contract.ownerSignedAt;
-  const canSignNow = !alreadySigned && (role === 'client' ? status === 'sent' : status === 'client_signed');
-  const waitingOnOtherParty = role === 'owner' && status === 'sent';
+  const canSignNow = !alreadySigned;
   const lineItems = snapshot.lineItems || [];
   const itemsTotal = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const grandTotal = (Number(snapshot.booking?.quotedTotal) || 0) + itemsTotal;
@@ -138,12 +137,6 @@ export default function ContractSignPage() {
             You've signed this contract. Waiting on the other party.
           </div>
         )}
-        {waitingOnOtherParty && (
-          <div className="mb-4 text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-            Waiting for the client to sign first — you'll be notified when it's your turn.
-          </div>
-        )}
-
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden mb-6">
           {pdfUrl ? (
             <iframe title="Contract PDF" src={pdfUrl} className="w-full h-[70vh]" />
