@@ -13,7 +13,9 @@ router.use(requireAuth, asyncHandler(attachUser), requirePlatformAdmin);
 
 function ownerOf(account) {
   const owner = account.memberships.find((m) => m.role === 'owner');
-  return owner ? { firstName: owner.user.firstName, lastName: owner.user.lastName, email: owner.user.email } : null;
+  return owner
+    ? { firstName: owner.user.firstName, lastName: owner.user.lastName, email: owner.user.email, hasPassword: !!owner.user.passwordHash }
+    : null;
 }
 
 function dataSummary(accountData) {
@@ -157,13 +159,45 @@ router.get('/support/threads', asyncHandler(async (req, res) => {
   res.json({ threads: threads.map(serializeThread) });
 }));
 
+function serializeNote(note) {
+  return { id: note.id, body: note.body, createdAt: note.createdAt, author: { firstName: note.author.firstName, lastName: note.author.lastName } };
+}
+
 router.get('/support/threads/:id', asyncHandler(async (req, res) => {
   const thread = await prisma.supportThread.findUnique({
     where: { id: req.params.id },
-    include: { messages: { orderBy: { createdAt: 'asc' } }, account: { include: { memberships: { include: { user: true } } } } },
+    include: {
+      messages: { orderBy: { createdAt: 'asc' } },
+      notes: { orderBy: { createdAt: 'asc' }, include: { author: true } },
+      account: { include: { memberships: { include: { user: true } } } },
+    },
   });
   if (!thread) return res.status(404).json({ error: 'Thread not found.' });
-  res.json({ thread: { ...serializeThread(thread), messages: thread.messages } });
+  res.json({ thread: { ...serializeThread(thread), messages: thread.messages, notes: thread.notes.map(serializeNote) } });
+}));
+
+router.patch('/support/threads/:id/read', asyncHandler(async (req, res) => {
+  const thread = await prisma.supportThread.findUnique({ where: { id: req.params.id } });
+  if (!thread) return res.status(404).json({ error: 'Thread not found.' });
+  await prisma.supportMessage.updateMany({
+    where: { threadId: thread.id, direction: 'user', readAt: null },
+    data: { readAt: new Date() },
+  });
+  res.json({ ok: true });
+}));
+
+router.post('/support/threads/:id/notes', asyncHandler(async (req, res) => {
+  const { body } = req.body || {};
+  if (!body?.trim()) return res.status(400).json({ error: 'Note body is required.' });
+
+  const thread = await prisma.supportThread.findUnique({ where: { id: req.params.id } });
+  if (!thread) return res.status(404).json({ error: 'Thread not found.' });
+
+  const note = await prisma.supportNote.create({
+    data: { threadId: thread.id, authorUserId: req.session.userId, body: body.trim() },
+    include: { author: true },
+  });
+  res.status(201).json({ note: serializeNote(note) });
 }));
 
 router.post('/support/threads/:id/messages', asyncHandler(async (req, res) => {

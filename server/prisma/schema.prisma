@@ -25,6 +25,7 @@ model User {
   updatedAt      DateTime    @updatedAt
   membership     Membership?
   passwordResetTokens PasswordResetToken[]
+  supportNotes   SupportNote[]
 }
 
 model Account {
@@ -152,6 +153,7 @@ model SupportThread {
   createdAt     DateTime @default(now())
 
   messages      SupportMessage[]
+  notes         SupportNote[]
 
   @@index([accountId])
 }
@@ -166,6 +168,24 @@ model SupportMessage {
   body         String        @db.Text
 
   readAt       DateTime?     // null = unread by the other side
+  createdAt    DateTime      @default(now())
+
+  @@index([threadId, createdAt])
+}
+
+// Admin-only annotations on a support thread — never sent to or visible by
+// the account. Kept as its own model rather than a flag on SupportMessage so
+// the customer-facing route (server/src/routes/support.js) can't leak these
+// just by forgetting a filter.
+model SupportNote {
+  id           String        @id @default(cuid())
+  threadId     String
+  thread       SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  authorUserId String
+  author       User          @relation(fields: [authorUserId], references: [id], onDelete: Cascade)
+  body         String        @db.Text
+
   createdAt    DateTime      @default(now())
 
   @@index([threadId, createdAt])

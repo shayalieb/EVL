@@ -95,6 +95,8 @@ export default function AdminAccountsPage() {
                 <td className="px-4 py-3">
                   {a.disabledAt ? (
                     <span className="text-xs font-semibold text-red-600">Disabled</span>
+                  ) : a.owner && !a.owner.hasPassword ? (
+                    <span className="text-xs font-semibold text-amber-600">Pending</span>
                   ) : (
                     <span className="text-xs font-semibold text-emerald-600">Active</span>
                   )}
