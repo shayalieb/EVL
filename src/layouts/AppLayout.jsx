@@ -3,15 +3,30 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Logo from '../components/ui/Logo';
 
-const NAV_ITEMS = [
-  { to: '/home', label: 'Home', icon: '🏠' },
-  { to: '/clients', label: 'Clients', icon: '👤' },
-  { to: '/bookings', label: 'Bookings', icon: '🤝' },
-  { to: '/events', label: 'Events', icon: '📅' },
-  { to: '/contractors', label: 'Contractors', icon: '🎧' },
-  { to: '/email-templates', label: 'Email Templates', icon: '✉️' },
-  { to: '/help', label: 'Help', icon: '💬' },
-  { to: '/settings', label: 'Settings', icon: '⚙️' },
+const NAV_GROUPS = [
+  {
+    label: 'Overview',
+    items: [
+      { to: '/home', label: 'Home', icon: '🏠' },
+      { to: '/bookings', label: 'Bookings', icon: '🤝' },
+      { to: '/events', label: 'Events', icon: '📅' },
+    ],
+  },
+  {
+    label: 'Resources',
+    items: [
+      { to: '/clients', label: 'Clients', icon: '👤' },
+      { to: '/contractors', label: 'Contractors', icon: '🎧' },
+      { to: '/email-templates', label: 'Email Templates', icon: '✉️' },
+    ],
+  },
+  {
+    label: 'Account',
+    items: [
+      { to: '/help', label: 'Help', icon: '💬' },
+      { to: '/settings', label: 'Settings', icon: '⚙️' },
+    ],
+  },
 ];
 
 export default function AppLayout() {
@@ -19,9 +34,11 @@ export default function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const navigate = useNavigate();
-  const navItems = currentUser?.isPlatformAdmin
-    ? [...NAV_ITEMS, { to: '/admin', label: 'Admin', icon: '🛡️' }]
-    : NAV_ITEMS;
+  const navGroups = currentUser?.isPlatformAdmin
+    ? NAV_GROUPS.map((group, i) =>
+        i === NAV_GROUPS.length - 1 ? { ...group, items: [...group.items, { to: '/admin', label: 'Admin', icon: '🛡️' }] } : group
+      )
+    : NAV_GROUPS;
 
   async function handleLogout() {
     await logout();
@@ -92,21 +109,26 @@ export default function AppLayout() {
         <nav
           className={`${mobileNavOpen ? 'block' : 'hidden'} sm:block w-full sm:w-56 shrink-0 border-r border-slate-200 bg-white sm:min-h-0`}
         >
-          <div className="p-3 space-y-1">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                onClick={() => setMobileNavOpen(false)}
-                className={({ isActive }) =>
-                  `nav-item flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium ${
-                    isActive ? 'bg-indigo-50 text-indigo-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'
-                  }`
-                }
-              >
-                <span>{item.icon}</span>
-                {item.label}
-              </NavLink>
+          <div className="p-3 space-y-4">
+            {navGroups.map((group) => (
+              <div key={group.label} className="space-y-1">
+                <div className="px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">{group.label}</div>
+                {group.items.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    onClick={() => setMobileNavOpen(false)}
+                    className={({ isActive }) =>
+                      `nav-item flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium ${
+                        isActive ? 'bg-indigo-50 text-indigo-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'
+                      }`
+                    }
+                  >
+                    <span>{item.icon}</span>
+                    {item.label}
+                  </NavLink>
+                ))}
+              </div>
             ))}
           </div>
         </nav>
