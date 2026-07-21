@@ -11,11 +11,12 @@ import { generateProposalPdf, generateProposalPdfAttachment } from '../lib/propo
 import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms } from '../lib/contracts';
 import { generateContractPdf, getContractPdfDataUrl } from '../lib/contractPdf';
 import { sendEmail } from '../lib/email/send';
-import { formatCurrency as currency, formatEventDate } from '../lib/format';
+import { formatCurrency as currency, formatEventDate, formatVenueLine } from '../lib/format';
 import { FileIcon } from '../components/ui/icons';
 import SignatureCanvas from '../components/SignatureCanvas';
 import ColorPicker from '../components/ui/ColorPicker';
 import MoneyInput from '../components/ui/MoneyInput';
+import { useSavingIndicator } from '../components/ui/SavingIndicator';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -49,7 +50,6 @@ function emptyForm() {
     // have a stable bookingId to attach to — mirrors EventFormPage.
     id: uid('bkg'),
     clientId: '', eventDate: '', eventType: '',
-    package: '',
     venue: emptyVenue(),
     depositAmount: '', depositDueDate: '', depositPaid: false,
     bookingStatus: '', priority: '', nextFollowUpDate: '',
@@ -159,46 +159,81 @@ function computeGrandTotal(lineItems) {
   return (lineItems || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 }
 
-function CustomFieldsEditor({ fields, onChange }) {
-  const [label, setLabel] = useState('');
+// A custom section = a title (rendered as a highlighted separator bar in the
+// PDF) plus an optional short value and/or a longer free-text block — used
+// for both the Proposal and Contract so either document can carry arbitrary
+// extra content (riders, policies, custom line notes) beyond the fixed
+// fields above.
+function SectionsEditor({ sections, onChange }) {
+  const [title, setTitle] = useState('');
+  const [text, setText] = useState('');
   const [value, setValue] = useState('');
 
   function handleAdd() {
-    if (!label.trim()) return;
-    onChange([...fields, { id: uid('field'), label: label.trim(), value: value.trim() }]);
-    setLabel('');
+    if (!title.trim()) return;
+    onChange([...sections, { id: uid('section'), title: title.trim(), text: text.trim(), value: value.trim() }]);
+    setTitle('');
+    setText('');
     setValue('');
   }
 
   function handleRemove(id) {
-    onChange(fields.filter((f) => f.id !== id));
+    onChange(sections.filter((s) => s.id !== id));
+  }
+
+  function handleUpdate(id, field, val) {
+    onChange(sections.map((s) => (s.id === id ? { ...s, [field]: val } : s)));
   }
 
   return (
     <div>
-      <label className={labelClass}>Custom Fields</label>
-      {fields.length > 0 && (
-        <div className="space-y-1.5 mb-2">
-          {fields.map((f) => (
-            <div key={f.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 text-sm">
-              <span className="font-semibold text-slate-700 w-1/3 truncate">{f.label}</span>
-              <span className="flex-1 text-slate-600 truncate">{f.value || '—'}</span>
-              <button
-                type="button"
-                onClick={() => handleRemove(f.id)}
-                className="w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
-                aria-label={`Remove ${f.label}`}
-              >
-                ✕
-              </button>
+      <label className={labelClass}>Custom Sections</label>
+      {sections.length > 0 && (
+        <div className="space-y-2 mb-3">
+          {sections.map((s) => (
+            <div key={s.id} className="border border-slate-200 rounded-lg p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <input
+                  value={s.title}
+                  onChange={(e) => handleUpdate(s.id, 'title', e.target.value)}
+                  placeholder="Section title"
+                  className={`${inputClass} font-semibold`}
+                />
+                <button
+                  type="button"
+                  onClick={() => handleRemove(s.id)}
+                  className="shrink-0 w-8 h-8 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
+                  aria-label={`Remove ${s.title || 'section'}`}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <textarea
+                  rows={2}
+                  value={s.text}
+                  onChange={(e) => handleUpdate(s.id, 'text', e.target.value)}
+                  placeholder="Text (optional)"
+                  className={inputClass}
+                />
+                <input
+                  value={s.value}
+                  onChange={(e) => handleUpdate(s.id, 'value', e.target.value)}
+                  placeholder="Value (optional)"
+                  className={inputClass}
+                />
+              </div>
             </div>
           ))}
         </div>
       )}
-      <div className="flex gap-2">
-        <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Field name" className={inputClass} />
-        <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Value" className={inputClass} />
-        <button type="button" onClick={handleAdd} className="shrink-0 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50">+ Add</button>
+      <div className="border border-dashed border-slate-300 rounded-lg p-3">
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="New section title" className={`${inputClass} mb-2`} />
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)} placeholder="Text (optional)" className={inputClass} />
+          <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Value (optional)" className={inputClass} />
+        </div>
+        <button type="button" onClick={handleAdd} className="px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50">+ Add Section</button>
       </div>
     </div>
   );
@@ -211,8 +246,9 @@ export default function BookingFormPage() {
     bookings, clients, eventTypes, addEventType, bookingStatuses,
     addBooking, updateBooking, convertBookingToEvent, addEvent,
   } = useData();
-  const { can, currentUser } = useAuth();
+  const { can, currentUser, updateCurrentUser } = useAuth();
   const { showToast } = useToast();
+  const notifySaving = useSavingIndicator();
 
   useEffect(() => {
     if (!can('manageBookings')) navigate('/bookings', { replace: true });
@@ -240,7 +276,8 @@ export default function BookingFormPage() {
   const [contractRecipientName, setContractRecipientName] = useState('');
   const [contractHours, setContractHours] = useState('');
   const [contractLineItems, setContractLineItems] = useState([]);
-  const [contractCustomFields, setContractCustomFields] = useState([]);
+  const [contractTitle, setContractTitle] = useState('Event Contract');
+  const [contractSections, setContractSections] = useState([]);
   const [contractAccentColor, setContractAccentColor] = useState(DEFAULT_CONTRACT_ACCENT_COLOR);
   const [contractPreviewUrl, setContractPreviewUrl] = useState('');
   const [showContractPreview, setShowContractPreview] = useState(false);
@@ -256,6 +293,8 @@ export default function BookingFormPage() {
   const client = clients.find((c) => c.id === form.clientId);
   const autoSaveSkipRef = useRef(true);
   const termsSkipRef = useRef(true);
+  const contractTemplateSkipRef = useRef(true);
+  const proposalTemplateSkipRef = useRef(true);
   const autoCreatedEventRef = useRef(false);
 
   useEffect(() => {
@@ -265,7 +304,6 @@ export default function BookingFormPage() {
         clientId: booking.clientId || '',
         eventDate: booking.eventDate || '',
         eventType: booking.eventType || '',
-        package: booking.package || '',
         venue: { ...emptyVenue(), ...booking.venue },
         depositAmount: booking.depositAmount ?? '',
         depositDueDate: booking.depositDueDate || '',
@@ -289,6 +327,7 @@ export default function BookingFormPage() {
     // would otherwise immediately re-persist the just-loaded data as if the
     // user had typed something.
     autoSaveSkipRef.current = true;
+    proposalTemplateSkipRef.current = true;
     autoCreatedEventRef.current = false;
   }, [bookingId, booking, bookingStatuses]);
 
@@ -334,7 +373,6 @@ export default function BookingFormPage() {
     if (!booking) return;
     setContractHours(booking.proposal?.hours || '');
     setContractLineItems(booking.proposal?.lineItems || []);
-    setContractCustomFields([]);
     setContractAccentColor(DEFAULT_CONTRACT_ACCENT_COLOR);
     setShowContractPreview(false);
     setContractPreviewUrl('');
@@ -374,6 +412,45 @@ export default function BookingFormPage() {
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contractTerms]);
+
+  // Title and custom sections work like a reusable template: before a
+  // contract is sent they're loaded from (and kept in sync with) the
+  // account-wide default, so whatever the user last set carries forward to
+  // every new contract. Once sent, they're locked into that contract's
+  // snapshot — same source-of-truth switch the terms field makes above.
+  useEffect(() => {
+    if (contract) {
+      setContractTitle(contract.snapshot?.title || 'Event Contract');
+      setContractSections(contract.snapshot?.sections || []);
+    } else {
+      setContractTitle(currentUser.contractTemplate?.title || 'Event Contract');
+      setContractSections(currentUser.contractTemplate?.sections || []);
+    }
+    contractTemplateSkipRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [booking?.id, contract?.id]);
+
+  useEffect(() => {
+    if (contract) return; // already locked into the sent snapshot
+    if (contractTemplateSkipRef.current) { contractTemplateSkipRef.current = false; return; }
+    const timer = setTimeout(() => {
+      updateCurrentUser({ contractTemplate: { title: contractTitle, sections: contractSections } });
+    }, 800);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contractTitle, contractSections]);
+
+  // Proposal sections follow the same reusable-template pattern, synced to
+  // the account default while a proposal is still a draft.
+  useEffect(() => {
+    if (!form.proposal) return;
+    if (proposalTemplateSkipRef.current) { proposalTemplateSkipRef.current = false; return; }
+    const timer = setTimeout(() => {
+      updateCurrentUser({ proposalTemplate: { sections: form.proposal.sections || [] } });
+    }, 800);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.proposal?.sections]);
 
   // Once both signatures are in, the event is created automatically — no
   // button to click. Guarded by a ref (not just booking.convertedEventId)
@@ -447,7 +524,7 @@ export default function BookingFormPage() {
   }
 
   function handlePushToProposal() {
-    const proposal = { hours: '', lineItems: [], sentAt: null, sentTo: null };
+    const proposal = { hours: '', lineItems: [], sections: currentUser.proposalTemplate?.sections || [], sentAt: null, sentTo: null };
     update('proposal', proposal);
     if (booking) updateBooking(booking.id, { proposal });
   }
@@ -498,7 +575,6 @@ export default function BookingFormPage() {
       booking: {
         eventType: form.eventType,
         eventDate: form.eventDate,
-        package: form.package,
         venue: form.venue,
         depositAmount: form.depositAmount === '' ? null : Number(form.depositAmount),
         depositDueDate: form.depositDueDate,
@@ -507,7 +583,8 @@ export default function BookingFormPage() {
       },
       hours: contractHours,
       lineItems: contractLineItems,
-      customFields: contractCustomFields,
+      title: contractTitle,
+      sections: contractSections,
       style: { accentColor: contractAccentColor },
     };
   }
@@ -756,7 +833,14 @@ export default function BookingFormPage() {
 
       {error && <div className="mb-6 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
-      <form id="booking-form" onSubmit={handleSubmit} className="space-y-6">
+      <form
+        id="booking-form"
+        onSubmit={handleSubmit}
+        onBlur={(e) => {
+          if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) notifySaving();
+        }}
+        className="space-y-6"
+      >
         <div className={activeTab === 'info' ? 'space-y-6' : 'hidden'}>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className={cardClass}>
@@ -802,11 +886,6 @@ export default function BookingFormPage() {
                     </div>
                   )}
                 </div>
-              </div>
-
-              <div>
-                <label className={labelClass}>Package / Pricing Tier</label>
-                <input value={form.package} onChange={(e) => update('package', e.target.value)} className={inputClass} />
               </div>
 
               <div className="grid grid-cols-3 gap-3">
@@ -1005,7 +1084,7 @@ export default function BookingFormPage() {
                   <div>
                     <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Event</div>
                     <div className="text-sm text-slate-700">{form.eventType || '—'} · {form.eventDate ? formatEventDate(form.eventDate) : 'Tentative'}</div>
-                    <div className="text-xs text-slate-400">{form.package || '—'}</div>
+                    <div className="text-xs text-slate-400">{formatVenueLine(form.venue) || '—'}</div>
                   </div>
                 </div>
 
@@ -1037,6 +1116,13 @@ export default function BookingFormPage() {
                   <div className="flex justify-end mt-3 text-sm font-bold text-slate-800">
                     Grand Total: {currency(computeGrandTotal(form.proposal.lineItems))}
                   </div>
+                </div>
+
+                <div className="mt-6 pt-6 border-t border-slate-100">
+                  <SectionsEditor
+                    sections={form.proposal.sections || []}
+                    onChange={(sections) => update('proposal', { ...form.proposal, sections })}
+                  />
                 </div>
               </div>
 
@@ -1100,6 +1186,11 @@ export default function BookingFormPage() {
               <p className="text-sm text-slate-500 mb-5 max-w-xl">
                 Sends a contract for signature, built from the current proposal. Terms are locked once sent — the client signs first, then it's returned to you to countersign.
               </p>
+              <div className="max-w-2xl mb-5">
+                <label className={labelClass}>Contract Title</label>
+                <input value={contractTitle} onChange={(e) => setContractTitle(e.target.value)} className={inputClass} />
+                <p className="mt-1 text-xs text-slate-400">Saved as your default title for future contracts, until changed.</p>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5 max-w-2xl">
                 <div>
                   <label className={labelClass}>Recipient Email *</label>
@@ -1121,7 +1212,8 @@ export default function BookingFormPage() {
                 </div>
               </div>
               <div className="max-w-2xl mb-5">
-                <CustomFieldsEditor fields={contractCustomFields} onChange={setContractCustomFields} />
+                <SectionsEditor sections={contractSections} onChange={setContractSections} />
+                <p className="mt-1 text-xs text-slate-400">Saved as your default sections for future contracts, until changed.</p>
               </div>
               <div className="max-w-2xl mb-5">
                 <label className={labelClass}>Terms</label>

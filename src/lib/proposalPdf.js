@@ -1,4 +1,4 @@
-import { formatCurrency as currency, formatEventDate } from './format';
+import { formatCurrency as currency, formatEventDate, formatVenueLine } from './format';
 
 function loadImageDimensions(dataUrl) {
   return new Promise((resolve) => {
@@ -83,7 +83,7 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
   const eventRows = [
     ['Event Type', booking.eventType || '—'],
     ['Event Date', booking.eventDate ? formatEventDate(booking.eventDate) : 'Tentative'],
-    ['Package / Tier', booking.package || '—'],
+    ['Location', formatVenueLine(booking.venue) || '—'],
     ['Estimated Hours', hours ? `${hours} hrs` : '—'],
   ];
   autoTable(doc, {
@@ -124,6 +124,32 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
     },
   });
   y = doc.lastAutoTable.finalY + 10;
+
+  const sections = (booking.proposal?.sections || []).filter((s) => s.title);
+  for (const section of sections) {
+    if (y > 255) { doc.addPage(); y = 20; }
+    doc.setFillColor(79, 70, 229);
+    doc.rect(marginX, y, pageWidth - marginX * 2, 7.5, 'F');
+    doc.setFontSize(10);
+    doc.setTextColor(255);
+    doc.text(section.title, marginX + 3, y + 5.3);
+    y += 7.5 + 6;
+
+    if (section.value) {
+      doc.setFontSize(11);
+      doc.setTextColor(30);
+      doc.text(section.value, marginX, y);
+      y += 7;
+    }
+    if (section.text) {
+      doc.setFontSize(10);
+      doc.setTextColor(90);
+      const lines = doc.splitTextToSize(section.text, pageWidth - marginX * 2);
+      doc.text(lines, marginX, y);
+      y += lines.length * 5 + 4;
+    }
+    y += 4;
+  }
 
   if (booking.notes) {
     doc.setFontSize(11);

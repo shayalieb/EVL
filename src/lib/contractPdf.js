@@ -1,4 +1,4 @@
-import { formatCurrency as currency, formatEventDate } from './format';
+import { formatCurrency as currency, formatEventDate, formatVenueLine } from './format';
 
 const DEFAULT_ACCENT_COLOR = '#4f46e5';
 
@@ -80,28 +80,68 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
 
   doc.setFontSize(20);
   doc.setTextColor(20);
-  doc.text('Event Contract', marginX, y);
-  y += 12;
+  doc.text(snapshot.title || 'Event Contract', pageWidth / 2, y, { align: 'center' });
+  y += 10;
 
-  doc.setFontSize(10);
+  // Compact, centered block: "BETWEEN" label, party names with "AND"
+  // between them on one line (sized/weighted to match, not a stray tiny
+  // word), and a single combined contact line underneath.
+  const centerX = pageWidth / 2;
+  const businessName = businessInfo.name || 'The Business';
+  const clientName = client ? `${client.firstName || ''} ${client.lastName || ''}`.trim() || '—' : '—';
+
+  const lineGap = 5.5;
+  doc.setFontSize(9);
   doc.setTextColor(140);
-  doc.text('BETWEEN', marginX, y);
-  y += 6;
+  doc.text('BETWEEN', centerX, y, { align: 'center' });
+  y += lineGap;
+
+  const gap = 5;
+  doc.setFontSize(12);
+  doc.setFont(undefined, 'bold');
+  const businessW = doc.getTextWidth(businessName);
+  const clientW = doc.getTextWidth(clientName);
   doc.setFontSize(11);
+  doc.setFont(undefined, 'normal');
+  const andW = doc.getTextWidth('AND');
+  const totalW = businessW + gap + andW + gap + clientW;
+  let partyX = centerX - totalW / 2;
+  const businessBlockCenterX = partyX + businessW / 2;
+
+  doc.setFontSize(12);
+  doc.setFont(undefined, 'bold');
   doc.setTextColor(30);
-  doc.text(businessInfo.name || 'The Business', marginX, y);
-  doc.text(client ? `${client.firstName || ''} ${client.lastName || ''}`.trim() || '—' : '—', pageWidth - marginX, y, { align: 'right' });
-  y += 5;
+  doc.text(businessName, partyX, y);
+  partyX += businessW + gap;
+
+  doc.setFontSize(11);
+  doc.setFont(undefined, 'normal');
+  doc.setTextColor(120);
+  doc.text('AND', partyX, y);
+  partyX += andW + gap;
+
+  const clientBlockCenterX = partyX + clientW / 2;
+  doc.setFontSize(12);
+  doc.setFont(undefined, 'bold');
+  doc.setTextColor(30);
+  doc.text(clientName, partyX, y);
+  doc.setFont(undefined, 'normal');
+  y += lineGap;
+
+  // Each email sits centered under its own party's name — name + email read
+  // as one cohesive block per party, rather than the email line being laid
+  // out independently of the names above it.
   doc.setFontSize(9);
   doc.setTextColor(110);
-  doc.text(businessInfo.email || '', marginX, y);
-  doc.text(client.email || '', pageWidth - marginX, y, { align: 'right' });
-  y += 10;
+  if (businessInfo.email) doc.text(businessInfo.email, businessBlockCenterX, y, { align: 'center' });
+  if (client.email) doc.text(client.email, clientBlockCenterX, y, { align: 'center' });
+  if (businessInfo.email || client.email) y += 5;
+  y += 3;
 
   const eventRows = [
     ['Event Type', booking.eventType || '—'],
     ['Event Date', booking.eventDate ? formatEventDate(booking.eventDate) : 'Tentative'],
-    ['Package / Tier', booking.package || '—'],
+    ['Location', formatVenueLine(booking.venue) || '—'],
     ['Estimated Hours', snapshot.hours ? `${snapshot.hours} hrs` : '—'],
   ];
   autoTable(doc, {
@@ -142,6 +182,34 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
     },
   });
   y = doc.lastAutoTable.finalY + 10;
+
+  // Custom sections — a colored title bar (tinted to the chosen accent)
+  // followed by whichever of text/value the section was given.
+  const sections = (snapshot.sections || []).filter((s) => s.title);
+  for (const section of sections) {
+    if (y > 255) { doc.addPage(); y = 20; }
+    doc.setFillColor(...accentRgb);
+    doc.rect(marginX, y, pageWidth - marginX * 2, 7.5, 'F');
+    doc.setFontSize(10);
+    doc.setTextColor(255);
+    doc.text(section.title, marginX + 3, y + 5.3);
+    y += 7.5 + 6;
+
+    if (section.value) {
+      doc.setFontSize(11);
+      doc.setTextColor(30);
+      doc.text(section.value, marginX, y);
+      y += 7;
+    }
+    if (section.text) {
+      doc.setFontSize(10);
+      doc.setTextColor(90);
+      const lines = doc.splitTextToSize(section.text, pageWidth - marginX * 2);
+      doc.text(lines, marginX, y);
+      y += lines.length * 5 + 4;
+    }
+    y += 4;
+  }
 
   const customFields = (snapshot.customFields || []).filter((f) => f.label);
   if (customFields.length) {

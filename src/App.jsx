@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
 import { ToastProvider } from './components/ui/Toast';
+import { SavingIndicatorProvider } from './components/ui/SavingIndicator';
 import AuthPage from './pages/AuthPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import ContractSignPage from './pages/ContractSignPage';
@@ -86,7 +87,9 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <ToastProvider>
-          <AppRoutes />
+          <SavingIndicatorProvider>
+            <AppRoutes />
+          </SavingIndicatorProvider>
         </ToastProvider>
       </AuthProvider>
     </BrowserRouter>

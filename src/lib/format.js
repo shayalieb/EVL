@@ -25,6 +25,14 @@ export function formatEventDate(dateStr) {
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
+export function formatVenueLine(venue) {
+  if (!venue) return '';
+  const cityStateZip = venue.city || venue.state || venue.zip
+    ? `${venue.city || ''}${venue.city && venue.state ? ', ' : ''}${venue.state || ''}${venue.zip ? ` ${venue.zip}` : ''}`.trim()
+    : '';
+  return [venue.name, venue.address1, venue.address2, cityStateZip].filter(Boolean).join(', ');
+}
+
 export function formatEventTime(timeStr) {
   if (!timeStr) return '';
   const [h, m] = timeStr.split(':').map(Number);
