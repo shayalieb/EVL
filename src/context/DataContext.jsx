@@ -241,6 +241,7 @@ export function DataProvider({ children }) {
         name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '',
         ...booking.venue,
       },
+      schedule: booking.schedule || [],
     });
     const convertedStatus = (currentUser.bookingStatuses || []).find((s) => s.label.toLowerCase() === 'converted');
     updateBooking(bookingId, {

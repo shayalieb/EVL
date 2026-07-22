@@ -11,13 +11,14 @@ import { generateProposalPdf, generateProposalPdfAttachment } from '../lib/propo
 import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms } from '../lib/contracts';
 import { generateContractPdf, getContractPdfDataUrl } from '../lib/contractPdf';
 import { sendEmail } from '../lib/email/send';
-import { formatCurrency as currency, formatEventDate, formatVenueLine } from '../lib/format';
+import { formatCurrency as currency, formatEventDate, formatVenueLine, formatEventTime } from '../lib/format';
 import { FileIcon } from '../components/ui/icons';
 import SignatureCanvas from '../components/SignatureCanvas';
 import MoneyInput from '../components/ui/MoneyInput';
 import { useSavingIndicator } from '../components/ui/SavingIndicator';
 import OfferingPickerModal from '../components/OfferingPickerModal';
 import { computeOfferingTotal, computeOfferingsTotal } from '../lib/offerings';
+import { matchesSearch } from '../lib/search';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -45,6 +46,12 @@ function emptyVenue() {
   return { name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '' };
 }
 
+// Mirrors EventFormPage's schedule item shape exactly — carries straight
+// into the event created from this booking (see convertBookingToEvent).
+function emptyScheduleItem() {
+  return { id: uid('sched'), time: '', name: '', details: '' };
+}
+
 function emptyForm() {
   return {
     // Generated up front so document uploads on a not-yet-saved booking still
@@ -52,6 +59,7 @@ function emptyForm() {
     id: uid('bkg'),
     eventName: '', clientId: '', eventDate: '', eventType: '',
     venue: emptyVenue(),
+    schedule: [emptyScheduleItem()],
     depositAmount: '', depositDueDate: '', depositPaid: false,
     bookingStatus: '', priority: '', nextFollowUpDate: '',
     contractSignedDate: '', referralSource: '', notes: '', activityLog: [],
@@ -321,6 +329,50 @@ function CollapsibleSection({ title, subtitle, defaultOpen, badge, children, cla
   );
 }
 
+// Type-to-filter client picker — a plain <select> doesn't scale once an
+// account has more than a handful of clients.
+function ClientCombobox({ clients, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const selected = clients.find((c) => c.id === value);
+  const filtered = clients.filter((c) => matchesSearch(query, [c.firstName, c.lastName, c.email, c.phone]));
+
+  return (
+    <div className="relative">
+      <input
+        value={open ? query : (selected ? `${selected.firstName} ${selected.lastName}` : '')}
+        onChange={(e) => { setQuery(e.target.value); onChange(''); }}
+        onFocus={() => { setQuery(''); setOpen(true); }}
+        placeholder="Search clients…"
+        className={inputClass}
+      />
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 right-0 mt-1 max-h-64 overflow-y-auto bg-white rounded-lg shadow-lg border border-slate-100 z-20">
+            {filtered.length === 0 && (
+              <div className="px-3 py-3 text-xs text-slate-400">No clients found.</div>
+            )}
+            {filtered.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => { onChange(c.id); setQuery(''); setOpen(false); }}
+                className="block w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                <div className="font-medium text-slate-700">{c.firstName} {c.lastName}</div>
+                {(c.email || c.phone) && (
+                  <div className="text-xs text-slate-400">{[c.email, c.phone].filter(Boolean).join(' · ')}</div>
+                )}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // Pure presentational read of state that already exists elsewhere on the
 // page (booking, proposal, contract, event) — no new data, just orientation.
 function pipelineSteps(booking, proposal, contract) {
@@ -442,6 +494,7 @@ export default function BookingFormPage() {
         eventDate: booking.eventDate || '',
         eventType: booking.eventType || '',
         venue: { ...emptyVenue(), ...booking.venue },
+        schedule: booking.schedule && booking.schedule.length ? booking.schedule : [emptyScheduleItem()],
         depositAmount: booking.depositAmount ?? '',
         depositDueDate: booking.depositDueDate || '',
         depositPaid: !!booking.depositPaid,
@@ -612,6 +665,16 @@ export default function BookingFormPage() {
 
   function updateVenue(field, val) {
     setForm((f) => ({ ...f, venue: { ...f.venue, [field]: val } }));
+  }
+
+  function addScheduleItem() {
+    setForm((f) => ({ ...f, schedule: [...f.schedule, emptyScheduleItem()] }));
+  }
+  function updateScheduleItem(id, patch) {
+    setForm((f) => ({ ...f, schedule: f.schedule.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
+  }
+  function removeScheduleItem(id) {
+    setForm((f) => ({ ...f, schedule: f.schedule.filter((s) => s.id !== id) }));
   }
 
   function handleAddActivity() {
@@ -1000,10 +1063,9 @@ export default function BookingFormPage() {
               <div>
                 <label className={labelClass}>Client *</label>
                 <div className="flex gap-2">
-                  <select required value={form.clientId} onChange={(e) => update('clientId', e.target.value)} className={inputClass}>
-                    <option value="">Select a client…</option>
-                    {clients.map((c) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
-                  </select>
+                  <div className="flex-1 min-w-0">
+                    <ClientCombobox clients={clients} value={form.clientId} onChange={(id) => update('clientId', id)} />
+                  </div>
                   <button
                     type="button"
                     onClick={() => setNewClientModalOpen(true)}
@@ -1144,6 +1206,60 @@ export default function BookingFormPage() {
         </div>
 
         <div className={cardClass}>
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h3 className={`${cardTitleClass} mb-0`}>Event Schedule</h3>
+              <p className="text-xs text-slate-400 mt-1">Included in the proposal, and carries straight into the event once this booking converts.</p>
+            </div>
+            <button
+              type="button"
+              onClick={addScheduleItem}
+              className="shrink-0 text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+            >
+              + Add Line
+            </button>
+          </div>
+          {form.schedule.length === 0 ? (
+            <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
+              No schedule lines yet.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {form.schedule.map((item) => (
+                <div key={item.id} className="flex items-start gap-2">
+                  <input
+                    type="time"
+                    value={item.time}
+                    onChange={(e) => updateScheduleItem(item.id, { time: e.target.value })}
+                    className="shrink-0 w-32 px-2.5 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                  <input
+                    value={item.name}
+                    onChange={(e) => updateScheduleItem(item.id, { name: e.target.value })}
+                    placeholder="e.g. Ceremony"
+                    className="shrink-0 w-48 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                  <input
+                    value={item.details}
+                    onChange={(e) => updateScheduleItem(item.id, { details: e.target.value })}
+                    placeholder="Details…"
+                    className="flex-1 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeScheduleItem(item.id)}
+                    className="shrink-0 w-9 h-9 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
+                    aria-label="Remove schedule line"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className={cardClass}>
           <h3 className={cardTitleClass}>Notes & Activity</h3>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div>
@@ -1258,6 +1374,23 @@ export default function BookingFormPage() {
                     </div>
                   </div>
                 </div>
+
+                {(form.schedule || []).some((s) => s.time || s.name || s.details) && (
+                  <CollapsibleSection
+                    title="Schedule"
+                    defaultOpen
+                  >
+                    <div className="space-y-1 text-sm">
+                      {form.schedule.filter((s) => s.time || s.name || s.details).map((s) => (
+                        <div key={s.id} className="flex gap-3">
+                          <span className="w-20 shrink-0 text-slate-400">{formatEventTime(s.time) || '—'}</span>
+                          <span className="w-40 shrink-0 font-medium text-slate-700">{s.name}</span>
+                          <span className="text-slate-500">{s.details}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </CollapsibleSection>
+                )}
 
                 <CollapsibleSection
                   title="Pricing"

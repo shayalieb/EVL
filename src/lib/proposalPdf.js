@@ -1,4 +1,4 @@
-import { formatCurrency as currency, formatEventDate, formatVenueLine } from './format';
+import { formatCurrency as currency, formatEventDate, formatVenueLine, formatEventTime } from './format';
 import { computeOfferingTotal, computeOfferingsTotal } from './offerings';
 
 function loadImageDimensions(dataUrl) {
@@ -126,6 +126,22 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
     },
   });
   y = doc.lastAutoTable.finalY + 10;
+
+  const scheduleList = (booking.schedule || []).filter((s) => s.time || s.name || s.details);
+  if (scheduleList.length) {
+    const scheduleRows = scheduleList.map((s) => [formatEventTime(s.time) || '—', [s.name, s.details].filter(Boolean).join('\n')]);
+    autoTable(doc, {
+      startY: y,
+      margin: { left: marginX, right: marginX },
+      head: [['Time', 'Schedule']],
+      body: scheduleRows,
+      theme: 'striped',
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [79, 70, 229] },
+      columnStyles: { 0: { fontStyle: 'bold', cellWidth: 30 } },
+    });
+    y = doc.lastAutoTable.finalY + 10;
+  }
 
   if (offeringsList.length) {
     const offeringRows = offeringsList.map((o) => {
