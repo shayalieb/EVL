@@ -50,7 +50,7 @@ function emptyForm() {
     // Generated up front so document uploads on a not-yet-saved booking still
     // have a stable bookingId to attach to — mirrors EventFormPage.
     id: uid('bkg'),
-    clientId: '', eventDate: '', eventType: '',
+    eventName: '', clientId: '', eventDate: '', eventType: '',
     venue: emptyVenue(),
     depositAmount: '', depositDueDate: '', depositPaid: false,
     bookingStatus: '', priority: '', nextFollowUpDate: '',
@@ -430,6 +430,7 @@ export default function BookingFormPage() {
     if (booking) {
       setForm({
         id: booking.id,
+        eventName: booking.eventName || '',
         clientId: booking.clientId || '',
         eventDate: booking.eventDate || '',
         eventType: booking.eventType || '',
@@ -983,6 +984,11 @@ export default function BookingFormPage() {
           <div className={cardClass}>
             <h3 className={cardTitleClass}>Booking Details</h3>
             <div className="space-y-5">
+              <div>
+                <label className={labelClass}>Event Name</label>
+                <input value={form.eventName} onChange={(e) => update('eventName', e.target.value)} className={inputClass} />
+              </div>
+
               <div>
                 <label className={labelClass}>Client *</label>
                 <div className="flex gap-2">

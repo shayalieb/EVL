@@ -227,7 +227,7 @@ export function DataProvider({ children }) {
     const booking = (currentUser.bookings || []).find((b) => b.id === bookingId);
     if (!booking || booking.convertedEventId) return;
     const client = (currentUser.clients || []).find((c) => c.id === booking.clientId);
-    const name = [client ? `${client.firstName} ${client.lastName}` : '', booking.eventType]
+    const name = booking.eventName || [client ? `${client.firstName} ${client.lastName}` : '', booking.eventType]
       .filter(Boolean).join(' ') || 'New Event';
     const event = addEvent({
       name,
