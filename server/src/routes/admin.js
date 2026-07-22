@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -8,6 +9,31 @@ import { sendMail, buildFromHeader } from '../lib/mailer.js';
 
 const router = Router();
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILES = 3;
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FILE_SIZE, files: MAX_FILES } });
+
+function uploadFiles(req, res, next) {
+  upload.array('files', MAX_FILES)(req, res, (err) => {
+    if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ error: 'One or more files are too large (10MB max).' });
+    }
+    if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_COUNT') {
+      return res.status(400).json({ error: `You can attach at most ${MAX_FILES} files.` });
+    }
+    if (err) return next(err);
+    next();
+  });
+}
+
+function attachmentsData(files) {
+  return (files || []).map((f) => ({
+    filename: f.originalname,
+    contentType: f.mimetype || 'application/octet-stream',
+    size: f.size,
+    data: f.buffer,
+  }));
+}
 
 router.use(requireAuth, asyncHandler(attachUser), requirePlatformAdmin);
 
@@ -151,9 +177,11 @@ function serializeThread(thread) {
   };
 }
 
+const attachmentSelect = { select: { id: true, filename: true, contentType: true, size: true } };
+
 router.get('/support/threads', asyncHandler(async (req, res) => {
   const threads = await prisma.supportThread.findMany({
-    include: { messages: true, account: { include: { memberships: { include: { user: true } } } } },
+    include: { messages: { include: { attachments: attachmentSelect } }, account: { include: { memberships: { include: { user: true } } } } },
     orderBy: { lastMessageAt: 'desc' },
   });
   res.json({ threads: threads.map(serializeThread) });
@@ -167,7 +195,7 @@ router.get('/support/threads/:id', asyncHandler(async (req, res) => {
   const thread = await prisma.supportThread.findUnique({
     where: { id: req.params.id },
     include: {
-      messages: { orderBy: { createdAt: 'asc' } },
+      messages: { orderBy: { createdAt: 'asc' }, include: { attachments: attachmentSelect } },
       notes: { orderBy: { createdAt: 'asc' }, include: { author: true } },
       account: { include: { memberships: { include: { user: true } } } },
     },
@@ -200,30 +228,64 @@ router.post('/support/threads/:id/notes', asyncHandler(async (req, res) => {
   res.status(201).json({ note: serializeNote(note) });
 }));
 
-router.post('/support/threads/:id/messages', asyncHandler(async (req, res) => {
+router.post('/support/threads/:id/messages', uploadFiles, asyncHandler(async (req, res) => {
   const { body } = req.body || {};
   if (!body?.trim()) return res.status(400).json({ error: 'Message body is required.' });
 
-  const thread = await prisma.supportThread.findUnique({
+  let thread = await prisma.supportThread.findUnique({
     where: { id: req.params.id },
     include: { account: { include: { memberships: { include: { user: true } } } } },
   });
   if (!thread) return res.status(404).json({ error: 'Thread not found.' });
 
+  if (!thread.replyToAlias && process.env.RESEND_INBOUND_DOMAIN) {
+    thread = await prisma.supportThread.update({
+      where: { id: thread.id },
+      data: { replyToAlias: `reply+support-${thread.id}@${process.env.RESEND_INBOUND_DOMAIN}` },
+      include: { account: { include: { memberships: { include: { user: true } } } } },
+    });
+  }
+
   const message = await prisma.supportMessage.create({
-    data: { threadId: thread.id, direction: 'admin', senderUserId: req.session.userId, body: body.trim() },
+    data: {
+      threadId: thread.id,
+      direction: 'admin',
+      senderUserId: req.session.userId,
+      body: body.trim(),
+      attachments: { create: attachmentsData(req.files) },
+    },
+    include: { attachments: attachmentSelect },
   });
   await prisma.supportThread.update({ where: { id: thread.id }, data: { lastMessageAt: new Date() } });
 
   const owner = thread.account.memberships.find((m) => m.role === 'owner');
   if (owner) {
+    const lastOutbound = await prisma.supportMessage.findFirst({
+      where: { threadId: thread.id, direction: 'admin', resendMessageId: { not: null }, id: { not: message.id } },
+      orderBy: { createdAt: 'desc' },
+    });
+    const headers = lastOutbound?.resendMessageId
+      ? { 'In-Reply-To': lastOutbound.resendMessageId, References: lastOutbound.resendMessageId }
+      : undefined;
+    const attachments = (req.files || []).map((f) => ({
+      content: f.buffer.toString('base64'),
+      filename: f.originalname,
+      contentType: f.mimetype || 'application/octet-stream',
+    }));
+
     try {
-      await sendMail({
+      const sent = await sendMail({
         from: buildFromHeader(),
         to: owner.user.email,
         subject: `Re: ${thread.subject}`,
-        html: `<p>You have a new reply to your support request "${thread.subject}":</p><p>${body.trim()}</p><p>Sign in to GigWorks to continue the conversation.</p>`,
+        html: `<p>You have a new reply to your support request "${thread.subject}":</p><p>${body.trim()}</p><p>Reply to this email to continue the conversation, or sign in to GigWorks.</p>`,
+        replyTo: thread.replyToAlias || undefined,
+        headers,
+        attachments: attachments.length ? attachments : undefined,
       });
+      if (sent?.data?.id) {
+        await prisma.supportMessage.update({ where: { id: message.id }, data: { resendMessageId: sent.data.id } });
+      }
     } catch {
       // best effort
     }
@@ -239,6 +301,14 @@ router.patch('/support/threads/:id', asyncHandler(async (req, res) => {
   }
   const thread = await prisma.supportThread.update({ where: { id: req.params.id }, data: { status } });
   res.json({ ok: true, status: thread.status });
+}));
+
+router.get('/support/attachments/:id/download', asyncHandler(async (req, res) => {
+  const attachment = await prisma.supportAttachment.findUnique({ where: { id: req.params.id } });
+  if (!attachment) return res.status(404).json({ error: 'Attachment not found.' });
+  res.setHeader('Content-Type', attachment.contentType);
+  res.setHeader('Content-Disposition', `attachment; filename="${attachment.filename.replace(/"/g, '')}"`);
+  res.send(attachment.data);
 }));
 
 function serializeAdmin(user) {

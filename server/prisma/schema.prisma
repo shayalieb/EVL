@@ -154,6 +154,11 @@ model SupportThread {
   lastMessageAt DateTime @default(now())
   createdAt     DateTime @default(now())
 
+  // "reply+support-<this.id>@<RESEND_INBOUND_DOMAIN>" — null until a domain
+  // is configured. Set once and never recomputed, same reasoning as
+  // EmailThread.replyToAlias above.
+  replyToAlias  String?
+
   messages      SupportMessage[]
   notes         SupportNote[]
 
@@ -161,18 +166,36 @@ model SupportThread {
 }
 
 model SupportMessage {
-  id           String        @id @default(cuid())
-  threadId     String
-  thread       SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  id              String        @id @default(cuid())
+  threadId        String
+  thread          SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
-  direction    String        // 'user' | 'admin'
-  senderUserId String
-  body         String        @db.Text
+  direction       String        // 'user' | 'admin'
+  senderUserId    String
+  body            String        @db.Text
 
-  readAt       DateTime?     // null = unread by the other side
-  createdAt    DateTime      @default(now())
+  resendMessageId String?       @unique
+  attachments     SupportAttachment[]
+
+  readAt          DateTime?     // null = unread by the other side
+  createdAt       DateTime      @default(now())
 
   @@index([threadId, createdAt])
+}
+
+model SupportAttachment {
+  id          String         @id @default(cuid())
+  messageId   String
+  message     SupportMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  filename    String
+  contentType String
+  size        Int
+  data        Bytes
+
+  createdAt   DateTime       @default(now())
+
+  @@index([messageId])
 }
 
 // Admin-only annotations on a support thread — never sent to or visible by

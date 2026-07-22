@@ -4,6 +4,52 @@ import { useToast } from '../../components/ui/Toast';
 import SearchInput from '../../components/ui/SearchInput';
 import FilterSelect from '../../components/ui/FilterSelect';
 import { matchesSearch } from '../../lib/search';
+import { FileIcon } from '../../components/ui/icons';
+import { sendSupportMessage, supportAttachmentDownloadUrl, formatFileSize } from '../../lib/support';
+
+const MAX_FILES = 3;
+
+function pickFiles(existing, incoming) {
+  return [...existing, ...Array.from(incoming || [])].slice(0, MAX_FILES);
+}
+
+function PendingFiles({ files, onRemove }) {
+  if (files.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {files.map((f, i) => (
+        <span key={i} className="inline-flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-full bg-slate-100 text-xs text-slate-600">
+          <FileIcon className="w-3.5 h-3.5 text-slate-400" />
+          {f.name}
+          <button type="button" onClick={() => onRemove(i)} className="w-4 h-4 flex items-center justify-center rounded-full text-slate-400 hover:text-red-600 hover:bg-red-50" aria-label={`Remove ${f.name}`}>
+            ×
+          </button>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function MessageAttachments({ attachments, dark }) {
+  if (!attachments?.length) return null;
+  return (
+    <div className="mt-1.5 space-y-1">
+      {attachments.map((a) => (
+        <a
+          key={a.id}
+          href={supportAttachmentDownloadUrl(a.id, { admin: true })}
+          target="_blank"
+          rel="noreferrer"
+          className={`flex items-center gap-1.5 text-xs underline ${dark ? 'text-indigo-100' : 'text-indigo-600'}`}
+        >
+          <FileIcon className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">{a.filename}</span>
+          <span className="opacity-70 shrink-0">({formatFileSize(a.size)})</span>
+        </a>
+      ))}
+    </div>
+  );
+}
 
 export default function AdminSupportPage() {
   const [threads, setThreads] = useState(null);
@@ -101,6 +147,7 @@ function ThreadDetail({ thread, onChanged }) {
   const [detail, setDetail] = useState(null);
   const [tab, setTab] = useState('messages');
   const [body, setBody] = useState('');
+  const [files, setFiles] = useState([]);
   const [sending, setSending] = useState(false);
   const [noteBody, setNoteBody] = useState('');
   const [savingNote, setSavingNote] = useState(false);
@@ -126,12 +173,10 @@ function ThreadDetail({ thread, onChanged }) {
     if (!body.trim()) return;
     setSending(true);
     try {
-      const data = await apiFetch(`/admin/support/threads/${thread.id}/messages`, {
-        method: 'POST',
-        body: JSON.stringify({ body }),
-      });
+      const data = await sendSupportMessage(`/admin/support/threads/${thread.id}/messages`, { body, files });
       setDetail((prev) => ({ ...prev, messages: [...prev.messages, data.message] }));
       setBody('');
+      setFiles([]);
       onChanged();
     } catch (err) {
       showToast(err.message, 'error');
@@ -208,21 +253,35 @@ function ThreadDetail({ thread, onChanged }) {
               <div key={m.id} className={`flex ${m.direction === 'admin' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[75%] rounded-2xl px-4 py-2 text-sm ${m.direction === 'admin' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-800'}`}>
                   {m.body}
+                  <MessageAttachments attachments={m.attachments} dark={m.direction === 'admin'} />
                 </div>
               </div>
             ))}
           </div>
 
-          <form onSubmit={handleSend} className="flex gap-2 p-4 border-t border-slate-100">
-            <input
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder="Reply…"
-              className="flex-1 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            />
-            <button type="submit" disabled={sending} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
-              Send
-            </button>
+          <form onSubmit={handleSend} className="p-4 border-t border-slate-100 space-y-2">
+            <PendingFiles files={files} onRemove={(i) => setFiles((prev) => prev.filter((_, idx) => idx !== i))} />
+            <div className="flex gap-2">
+              <input
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder="Reply…"
+                className="flex-1 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+              />
+              <label className={`px-3 py-2 rounded-lg border text-sm font-semibold cursor-pointer flex items-center ${files.length >= MAX_FILES ? 'border-slate-200 text-slate-300 cursor-not-allowed' : 'border-slate-300 text-slate-500 hover:bg-slate-50'}`}>
+                📎
+                <input
+                  type="file"
+                  multiple
+                  disabled={files.length >= MAX_FILES}
+                  onChange={(e) => { setFiles((prev) => pickFiles(prev, e.target.files)); e.target.value = ''; }}
+                  className="hidden"
+                />
+              </label>
+              <button type="submit" disabled={sending} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+                Send
+              </button>
+            </div>
           </form>
         </>
       ) : (
