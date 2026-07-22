@@ -1,11 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import Logo from '../components/ui/Logo';
-import SignatureCanvas from '../components/SignatureCanvas';
+import ContractDocument from '../components/ContractDocument';
 import { viewContractByToken, submitContractSignature } from '../lib/contracts';
-import { getContractPdfDataUrl } from '../lib/contractPdf';
-import { formatCurrency as currency } from '../lib/format';
-import { computeOfferingsTotal } from '../lib/offerings';
+import { generateContractPdf } from '../lib/contractPdf';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -18,24 +16,13 @@ export default function ContractSignPage() {
   const [email, setEmail] = useState('');
   const [verifiedEmail, setVerifiedEmail] = useState('');
   const [contract, setContract] = useState(null);
-  const [pdfUrl, setPdfUrl] = useState('');
   const [error, setError] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [signerName, setSignerName] = useState('');
   const [signatureImage, setSignatureImage] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (!contract) return;
-    let cancelled = false;
-    getContractPdfDataUrl({
-      snapshot: contract.snapshot,
-      terms: contract.terms,
-      clientSignature: toSignature(contract.clientSignatureName, contract.clientSignatureImage, contract.clientSignedAt),
-      ownerSignature: toSignature(contract.ownerSignatureName, contract.ownerSignatureImage, contract.ownerSignedAt),
-    }).then((url) => { if (!cancelled) setPdfUrl(url); });
-    return () => { cancelled = true; };
-  }, [contract]);
+  const [downloading, setDownloading] = useState(false);
+  const signHereRef = useRef(null);
 
   async function handleVerify(e) {
     e.preventDefault();
@@ -52,11 +39,16 @@ export default function ContractSignPage() {
     }
   }
 
-  async function handleSign(e) {
-    e.preventDefault();
+  async function handleSignClick() {
     setError('');
     if (!signatureImage) {
-      setError('Please draw your signature above.');
+      signHereRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setError('Please draw your signature in the "Sign Here" box below.');
+      return;
+    }
+    if (!signerName.trim()) {
+      signHereRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setError('Please type your full legal name.');
       return;
     }
     setSubmitting(true);
@@ -71,6 +63,20 @@ export default function ContractSignPage() {
       setError(err.message || 'Failed to submit signature.');
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleDownload() {
+    setDownloading(true);
+    try {
+      await generateContractPdf({
+        snapshot: contract.snapshot,
+        terms: contract.terms,
+        clientSignature: toSignature(contract.clientSignatureName, contract.clientSignatureImage, contract.clientSignedAt),
+        ownerSignature: toSignature(contract.ownerSignatureName, contract.ownerSignatureImage, contract.ownerSignedAt),
+      });
+    } finally {
+      setDownloading(false);
     }
   }
 
@@ -112,18 +118,28 @@ export default function ContractSignPage() {
   const { role, status, snapshot } = contract;
   const alreadySigned = role === 'client' ? !!contract.clientSignedAt : !!contract.ownerSignedAt;
   const canSignNow = !alreadySigned;
-  const lineItems = snapshot.lineItems || [];
-  const grandTotal = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0) + computeOfferingsTotal(snapshot.offerings);
+  const clientSignature = toSignature(contract.clientSignatureName, contract.clientSignatureImage, contract.clientSignedAt);
+  const ownerSignature = toSignature(contract.ownerSignatureName, contract.ownerSignatureImage, contract.ownerSignedAt);
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 sm:p-8">
+    <div className="min-h-screen bg-slate-50 p-4 sm:p-8 pb-28">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center gap-3 mb-6">
-          <Logo className="h-10 w-auto" />
-          <div>
-            <div className="font-bold text-slate-800">{snapshot.businessInfo?.name || 'Event Contract'}</div>
-            <div className="text-xs text-slate-400">Contract for {snapshot.client?.firstName} {snapshot.client?.lastName}</div>
+        <div className="flex items-center justify-between gap-3 mb-6">
+          <div className="flex items-center gap-3">
+            <Logo className="h-10 w-auto" />
+            <div>
+              <div className="font-bold text-slate-800">{snapshot.businessInfo?.name || 'Event Contract'}</div>
+              <div className="text-xs text-slate-400">Contract for {snapshot.client?.firstName} {snapshot.client?.lastName}</div>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={downloading}
+            className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-white disabled:opacity-60 shrink-0"
+          >
+            {downloading ? 'Preparing…' : 'Download a copy (PDF)'}
+          </button>
         </div>
 
         {error && <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
@@ -138,49 +154,39 @@ export default function ContractSignPage() {
             You've signed this contract. Waiting on the other party.
           </div>
         )}
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden mb-6">
-          {pdfUrl ? (
-            <iframe title="Contract PDF" src={pdfUrl} className="w-full h-[70vh]" />
-          ) : (
-            <div className="h-[70vh] flex items-center justify-center text-sm text-slate-400">Loading contract…</div>
-          )}
-        </div>
 
-        {canSignNow && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6">
-            <h3 className="text-base font-bold text-slate-800 mb-4">
-              {role === 'client' ? 'Sign as the client' : 'Countersign as the business'}
-            </h3>
-            <form onSubmit={handleSign} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1">Full Legal Name</label>
-                <input
-                  required
-                  value={signerName}
-                  onChange={(e) => setSignerName(e.target.value)}
-                  placeholder="Type your full name"
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1">Signature</label>
-                <SignatureCanvas onChange={setSignatureImage} />
-              </div>
-              <div className="text-xs text-slate-400">
-                Grand Total: <span className="font-semibold text-slate-600">{currency(grandTotal)}</span>
-              </div>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="px-5 py-2.5 rounded-lg bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
-              >
-                {submitting && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
-                Sign Contract
-              </button>
-            </form>
-          </div>
-        )}
+        <ContractDocument
+          snapshot={snapshot}
+          terms={contract.terms}
+          clientSignature={clientSignature}
+          ownerSignature={ownerSignature}
+          role={role}
+          canSignNow={canSignNow}
+          signerName={signerName}
+          onSignerNameChange={setSignerName}
+          onSignatureChange={setSignatureImage}
+          signHereRef={signHereRef}
+        />
       </div>
+
+      {canSignNow && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
+          <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
+            <span className="text-xs text-slate-400 hidden sm:block">
+              {role === 'client' ? 'Review the contract, then sign in the box above.' : 'Review the contract, then countersign in the box above.'}
+            </span>
+            <button
+              type="button"
+              onClick={handleSignClick}
+              disabled={submitting}
+              className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-700 disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {submitting && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
+              Sign Contract
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
