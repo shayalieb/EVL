@@ -510,7 +510,11 @@ export default function BookingFormPage() {
         proposal: booking.proposal || null,
       });
     } else {
-      hydratedBookingIdRef.current = null;
+      // bookingId is undefined for the whole time you're drafting a brand-new
+      // booking — guard on it (not just truthiness of `booking`) so a
+      // background refresh doesn't wipe that in-progress, not-yet-saved draft.
+      if (hydratedBookingIdRef.current === bookingId) return;
+      hydratedBookingIdRef.current = bookingId;
       setForm(emptyForm());
     }
     setError('');

@@ -183,7 +183,11 @@ export default function EventFormPage() {
         requests: event.requests || [emptyRequestItem()],
       });
     } else {
-      hydratedEventIdRef.current = null;
+      // eventId is undefined for the whole time you're drafting a brand-new
+      // event — guard on it (not just truthiness of `event`) so a background
+      // refresh doesn't wipe that in-progress, not-yet-saved draft.
+      if (hydratedEventIdRef.current === eventId) return;
+      hydratedEventIdRef.current = eventId;
       setForm(emptyForm());
     }
     setError('');
