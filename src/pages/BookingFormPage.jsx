@@ -341,14 +341,16 @@ function ClientCombobox({ clients, value, onChange }) {
     <div className="relative">
       <input
         value={open ? query : (selected ? `${selected.firstName} ${selected.lastName}` : '')}
-        onChange={(e) => { setQuery(e.target.value); onChange(''); }}
+        onChange={(e) => setQuery(e.target.value)}
         onFocus={() => { setQuery(''); setOpen(true); }}
         placeholder="Search clients…"
         className={inputClass}
       />
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          {/* Closing without picking a result must not touch the committed
+              selection — only clear the transient search text. */}
+          <div className="fixed inset-0 z-10" onClick={() => { setOpen(false); setQuery(''); }} />
           <div className="absolute left-0 right-0 mt-1 max-h-64 overflow-y-auto bg-white rounded-lg shadow-lg border border-slate-100 z-20">
             {filtered.length === 0 && (
               <div className="px-3 py-3 text-xs text-slate-400">No clients found.</div>
