@@ -67,6 +67,39 @@ function emptyForm() {
   };
 }
 
+// A brand-new booking only lives in memory until "Add Booking" is clicked —
+// nothing to auto-save to the server yet. But the tab itself can still be
+// discarded by the browser (backgrounded to save memory) or reloaded, which
+// wipes that in-progress React state outright. Mirroring the draft into
+// sessionStorage means a reload picks up right where the user left off
+// instead of silently losing everything they'd typed.
+const NEW_BOOKING_DRAFT_KEY = 'gigworks:newBookingDraft';
+
+function loadNewBookingDraft() {
+  try {
+    const raw = sessionStorage.getItem(NEW_BOOKING_DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveNewBookingDraft(form) {
+  try {
+    sessionStorage.setItem(NEW_BOOKING_DRAFT_KEY, JSON.stringify(form));
+  } catch {
+    // storage full/unavailable — draft recovery just won't work this time
+  }
+}
+
+function clearNewBookingDraft() {
+  try {
+    sessionStorage.removeItem(NEW_BOOKING_DRAFT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 function DocumentSection({ category, docs, uploading, onUpload, onRequestDelete }) {
   const label = category === 'proposal' ? 'Proposal' : 'Contract';
   return (
@@ -515,7 +548,7 @@ export default function BookingFormPage() {
       // background refresh doesn't wipe that in-progress, not-yet-saved draft.
       if (hydratedBookingIdRef.current === bookingId) return;
       hydratedBookingIdRef.current = bookingId;
-      setForm(emptyForm());
+      setForm(loadNewBookingDraft() || emptyForm());
     }
     setError('');
     setAddingType(false);
@@ -527,6 +560,14 @@ export default function BookingFormPage() {
     proposalTemplateSkipRef.current = true;
     autoCreatedEventRef.current = false;
   }, [bookingId, booking, bookingStatuses]);
+
+  // Mirrors the in-progress draft of a brand-new (not-yet-saved) booking into
+  // sessionStorage on every change, so a discarded/reloaded tab can recover
+  // it — see loadNewBookingDraft above.
+  useEffect(() => {
+    if (booking) return;
+    saveNewBookingDraft(form);
+  }, [form, booking]);
 
   // Auto-saves an existing booking shortly after any field changes — no
   // explicit "Save Changes" click needed. Only for bookings that already
@@ -722,9 +763,16 @@ export default function BookingFormPage() {
     const err = validate();
     if (err) { setError(err); setActiveTab('info'); return; }
     setSaving(true);
+    const wasNew = !booking;
     persistBooking();
     setSaving(false);
+    if (wasNew) clearNewBookingDraft();
     showToast(booking ? 'Booking updated' : 'Booking added');
+    navigate('/bookings');
+  }
+
+  function handleLeaveWithoutSaving() {
+    if (!booking) clearNewBookingDraft();
     navigate('/bookings');
   }
 
@@ -975,7 +1023,7 @@ export default function BookingFormPage() {
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
-            onClick={() => navigate('/bookings')}
+            onClick={handleLeaveWithoutSaving}
             className="w-9 h-9 shrink-0 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100"
             aria-label="Back to Bookings"
           >
@@ -993,7 +1041,7 @@ export default function BookingFormPage() {
               Convert to Event →
             </button>
           )}
-          <button type="button" onClick={() => navigate('/bookings')} className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">
+          <button type="button" onClick={handleLeaveWithoutSaving} className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">
             Cancel
           </button>
           <button

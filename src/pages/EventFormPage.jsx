@@ -94,6 +94,39 @@ function emptyRequestItem() {
   return { id: uid('req'), name: '', details: '', link: '', documentId: null, documentName: null };
 }
 
+// A brand-new event only lives in memory until it's saved — nothing to
+// auto-save to the server yet. But the tab itself can still be discarded by
+// the browser (backgrounded to save memory) or reloaded, which wipes that
+// in-progress React state outright. Mirroring the draft into sessionStorage
+// means a reload picks up right where the user left off instead of silently
+// losing everything they'd typed.
+const NEW_EVENT_DRAFT_KEY = 'gigworks:newEventDraft';
+
+function loadNewEventDraft() {
+  try {
+    const raw = sessionStorage.getItem(NEW_EVENT_DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveNewEventDraft(form) {
+  try {
+    sessionStorage.setItem(NEW_EVENT_DRAFT_KEY, JSON.stringify(form));
+  } catch {
+    // storage full/unavailable — draft recovery just won't work this time
+  }
+}
+
+function clearNewEventDraft() {
+  try {
+    sessionStorage.removeItem(NEW_EVENT_DRAFT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export default function EventFormPage() {
   const { eventId } = useParams();
   const navigate = useNavigate();
@@ -188,12 +221,20 @@ export default function EventFormPage() {
       // refresh doesn't wipe that in-progress, not-yet-saved draft.
       if (hydratedEventIdRef.current === eventId) return;
       hydratedEventIdRef.current = eventId;
-      setForm(emptyForm());
+      setForm(loadNewEventDraft() || emptyForm());
     }
     setError('');
     setAddingType(false);
     setPickerOpen(false);
   }, [eventId, event, contractors]);
+
+  // Mirrors the in-progress draft of a brand-new (not-yet-saved) event into
+  // sessionStorage on every change, so a discarded/reloaded tab can recover
+  // it — see loadNewEventDraft above.
+  useEffect(() => {
+    if (event) return;
+    saveNewEventDraft(form);
+  }, [form, event]);
 
   const latestSummariesEventIdRef = useRef(null);
 
@@ -589,7 +630,9 @@ export default function EventFormPage() {
   function handleSaveDraft() {
     const err = validate();
     if (err) { setError(err); setActiveTab('details'); return; }
+    const wasNew = !event;
     persistEvent(draftStatus?.id);
+    if (wasNew) clearNewEventDraft();
     showToast('Saved as draft');
     navigate('/events');
   }
@@ -599,13 +642,20 @@ export default function EventFormPage() {
     const err = validate();
     if (err) { setError(err); setActiveTab('details'); return; }
     setSaving(true);
+    const wasNew = !event;
     setTimeout(() => {
       const confirmedStatus = eventStatuses.find((s) => s.label.toLowerCase() === 'confirmed');
       persistEvent(event?.eventStatus || confirmedStatus?.id || draftStatus?.id);
+      if (wasNew) clearNewEventDraft();
       setSaving(false);
       showToast(event ? 'Event updated' : 'Event added');
       navigate('/events');
     }, 600);
+  }
+
+  function handleLeaveWithoutSaving() {
+    if (!event) clearNewEventDraft();
+    navigate('/events');
   }
 
   if (isEditing && !event) {
@@ -665,7 +715,7 @@ export default function EventFormPage() {
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
-            onClick={() => navigate('/events')}
+            onClick={handleLeaveWithoutSaving}
             className="w-9 h-9 shrink-0 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100"
             aria-label="Back to Events"
           >
@@ -674,7 +724,7 @@ export default function EventFormPage() {
           <h2 className="text-2xl font-bold text-slate-800 truncate">{isEditing ? event.name : 'Add Event'}</h2>
         </div>
         <div className="flex gap-2 shrink-0">
-          <button type="button" onClick={() => navigate('/events')} className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">
+          <button type="button" onClick={handleLeaveWithoutSaving} className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">
             Cancel
           </button>
           <button type="button" onClick={handleSaveDraft} className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50">
