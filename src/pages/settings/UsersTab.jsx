@@ -3,6 +3,9 @@ import { apiFetch, useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
 import Modal from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import SearchInput from '../../components/ui/SearchInput';
+import FilterSelect from '../../components/ui/FilterSelect';
+import { matchesSearch } from '../../lib/search';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -30,6 +33,8 @@ export default function UsersTab() {
   const [loadError, setLoadError] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState(null);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
 
   useEffect(() => {
     apiFetch('/team/members')
@@ -74,6 +79,12 @@ export default function UsersTab() {
   if (loadError) return <div className="text-sm text-red-600">{loadError}</div>;
   if (!members) return <div className="text-sm text-slate-400">Loading…</div>;
 
+  const hasFilters = !!(search || roleFilter);
+  const filteredMembers = members.filter((m) => {
+    if (roleFilter && m.role !== roleFilter) return false;
+    return matchesSearch(search, [m.firstName, m.lastName, m.email]);
+  });
+
   return (
     <div className="max-w-3xl space-y-4">
       <div className="flex items-center justify-between">
@@ -85,6 +96,29 @@ export default function UsersTab() {
         >
           + Add Member
         </button>
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search by name or email…" className="w-72" />
+        <FilterSelect
+          value={roleFilter}
+          onChange={setRoleFilter}
+          allLabel="All Roles"
+          options={[
+            { value: 'owner', label: 'Owner' },
+            { value: 'admin', label: 'Admin' },
+            { value: 'member', label: 'Member' },
+          ]}
+        />
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={() => { setSearch(''); setRoleFilter(''); }}
+            className="text-sm font-semibold text-slate-500 hover:text-slate-700"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -99,7 +133,14 @@ export default function UsersTab() {
             </tr>
           </thead>
           <tbody>
-            {members.map((m) => (
+            {filteredMembers.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-4 py-10 text-center text-slate-400">
+                  {members.length === 0 ? 'No team members yet.' : 'No members match your search or filters.'}
+                </td>
+              </tr>
+            )}
+            {filteredMembers.map((m) => (
               <tr key={m.id} className="border-b border-slate-50 last:border-0">
                 <td className="px-4 py-3 font-medium text-slate-800">{m.firstName} {m.lastName}</td>
                 <td className="px-4 py-3 text-slate-500">{m.email}</td>

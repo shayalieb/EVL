@@ -8,7 +8,10 @@ import Badge from '../components/ui/Badge';
 import Tabs from '../components/ui/Tabs';
 import { useToast } from '../components/ui/Toast';
 import EventsCalendarView from '../components/events/EventsCalendarView';
+import SearchInput from '../components/ui/SearchInput';
+import FilterSelect from '../components/ui/FilterSelect';
 import { formatCurrency as currency } from '../lib/format';
+import { matchesSearch } from '../lib/search';
 
 const VIEW_TABS = [
   { id: 'list', label: 'List View' },
@@ -30,12 +33,22 @@ export default function EventsPage() {
   const navigate = useNavigate();
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [activeTab, setActiveTab] = useState('list');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [vendorFilter, setVendorFilter] = useState('');
 
   function handleDelete() {
     deleteEvent(deleteTarget.id);
     showToast('Event deleted');
     setDeleteTarget(null);
   }
+
+  const hasFilters = !!(search || statusFilter || vendorFilter);
+  const filteredEvents = events.filter((evt) => {
+    if (statusFilter && evt.eventStatus !== statusFilter) return false;
+    if (vendorFilter && computeVendorStatus(evt).status !== vendorFilter) return false;
+    return matchesSearch(search, [evt.name]);
+  });
 
   return (
     <div>
@@ -51,13 +64,41 @@ export default function EventsPage() {
         </button>
       </div>
 
-      <div className="mb-4">
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
         <Tabs tabs={VIEW_TABS} activeTab={activeTab} onChange={setActiveTab} />
+        <div className="flex items-center gap-2 flex-wrap">
+          <SearchInput value={search} onChange={setSearch} placeholder="Search events…" className="w-56" />
+          <FilterSelect
+            value={statusFilter}
+            onChange={setStatusFilter}
+            allLabel="All Statuses"
+            options={eventStatuses.map((s) => ({ value: s.id, label: s.label }))}
+          />
+          <FilterSelect
+            value={vendorFilter}
+            onChange={setVendorFilter}
+            allLabel="All Vendor Statuses"
+            options={[
+              { value: 'confirmed', label: 'Confirmed' },
+              { value: 'pending', label: 'Pending' },
+              { value: 'none', label: 'None' },
+            ]}
+          />
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={() => { setSearch(''); setStatusFilter(''); setVendorFilter(''); }}
+              className="text-sm font-semibold text-slate-500 hover:text-slate-700"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       {activeTab === 'calendar' ? (
         <EventsCalendarView
-          events={events}
+          events={filteredEvents}
           eventStatuses={eventStatuses}
           onSelectEvent={(evt) => navigate(`/events/${evt.id}`)}
         />
@@ -77,14 +118,16 @@ export default function EventsPage() {
               </tr>
             </thead>
             <tbody>
-              {events.length === 0 && (
+              {filteredEvents.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
-                    No events yet. Add your first event to start booking contractors.
+                    {events.length === 0
+                      ? 'No events yet. Add your first event to start booking contractors.'
+                      : 'No events match your search or filters.'}
                   </td>
                 </tr>
               )}
-              {events.map((evt) => {
+              {filteredEvents.map((evt) => {
                 const status = eventStatuses.find((s) => s.id === evt.eventStatus);
                 const total = computeEventTotalCost(evt);
                 const vendor = computeVendorStatus(evt);

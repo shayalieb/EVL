@@ -3,6 +3,9 @@ import { apiFetch } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
 import Modal from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import SearchInput from '../../components/ui/SearchInput';
+import FilterSelect from '../../components/ui/FilterSelect';
+import { matchesSearch } from '../../lib/search';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -13,6 +16,8 @@ export default function AdminAdminsPage() {
   const [grantOpen, setGrantOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [revokeTarget, setRevokeTarget] = useState(null);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
 
   function load() {
     apiFetch('/admin/platform-admins')
@@ -36,6 +41,12 @@ export default function AdminAdminsPage() {
 
   if (loadError) return <div className="text-sm text-red-600">{loadError}</div>;
   if (!admins) return <div className="text-sm text-slate-400">Loading…</div>;
+
+  const hasFilters = !!(search || roleFilter);
+  const filteredAdmins = admins.filter((a) => {
+    if (roleFilter && (a.isPlatformOwner ? 'owner' : 'admin') !== roleFilter) return false;
+    return matchesSearch(search, [a.firstName, a.lastName, a.email]);
+  });
 
   return (
     <div className="max-w-3xl space-y-4">
@@ -64,6 +75,28 @@ export default function AdminAdminsPage() {
         </div>
       </div>
 
+      <div className="flex items-center gap-2 flex-wrap">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search by name or email…" className="w-72" />
+        <FilterSelect
+          value={roleFilter}
+          onChange={setRoleFilter}
+          allLabel="All Roles"
+          options={[
+            { value: 'owner', label: 'Owner' },
+            { value: 'admin', label: 'Admin' },
+          ]}
+        />
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={() => { setSearch(''); setRoleFilter(''); }}
+            className="text-sm font-semibold text-slate-500 hover:text-slate-700"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -75,7 +108,14 @@ export default function AdminAdminsPage() {
             </tr>
           </thead>
           <tbody>
-            {admins.map((a) => (
+            {filteredAdmins.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-4 py-10 text-center text-slate-400">
+                  {admins.length === 0 ? 'No admins yet.' : 'No admins match your search or filters.'}
+                </td>
+              </tr>
+            )}
+            {filteredAdmins.map((a) => (
               <tr key={a.id} className="border-b border-slate-50 last:border-0">
                 <td className="px-4 py-3 font-medium text-slate-800">{a.firstName} {a.lastName}</td>
                 <td className="px-4 py-3 text-slate-500">{a.email}</td>

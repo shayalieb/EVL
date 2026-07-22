@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
+import SearchInput from '../../components/ui/SearchInput';
+import FilterSelect from '../../components/ui/FilterSelect';
+import { matchesSearch } from '../../lib/search';
 
 export default function AdminSupportPage() {
   const [threads, setThreads] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [activeId, setActiveId] = useState(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
 
   function load() {
     apiFetch('/admin/support/threads')
@@ -19,14 +24,44 @@ export default function AdminSupportPage() {
   if (!threads) return <div className="text-sm text-slate-400">Loading…</div>;
 
   const active = threads.find((t) => t.id === activeId);
+  const hasFilters = !!(search || statusFilter);
+  const filteredThreads = threads.filter((t) => {
+    if (statusFilter && t.status !== statusFilter) return false;
+    return matchesSearch(search, [t.subject, t.account.owner?.firstName, t.account.owner?.lastName]);
+  });
 
   return (
     <div className="max-w-5xl">
       <h2 className="text-2xl font-bold text-slate-800 mb-4">Support</h2>
-      <div className="flex gap-4 h-[calc(100vh-220px)] min-h-[400px]">
+      <div className="flex items-center gap-2 flex-wrap mb-4">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search threads…" className="w-64" />
+        <FilterSelect
+          value={statusFilter}
+          onChange={setStatusFilter}
+          allLabel="All Statuses"
+          options={[
+            { value: 'open', label: 'Open' },
+            { value: 'closed', label: 'Closed' },
+          ]}
+        />
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={() => { setSearch(''); setStatusFilter(''); }}
+            className="text-sm font-semibold text-slate-500 hover:text-slate-700"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+      <div className="flex gap-4 h-[calc(100vh-270px)] min-h-[400px]">
         <div className="w-72 shrink-0 bg-white rounded-xl border border-slate-200 overflow-y-auto">
-          {threads.length === 0 && <div className="p-4 text-sm text-slate-400">No support threads yet.</div>}
-          {threads.map((t) => (
+          {filteredThreads.length === 0 && (
+            <div className="p-4 text-sm text-slate-400">
+              {threads.length === 0 ? 'No support threads yet.' : 'No threads match your search or filters.'}
+            </div>
+          )}
+          {filteredThreads.map((t) => (
             <button
               key={t.id}
               type="button"

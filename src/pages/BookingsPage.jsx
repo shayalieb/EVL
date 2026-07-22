@@ -6,8 +6,11 @@ import { PRIORITIES } from './BookingFormPage';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Badge from '../components/ui/Badge';
 import Tooltip from '../components/ui/Tooltip';
+import SearchInput from '../components/ui/SearchInput';
+import FilterSelect from '../components/ui/FilterSelect';
 import { useToast } from '../components/ui/Toast';
 import { formatCurrency as currency, formatEventDate } from '../lib/format';
+import { matchesSearch } from '../lib/search';
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -27,6 +30,17 @@ export default function BookingsPage() {
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState('');
+
+  const hasFilters = !!(search || statusFilter || priorityFilter);
+  const filteredBookings = bookings.filter((b) => {
+    if (statusFilter && b.bookingStatus !== statusFilter) return false;
+    if (priorityFilter && b.priority !== priorityFilter) return false;
+    const client = clients.find((c) => c.id === b.clientId);
+    return matchesSearch(search, [client?.firstName, client?.lastName, b.eventType, b.notes]);
+  });
 
   function openAdd() {
     navigate('/bookings/new');
@@ -63,6 +77,31 @@ export default function BookingsPage() {
         </button>
       </div>
 
+      <div className="flex items-center gap-2 flex-wrap mb-4">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search bookings…" className="w-64" />
+        <FilterSelect
+          value={statusFilter}
+          onChange={setStatusFilter}
+          allLabel="All Statuses"
+          options={bookingStatuses.map((s) => ({ value: s.id, label: s.label }))}
+        />
+        <FilterSelect
+          value={priorityFilter}
+          onChange={setPriorityFilter}
+          allLabel="All Priorities"
+          options={PRIORITIES.map((p) => ({ value: p.value, label: p.label }))}
+        />
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={() => { setSearch(''); setStatusFilter(''); setPriorityFilter(''); }}
+            className="text-sm font-semibold text-slate-500 hover:text-slate-700"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -79,14 +118,16 @@ export default function BookingsPage() {
               </tr>
             </thead>
             <tbody>
-              {bookings.length === 0 && (
+              {filteredBookings.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
-                    No bookings yet. Add an inquiry or quote to start tracking the sales pipeline.
+                    {bookings.length === 0
+                      ? 'No bookings yet. Add an inquiry or quote to start tracking the sales pipeline.'
+                      : 'No bookings match your search or filters.'}
                   </td>
                 </tr>
               )}
-              {bookings.map((b) => {
+              {filteredBookings.map((b) => {
                 const status = bookingStatuses.find((s) => s.id === b.bookingStatus);
                 const client = clients.find((c) => c.id === b.clientId);
                 const canConvert = !b.convertedEventId && status?.isBooked;

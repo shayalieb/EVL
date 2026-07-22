@@ -3,8 +3,11 @@ import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import OfferingModal from '../components/OfferingModal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import SearchInput from '../components/ui/SearchInput';
+import FilterSelect from '../components/ui/FilterSelect';
 import { computeOfferingTotal } from '../lib/offerings';
 import { formatCurrency as currency } from '../lib/format';
+import { matchesSearch } from '../lib/search';
 
 export default function OfferingsPage() {
   const { offerings, deleteOffering } = useData();
@@ -13,6 +16,14 @@ export default function OfferingsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingOffering, setEditingOffering] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+
+  const hasFilters = !!(search || typeFilter);
+  const filteredOfferings = offerings.filter((o) => {
+    if (typeFilter && o.type !== typeFilter) return false;
+    return matchesSearch(search, [o.name]);
+  });
 
   function openAdd() {
     setEditingOffering(null);
@@ -46,6 +57,28 @@ export default function OfferingsPage() {
         </button>
       </div>
 
+      <div className="flex items-center gap-2 flex-wrap mb-4">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search offerings…" className="w-64" />
+        <FilterSelect
+          value={typeFilter}
+          onChange={setTypeFilter}
+          allLabel="All Types"
+          options={[
+            { value: 'general', label: 'General' },
+            { value: 'perUnit', label: 'Per Unit' },
+          ]}
+        />
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={() => { setSearch(''); setTypeFilter(''); }}
+            className="text-sm font-semibold text-slate-500 hover:text-slate-700"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -58,14 +91,16 @@ export default function OfferingsPage() {
               </tr>
             </thead>
             <tbody>
-              {offerings.length === 0 && (
+              {filteredOfferings.length === 0 && (
                 <tr>
                   <td colSpan={4} className="px-4 py-10 text-center text-slate-400">
-                    No offerings yet. Add one to reuse it across proposals and contracts.
+                    {offerings.length === 0
+                      ? 'No offerings yet. Add one to reuse it across proposals and contracts.'
+                      : 'No offerings match your search or filters.'}
                   </td>
                 </tr>
               )}
-              {offerings.map((o) => (
+              {filteredOfferings.map((o) => (
                 <tr key={o.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                   <td className="px-4 py-3 font-medium text-slate-800">
                     {canEdit ? (

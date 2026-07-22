@@ -4,7 +4,9 @@ import { useAuth } from '../context/AuthContext';
 import ClientModal from '../components/ClientModal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Tooltip from '../components/ui/Tooltip';
+import SearchInput from '../components/ui/SearchInput';
 import { useToast } from '../components/ui/Toast';
+import { matchesSearch } from '../lib/search';
 
 export default function ClientsPage() {
   const { clients, deleteClient, computeClientEventCounts } = useData();
@@ -14,6 +16,11 @@ export default function ClientsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [search, setSearch] = useState('');
+
+  const filteredClients = clients.filter((c) =>
+    matchesSearch(search, [c.firstName, c.lastName, c.phone, c.email, c.notes])
+  );
 
   function openAdd() {
     setEditingClient(null);
@@ -45,6 +52,10 @@ export default function ClientsPage() {
         </button>
       </div>
 
+      <div className="mb-4">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search clients by name, phone, or email…" className="w-full sm:w-80" />
+      </div>
+
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -61,14 +72,16 @@ export default function ClientsPage() {
               </tr>
             </thead>
             <tbody>
-              {clients.length === 0 && (
+              {filteredClients.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
-                    No clients yet. Add your first client to start tracking their events.
+                    {clients.length === 0
+                      ? 'No clients yet. Add your first client to start tracking their events.'
+                      : 'No clients match your search.'}
                   </td>
                 </tr>
               )}
-              {clients.map((c) => {
+              {filteredClients.map((c) => {
                 const counts = computeClientEventCounts(c.id);
                 return (
                   <tr key={c.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">

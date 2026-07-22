@@ -3,6 +3,15 @@ import { apiFetch } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
 import Modal from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import SearchInput from '../../components/ui/SearchInput';
+import FilterSelect from '../../components/ui/FilterSelect';
+import { matchesSearch } from '../../lib/search';
+
+function accountStatus(a) {
+  if (a.disabledAt) return 'disabled';
+  if (a.owner && !a.owner.hasPassword) return 'pending';
+  return 'active';
+}
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -14,6 +23,8 @@ export default function AdminAccountsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [disableTarget, setDisableTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
 
   function load() {
     apiFetch('/admin/accounts')
@@ -55,6 +66,12 @@ export default function AdminAccountsPage() {
   if (loadError) return <div className="text-sm text-red-600">{loadError}</div>;
   if (!accounts) return <div className="text-sm text-slate-400">Loading…</div>;
 
+  const hasFilters = !!(search || statusFilter);
+  const filteredAccounts = accounts.filter((a) => {
+    if (statusFilter && accountStatus(a) !== statusFilter) return false;
+    return matchesSearch(search, [a.owner?.firstName, a.owner?.lastName, a.owner?.email]);
+  });
+
   return (
     <div className="max-w-4xl space-y-4">
       <div className="flex items-center justify-between">
@@ -66,6 +83,29 @@ export default function AdminAccountsPage() {
         >
           + New Account
         </button>
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search by owner name or email…" className="w-72" />
+        <FilterSelect
+          value={statusFilter}
+          onChange={setStatusFilter}
+          allLabel="All Statuses"
+          options={[
+            { value: 'active', label: 'Active' },
+            { value: 'pending', label: 'Pending' },
+            { value: 'disabled', label: 'Disabled' },
+          ]}
+        />
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={() => { setSearch(''); setStatusFilter(''); }}
+            className="text-sm font-semibold text-slate-500 hover:text-slate-700"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -81,7 +121,14 @@ export default function AdminAccountsPage() {
             </tr>
           </thead>
           <tbody>
-            {accounts.map((a) => (
+            {filteredAccounts.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
+                  {accounts.length === 0 ? 'No accounts yet.' : 'No accounts match your search or filters.'}
+                </td>
+              </tr>
+            )}
+            {filteredAccounts.map((a) => (
               <tr key={a.id} className="border-b border-slate-50 last:border-0">
                 <td className="px-4 py-3">
                   <div className="font-medium text-slate-800">{a.owner ? `${a.owner.firstName} ${a.owner.lastName}` : '—'}</div>

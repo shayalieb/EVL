@@ -4,9 +4,12 @@ import { useAuth } from '../context/AuthContext';
 import ContractorModal from '../components/ContractorModal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Tooltip from '../components/ui/Tooltip';
+import SearchInput from '../components/ui/SearchInput';
+import FilterSelect from '../components/ui/FilterSelect';
 import { useToast } from '../components/ui/Toast';
 import { formatCurrency as currency } from '../lib/format';
 import { getPricingTiers } from '../lib/pricingTiers';
+import { matchesSearch } from '../lib/search';
 
 export default function ContractorsPage() {
   const { contractors, deleteContractor } = useData();
@@ -16,6 +19,18 @@ export default function ContractorsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingContractor, setEditingContractor] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+
+  const categoryOptions = [...new Set(contractors.map((c) => c.contractorType1).filter(Boolean))]
+    .sort()
+    .map((cat) => ({ value: cat, label: cat }));
+
+  const hasFilters = !!(search || categoryFilter);
+  const filteredContractors = contractors.filter((c) => {
+    if (categoryFilter && c.contractorType1 !== categoryFilter) return false;
+    return matchesSearch(search, [c.firstName, c.middleName, c.lastName, c.email, c.phone, c.contractorType1, c.contractorType2]);
+  });
 
   function openAdd() {
     setEditingContractor(null);
@@ -47,6 +62,25 @@ export default function ContractorsPage() {
         </button>
       </div>
 
+      <div className="flex items-center gap-2 flex-wrap mb-4">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search contractors…" className="w-64" />
+        <FilterSelect
+          value={categoryFilter}
+          onChange={setCategoryFilter}
+          allLabel="All Categories"
+          options={categoryOptions}
+        />
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={() => { setSearch(''); setCategoryFilter(''); }}
+            className="text-sm font-semibold text-slate-500 hover:text-slate-700"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -63,14 +97,16 @@ export default function ContractorsPage() {
               </tr>
             </thead>
             <tbody>
-              {contractors.length === 0 && (
+              {filteredContractors.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
-                    No contractors yet. Add your first contractor to build your vendor roster.
+                    {contractors.length === 0
+                      ? 'No contractors yet. Add your first contractor to build your vendor roster.'
+                      : 'No contractors match your search or filters.'}
                   </td>
                 </tr>
               )}
-              {contractors.map((c) => (
+              {filteredContractors.map((c) => (
                 <tr key={c.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                   <td className="px-4 py-3 font-medium text-slate-800">
                     {canEdit ? (
