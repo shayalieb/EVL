@@ -3,7 +3,11 @@ import { Router } from 'express';
 const router = Router();
 
 function escapeText(str) {
-  return String(str).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+  // \r isn't a valid TEXT-value character per RFC 5545 and has no defined
+  // escape sequence — stripped outright so it can't combine with an
+  // adjacent (escaped) \n to smuggle a real CRLF line break into the
+  // output and inject additional ICS properties.
+  return String(str).replace(/\r/g, '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 }
 
 // RFC 5545 §3.1: content lines over 75 octets must be "folded" with a

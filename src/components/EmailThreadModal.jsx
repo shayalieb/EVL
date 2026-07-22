@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import DOMPurify from 'dompurify';
 import Modal from './ui/Modal';
 import { getThread, markThreadRead, sendThreadedEmail, logManualContact } from '../lib/email/threads';
 import { useToast } from './ui/Toast';
@@ -115,7 +116,7 @@ export default function EmailThreadModal({ open, onClose, eventId, contractorId,
                     }`}
                   >
                     <div className={`text-xs font-semibold mb-1 ${m.direction === 'outbound' ? 'text-indigo-500' : 'opacity-70'}`}>{m.subject}</div>
-                    <div className="whitespace-pre-wrap break-words" dangerouslySetInnerHTML={{ __html: m.body }} />
+                    <div className="whitespace-pre-wrap break-words" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(m.body) }} />
                     <div className={`text-[10px] mt-1.5 ${m.direction === 'outbound' ? 'text-indigo-400' : 'text-slate-400'}`}>
                       {formatTimestamp(m.createdAt)}
                     </div>

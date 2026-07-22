@@ -1,12 +1,29 @@
 import { Router } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { buildFromHeader, sendMail } from '../lib/mailer.js';
 
 const router = Router();
-router.use(requireAuth);
+router.use(requireAuth, asyncHandler(attachMembership));
 
-router.post('/send', asyncHandler(async (req, res) => {
+// This sends real external email from the platform's own domain, so it's
+// gated on manageBookings (proposal/contract sends are the only current
+// caller) rather than just being logged in, plus a rate limit — bare
+// requireAuth would let any self-signed-up account use it as an open relay.
+const sendLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many emails sent. Please try again later.' },
+});
+
+router.post('/send', sendLimiter, asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageBookings) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const { to, subject, body, fromName, replyTo, pdfAttachment } = req.body || {};
   if (!to?.trim() || !subject?.trim() || !body?.trim()) {
     return res.status(400).json({ error: 'Recipient, subject, and body are required.' });
