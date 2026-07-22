@@ -425,9 +425,16 @@ export default function BookingFormPage() {
   const contractTemplateSkipRef = useRef(true);
   const proposalTemplateSkipRef = useRef(true);
   const autoCreatedEventRef = useRef(false);
+  // Background refreshes (e.g. the window-focus refetch in AuthContext) hand
+  // back a brand-new `booking` object even when nothing changed, which would
+  // otherwise re-run this effect and clobber whatever the user is mid-typing.
+  // Only actually hydrate once per booking id.
+  const hydratedBookingIdRef = useRef(null);
 
   useEffect(() => {
     if (booking) {
+      if (hydratedBookingIdRef.current === booking.id) return;
+      hydratedBookingIdRef.current = booking.id;
       setForm({
         id: booking.id,
         eventName: booking.eventName || '',
@@ -448,6 +455,7 @@ export default function BookingFormPage() {
         proposal: booking.proposal || null,
       });
     } else {
+      hydratedBookingIdRef.current = null;
       setForm(emptyForm());
     }
     setError('');

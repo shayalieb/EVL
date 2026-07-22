@@ -149,8 +149,16 @@ export default function EventFormPage() {
 
   const draftStatus = eventStatuses.find((s) => s.label.toLowerCase() === 'draft') || eventStatuses[0];
 
+  // Background refreshes (e.g. the window-focus refetch in AuthContext) hand
+  // back a brand-new `event` object even when nothing changed, which would
+  // otherwise re-run this effect and clobber whatever the user is mid-typing.
+  // Only actually hydrate once per event id.
+  const hydratedEventIdRef = useRef(null);
+
   useEffect(() => {
     if (event) {
+      if (hydratedEventIdRef.current === event.id) return;
+      hydratedEventIdRef.current = event.id;
       // Older saved events predate categoryTabs — derive an initial set from
       // whichever categories are already booked so nothing disappears.
       const categoryTabs = event.categoryTabs || Array.from(new Set(
@@ -175,6 +183,7 @@ export default function EventFormPage() {
         requests: event.requests || [emptyRequestItem()],
       });
     } else {
+      hydratedEventIdRef.current = null;
       setForm(emptyForm());
     }
     setError('');
