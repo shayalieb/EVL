@@ -35,6 +35,7 @@ export default function UsersTab() {
   const [removeTarget, setRemoveTarget] = useState(null);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [permissionFilter, setPermissionFilter] = useState('');
 
   useEffect(() => {
     apiFetch('/team/members')
@@ -79,9 +80,10 @@ export default function UsersTab() {
   if (loadError) return <div className="text-sm text-red-600">{loadError}</div>;
   if (!members) return <div className="text-sm text-slate-400">Loading…</div>;
 
-  const hasFilters = !!(search || roleFilter);
+  const hasFilters = !!(search || roleFilter || permissionFilter);
   const filteredMembers = members.filter((m) => {
     if (roleFilter && m.role !== roleFilter) return false;
+    if (permissionFilter && !m.permissions[permissionFilter]) return false;
     return matchesSearch(search, [m.firstName, m.lastName, m.email]);
   });
 
@@ -110,10 +112,16 @@ export default function UsersTab() {
             { value: 'member', label: 'Member' },
           ]}
         />
+        <FilterSelect
+          value={permissionFilter}
+          onChange={setPermissionFilter}
+          allLabel="All Permissions"
+          options={PERMISSION_FIELDS.map((p) => ({ value: p.key, label: p.label }))}
+        />
         {hasFilters && (
           <button
             type="button"
-            onClick={() => { setSearch(''); setRoleFilter(''); }}
+            onClick={() => { setSearch(''); setRoleFilter(''); setPermissionFilter(''); }}
             className="text-sm font-semibold text-slate-500 hover:text-slate-700"
           >
             Clear

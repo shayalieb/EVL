@@ -24,7 +24,7 @@ function followUpTone(dateStr) {
 }
 
 export default function BookingsPage() {
-  const { bookings, bookingStatuses, clients, deleteBooking, convertBookingToEvent } = useData();
+  const { bookings, bookingStatuses, eventTypes, clients, deleteBooking, convertBookingToEvent } = useData();
   const { can } = useAuth();
   const canEdit = can('manageBookings');
   const { showToast } = useToast();
@@ -33,11 +33,21 @@ export default function BookingsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
+  const [eventTypeFilter, setEventTypeFilter] = useState('');
+  const [depositFilter, setDepositFilter] = useState('');
 
-  const hasFilters = !!(search || statusFilter || priorityFilter);
+  function depositStatus(b) {
+    if (b.depositPaid) return 'paid';
+    if (b.depositAmount) return 'due';
+    return 'none';
+  }
+
+  const hasFilters = !!(search || statusFilter || priorityFilter || eventTypeFilter || depositFilter);
   const filteredBookings = bookings.filter((b) => {
     if (statusFilter && b.bookingStatus !== statusFilter) return false;
     if (priorityFilter && b.priority !== priorityFilter) return false;
+    if (eventTypeFilter && b.eventType !== eventTypeFilter) return false;
+    if (depositFilter && depositStatus(b) !== depositFilter) return false;
     const client = clients.find((c) => c.id === b.clientId);
     return matchesSearch(search, [client?.firstName, client?.lastName, b.eventType, b.notes]);
   });
@@ -91,10 +101,26 @@ export default function BookingsPage() {
           allLabel="All Priorities"
           options={PRIORITIES.map((p) => ({ value: p.value, label: p.label }))}
         />
+        <FilterSelect
+          value={eventTypeFilter}
+          onChange={setEventTypeFilter}
+          allLabel="All Event Types"
+          options={eventTypes.map((t) => ({ value: t, label: t }))}
+        />
+        <FilterSelect
+          value={depositFilter}
+          onChange={setDepositFilter}
+          allLabel="All Deposits"
+          options={[
+            { value: 'paid', label: 'Deposit Paid' },
+            { value: 'due', label: 'Deposit Due' },
+            { value: 'none', label: 'No Deposit' },
+          ]}
+        />
         {hasFilters && (
           <button
             type="button"
-            onClick={() => { setSearch(''); setStatusFilter(''); setPriorityFilter(''); }}
+            onClick={() => { setSearch(''); setStatusFilter(''); setPriorityFilter(''); setEventTypeFilter(''); setDepositFilter(''); }}
             className="text-sm font-semibold text-slate-500 hover:text-slate-700"
           >
             Clear

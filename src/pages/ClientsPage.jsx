@@ -5,8 +5,15 @@ import ClientModal from '../components/ClientModal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Tooltip from '../components/ui/Tooltip';
 import SearchInput from '../components/ui/SearchInput';
+import FilterSelect from '../components/ui/FilterSelect';
 import { useToast } from '../components/ui/Toast';
 import { matchesSearch } from '../lib/search';
+
+const ENGAGEMENT_OPTIONS = [
+  { value: 'has-confirmed', label: 'Has Confirmed Events' },
+  { value: 'has-pending', label: 'Has Pending Events' },
+  { value: 'no-events', label: 'No Events' },
+];
 
 export default function ClientsPage() {
   const { clients, deleteClient, computeClientEventCounts } = useData();
@@ -17,10 +24,18 @@ export default function ClientsPage() {
   const [editingClient, setEditingClient] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [search, setSearch] = useState('');
+  const [engagementFilter, setEngagementFilter] = useState('');
 
-  const filteredClients = clients.filter((c) =>
-    matchesSearch(search, [c.firstName, c.lastName, c.phone, c.email, c.notes])
-  );
+  const hasFilters = !!(search || engagementFilter);
+  const filteredClients = clients.filter((c) => {
+    if (engagementFilter) {
+      const counts = computeClientEventCounts(c.id);
+      if (engagementFilter === 'has-confirmed' && !(counts.confirmed > 0)) return false;
+      if (engagementFilter === 'has-pending' && !(counts.pending > 0)) return false;
+      if (engagementFilter === 'no-events' && (counts.confirmed > 0 || counts.pending > 0 || counts.declined > 0)) return false;
+    }
+    return matchesSearch(search, [c.firstName, c.lastName, c.phone, c.email, c.notes]);
+  });
 
   function openAdd() {
     setEditingClient(null);
@@ -52,8 +67,23 @@ export default function ClientsPage() {
         </button>
       </div>
 
-      <div className="mb-4">
+      <div className="flex items-center gap-2 flex-wrap mb-4">
         <SearchInput value={search} onChange={setSearch} placeholder="Search clients by name, phone, or email…" className="w-full sm:w-80" />
+        <FilterSelect
+          value={engagementFilter}
+          onChange={setEngagementFilter}
+          allLabel="All Clients"
+          options={ENGAGEMENT_OPTIONS}
+        />
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={() => { setSearch(''); setEngagementFilter(''); }}
+            className="text-sm font-semibold text-slate-500 hover:text-slate-700"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">

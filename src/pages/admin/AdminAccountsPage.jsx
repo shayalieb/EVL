@@ -25,6 +25,7 @@ export default function AdminAccountsPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [teamSizeFilter, setTeamSizeFilter] = useState('');
 
   function load() {
     apiFetch('/admin/accounts')
@@ -66,9 +67,16 @@ export default function AdminAccountsPage() {
   if (loadError) return <div className="text-sm text-red-600">{loadError}</div>;
   if (!accounts) return <div className="text-sm text-slate-400">Loading…</div>;
 
-  const hasFilters = !!(search || statusFilter);
+  function teamSizeBucket(a) {
+    if (a.memberCount <= 1) return 'solo';
+    if (a.memberCount <= 5) return 'small';
+    return 'large';
+  }
+
+  const hasFilters = !!(search || statusFilter || teamSizeFilter);
   const filteredAccounts = accounts.filter((a) => {
     if (statusFilter && accountStatus(a) !== statusFilter) return false;
+    if (teamSizeFilter && teamSizeBucket(a) !== teamSizeFilter) return false;
     return matchesSearch(search, [a.owner?.firstName, a.owner?.lastName, a.owner?.email]);
   });
 
@@ -97,10 +105,20 @@ export default function AdminAccountsPage() {
             { value: 'disabled', label: 'Disabled' },
           ]}
         />
+        <FilterSelect
+          value={teamSizeFilter}
+          onChange={setTeamSizeFilter}
+          allLabel="All Team Sizes"
+          options={[
+            { value: 'solo', label: 'Solo (1)' },
+            { value: 'small', label: 'Small (2–5)' },
+            { value: 'large', label: 'Large (6+)' },
+          ]}
+        />
         {hasFilters && (
           <button
             type="button"
-            onClick={() => { setSearch(''); setStatusFilter(''); }}
+            onClick={() => { setSearch(''); setStatusFilter(''); setTeamSizeFilter(''); }}
             className="text-sm font-semibold text-slate-500 hover:text-slate-700"
           >
             Clear

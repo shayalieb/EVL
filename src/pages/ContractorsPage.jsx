@@ -21,14 +21,28 @@ export default function ContractorsPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [priceFilter, setPriceFilter] = useState('');
 
   const categoryOptions = [...new Set(contractors.map((c) => c.contractorType1).filter(Boolean))]
     .sort()
     .map((cat) => ({ value: cat, label: cat }));
+  const roleOptions = [...new Set(contractors.map((c) => c.contractorType2).filter(Boolean))]
+    .sort()
+    .map((role) => ({ value: role, label: role }));
 
-  const hasFilters = !!(search || categoryFilter);
+  function priceBucket(c) {
+    const price = getPricingTiers(c)[0]?.price ?? 0;
+    if (price < 500) return 'under-500';
+    if (price <= 1500) return '500-1500';
+    return '1500-plus';
+  }
+
+  const hasFilters = !!(search || categoryFilter || roleFilter || priceFilter);
   const filteredContractors = contractors.filter((c) => {
     if (categoryFilter && c.contractorType1 !== categoryFilter) return false;
+    if (roleFilter && c.contractorType2 !== roleFilter) return false;
+    if (priceFilter && priceBucket(c) !== priceFilter) return false;
     return matchesSearch(search, [c.firstName, c.middleName, c.lastName, c.email, c.phone, c.contractorType1, c.contractorType2]);
   });
 
@@ -70,10 +84,26 @@ export default function ContractorsPage() {
           allLabel="All Categories"
           options={categoryOptions}
         />
+        <FilterSelect
+          value={roleFilter}
+          onChange={setRoleFilter}
+          allLabel="All Roles"
+          options={roleOptions}
+        />
+        <FilterSelect
+          value={priceFilter}
+          onChange={setPriceFilter}
+          allLabel="All Prices"
+          options={[
+            { value: 'under-500', label: 'Under $500' },
+            { value: '500-1500', label: '$500 – $1,500' },
+            { value: '1500-plus', label: '$1,500+' },
+          ]}
+        />
         {hasFilters && (
           <button
             type="button"
-            onClick={() => { setSearch(''); setCategoryFilter(''); }}
+            onClick={() => { setSearch(''); setCategoryFilter(''); setRoleFilter(''); setPriceFilter(''); }}
             className="text-sm font-semibold text-slate-500 hover:text-slate-700"
           >
             Clear

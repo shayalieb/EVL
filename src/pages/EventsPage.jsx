@@ -26,7 +26,7 @@ function formatDateWithWeekday(dateStr) {
 }
 
 export default function EventsPage() {
-  const { events, eventStatuses, deleteEvent, computeEventTotalCost, computeVendorStatus, getContractorById } = useData();
+  const { events, eventStatuses, eventTypes, deleteEvent, computeEventTotalCost, computeVendorStatus, getContractorById } = useData();
   const { can } = useAuth();
   const canEdit = can('manageEvents');
   const { showToast } = useToast();
@@ -36,6 +36,8 @@ export default function EventsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [vendorFilter, setVendorFilter] = useState('');
+  const [eventTypeFilter, setEventTypeFilter] = useState('');
+  const [contractorsFilter, setContractorsFilter] = useState('');
 
   function handleDelete() {
     deleteEvent(deleteTarget.id);
@@ -43,11 +45,14 @@ export default function EventsPage() {
     setDeleteTarget(null);
   }
 
-  const hasFilters = !!(search || statusFilter || vendorFilter);
+  const hasFilters = !!(search || statusFilter || vendorFilter || eventTypeFilter || contractorsFilter);
   const filteredEvents = events.filter((evt) => {
     if (statusFilter && evt.eventStatus !== statusFilter) return false;
     if (vendorFilter && computeVendorStatus(evt).status !== vendorFilter) return false;
-    return matchesSearch(search, [evt.name]);
+    if (eventTypeFilter && evt.eventType !== eventTypeFilter) return false;
+    if (contractorsFilter === 'has' && evt.contractorBookings.length === 0) return false;
+    if (contractorsFilter === 'none' && evt.contractorBookings.length > 0) return false;
+    return matchesSearch(search, [evt.name, evt.eventType]);
   });
 
   return (
@@ -84,10 +89,25 @@ export default function EventsPage() {
               { value: 'none', label: 'None' },
             ]}
           />
+          <FilterSelect
+            value={eventTypeFilter}
+            onChange={setEventTypeFilter}
+            allLabel="All Event Types"
+            options={eventTypes.map((t) => ({ value: t, label: t }))}
+          />
+          <FilterSelect
+            value={contractorsFilter}
+            onChange={setContractorsFilter}
+            allLabel="All Contractor Counts"
+            options={[
+              { value: 'has', label: 'Has Contractors' },
+              { value: 'none', label: 'No Contractors' },
+            ]}
+          />
           {hasFilters && (
             <button
               type="button"
-              onClick={() => { setSearch(''); setStatusFilter(''); setVendorFilter(''); }}
+              onClick={() => { setSearch(''); setStatusFilter(''); setVendorFilter(''); setEventTypeFilter(''); setContractorsFilter(''); }}
               className="text-sm font-semibold text-slate-500 hover:text-slate-700"
             >
               Clear

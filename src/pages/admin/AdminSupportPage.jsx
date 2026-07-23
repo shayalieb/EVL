@@ -57,6 +57,7 @@ export default function AdminSupportPage() {
   const [activeId, setActiveId] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [replyFilter, setReplyFilter] = useState('');
 
   function load() {
     apiFetch('/admin/support/threads')
@@ -70,9 +71,11 @@ export default function AdminSupportPage() {
   if (!threads) return <div className="text-sm text-slate-400">Loading…</div>;
 
   const active = threads.find((t) => t.id === activeId);
-  const hasFilters = !!(search || statusFilter);
+  const hasFilters = !!(search || statusFilter || replyFilter);
   const filteredThreads = threads.filter((t) => {
     if (statusFilter && t.status !== statusFilter) return false;
+    if (replyFilter === 'needs-reply' && !(t.unreadFromUser > 0)) return false;
+    if (replyFilter === 'read' && t.unreadFromUser > 0) return false;
     return matchesSearch(search, [t.subject, t.account.owner?.firstName, t.account.owner?.lastName]);
   });
 
@@ -90,10 +93,19 @@ export default function AdminSupportPage() {
             { value: 'closed', label: 'Closed' },
           ]}
         />
+        <FilterSelect
+          value={replyFilter}
+          onChange={setReplyFilter}
+          allLabel="All Threads"
+          options={[
+            { value: 'needs-reply', label: 'Needs Reply' },
+            { value: 'read', label: 'Read' },
+          ]}
+        />
         {hasFilters && (
           <button
             type="button"
-            onClick={() => { setSearch(''); setStatusFilter(''); }}
+            onClick={() => { setSearch(''); setStatusFilter(''); setReplyFilter(''); }}
             className="text-sm font-semibold text-slate-500 hover:text-slate-700"
           >
             Clear
