@@ -11,7 +11,7 @@ import { uid } from '../lib/storage';
 import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, bookingDocumentDownloadUrl } from '../lib/bookingDocuments';
 import { generateProposalPdf, generateProposalPdfAttachment } from '../lib/proposalPdf';
 import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms } from '../lib/contracts';
-import { listInvoices, createInvoice, sendInvoice, voidInvoice } from '../lib/invoices';
+import { listInvoices, createInvoice, updateInvoice, sendInvoice, voidInvoice } from '../lib/invoices';
 import { generateContractPdf, getContractPdfDataUrl } from '../lib/contractPdf';
 import { sendEmail } from '../lib/email/send';
 import { formatCurrency as currency, formatEventDate, formatVenueLine, formatEventTime } from '../lib/format';
@@ -414,11 +414,13 @@ function ClientCombobox({ clients, value, onChange }) {
 
 // Pure presentational read of state that already exists elsewhere on the
 // page (booking, proposal, contract, event) — no new data, just orientation.
-function pipelineSteps(booking, proposal, contract) {
+function pipelineSteps(booking, proposal, contract, invoices) {
   const proposalSent = !!proposal?.sentAt;
   const contractSent = !!contract;
   const fullySigned = contract?.status === 'fully_signed';
   const hasEvent = !!booking?.convertedEventId;
+  const invoicePaid = (invoices || []).some((inv) => inv.status === 'paid');
+  const invoiceAwaitingPayment = (invoices || []).some((inv) => inv.status === 'sent');
   const state = (done, current) => (done ? 'done' : current ? 'current' : 'upcoming');
   return [
     { label: 'Booking', state: state(!!booking, !booking) },
@@ -426,6 +428,7 @@ function pipelineSteps(booking, proposal, contract) {
     { label: 'Contract', state: state(contractSent, proposalSent && !contractSent) },
     { label: 'Signed', state: state(fullySigned, contractSent && !fullySigned) },
     { label: 'Event', state: state(hasEvent, fullySigned && !hasEvent) },
+    { label: 'Payment', state: state(invoicePaid, invoiceAwaitingPayment && !invoicePaid) },
   ];
 }
 
@@ -500,6 +503,7 @@ export default function BookingFormPage() {
   const [proposalOfferingPickerOpen, setProposalOfferingPickerOpen] = useState(false);
   const [contractOfferingPickerOpen, setContractOfferingPickerOpen] = useState(false);
   const [invoices, setInvoices] = useState([]);
+  const [editingInvoiceId, setEditingInvoiceId] = useState(null);
   const [newInvoiceOfferings, setNewInvoiceOfferings] = useState([]);
   const [newInvoiceRecipientEmail, setNewInvoiceRecipientEmail] = useState('');
   const [newInvoiceRecipientName, setNewInvoiceRecipientName] = useState('');
@@ -627,11 +631,14 @@ export default function BookingFormPage() {
     return () => { cancelled = true; };
   }, [booking?.id]);
 
-  // Seeds the new-invoice composer from the client each time a different
-  // booking loads — same idea as the contract prep panel above.
+  // Seeds the new-invoice composer from the client and the current proposal
+  // each time a different booking loads — same idea as the contract prep
+  // panel above, so the invoice starts out billing everything that was
+  // proposed and the user trims/adds from there.
   useEffect(() => {
     if (!booking) return;
-    setNewInvoiceOfferings([]);
+    setEditingInvoiceId(null);
+    setNewInvoiceOfferings(booking.proposal?.offerings || []);
     setNewInvoiceDueDate('');
     setNewInvoiceMemo('');
     setLastInvoicePayLink(null);
@@ -900,6 +907,37 @@ export default function BookingFormPage() {
     };
   }
 
+  // A brand-new invoice prepends; an edited draft replaces in place so it
+  // doesn't jump to the top of the history list just for being touched.
+  function upsertInvoiceInList(invoice, { isNew }) {
+    setInvoices((prev) => (isNew ? [invoice, ...prev] : prev.map((inv) => (inv.id === invoice.id ? invoice : inv))));
+  }
+
+  function resetInvoiceComposer() {
+    setEditingInvoiceId(null);
+    setNewInvoiceOfferings([]);
+    setNewInvoiceDueDate('');
+    setNewInvoiceMemo('');
+    setShowInvoicePreview(false);
+  }
+
+  function handleEditInvoiceClick(inv) {
+    setEditingInvoiceId(inv.id);
+    setNewInvoiceRecipientEmail(inv.recipientEmail || '');
+    setNewInvoiceRecipientName(inv.recipientName || '');
+    setNewInvoiceDueDate(inv.dueDate ? inv.dueDate.slice(0, 10) : '');
+    setNewInvoiceMemo(inv.memo || '');
+    setNewInvoiceOfferings(inv.snapshot?.lineItems || []);
+    setShowInvoicePreview(false);
+  }
+
+  function handleCancelEditInvoice() {
+    resetInvoiceComposer();
+    setNewInvoiceOfferings(booking.proposal?.offerings || []);
+    setNewInvoiceRecipientEmail(client?.email || '');
+    setNewInvoiceRecipientName(client ? `${client.firstName} ${client.lastName}`.trim() : '');
+  }
+
   async function handleSaveInvoiceDraft() {
     if (!newInvoiceRecipientEmail.trim()) {
       showToast('Recipient email is required', 'error');
@@ -907,20 +945,19 @@ export default function BookingFormPage() {
     }
     setSavingInvoiceDraft(true);
     try {
-      const invoice = await createInvoice({
-        bookingId: booking.id,
+      const payload = {
         recipientEmail: newInvoiceRecipientEmail.trim(),
         recipientName: newInvoiceRecipientName.trim(),
         snapshot: buildInvoiceSnapshot(),
         dueDate: newInvoiceDueDate || null,
         memo: newInvoiceMemo || null,
-      });
-      setInvoices((prev) => [invoice, ...prev]);
-      setNewInvoiceOfferings([]);
-      setNewInvoiceDueDate('');
-      setNewInvoiceMemo('');
-      setShowInvoicePreview(false);
-      showToast('Invoice saved as draft');
+      };
+      const invoice = editingInvoiceId
+        ? await updateInvoice(editingInvoiceId, payload)
+        : await createInvoice({ bookingId: booking.id, ...payload });
+      upsertInvoiceInList(invoice, { isNew: !editingInvoiceId });
+      resetInvoiceComposer();
+      showToast(editingInvoiceId ? 'Invoice draft updated' : 'Invoice saved as draft');
     } catch (err) {
       showToast(err.message || 'Failed to save invoice', 'error');
     } finally {
@@ -939,21 +976,20 @@ export default function BookingFormPage() {
     }
     setSendingNewInvoice(true);
     try {
-      const invoice = await createInvoice({
-        bookingId: booking.id,
+      const payload = {
         recipientEmail: newInvoiceRecipientEmail.trim(),
         recipientName: newInvoiceRecipientName.trim(),
         snapshot: buildInvoiceSnapshot(),
         dueDate: newInvoiceDueDate || null,
         memo: newInvoiceMemo || null,
-      });
-      const { invoice: sent, payLink, emailError } = await sendInvoice(invoice.id);
-      setInvoices((prev) => [sent, ...prev]);
+      };
+      const draft = editingInvoiceId
+        ? await updateInvoice(editingInvoiceId, payload)
+        : await createInvoice({ bookingId: booking.id, ...payload });
+      const { invoice: sent, payLink, emailError } = await sendInvoice(draft.id);
+      upsertInvoiceInList(sent, { isNew: !editingInvoiceId });
       setLastInvoicePayLink({ invoiceId: sent.id, link: payLink });
-      setNewInvoiceOfferings([]);
-      setNewInvoiceDueDate('');
-      setNewInvoiceMemo('');
-      setShowInvoicePreview(false);
+      resetInvoiceComposer();
       if (emailError) showToast(emailError, 'error');
       else showToast(`Invoice sent to ${newInvoiceRecipientEmail.trim()}`);
     } catch (err) {
@@ -1215,7 +1251,7 @@ export default function BookingFormPage() {
         </div>
       )}
 
-      <PipelineStepper steps={pipelineSteps(booking, form.proposal, contract)} />
+      <PipelineStepper steps={pipelineSteps(booking, form.proposal, contract, invoices)} />
 
       <div className="flex border-b border-slate-200 mb-6">
         {TABS.map((t) => {
@@ -1991,7 +2027,7 @@ export default function BookingFormPage() {
           ) : (
             <>
               <div className={cardClass}>
-                <h3 className={cardTitleClass}>New Invoice</h3>
+                <h3 className={cardTitleClass}>{editingInvoiceId ? 'Edit Draft Invoice' : 'New Invoice'}</h3>
                 <p className="text-sm text-slate-500 mb-5 max-w-xl">
                   Paid online via Stripe, straight into your own connected account — see Settings → Billing to connect one first.
                 </p>
@@ -2037,13 +2073,23 @@ export default function BookingFormPage() {
                   >
                     {showInvoicePreview ? 'Hide Preview' : 'Preview'}
                   </button>
+                  {editingInvoiceId && (
+                    <button
+                      type="button"
+                      onClick={handleCancelEditInvoice}
+                      disabled={savingInvoiceDraft || sendingNewInvoice}
+                      className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      Cancel
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={handleSaveInvoiceDraft}
                     disabled={savingInvoiceDraft || sendingNewInvoice}
                     className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60"
                   >
-                    {savingInvoiceDraft ? 'Saving…' : 'Save Draft'}
+                    {savingInvoiceDraft ? 'Saving…' : editingInvoiceId ? 'Save Changes' : 'Save Draft'}
                   </button>
                   <button
                     type="button"
@@ -2096,7 +2142,17 @@ export default function BookingFormPage() {
                               </div>
                             </div>
                             <div className="flex gap-2">
-                              {inv.status === 'draft' && (
+                              {inv.status === 'draft' && editingInvoiceId !== inv.id && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditInvoiceClick(inv)}
+                                  disabled={acting}
+                                  className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-50 disabled:opacity-50"
+                                >
+                                  Edit
+                                </button>
+                              )}
+                              {inv.status === 'draft' && editingInvoiceId !== inv.id && (
                                 <button
                                   type="button"
                                   onClick={() => handleSendExistingInvoice(inv.id)}
@@ -2105,6 +2161,9 @@ export default function BookingFormPage() {
                                 >
                                   {acting ? 'Sending…' : 'Send'}
                                 </button>
+                              )}
+                              {inv.status === 'draft' && editingInvoiceId === inv.id && (
+                                <span className="px-3 py-1.5 text-xs font-semibold text-indigo-600">Editing above ↑</span>
                               )}
                               {inv.status === 'sent' && payLink && (
                                 <button
