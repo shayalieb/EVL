@@ -11,7 +11,7 @@ import { uid } from '../lib/storage';
 import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, bookingDocumentDownloadUrl } from '../lib/bookingDocuments';
 import { generateProposalPdf, generateProposalPdfAttachment } from '../lib/proposalPdf';
 import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms } from '../lib/contracts';
-import { listInvoices, createInvoice, updateInvoice, sendInvoice, markInvoicePayment, voidInvoice } from '../lib/invoices';
+import { listInvoices, createInvoice, updateInvoice, sendInvoice, markInvoicePayment, sendReceipt, voidInvoice } from '../lib/invoices';
 import { generateContractPdf, getContractPdfDataUrl } from '../lib/contractPdf';
 import { sendEmail } from '../lib/email/send';
 import { formatCurrency as currency, formatEventDate, formatVenueLine, formatEventTime } from '../lib/format';
@@ -904,6 +904,7 @@ export default function BookingFormPage() {
     return {
       businessInfo: currentUser.businessInfo || {},
       client: client ? { firstName: client.firstName, lastName: client.lastName, email: client.email, phone: client.phone } : {},
+      event: { type: form.eventType, date: form.eventDate, venue: formatVenueLine(form.venue) },
       lineItems: newInvoiceOfferings,
     };
   }
@@ -1025,6 +1026,20 @@ export default function BookingFormPage() {
       showToast(`Invoice marked as ${label}`);
     } catch (err) {
       showToast(err.message || 'Failed to update payment status', 'error');
+    } finally {
+      setInvoiceActionId(null);
+    }
+  }
+
+  async function handleSendReceiptClick(invoiceId) {
+    setInvoiceActionId(invoiceId);
+    try {
+      const { invoice: updated, emailError } = await sendReceipt(invoiceId);
+      setInvoices((prev) => prev.map((inv) => (inv.id === updated.id ? updated : inv)));
+      if (emailError) showToast(emailError, 'error');
+      else showToast(`Receipt sent to ${updated.recipientEmail}`);
+    } catch (err) {
+      showToast(err.message || 'Failed to send receipt', 'error');
     } finally {
       setInvoiceActionId(null);
     }
@@ -2122,9 +2137,12 @@ export default function BookingFormPage() {
                     <InvoiceDocument
                       businessInfo={currentUser.businessInfo}
                       client={client}
+                      event={{ type: form.eventType, date: form.eventDate, venue: formatVenueLine(form.venue) }}
                       lineItems={newInvoiceOfferings}
                       dueDate={newInvoiceDueDate}
                       memo={newInvoiceMemo}
+                      status="draft"
+                      invoiceId={editingInvoiceId}
                     />
                   </div>
                 )}
@@ -2145,7 +2163,9 @@ export default function BookingFormPage() {
                       const acting = invoiceActionId === inv.id;
                       const payLink = lastInvoicePayLink?.invoiceId === inv.id ? lastInvoicePayLink.link : null;
                       const editingPartialAmount = partialAmountDraft?.invoiceId === inv.id;
-                      const canMarkPayment = ['sent', 'partial', 'paid'].includes(inv.status);
+                      // Draft included so a business that never connects Stripe can still
+                      // track invoices by hand, without going through the Stripe-gated Send.
+                      const canMarkPayment = ['draft', 'sent', 'partial', 'paid'].includes(inv.status);
                       return (
                         <div key={inv.id} className="border border-slate-200 rounded-lg p-4">
                           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -2160,6 +2180,7 @@ export default function BookingFormPage() {
                                 {inv.recipientName || inv.recipientEmail}
                                 {inv.dueDate && ` · Due ${formatEventDate(inv.dueDate.slice(0, 10))}`}
                                 {inv.paidAt && ` · Paid ${formatEventDate(inv.paidAt.slice(0, 10))}`}
+                                {inv.receiptSentAt && ` · Receipt sent ${formatEventDate(inv.receiptSentAt.slice(0, 10))}`}
                               </div>
                             </div>
                             <div className="flex items-center gap-2 flex-wrap">
@@ -2258,6 +2279,16 @@ export default function BookingFormPage() {
                                     </button>
                                   )}
                                 </>
+                              )}
+                              {inv.status === 'paid' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSendReceiptClick(inv.id)}
+                                  disabled={acting}
+                                  className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-50 disabled:opacity-50"
+                                >
+                                  {acting ? 'Sending…' : inv.receiptSentAt ? 'Resend Receipt' : 'Send Receipt'}
+                                </button>
                               )}
                               {(inv.status === 'sent' || inv.status === 'partial') && (
                                 <button

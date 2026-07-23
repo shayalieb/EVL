@@ -44,12 +44,14 @@ function serializeForOwner(invoice) {
     sentAt: invoice.sentAt,
     paidAt: invoice.paidAt,
     voidedAt: invoice.voidedAt,
+    receiptSentAt: invoice.receiptSentAt,
     createdAt: invoice.createdAt,
   };
 }
 
 function serializeForPublic(invoice) {
   return {
+    id: invoice.id,
     snapshot: invoice.snapshot,
     dueDate: invoice.dueDate,
     memo: invoice.memo,
@@ -57,7 +59,9 @@ function serializeForPublic(invoice) {
     recipientName: invoice.recipientName,
     total: invoiceTotal(invoice),
     paidAmount: invoice.paidAmount ?? 0,
+    sentAt: invoice.sentAt,
     paidAt: invoice.paidAt,
+    createdAt: invoice.createdAt,
   };
 }
 
@@ -173,18 +177,21 @@ router.post('/:id/send', asyncHandler(async (req, res) => {
   res.json({ invoice: serializeForOwner(updated), payLink: payUrl, emailError });
 }));
 
-// Manual payment-status override for money collected outside Stripe (cash,
-// check, wire, etc.) — Stripe's own webhook (stripeWebhooks.js) sets 'paid'
-// automatically when the online pay link is used, this covers everything
-// else. Source status must already be sent/partial/paid (not draft/void) —
-// there's nothing to record a payment against otherwise.
+// Manual payment-status override — covers money collected outside Stripe
+// (cash, check, wire, etc.) as well as businesses that never connect Stripe
+// at all and just want to track invoices by hand. Stripe's own webhook
+// (stripeWebhooks.js) sets 'paid' automatically when the online pay link is
+// used; this endpoint is the manual equivalent for everything else,
+// including moving a draft straight to sent/partial/paid without ever
+// going through the Stripe-gated POST /:id/send. Only 'void' is off-limits
+// — there's nothing to record a payment against once cancelled.
 router.post('/:id/mark-payment', asyncHandler(async (req, res) => {
   const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
   if (!invoice || invoice.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Invoice not found.' });
   }
-  if (!['sent', 'partial', 'paid'].includes(invoice.status)) {
-    return res.status(400).json({ error: 'Only a sent invoice can have its payment status updated.' });
+  if (invoice.status === 'void') {
+    return res.status(400).json({ error: 'A voided invoice cannot have its payment status changed.' });
   }
 
   const { status } = req.body || {};
@@ -203,9 +210,52 @@ router.post('/:id/mark-payment', asyncHandler(async (req, res) => {
   } else {
     return res.status(400).json({ error: "status must be 'sent', 'partial', or 'paid'." });
   }
+  // Leaving draft status behind for the first time — stamp sentAt so it
+  // reads consistently with an invoice that went out through POST /:id/send.
+  if (invoice.status === 'draft') data.sentAt = new Date();
 
   const updated = await prisma.invoice.update({ where: { id: invoice.id }, data });
   res.json({ invoice: serializeForOwner(updated) });
+}));
+
+// A receipt only makes sense once money has actually landed — gated on
+// 'paid' rather than allowing it any time, unlike mark-payment above.
+router.post('/:id/send-receipt', asyncHandler(async (req, res) => {
+  const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
+  if (!invoice || invoice.accountId !== req.membership.accountId) {
+    return res.status(404).json({ error: 'Invoice not found.' });
+  }
+  if (invoice.status !== 'paid') {
+    return res.status(400).json({ error: 'Only a fully paid invoice has a receipt to send.' });
+  }
+
+  const fromName = invoice.snapshot?.businessInfo?.name || 'GigWorks';
+  const total = invoiceTotal(invoice);
+  const totalLabel = total.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  const paidDateLabel = invoice.paidAt
+    ? new Date(invoice.paidAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    : null;
+  const lineItemsHtml = (invoice.snapshot?.lineItems || [])
+    .map((item) => `<tr><td style="padding:4px 16px 4px 0">${item.name || 'Item'}</td><td style="padding:4px 0;text-align:right">${lineItemTotal(item).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</td></tr>`)
+    .join('');
+
+  let emailError = null;
+  try {
+    await sendMail({
+      from: buildFromHeader(fromName),
+      to: invoice.recipientEmail,
+      subject: `Receipt for ${totalLabel} from ${fromName}`,
+      html: `<p>Hi ${invoice.recipientName || 'there'},</p><p>This confirms your payment of ${totalLabel}${paidDateLabel ? ` received ${paidDateLabel}` : ''}.</p><table>${lineItemsHtml}</table><p>Thank you for your business!</p><p>${fromName}</p>`,
+    });
+  } catch {
+    emailError = 'Could not send the receipt email — check the recipient address and try again.';
+  }
+
+  const updated = emailError
+    ? invoice
+    : await prisma.invoice.update({ where: { id: invoice.id }, data: { receiptSentAt: new Date() } });
+
+  res.json({ invoice: serializeForOwner(updated), emailError });
 }));
 
 router.post('/:id/void', asyncHandler(async (req, res) => {

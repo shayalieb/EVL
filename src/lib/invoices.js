@@ -37,6 +37,11 @@ export async function markInvoicePayment(invoiceId, { status, paidAmount } = {})
   return data.invoice;
 }
 
+// Only meaningful once status is 'paid' — see the server route for the gate.
+export async function sendReceipt(invoiceId) {
+  return apiFetch(`/invoices/${invoiceId}/send-receipt`, { method: 'POST' });
+}
+
 export async function voidInvoice(invoiceId) {
   const data = await apiFetch(`/invoices/${invoiceId}/void`, { method: 'POST' });
   return data.invoice;

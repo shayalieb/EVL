@@ -82,18 +82,14 @@ export default function InvoicePayPage() {
     );
   }
 
-  const { snapshot, dueDate, memo, status, total, paidAmount } = invoice;
+  const { id, snapshot, dueDate, memo, status, total, paidAmount, sentAt, createdAt } = invoice;
   const remaining = total - (paidAmount || 0);
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-8 pb-28">
       <div className="max-w-2xl mx-auto">
-        <div className="flex items-center gap-3 mb-6">
+        <div className="mb-6">
           <Logo className="h-10 w-auto" />
-          <div>
-            <div className="font-bold text-slate-800">{snapshot.businessInfo?.name || 'Invoice'}</div>
-            <div className="text-xs text-slate-400">Invoice for {snapshot.client?.firstName} {snapshot.client?.lastName}</div>
-          </div>
         </div>
 
         {error && <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
@@ -117,10 +113,15 @@ export default function InvoicePayPage() {
         <InvoiceDocument
           businessInfo={snapshot.businessInfo}
           client={snapshot.client}
+          event={snapshot.event}
           lineItems={snapshot.lineItems}
           dueDate={dueDate}
           memo={memo}
           total={total}
+          status={status}
+          paidAmount={paidAmount}
+          invoiceId={id}
+          issueDate={sentAt || createdAt}
         />
       </div>
 
