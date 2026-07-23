@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import Logo from '../components/ui/Logo';
+import InvoiceDocument from '../components/InvoiceDocument';
 import { viewInvoiceByToken, startInvoiceCheckout } from '../lib/invoices';
-import { computeOfferingTotal } from '../lib/offerings';
 import { formatCurrency as currency, formatEventDate } from '../lib/format';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -83,7 +83,6 @@ export default function InvoicePayPage() {
   }
 
   const { snapshot, dueDate, memo, status, total } = invoice;
-  const lineItems = snapshot.lineItems || [];
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-8 pb-28">
@@ -109,33 +108,14 @@ export default function InvoicePayPage() {
           </div>
         )}
 
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-sm">
-          <div className="flex items-center justify-between gap-4 mb-6">
-            <h1 className="text-lg font-bold text-slate-800">Invoice</h1>
-            {dueDate && <div className="text-xs text-slate-400">Due {formatEventDate(dueDate.slice(0, 10))}</div>}
-          </div>
-
-          <div className="space-y-3 mb-6">
-            {lineItems.map((item) => (
-              <div key={item.id} className="flex items-start justify-between gap-4 pb-3 border-b border-slate-100 last:border-0 last:pb-0">
-                <div>
-                  <div className="text-sm font-semibold text-slate-700">{item.name}</div>
-                  {item.details && <div className="text-xs text-slate-400 mt-0.5">{item.details}</div>}
-                </div>
-                <div className="text-sm font-semibold text-slate-700 shrink-0">{currency(computeOfferingTotal(item))}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex items-center justify-between pt-4 border-t border-slate-200">
-            <span className="text-sm font-bold text-slate-800">Total</span>
-            <span className="text-lg font-bold text-slate-800">{currency(total)}</span>
-          </div>
-
-          {memo && (
-            <div className="mt-6 pt-6 border-t border-slate-100 text-sm text-slate-600 whitespace-pre-wrap">{memo}</div>
-          )}
-        </div>
+        <InvoiceDocument
+          businessInfo={snapshot.businessInfo}
+          client={snapshot.client}
+          lineItems={snapshot.lineItems}
+          dueDate={dueDate}
+          memo={memo}
+          total={total}
+        />
       </div>
 
       {status === 'sent' && (

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ClientModal from '../components/ClientModal';
+import InvoiceDocument from '../components/InvoiceDocument';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Badge from '../components/ui/Badge';
 import { useData } from '../context/DataContext';
@@ -505,6 +506,7 @@ export default function BookingFormPage() {
   const [newInvoiceDueDate, setNewInvoiceDueDate] = useState('');
   const [newInvoiceMemo, setNewInvoiceMemo] = useState('');
   const [invoiceOfferingPickerOpen, setInvoiceOfferingPickerOpen] = useState(false);
+  const [showInvoicePreview, setShowInvoicePreview] = useState(false);
   const [savingInvoiceDraft, setSavingInvoiceDraft] = useState(false);
   const [sendingNewInvoice, setSendingNewInvoice] = useState(false);
   const [invoiceActionId, setInvoiceActionId] = useState(null);
@@ -633,6 +635,7 @@ export default function BookingFormPage() {
     setNewInvoiceDueDate('');
     setNewInvoiceMemo('');
     setLastInvoicePayLink(null);
+    setShowInvoicePreview(false);
   }, [booking?.id]);
 
   useEffect(() => {
@@ -916,6 +919,7 @@ export default function BookingFormPage() {
       setNewInvoiceOfferings([]);
       setNewInvoiceDueDate('');
       setNewInvoiceMemo('');
+      setShowInvoicePreview(false);
       showToast('Invoice saved as draft');
     } catch (err) {
       showToast(err.message || 'Failed to save invoice', 'error');
@@ -949,6 +953,7 @@ export default function BookingFormPage() {
       setNewInvoiceOfferings([]);
       setNewInvoiceDueDate('');
       setNewInvoiceMemo('');
+      setShowInvoicePreview(false);
       if (emailError) showToast(emailError, 'error');
       else showToast(`Invoice sent to ${newInvoiceRecipientEmail.trim()}`);
     } catch (err) {
@@ -2027,6 +2032,13 @@ export default function BookingFormPage() {
                 <div className="flex gap-2">
                   <button
                     type="button"
+                    onClick={() => setShowInvoicePreview((v) => !v)}
+                    className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
+                  >
+                    {showInvoicePreview ? 'Hide Preview' : 'Preview'}
+                  </button>
+                  <button
+                    type="button"
                     onClick={handleSaveInvoiceDraft}
                     disabled={savingInvoiceDraft || sendingNewInvoice}
                     className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60"
@@ -2043,6 +2055,17 @@ export default function BookingFormPage() {
                     Send Invoice
                   </button>
                 </div>
+                {showInvoicePreview && (
+                  <div className="mt-5 max-w-2xl">
+                    <InvoiceDocument
+                      businessInfo={currentUser.businessInfo}
+                      client={client}
+                      lineItems={newInvoiceOfferings}
+                      dueDate={newInvoiceDueDate}
+                      memo={newInvoiceMemo}
+                    />
+                  </div>
+                )}
               </div>
 
               {invoices.length > 0 && (
