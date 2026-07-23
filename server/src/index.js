@@ -13,6 +13,9 @@ import emailWebhooksRouter from './routes/emailWebhooks.js';
 import eventDocumentsRouter from './routes/eventDocuments.js';
 import bookingDocumentsRouter from './routes/bookingDocuments.js';
 import contractsRouter, { publicContractsRouter } from './routes/contracts.js';
+import billingRouter from './routes/billing.js';
+import invoicesRouter, { publicInvoicesRouter } from './routes/invoices.js';
+import stripeWebhooksRouter from './routes/stripeWebhooks.js';
 import calendarRouter from './routes/calendar.js';
 import supportRouter from './routes/support.js';
 import adminRouter from './routes/admin.js';
@@ -34,9 +37,12 @@ app.use(cors({
   },
   credentials: true,
 }));
-// Mounted before express.json() — Svix signature verification needs the
-// exact raw request bytes, not a parsed/re-serialized body.
+// Mounted before express.json() — Svix/Stripe signature verification needs
+// the exact raw request bytes, not a parsed/re-serialized body. Each raw()
+// call only applies to the app.use() it's passed to, so it's repeated per
+// webhook router rather than shared.
 app.use('/api/webhooks', express.raw({ type: '*/*' }), emailWebhooksRouter);
+app.use('/api/webhooks', express.raw({ type: '*/*' }), stripeWebhooksRouter);
 
 app.use(express.json());
 
@@ -68,6 +74,10 @@ app.use('/api/contracts', contractsRouter);
 // Public/unauthenticated — recipients click this link from an email, not
 // while logged into the app (same reasoning as calendar.js below).
 app.use('/api/contract-sign', publicContractsRouter);
+app.use('/api/billing', billingRouter);
+app.use('/api/invoices', invoicesRouter);
+// Public/unauthenticated — same reasoning as /api/contract-sign above.
+app.use('/api/invoice-pay', publicInvoicesRouter);
 app.use('/api/support', supportRouter);
 app.use('/api/admin', adminRouter);
 // Public/unauthenticated — recipients click this link from an email, not

@@ -6,6 +6,7 @@ import { SavingIndicatorProvider } from './components/ui/SavingIndicator';
 import AuthPage from './pages/AuthPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import ContractSignPage from './pages/ContractSignPage';
+import InvoicePayPage from './pages/InvoicePayPage';
 import AppLayout from './layouts/AppLayout';
 import HomePage from './pages/HomePage';
 import NoAccountAccessPage from './pages/NoAccountAccessPage';
@@ -57,6 +58,7 @@ function AppRoutes() {
       <Route path="/auth" element={<AuthGate><AuthPage /></AuthGate>} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/sign/:token" element={<ContractSignPage />} />
+      <Route path="/invoice/:token" element={<InvoicePayPage />} />
       <Route path="/" element={<ProtectedArea />}>
         <Route index element={<Navigate to="/home" replace />} />
         <Route path="home" element={<HomePage />} />

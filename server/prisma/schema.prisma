@@ -37,8 +37,22 @@ model Account {
   eventDocuments EventDocument[]
   bookingDocuments BookingDocument[]
   contracts      Contract[]
+  invoices       Invoice[]
   accountData    AccountData?
   supportThreads SupportThread[]
+
+  // Stripe Connect (Express) — set once onboarding starts. The three
+  // booleans are a local cache of the connected Account object, synced by
+  // account.updated webhooks (server/src/routes/stripeWebhooks.js) and by a
+  // manual refresh right after the onboarding redirect back into the app
+  // (server/src/routes/billing.js), since webhooks can lag that redirect by
+  // a few seconds. chargesEnabled (not just stripeAccountId being set) is
+  // what every invoice-sending code path actually checks, since Stripe can
+  // flag a previously-connected account and revoke it later.
+  stripeAccountId        String?  @unique
+  stripeDetailsSubmitted Boolean  @default(false)
+  stripeChargesEnabled   Boolean  @default(false)
+  stripePayoutsEnabled   Boolean  @default(false)
 }
 
 model Membership {
@@ -294,6 +308,52 @@ model Contract {
   ownerSignatureImage  String? @db.Text
 
   sentAt          DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([accountId, bookingId])
+}
+
+// A billable invoice for a booking, paid online via Stripe Connect directly
+// into the account's own connected Stripe account (see Account.stripeAccountId
+// above) — GigWorks never touches the funds. Unlike Contract (frozen and
+// sent in one step), an invoice has a real draft stage: snapshot/dueDate/memo
+// stay editable while status is 'draft', then lock once sent, mirroring the
+// spirit of Contract's frozen snapshot without a separate always-live field
+// (there's no "terms" equivalent an invoice needs to keep editing post-send).
+// A booking can have several invoices over time (e.g. deposit + balance), so
+// reads are always a list, unlike Contract's effective one-per-booking.
+// No stored total — always computed from snapshot.lineItems via
+// computeOfferingsTotal() (src/lib/offerings.js), same as Proposal never
+// storing a redundant total either.
+model Invoice {
+  id              String   @id @default(cuid())
+  accountId       String
+  account         Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  bookingId       String   // opaque localStorage id, same non-FK pattern as Contract.bookingId
+
+  snapshot        Json     // { businessInfo, client, lineItems: Offering[] }
+  dueDate         DateTime?
+  memo            String?  @db.Text
+
+  status          String   @default("draft") // 'draft' | 'sent' | 'paid' | 'void'
+
+  recipientEmail  String
+  recipientName   String?
+  ownerEmail      String
+
+  // Raw token emailed once, only its hash persisted — same reasoning as
+  // Contract's clientTokenHash/PasswordResetToken.tokenHash. Only one role
+  // (the client) ever needs a pay link, unlike Contract's client+owner pair.
+  payTokenHash    String?  @unique
+
+  stripeCheckoutSessionId String? @unique
+  stripePaymentIntentId   String?
+
+  sentAt          DateTime?
+  paidAt          DateTime?
+  voidedAt        DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

@@ -5,6 +5,7 @@ import { useToast } from '../components/ui/Toast';
 import ColorPicker from '../components/ui/ColorPicker';
 import Badge from '../components/ui/Badge';
 import UsersTab from './settings/UsersTab';
+import BillingTab from './settings/BillingTab';
 import { resizeImageToDataUrl } from '../lib/resizeImage';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -18,6 +19,7 @@ export default function SettingsPage() {
     { id: 'business', label: 'Business Info' },
     { id: 'fields', label: 'Custom Fields' },
     ...(isAdminOrOwner ? [{ id: 'users', label: 'Users' }] : []),
+    ...(isAdminOrOwner ? [{ id: 'billing', label: 'Billing' }] : []),
   ];
   const [tab, setTab] = useState('user');
 
@@ -43,6 +45,7 @@ export default function SettingsPage() {
       {tab === 'business' && <BusinessInfoTab />}
       {tab === 'fields' && <CustomFieldsTab />}
       {tab === 'users' && isAdminOrOwner && <UsersTab />}
+      {tab === 'billing' && isAdminOrOwner && <BillingTab />}
     </div>
   );
 }
