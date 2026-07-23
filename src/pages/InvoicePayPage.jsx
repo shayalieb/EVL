@@ -82,7 +82,8 @@ export default function InvoicePayPage() {
     );
   }
 
-  const { snapshot, dueDate, memo, status, total } = invoice;
+  const { snapshot, dueDate, memo, status, total, paidAmount } = invoice;
+  const remaining = total - (paidAmount || 0);
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-8 pb-28">
@@ -102,6 +103,11 @@ export default function InvoicePayPage() {
             Paid{invoice.paidAt ? ` on ${formatEventDate(invoice.paidAt.slice(0, 10))}` : ''}. Thank you!
           </div>
         )}
+        {status === 'partial' && (
+          <div className="mb-4 text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+            {currency(paidAmount)} of {currency(total)} received — {currency(remaining)} still due.
+          </div>
+        )}
         {status === 'void' && (
           <div className="mb-4 text-sm text-slate-600 bg-slate-100 border border-slate-200 rounded-lg px-3 py-2">
             This invoice has been voided and is no longer payable.
@@ -118,7 +124,7 @@ export default function InvoicePayPage() {
         />
       </div>
 
-      {status === 'sent' && (
+      {(status === 'sent' || status === 'partial') && (
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
           <div className="max-w-2xl mx-auto flex items-center justify-between gap-3">
             <span className="text-xs text-slate-400 hidden sm:block">Secure payment powered by Stripe</span>
@@ -129,7 +135,7 @@ export default function InvoicePayPage() {
               className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-700 disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {payingNow && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
-              Pay {currency(total)} Now
+              Pay {currency(remaining)} Now
             </button>
           </div>
         </div>

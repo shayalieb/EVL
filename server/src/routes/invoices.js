@@ -17,13 +17,15 @@ function frontendUrl() {
 // exactly — duplicated here (not imported, frontend and backend are
 // separate bundles) as a server-side sanity check before real money moves,
 // rather than trusting the client-supplied snapshot's total blindly.
-function lineItemTotal(item) {
+// Exported so stripeWebhooks.js can compute the same total when a webhook
+// marks an invoice paid, without a second copy of this math.
+export function lineItemTotal(item) {
   if (item?.type === 'perUnit') {
     return (Number(item.unitCount) || 0) * (Number(item.ratePerUnit) || 0);
   }
   return Number(item?.amount) || 0;
 }
-function invoiceTotal(invoice) {
+export function invoiceTotal(invoice) {
   return (invoice.snapshot?.lineItems || []).reduce((sum, item) => sum + lineItemTotal(item), 0);
 }
 
@@ -38,6 +40,7 @@ function serializeForOwner(invoice) {
     recipientEmail: invoice.recipientEmail,
     recipientName: invoice.recipientName,
     total: invoiceTotal(invoice),
+    paidAmount: invoice.paidAmount ?? 0,
     sentAt: invoice.sentAt,
     paidAt: invoice.paidAt,
     voidedAt: invoice.voidedAt,
@@ -53,6 +56,7 @@ function serializeForPublic(invoice) {
     status: invoice.status,
     recipientName: invoice.recipientName,
     total: invoiceTotal(invoice),
+    paidAmount: invoice.paidAmount ?? 0,
     paidAt: invoice.paidAt,
   };
 }
@@ -169,6 +173,41 @@ router.post('/:id/send', asyncHandler(async (req, res) => {
   res.json({ invoice: serializeForOwner(updated), payLink: payUrl, emailError });
 }));
 
+// Manual payment-status override for money collected outside Stripe (cash,
+// check, wire, etc.) — Stripe's own webhook (stripeWebhooks.js) sets 'paid'
+// automatically when the online pay link is used, this covers everything
+// else. Source status must already be sent/partial/paid (not draft/void) —
+// there's nothing to record a payment against otherwise.
+router.post('/:id/mark-payment', asyncHandler(async (req, res) => {
+  const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
+  if (!invoice || invoice.accountId !== req.membership.accountId) {
+    return res.status(404).json({ error: 'Invoice not found.' });
+  }
+  if (!['sent', 'partial', 'paid'].includes(invoice.status)) {
+    return res.status(400).json({ error: 'Only a sent invoice can have its payment status updated.' });
+  }
+
+  const { status } = req.body || {};
+  const total = invoiceTotal(invoice);
+  let data;
+  if (status === 'paid') {
+    data = { status: 'paid', paidAmount: total, paidAt: new Date() };
+  } else if (status === 'partial') {
+    const amount = Number(req.body?.paidAmount);
+    if (!(amount > 0) || amount >= total) {
+      return res.status(400).json({ error: 'Partial amount must be greater than $0 and less than the invoice total.' });
+    }
+    data = { status: 'partial', paidAmount: amount, paidAt: null };
+  } else if (status === 'sent') {
+    data = { status: 'sent', paidAmount: null, paidAt: null };
+  } else {
+    return res.status(400).json({ error: "status must be 'sent', 'partial', or 'paid'." });
+  }
+
+  const updated = await prisma.invoice.update({ where: { id: invoice.id }, data });
+  res.json({ invoice: serializeForOwner(updated) });
+}));
+
 router.post('/:id/void', asyncHandler(async (req, res) => {
   const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
   if (!invoice || invoice.accountId !== req.membership.accountId) {
@@ -227,7 +266,7 @@ publicInvoicesRouter.post('/:token/view', asyncHandler(async (req, res) => {
       if (session.payment_status === 'paid') {
         invoice = await prisma.invoice.update({
           where: { id: invoice.id },
-          data: { status: 'paid', paidAt: new Date(), stripePaymentIntentId: session.payment_intent },
+          data: { status: 'paid', paidAmount: invoiceTotal(invoice), paidAt: new Date(), stripePaymentIntentId: session.payment_intent },
         });
       }
     } catch {
@@ -247,7 +286,7 @@ publicInvoicesRouter.post('/:token/checkout', asyncHandler(async (req, res) => {
   if (!checkEmail(invoice, email)) {
     return res.status(403).json({ error: "That email doesn't match this link." });
   }
-  if (invoice.status !== 'sent') {
+  if (invoice.status !== 'sent' && invoice.status !== 'partial') {
     return res.status(400).json({ error: 'This invoice is no longer payable.' });
   }
 
@@ -257,26 +296,32 @@ publicInvoicesRouter.post('/:token/checkout', asyncHandler(async (req, res) => {
   }
 
   const stripe = getStripeClient();
-  const lineItems = invoice.snapshot.lineItems || [];
+  // A partial invoice has already had some amount recorded against it (e.g.
+  // an offline deposit) — charge only what's left as a single lump-sum line
+  // rather than the original itemized list, which would overcharge.
+  const remaining = invoiceTotal(invoice) - (invoice.paidAmount || 0);
+  const lineItems = invoice.status === 'partial'
+    ? [{ price_data: { currency: 'usd', product_data: { name: 'Remaining balance' }, unit_amount: Math.round(remaining * 100) }, quantity: 1 }]
+    : (invoice.snapshot.lineItems || []).map((item) => ({
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: item.name || 'Item',
+            ...(item.details ? { description: item.details } : {}),
+          },
+          // Direct charge, created on the connected account itself — funds
+          // land in that business's own Stripe balance/payouts, no platform
+          // involvement in the money movement (no application_fee_amount set
+          // anywhere — that's the one line to add later if a platform fee is
+          // ever introduced).
+          unit_amount: Math.round(lineItemTotal(item) * 100 / (item.type === 'perUnit' ? (Number(item.unitCount) || 1) : 1)),
+        },
+        quantity: item.type === 'perUnit' ? (Number(item.unitCount) || 1) : 1,
+      }));
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
     payment_method_types: ['card'],
-    line_items: lineItems.map((item) => ({
-      price_data: {
-        currency: 'usd',
-        product_data: {
-          name: item.name || 'Item',
-          ...(item.details ? { description: item.details } : {}),
-        },
-        // Direct charge, created on the connected account itself — funds
-        // land in that business's own Stripe balance/payouts, no platform
-        // involvement in the money movement (no application_fee_amount set
-        // anywhere — that's the one line to add later if a platform fee is
-        // ever introduced).
-        unit_amount: Math.round(lineItemTotal(item) * 100 / (item.type === 'perUnit' ? (Number(item.unitCount) || 1) : 1)),
-      },
-      quantity: item.type === 'perUnit' ? (Number(item.unitCount) || 1) : 1,
-    })),
+    line_items: lineItems,
     metadata: { invoiceId: invoice.id },
     success_url: `${frontendUrl()}/invoice/${req.params.token}?paid=1&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${frontendUrl()}/invoice/${req.params.token}`,

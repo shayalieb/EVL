@@ -26,6 +26,17 @@ export async function sendInvoice(invoiceId) {
   return apiFetch(`/invoices/${invoiceId}/send`, { method: 'POST' });
 }
 
+// Manual payment-status override (open/partially paid/paid) for money
+// collected outside Stripe — see server/src/routes/invoices.js's
+// POST /:id/mark-payment for the source-status rules.
+export async function markInvoicePayment(invoiceId, { status, paidAmount } = {}) {
+  const data = await apiFetch(`/invoices/${invoiceId}/mark-payment`, {
+    method: 'POST',
+    body: JSON.stringify({ status, paidAmount }),
+  });
+  return data.invoice;
+}
+
 export async function voidInvoice(invoiceId) {
   const data = await apiFetch(`/invoices/${invoiceId}/void`, { method: 'POST' });
   return data.invoice;

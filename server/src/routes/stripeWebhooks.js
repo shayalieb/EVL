@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getStripeClient } from '../lib/stripe.js';
+import { invoiceTotal } from './invoices.js';
 
 const router = Router();
 
@@ -33,14 +34,21 @@ router.post('/stripe', asyncHandler(async (req, res) => {
     const session = event.data.object;
     const invoiceId = session.metadata?.invoiceId;
     if (invoiceId) {
-      // Status-guarded update rather than a unique-constraint-collision
-      // check (nothing here would collide on a redelivery) — a repeated
-      // delivery of the same event just matches zero rows the second time,
-      // which is the natural idempotency key for this shape.
-      await prisma.invoice.updateMany({
-        where: { id: invoiceId, status: { not: 'paid' } },
-        data: { status: 'paid', paidAt: new Date(), stripePaymentIntentId: session.payment_intent },
-      });
+      // Checkout was created for either the full total ('sent') or the
+      // remaining balance ('partial') — either way, completion means the
+      // invoice is now fully paid, so paidAmount is always set to the full
+      // total rather than added to whatever was there before.
+      const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+      // Status-guarded rather than a unique-constraint-collision check
+      // (nothing here would collide on a redelivery) — a repeated delivery
+      // of the same event just no-ops the second time, which is the
+      // natural idempotency key for this shape.
+      if (invoice && invoice.status !== 'paid') {
+        await prisma.invoice.update({
+          where: { id: invoiceId },
+          data: { status: 'paid', paidAmount: invoiceTotal(invoice), paidAt: new Date(), stripePaymentIntentId: session.payment_intent },
+        });
+      }
     }
   } else if (event.type === 'account.updated') {
     const account = event.data.object;

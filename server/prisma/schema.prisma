@@ -337,7 +337,11 @@ model Invoice {
   dueDate         DateTime?
   memo            String?  @db.Text
 
-  status          String   @default("draft") // 'draft' | 'sent' | 'paid' | 'void'
+  status          String   @default("draft") // 'draft' | 'sent' | 'partial' | 'paid' | 'void'
+  // How much of the total has been recorded as paid — set to the full total
+  // automatically by the Stripe webhook, or entered by hand when marking an
+  // offline (cash/check/etc.) payment. Null/0 while still 'sent'.
+  paidAmount      Float?
 
   recipientEmail  String
   recipientName   String?

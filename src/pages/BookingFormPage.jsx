@@ -11,7 +11,7 @@ import { uid } from '../lib/storage';
 import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, bookingDocumentDownloadUrl } from '../lib/bookingDocuments';
 import { generateProposalPdf, generateProposalPdfAttachment } from '../lib/proposalPdf';
 import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms } from '../lib/contracts';
-import { listInvoices, createInvoice, updateInvoice, sendInvoice, voidInvoice } from '../lib/invoices';
+import { listInvoices, createInvoice, updateInvoice, sendInvoice, markInvoicePayment, voidInvoice } from '../lib/invoices';
 import { generateContractPdf, getContractPdfDataUrl } from '../lib/contractPdf';
 import { sendEmail } from '../lib/email/send';
 import { formatCurrency as currency, formatEventDate, formatVenueLine, formatEventTime } from '../lib/format';
@@ -420,7 +420,7 @@ function pipelineSteps(booking, proposal, contract, invoices) {
   const fullySigned = contract?.status === 'fully_signed';
   const hasEvent = !!booking?.convertedEventId;
   const invoicePaid = (invoices || []).some((inv) => inv.status === 'paid');
-  const invoiceAwaitingPayment = (invoices || []).some((inv) => inv.status === 'sent');
+  const invoiceAwaitingPayment = (invoices || []).some((inv) => inv.status === 'sent' || inv.status === 'partial');
   const state = (done, current) => (done ? 'done' : current ? 'current' : 'upcoming');
   return [
     { label: 'Booking', state: state(!!booking, !booking) },
@@ -515,6 +515,7 @@ export default function BookingFormPage() {
   const [sendingNewInvoice, setSendingNewInvoice] = useState(false);
   const [invoiceActionId, setInvoiceActionId] = useState(null);
   const [lastInvoicePayLink, setLastInvoicePayLink] = useState(null); // { invoiceId, link } — only known right after sending, same as contract sign links
+  const [partialAmountDraft, setPartialAmountDraft] = useState(null); // { invoiceId, value } — inline "$ paid so far" editor for one row at a time
   const [contractPreviewUrl, setContractPreviewUrl] = useState('');
   const [showContractPreview, setShowContractPreview] = useState(false);
   const [loadingContractPreview, setLoadingContractPreview] = useState(false);
@@ -1009,6 +1010,21 @@ export default function BookingFormPage() {
       else showToast(`Invoice sent to ${sent.recipientEmail}`);
     } catch (err) {
       showToast(err.message || 'Failed to send invoice', 'error');
+    } finally {
+      setInvoiceActionId(null);
+    }
+  }
+
+  async function handleMarkInvoicePayment(invoiceId, status, paidAmount) {
+    setInvoiceActionId(invoiceId);
+    try {
+      const updated = await markInvoicePayment(invoiceId, { status, paidAmount });
+      setInvoices((prev) => prev.map((inv) => (inv.id === updated.id ? updated : inv)));
+      setPartialAmountDraft(null);
+      const label = { sent: 'open', partial: 'partially paid', paid: 'paid' }[status];
+      showToast(`Invoice marked as ${label}`);
+    } catch (err) {
+      showToast(err.message || 'Failed to update payment status', 'error');
     } finally {
       setInvoiceActionId(null);
     }
@@ -2121,19 +2137,24 @@ export default function BookingFormPage() {
                     {invoices.map((inv) => {
                       const statusMeta = {
                         draft: { label: 'Draft', color: '#94a3b8' },
-                        sent: { label: 'Sent', color: '#eab308' },
+                        sent: { label: 'Open', color: '#eab308' },
+                        partial: { label: 'Partially Paid', color: '#f97316' },
                         paid: { label: 'Paid', color: '#22c55e' },
                         void: { label: 'Void', color: '#ef4444' },
                       }[inv.status];
                       const acting = invoiceActionId === inv.id;
                       const payLink = lastInvoicePayLink?.invoiceId === inv.id ? lastInvoicePayLink.link : null;
+                      const editingPartialAmount = partialAmountDraft?.invoiceId === inv.id;
+                      const canMarkPayment = ['sent', 'partial', 'paid'].includes(inv.status);
                       return (
                         <div key={inv.id} className="border border-slate-200 rounded-lg p-4">
                           <div className="flex items-center justify-between flex-wrap gap-3">
                             <div>
                               <div className="flex items-center gap-2 mb-1">
                                 <Badge color={statusMeta.color}>{statusMeta.label}</Badge>
-                                <span className="text-sm font-bold text-slate-800">{currency(inv.total)}</span>
+                                <span className="text-sm font-bold text-slate-800">
+                                  {inv.status === 'partial' ? `${currency(inv.paidAmount)} of ${currency(inv.total)}` : currency(inv.total)}
+                                </span>
                               </div>
                               <div className="text-xs text-slate-400">
                                 {inv.recipientName || inv.recipientEmail}
@@ -2141,7 +2162,7 @@ export default function BookingFormPage() {
                                 {inv.paidAt && ` · Paid ${formatEventDate(inv.paidAt.slice(0, 10))}`}
                               </div>
                             </div>
-                            <div className="flex gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               {inv.status === 'draft' && editingInvoiceId !== inv.id && (
                                 <button
                                   type="button"
@@ -2165,7 +2186,7 @@ export default function BookingFormPage() {
                               {inv.status === 'draft' && editingInvoiceId === inv.id && (
                                 <span className="px-3 py-1.5 text-xs font-semibold text-indigo-600">Editing above ↑</span>
                               )}
-                              {inv.status === 'sent' && payLink && (
+                              {(inv.status === 'sent' || inv.status === 'partial') && payLink && (
                                 <button
                                   type="button"
                                   onClick={() => handleCopyInvoiceLink(payLink)}
@@ -2174,7 +2195,71 @@ export default function BookingFormPage() {
                                   Copy Pay Link
                                 </button>
                               )}
-                              {inv.status === 'sent' && (
+                              {editingPartialAmount ? (
+                                <>
+                                  <div className="relative">
+                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      autoFocus
+                                      value={partialAmountDraft.value}
+                                      onChange={(e) => setPartialAmountDraft({ invoiceId: inv.id, value: e.target.value })}
+                                      className="w-24 pl-5 pr-2 py-1.5 rounded-lg border border-slate-300 text-xs"
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMarkInvoicePayment(inv.id, 'partial', Number(partialAmountDraft.value))}
+                                    disabled={acting || !(Number(partialAmountDraft.value) > 0)}
+                                    className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPartialAmountDraft(null)}
+                                    className="px-2 py-1.5 text-xs text-slate-400 hover:text-slate-600"
+                                  >
+                                    Cancel
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  {canMarkPayment && inv.status !== 'sent' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMarkInvoicePayment(inv.id, 'sent', null)}
+                                      disabled={acting}
+                                      className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-50 disabled:opacity-50"
+                                    >
+                                      Mark Open
+                                    </button>
+                                  )}
+                                  {canMarkPayment && inv.status !== 'paid' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setPartialAmountDraft({ invoiceId: inv.id, value: inv.paidAmount ? String(inv.paidAmount) : '' })}
+                                      disabled={acting}
+                                      className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-50 disabled:opacity-50"
+                                    >
+                                      Mark Partial
+                                    </button>
+                                  )}
+                                  {canMarkPayment && inv.status !== 'paid' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMarkInvoicePayment(inv.id, 'paid', null)}
+                                      disabled={acting}
+                                      className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50"
+                                    >
+                                      Mark Paid
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                              {(inv.status === 'sent' || inv.status === 'partial') && (
                                 <button
                                   type="button"
                                   onClick={() => handleVoidInvoiceClick(inv.id)}
