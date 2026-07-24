@@ -1802,7 +1802,19 @@ export default function BookingFormPage() {
             </div>
           ) : !form.proposal ? (
             <div className={cardClass}>
-              <p className="text-sm text-slate-400 text-center py-8">Push this booking to a proposal first, then you can move it to a contract.</p>
+              <p className="text-sm text-slate-500 text-center pt-8 pb-4 max-w-md mx-auto">
+                A contract is built from a proposal's pricing and details — push this booking to a proposal first, then come back here.
+              </p>
+              <div className="flex justify-center pb-8">
+                <button
+                  type="button"
+                  onClick={() => { handlePushToProposal(); setActiveTab('proposal'); }}
+                  data-testid="booking-form-contract-push-to-proposal-button"
+                  className={primaryButtonClass}
+                >
+                  Push to Proposal
+                </button>
+              </div>
             </div>
           ) : !contract ? (
             <div className={cardClass}>
@@ -1836,6 +1848,11 @@ export default function BookingFormPage() {
                 badge={<span className="text-sm font-bold text-slate-800">{currency(computeGrandTotal(contractLineItems, contractOfferings))}</span>}
                 testId="booking-form-contract-pricing-toggle"
               >
+                {booking.proposal?.offerings?.length > 0 && (
+                  <p className="text-xs text-slate-400 mb-3">
+                    Copied from your Proposal — edit freely, this won't change the Proposal itself.
+                  </p>
+                )}
                 <OfferingsEditor
                   offerings={contractOfferings}
                   onChange={setContractOfferings}
@@ -2161,6 +2178,11 @@ export default function BookingFormPage() {
                   </div>
                 </div>
                 <div className="max-w-2xl mb-5">
+                  {!editingInvoiceId && booking.proposal?.offerings?.length > 0 && (
+                    <p className="text-xs text-slate-400 mb-3">
+                      Copied from your Proposal — edit freely, this won't change the Proposal itself.
+                    </p>
+                  )}
                   <OfferingsEditor
                     offerings={newInvoiceOfferings}
                     onChange={setNewInvoiceOfferings}
