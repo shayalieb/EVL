@@ -1621,6 +1621,20 @@ export default function BookingFormPage() {
             )}
           </div>
         </div>
+
+        {booking && (
+          <div className={`${cardClass} flex items-center justify-between flex-wrap gap-3`}>
+            <p className="text-sm text-slate-500">Booking info looks good — ready to put together a proposal?</p>
+            <button
+              type="button"
+              onClick={() => { if (!form.proposal) handlePushToProposal(); setActiveTab('proposal'); }}
+              data-testid="booking-form-info-continue-to-proposal-button"
+              className={primaryButtonClass}
+            >
+              Continue to Proposal →
+            </button>
+          </div>
+        )}
         </div>
 
         <div className={activeTab === 'proposal' ? 'space-y-6' : 'hidden'}>
@@ -1784,6 +1798,20 @@ export default function BookingFormPage() {
                 </div>
               </div>
 
+              {(form.proposal.offerings || []).length > 0 && (
+                <div className={`${cardClass} flex items-center justify-between flex-wrap gap-3`}>
+                  <p className="text-sm text-slate-500">Pricing's in place — ready to turn this into a contract?</p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('contract')}
+                    data-testid="booking-form-proposal-continue-to-contract-button"
+                    className={primaryButtonClass}
+                  >
+                    Continue to Contract →
+                  </button>
+                </div>
+              )}
+
               <DocumentSection
                 category="proposal"
                 docs={proposalDocs}
@@ -1813,6 +1841,22 @@ export default function BookingFormPage() {
                   className={primaryButtonClass}
                 >
                   Push to Proposal
+                </button>
+              </div>
+            </div>
+          ) : !contract && (form.proposal.offerings || []).length === 0 ? (
+            <div className={cardClass}>
+              <p className="text-sm text-slate-500 text-center pt-8 pb-4 max-w-md mx-auto">
+                This booking's proposal doesn't have any pricing yet — add at least one item there before moving it to a contract.
+              </p>
+              <div className="flex justify-center pb-8">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('proposal')}
+                  data-testid="booking-form-contract-finish-proposal-button"
+                  className={primaryButtonClass}
+                >
+                  Go to Proposal
                 </button>
               </div>
             </div>
@@ -2127,6 +2171,20 @@ export default function BookingFormPage() {
                   )}
                 </div>
               )}
+
+              {contract.status === 'fully_signed' && (
+                <div className={`${cardClass} flex items-center justify-between flex-wrap gap-3`}>
+                  <p className="text-sm text-slate-500">Signed and ready — go ahead and invoice for it.</p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('invoices')}
+                    data-testid="booking-form-contract-continue-to-invoicing-button"
+                    className={primaryButtonClass}
+                  >
+                    Continue to Invoicing →
+                  </button>
+                </div>
+              )}
             </>
           )}
 
@@ -2146,137 +2204,157 @@ export default function BookingFormPage() {
             </div>
           ) : (
             <>
-              <div className={cardClass}>
-                <h3 className={cardTitleClass}>{editingInvoiceId ? 'Edit Draft Invoice' : 'New Invoice'}</h3>
-                <p className="text-sm text-slate-500 mb-5 max-w-xl">
-                  Paid online via Stripe, straight into your own connected account — see Settings → Billing to connect one first.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-5 max-w-3xl">
-                  <div>
-                    <label className={labelClass}>Invoice #</label>
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={newInvoiceNumber}
-                      onChange={(e) => setNewInvoiceNumber(e.target.value)}
-                      data-testid="booking-form-invoice-number-input"
-                      className={inputClass}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Recipient Email *</label>
-                    <input type="email" value={newInvoiceRecipientEmail} onChange={(e) => setNewInvoiceRecipientEmail(e.target.value)} data-testid="booking-form-invoice-recipient-email-input" className={inputClass} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Recipient Name</label>
-                    <input value={newInvoiceRecipientName} onChange={(e) => setNewInvoiceRecipientName(e.target.value)} data-testid="booking-form-invoice-recipient-name-input" className={inputClass} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Due Date</label>
-                    <input type="date" value={newInvoiceDueDate} onChange={(e) => setNewInvoiceDueDate(e.target.value)} data-testid="booking-form-invoice-due-date-input" className={inputClass} />
-                  </div>
-                </div>
-                <div className="max-w-2xl mb-5">
-                  {!editingInvoiceId && booking.proposal?.offerings?.length > 0 && (
-                    <p className="text-xs text-slate-400 mb-3">
-                      Copied from your Proposal — edit freely, this won't change the Proposal itself.
-                    </p>
-                  )}
-                  <OfferingsEditor
-                    offerings={newInvoiceOfferings}
-                    onChange={setNewInvoiceOfferings}
-                    onAddClick={() => setInvoiceOfferingPickerOpen(true)}
-                  />
-                  <div className="flex justify-end mt-3 text-sm font-bold text-slate-800">
-                    Total: {currency(computeOfferingsTotal(newInvoiceOfferings))}
-                  </div>
-                </div>
-                <div className="max-w-2xl mb-5">
-                  <label className={labelClass}>Memo</label>
-                  <textarea
-                    rows={2}
-                    placeholder="Shown at the bottom of the invoice — carries over to future invoices until changed"
-                    value={newInvoiceMemo}
-                    onChange={(e) => setNewInvoiceMemo(e.target.value)}
-                    data-testid="booking-form-invoice-memo-textarea"
-                    className={inputClass}
-                  />
-                </div>
-                <div className="max-w-2xl mb-5">
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={newInvoiceAcceptPayment}
-                      onChange={(e) => setNewInvoiceAcceptPayment(e.target.checked)}
-                      data-testid="booking-form-invoice-accept-payment-checkbox"
-                      className="mt-0.5 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <span>
-                      <span className="block text-sm font-semibold text-slate-700">Accept Payment</span>
-                      <span className="block text-xs text-slate-500">
-                        {newInvoiceAcceptPayment
-                          ? 'Recipient can pay online via Stripe. Turn off if this invoice is being paid outside GigWorks.'
-                          : 'This invoice will be sent as a document only — no online payment option, no Stripe required.'}
-                      </span>
-                    </span>
-                  </label>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowInvoicePreview((v) => !v)}
-                    data-testid="booking-form-invoice-preview-button"
-                    className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
-                  >
-                    {showInvoicePreview ? 'Hide Preview' : 'Preview'}
-                  </button>
-                  {editingInvoiceId && (
+              {!editingInvoiceId && contract?.status !== 'fully_signed' ? (
+                <div className={cardClass}>
+                  <p className="text-sm text-slate-500 text-center pt-8 pb-4 max-w-md mx-auto">
+                    Invoicing opens up once the contract for this booking is signed by both sides.
+                  </p>
+                  <div className="flex justify-center pb-8">
                     <button
                       type="button"
-                      onClick={handleCancelEditInvoice}
-                      disabled={savingInvoiceDraft || sendingNewInvoice}
-                      data-testid="booking-form-invoice-cancel-edit-button"
-                      className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60"
+                      onClick={() => setActiveTab('contract')}
+                      data-testid="booking-form-invoices-go-to-contract-button"
+                      className={primaryButtonClass}
                     >
-                      Cancel
+                      Go to Contract
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleSaveInvoiceDraft}
-                    disabled={savingInvoiceDraft || sendingNewInvoice}
-                    data-testid="booking-form-invoice-save-draft-button"
-                    className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60"
-                  >
-                    {savingInvoiceDraft ? 'Saving…' : editingInvoiceId ? 'Save Changes' : 'Save Draft'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSendNewInvoice}
-                    disabled={sendingNewInvoice || savingInvoiceDraft}
-                    data-testid="booking-form-invoice-send-button"
-                    className={`${primaryButtonClass} disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
-                  >
-                    {sendingNewInvoice && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
-                    Send Invoice
-                  </button>
-                </div>
-                {showInvoicePreview && (
-                  <div className="mt-5 max-w-2xl" data-testid="booking-form-invoice-preview-container">
-                    <InvoiceDocument
-                      businessInfo={currentUser.businessInfo}
-                      client={client}
-                      event={{ type: form.eventType, date: form.eventDate, venue: formatVenueLine(form.venue) }}
-                      lineItems={newInvoiceOfferings}
-                      dueDate={newInvoiceDueDate}
-                      memo={newInvoiceMemo}
-                      status="draft"
-                      number={newInvoiceNumber ? Number(newInvoiceNumber) : null}
-                    />
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <>
+                  <div className={cardClass}>
+                    <h3 className={cardTitleClass}>{editingInvoiceId ? 'Edit Draft Invoice' : 'New Invoice'}</h3>
+                    <p className="text-sm text-slate-500 mb-5 max-w-xl">
+                      Paid online via Stripe, straight into your own connected account — see Settings → Billing to connect one first.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-5 max-w-3xl">
+                      <div>
+                        <label className={labelClass}>Invoice #</label>
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={newInvoiceNumber}
+                          onChange={(e) => setNewInvoiceNumber(e.target.value)}
+                          data-testid="booking-form-invoice-number-input"
+                          className={inputClass}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Recipient Email *</label>
+                        <input type="email" value={newInvoiceRecipientEmail} onChange={(e) => setNewInvoiceRecipientEmail(e.target.value)} data-testid="booking-form-invoice-recipient-email-input" className={inputClass} />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Recipient Name</label>
+                        <input value={newInvoiceRecipientName} onChange={(e) => setNewInvoiceRecipientName(e.target.value)} data-testid="booking-form-invoice-recipient-name-input" className={inputClass} />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Due Date</label>
+                        <input type="date" value={newInvoiceDueDate} onChange={(e) => setNewInvoiceDueDate(e.target.value)} data-testid="booking-form-invoice-due-date-input" className={inputClass} />
+                      </div>
+                    </div>
+                    <div className="max-w-2xl mb-5">
+                      {!editingInvoiceId && booking.proposal?.offerings?.length > 0 && (
+                        <p className="text-xs text-slate-400 mb-3">
+                          Copied from your Proposal — edit freely, this won't change the Proposal itself.
+                        </p>
+                      )}
+                      <OfferingsEditor
+                        offerings={newInvoiceOfferings}
+                        onChange={setNewInvoiceOfferings}
+                        onAddClick={() => setInvoiceOfferingPickerOpen(true)}
+                      />
+                      <div className="flex justify-end mt-3 text-sm font-bold text-slate-800">
+                        Total: {currency(computeOfferingsTotal(newInvoiceOfferings))}
+                      </div>
+                    </div>
+                    <div className="max-w-2xl mb-5">
+                      <label className={labelClass}>Memo</label>
+                      <textarea
+                        rows={2}
+                        placeholder="Shown at the bottom of the invoice — carries over to future invoices until changed"
+                        value={newInvoiceMemo}
+                        onChange={(e) => setNewInvoiceMemo(e.target.value)}
+                        data-testid="booking-form-invoice-memo-textarea"
+                        className={inputClass}
+                      />
+                    </div>
+                    <div className="max-w-2xl mb-5">
+                      <label className="flex items-start gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newInvoiceAcceptPayment}
+                          onChange={(e) => setNewInvoiceAcceptPayment(e.target.checked)}
+                          data-testid="booking-form-invoice-accept-payment-checkbox"
+                          className="mt-0.5 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>
+                          <span className="block text-sm font-semibold text-slate-700">Accept Payment</span>
+                          <span className="block text-xs text-slate-500">
+                            {newInvoiceAcceptPayment
+                              ? 'Recipient can pay online via Stripe. Turn off if this invoice is being paid outside GigWorks.'
+                              : 'This invoice will be sent as a document only — no online payment option, no Stripe required.'}
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowInvoicePreview((v) => !v)}
+                        data-testid="booking-form-invoice-preview-button"
+                        className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
+                      >
+                        {showInvoicePreview ? 'Hide Preview' : 'Preview'}
+                      </button>
+                      {editingInvoiceId && (
+                        <button
+                          type="button"
+                          onClick={handleCancelEditInvoice}
+                          disabled={savingInvoiceDraft || sendingNewInvoice}
+                          data-testid="booking-form-invoice-cancel-edit-button"
+                          className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleSaveInvoiceDraft}
+                        disabled={savingInvoiceDraft || sendingNewInvoice}
+                        data-testid="booking-form-invoice-save-draft-button"
+                        className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        {savingInvoiceDraft ? 'Saving…' : editingInvoiceId ? 'Save Changes' : 'Save Draft'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSendNewInvoice}
+                        disabled={sendingNewInvoice || savingInvoiceDraft}
+                        data-testid="booking-form-invoice-send-button"
+                        className={`${primaryButtonClass} disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
+                      >
+                        {sendingNewInvoice && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
+                        Send Invoice
+                      </button>
+                    </div>
+                    {showInvoicePreview && (
+                      <div className="mt-5 max-w-2xl" data-testid="booking-form-invoice-preview-container">
+                        <InvoiceDocument
+                          businessInfo={currentUser.businessInfo}
+                          client={client}
+                          event={{ type: form.eventType, date: form.eventDate, venue: formatVenueLine(form.venue) }}
+                          lineItems={newInvoiceOfferings}
+                          dueDate={newInvoiceDueDate}
+                          memo={newInvoiceMemo}
+                          status="draft"
+                          number={newInvoiceNumber ? Number(newInvoiceNumber) : null}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
 
               {invoices.length > 0 && (
                 <div className={cardClass}>
