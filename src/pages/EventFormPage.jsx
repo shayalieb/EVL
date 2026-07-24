@@ -303,7 +303,7 @@ export default function EventFormPage() {
   const duration = computeDurationHours(form.startTime, form.endTime);
   const availableContractors = contractors.filter((c) => !form.contractorBookings.some((b) => b.contractorId === c.id));
   const prepContractors = getPrepContractors(form, contractors);
-  const prepEmailDraft = renderPrepSheetEmail(form, prepContractors, form.requests);
+  const prepEmailDraft = renderPrepSheetEmail(form, prepContractors, form.requests, undefined, currentUser.businessInfo);
   // Documents attached directly to a request are shown inline on that
   // request's row, not duplicated in the general Documents widget/picker.
   const requestDocumentIds = new Set(form.requests.map((r) => r.documentId).filter(Boolean));
@@ -547,7 +547,7 @@ export default function EventFormPage() {
 
   async function handleDownloadPdf() {
     try {
-      await generatePrepSheetPdf(form, prepContractors, form.requests);
+      await generatePrepSheetPdf(form, prepContractors, form.requests, currentUser.businessInfo);
     } catch (err) {
       showToast(err.message || 'Failed to generate PDF', 'error');
     }
@@ -560,7 +560,7 @@ export default function EventFormPage() {
       // they were never offered as a separate checkbox in the modal.
       const requestDocIds = form.requests.map((r) => r.documentId).filter(Boolean);
       const mergedDocumentIds = Array.from(new Set([...documentIds, ...requestDocIds]));
-      const pdfAttachment = await generatePrepSheetPdfAttachment(form, prepContractors, form.requests);
+      const pdfAttachment = await generatePrepSheetPdfAttachment(form, prepContractors, form.requests, currentUser.businessInfo);
       let successCount = 0;
       for (const contractorId of recipientIds) {
         const contractor = contractors.find((c) => c.id === contractorId);

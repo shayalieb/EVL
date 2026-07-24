@@ -212,9 +212,9 @@ function BusinessInfoTab() {
         <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} data-testid="settings-business-email-input" className={inputClass} />
       </div>
       <div>
-        <label className={labelClass}>Contract Accent Color</label>
+        <label className={labelClass}>Brand Accent Color</label>
         <ColorPicker value={form.accentColor} onChange={(c) => setForm((f) => ({ ...f, accentColor: c }))} />
-        <p className="mt-1 text-xs text-slate-400">Used for separators and headings on every proposal and contract PDF.</p>
+        <p className="mt-1 text-xs text-slate-400">Used for separators, headings, and table accents on proposals, contracts, prep sheets, and invoices — pick from the palette or click the wheel for any custom color.</p>
       </div>
       <button type="submit" disabled={!canEdit} data-testid="settings-business-save-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed">
         Save Business Info

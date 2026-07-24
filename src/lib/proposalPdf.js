@@ -1,5 +1,6 @@
 import { formatCurrency as currency, formatEventDate, formatVenueLine, formatEventTime } from './format';
 import { computeOfferingTotal, computeOfferingsTotal } from './offerings';
+import { DEFAULT_ACCENT_COLOR, hexToRgb, lightenRgb } from './colorTheme';
 
 function loadImageDimensions(dataUrl) {
   return new Promise((resolve) => {
@@ -27,6 +28,7 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
   const doc = new jsPDF();
   const marginX = 14;
   const pageWidth = doc.internal.pageSize.getWidth();
+  const accentRgb = hexToRgb(businessInfo?.accentColor || DEFAULT_ACCENT_COLOR);
   let y = 18;
 
   // Letterhead — company logo (if set) beside the business name/contact info.
@@ -53,8 +55,10 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
   }
 
   y = Math.max(y, 28) + 4;
-  doc.setDrawColor(225);
+  doc.setDrawColor(...accentRgb);
+  doc.setLineWidth(0.6);
   doc.line(marginX, y, pageWidth - marginX, y);
+  doc.setLineWidth(0.2);
   y += 11;
 
   doc.setFontSize(20);
@@ -95,7 +99,7 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
     body: eventRows,
     theme: 'striped',
     styles: { fontSize: 10 },
-    headStyles: { fillColor: [79, 70, 229] },
+    headStyles: { fillColor: accentRgb },
     columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } },
   });
   y = doc.lastAutoTable.finalY + 10;
@@ -116,12 +120,12 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
     body: investmentRows,
     theme: 'striped',
     styles: { fontSize: 10 },
-    headStyles: { fillColor: [79, 70, 229] },
+    headStyles: { fillColor: accentRgb },
     columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } },
     didParseCell: (data) => {
       if (data.section === 'body' && data.row.raw[0] === 'Grand Total') {
         data.cell.styles.fontStyle = 'bold';
-        data.cell.styles.fillColor = [238, 242, 255];
+        data.cell.styles.fillColor = lightenRgb(accentRgb);
       }
     },
   });
@@ -137,7 +141,7 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
       body: scheduleRows,
       theme: 'striped',
       styles: { fontSize: 10 },
-      headStyles: { fillColor: [79, 70, 229] },
+      headStyles: { fillColor: accentRgb },
       columnStyles: { 0: { fontStyle: 'bold', cellWidth: 30 } },
     });
     y = doc.lastAutoTable.finalY + 10;
@@ -158,7 +162,7 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
       body: offeringRows,
       theme: 'striped',
       styles: { fontSize: 10 },
-      headStyles: { fillColor: [79, 70, 229] },
+      headStyles: { fillColor: accentRgb },
       columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } },
     });
     y = doc.lastAutoTable.finalY + 10;
@@ -167,7 +171,7 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
   const sections = (booking.proposal?.sections || []).filter((s) => s.title);
   for (const section of sections) {
     if (y > 255) { doc.addPage(); y = 20; }
-    doc.setFillColor(79, 70, 229);
+    doc.setFillColor(...accentRgb);
     doc.rect(marginX, y, pageWidth - marginX * 2, 7.5, 'F');
     doc.setFontSize(10);
     doc.setTextColor(255);

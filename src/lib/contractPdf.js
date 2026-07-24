@@ -1,22 +1,6 @@
 import { formatCurrency as currency, formatEventDate, formatVenueLine } from './format';
 import { computeOfferingTotal, computeOfferingsTotal } from './offerings';
-
-const DEFAULT_ACCENT_COLOR = '#4f46e5';
-
-function hexToRgb(hex) {
-  const clean = (hex || '').replace('#', '');
-  const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean;
-  const num = Number.parseInt(full, 16);
-  if (Number.isNaN(num) || full.length !== 6) return [79, 70, 229];
-  return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
-}
-
-// Blends a color most of the way to white — used for subtle row highlights
-// (e.g. the Grand Total line) that should tint with the chosen accent color
-// rather than always being the same fixed light-indigo.
-function lightenRgb([r, g, b], amount = 0.9) {
-  return [r, g, b].map((c) => Math.round(c + (255 - c) * amount));
-}
+import { DEFAULT_ACCENT_COLOR, hexToRgb, lightenRgb } from './colorTheme';
 
 function loadImageDimensions(dataUrl) {
   return new Promise((resolve) => {

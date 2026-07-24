@@ -1,6 +1,7 @@
 import Badge from './ui/Badge';
 import { computeOfferingTotal, computeOfferingsTotal } from '../lib/offerings';
 import { formatCurrency as currency, formatEventDate } from '../lib/format';
+import { DEFAULT_ACCENT_COLOR } from '../lib/colorTheme';
 
 const STATUS_META = {
   draft: { label: 'Draft', color: '#94a3b8' },
@@ -28,10 +29,11 @@ export default function InvoiceDocument({
   const statusMeta = status ? STATUS_META[status] : null;
   const balanceDue = grandTotal - (paidAmount || 0);
   const eventLine = event ? [event.type, event.date ? formatEventDate(event.date) : null].filter(Boolean).join(' · ') : '';
+  const accent = businessInfo?.accentColor || DEFAULT_ACCENT_COLOR;
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-sm">
-      <div className="flex items-start justify-between gap-4 pb-5 mb-5 border-b border-slate-100 flex-wrap">
+      <div className="flex items-start justify-between gap-4 pb-5 mb-5 flex-wrap" style={{ borderBottom: `2px solid ${accent}` }}>
         <div className="flex items-center gap-3">
           {businessInfo?.logo && <img src={businessInfo.logo} alt="" className="h-12 w-auto object-contain" />}
           <div>
@@ -76,7 +78,7 @@ export default function InvoiceDocument({
         <div className="overflow-x-auto mb-6">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-200 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">
+              <tr className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wide" style={{ borderBottom: `2px solid ${accent}` }}>
                 <th className="pb-2 font-semibold">Description</th>
                 <th className="pb-2 font-semibold text-right w-16">Qty</th>
                 <th className="pb-2 font-semibold text-right w-24">Rate</th>

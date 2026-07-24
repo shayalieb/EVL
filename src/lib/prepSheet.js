@@ -1,4 +1,5 @@
 import { formatEventDate as formatDate, formatEventTime as formatTime } from './format';
+import { DEFAULT_ACCENT_COLOR } from './colorTheme';
 
 // Deliberately reads only name/role/time off each contractor+booking —
 // never email or pricing/tier info, since the prep sheet is meant to be
@@ -19,7 +20,8 @@ export function getPrepContractors(form, contractors) {
     .sort((a, b) => (a.startTime || '99:99').localeCompare(b.startTime || '99:99'));
 }
 
-export function renderPrepSheetEmail(form, prepContractors, requests = [], attachedDocs = []) {
+export function renderPrepSheetEmail(form, prepContractors, requests = [], attachedDocs = [], businessInfo) {
+  const accentColor = businessInfo?.accentColor || DEFAULT_ACCENT_COLOR;
   const eventDate = formatDate(form.eventDate);
   const venue = form.venue || {};
   const address = [venue.address1, venue.address2, venue.city && venue.state ? `${venue.city}, ${venue.state} ${venue.zip || ''}` : '']
@@ -38,7 +40,7 @@ export function renderPrepSheetEmail(form, prepContractors, requests = [], attac
     .filter((r) => r.name || r.details || r.link || r.documentName)
     .map((r) => {
       const extras = [];
-      if (r.link) extras.push(`<a href="${r.link}" style="color:#4f46e5;">${r.link}</a>`);
+      if (r.link) extras.push(`<a href="${r.link}" style="color:${accentColor};">${r.link}</a>`);
       if (r.documentName) extras.push(`Attached: ${r.documentName}`);
       return `<tr><td style="padding:4px 12px 4px 0;font-weight:600;vertical-align:top;">${r.name || ''}</td><td style="padding:4px 12px 4px 0;color:#475569;vertical-align:top;">${r.details || ''}</td><td style="padding:4px 0;color:#475569;vertical-align:top;">${extras.join('<br>')}</td></tr>`;
     })

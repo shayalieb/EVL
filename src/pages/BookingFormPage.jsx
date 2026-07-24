@@ -24,6 +24,7 @@ import { useSavingIndicator } from '../components/ui/SavingIndicator';
 import OfferingPickerModal from '../components/OfferingPickerModal';
 import { computeOfferingTotal, computeOfferingsTotal } from '../lib/offerings';
 import { matchesSearch } from '../lib/search';
+import { DEFAULT_ACCENT_COLOR } from '../lib/colorTheme';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -44,7 +45,6 @@ const TABS = [
   { id: 'invoices', label: 'Invoices' },
 ];
 
-const DEFAULT_CONTRACT_ACCENT_COLOR = '#6366f1';
 
 const PAYMENT_METHOD_LABELS = { ach: 'ACH', check: 'Check', card: 'Card', other: 'Other' };
 
@@ -914,7 +914,7 @@ export default function BookingFormPage() {
       offerings: contractOfferings,
       title: contractTitle,
       sections: contractSections,
-      style: { accentColor: currentUser.businessInfo?.accentColor || DEFAULT_CONTRACT_ACCENT_COLOR },
+      style: { accentColor: currentUser.businessInfo?.accentColor || DEFAULT_ACCENT_COLOR },
     };
   }
 

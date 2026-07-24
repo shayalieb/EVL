@@ -1,14 +1,16 @@
 import { formatEventDate as formatDate, formatEventTime as formatTime } from './format';
+import { DEFAULT_ACCENT_COLOR, hexToRgb } from './colorTheme';
 
 // jsPDF pulls in html2canvas/DOMPurify (~450KB) even though we only use its
 // plain drawing API — lazy-load it so that weight isn't in the main bundle.
-async function buildPrepSheetDoc(form, prepContractors, requests) {
+async function buildPrepSheetDoc(form, prepContractors, requests, businessInfo) {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable'),
   ]);
   const doc = new jsPDF();
   const marginX = 14;
+  const accentRgb = hexToRgb(businessInfo?.accentColor || DEFAULT_ACCENT_COLOR);
   let y = 18;
 
   doc.setFontSize(18);
@@ -59,7 +61,7 @@ async function buildPrepSheetDoc(form, prepContractors, requests) {
       body: scheduleRows,
       theme: 'striped',
       styles: { fontSize: 9 },
-      headStyles: { fillColor: [79, 70, 229] },
+      headStyles: { fillColor: accentRgb },
     });
     y = doc.lastAutoTable.finalY + 10;
   }
@@ -76,7 +78,7 @@ async function buildPrepSheetDoc(form, prepContractors, requests) {
       body: prepContractors.map((c) => [c.name, c.role, formatTime(c.startTime), formatTime(c.endTime)]),
       theme: 'striped',
       styles: { fontSize: 9 },
-      headStyles: { fillColor: [79, 70, 229] },
+      headStyles: { fillColor: accentRgb },
     });
     y = doc.lastAutoTable.finalY + 10;
   }
@@ -98,7 +100,7 @@ async function buildPrepSheetDoc(form, prepContractors, requests) {
       body: requestRows,
       theme: 'striped',
       styles: { fontSize: 9 },
-      headStyles: { fillColor: [79, 70, 229] },
+      headStyles: { fillColor: accentRgb },
     });
     y = doc.lastAutoTable.finalY + 10;
   }
@@ -118,15 +120,15 @@ async function buildPrepSheetDoc(form, prepContractors, requests) {
   return { doc, filename };
 }
 
-export async function generatePrepSheetPdf(form, prepContractors, requests) {
-  const { doc, filename } = await buildPrepSheetDoc(form, prepContractors, requests);
+export async function generatePrepSheetPdf(form, prepContractors, requests, businessInfo) {
+  const { doc, filename } = await buildPrepSheetDoc(form, prepContractors, requests, businessInfo);
   doc.save(filename);
 }
 
 // Returns the same PDF as a base64 string so it can be sent as an email
 // attachment without a round-trip through document storage.
-export async function generatePrepSheetPdfAttachment(form, prepContractors, requests) {
-  const { doc, filename } = await buildPrepSheetDoc(form, prepContractors, requests);
+export async function generatePrepSheetPdfAttachment(form, prepContractors, requests, businessInfo) {
+  const { doc, filename } = await buildPrepSheetDoc(form, prepContractors, requests, businessInfo);
   // jsPDF has no plain "base64" output type (only 'datauristring' and
   // friends) — passing 'base64' silently returns null with no error.
   const dataUri = doc.output('datauristring', filename);

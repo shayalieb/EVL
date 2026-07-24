@@ -2,8 +2,7 @@ import { useState } from 'react';
 import SignatureCanvas from './SignatureCanvas';
 import { formatCurrency as currency, formatEventDate, formatVenueLine } from '../lib/format';
 import { computeOfferingTotal, computeOfferingsTotal } from '../lib/offerings';
-
-const DEFAULT_ACCENT = '#4f46e5';
+import { DEFAULT_ACCENT_COLOR } from '../lib/colorTheme';
 
 function Row({ label, value }) {
   return (
@@ -70,7 +69,7 @@ function SignHereSlot({ label, signerName, onSignerNameChange, onSignatureChange
 
 export default function ContractDocument({ snapshot, terms, clientSignature, ownerSignature, role, canSignNow, signerName, onSignerNameChange, onSignatureChange, signHereRef }) {
   const [logoFailed, setLogoFailed] = useState(false);
-  const accent = snapshot.style?.accentColor || DEFAULT_ACCENT;
+  const accent = snapshot.style?.accentColor || DEFAULT_ACCENT_COLOR;
   const businessInfo = snapshot.businessInfo || {};
   const client = snapshot.client || {};
   const booking = snapshot.booking || {};
