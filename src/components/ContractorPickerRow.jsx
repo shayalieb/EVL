@@ -128,7 +128,7 @@ export default function ContractorPickerRow({
               );
             })}
           </div>
-          {statusesByBucket[currentBucket].length > 1 && (
+          {currentBucket !== 'unavailable' && statusesByBucket[currentBucket].length > 1 && (
             <select
               value={booking.inquiryStatusId || ''}
               onChange={(e) => onStatusChange(booking.contractorId, e.target.value)}
