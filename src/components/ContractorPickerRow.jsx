@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { formatCurrency as currency } from '../lib/format';
 import { getPricingTier, getPricingTiers } from '../lib/pricingTiers';
+import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
 
 const timeInputClass = 'px-2 py-1 rounded-lg border border-slate-300 text-xs focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -16,6 +17,18 @@ export default function ContractorPickerRow({
   const unreadCount = threadSummary?.unreadCount || 0;
   const tiers = getPricingTiers(contractor);
   const activeTier = getPricingTier(contractor, booking.pricingTierId);
+
+  const currentBucket = statusBucket(status);
+  const statusesByBucket = Object.fromEntries(BUCKETS.map((b) => [b.value, inquiryStatuses.filter((s) => statusBucket(s) === b.value)]));
+
+  // Switching bucket picks that bucket's first configured status (e.g.
+  // whichever inquiry status is first in Settings' Tentative group) — the
+  // secondary dropdown below is for picking a more specific one afterward.
+  function handleBucketClick(bucketValue) {
+    if (bucketValue === currentBucket) return;
+    const candidate = statusesByBucket[bucketValue][0];
+    if (candidate) onStatusChange(booking.contractorId, candidate.id);
+  }
 
   function handleSend() {
     if (!selectedTemplateId) return;
@@ -95,14 +108,37 @@ export default function ContractorPickerRow({
           </>
         )}
 
-        <select
-          value={booking.inquiryStatusId || ''}
-          onChange={(e) => onStatusChange(booking.contractorId, e.target.value)}
-          className="shrink-0 ml-3 w-32 px-2 py-1.5 rounded-lg border border-slate-300 text-xs font-medium"
-          style={status ? { color: status.color, borderColor: `${status.color}55`, backgroundColor: `${status.color}11` } : undefined}
-        >
-          {inquiryStatuses.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-        </select>
+        <div className="shrink-0 ml-3 flex items-center gap-1">
+          <div className="flex gap-1">
+            {BUCKETS.map((b) => {
+              const active = currentBucket === b.value;
+              const disabled = statusesByBucket[b.value].length === 0;
+              return (
+                <button
+                  key={b.value}
+                  type="button"
+                  onClick={() => handleBucketClick(b.value)}
+                  disabled={disabled}
+                  title={disabled ? `No "${b.label}" inquiry status configured in Settings` : b.label}
+                  className="px-2 py-1.5 rounded-lg border text-xs font-semibold disabled:opacity-30 disabled:cursor-not-allowed border-slate-300 text-slate-500 hover:bg-slate-50"
+                  style={active ? { color: status.color, borderColor: `${status.color}55`, backgroundColor: `${status.color}11` } : undefined}
+                >
+                  {b.label}
+                </button>
+              );
+            })}
+          </div>
+          {statusesByBucket[currentBucket].length > 1 && (
+            <select
+              value={booking.inquiryStatusId || ''}
+              onChange={(e) => onStatusChange(booking.contractorId, e.target.value)}
+              title="Specific status"
+              className="w-28 px-1.5 py-1.5 rounded-lg border border-slate-300 text-xs"
+            >
+              {statusesByBucket[currentBucket].map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          )}
+        </div>
 
         {tiers.length > 1 && (
           <select

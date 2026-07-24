@@ -7,6 +7,7 @@ import Badge from '../components/ui/Badge';
 import UsersTab from './settings/UsersTab';
 import BillingTab from './settings/BillingTab';
 import { resizeImageToDataUrl } from '../lib/resizeImage';
+import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -351,37 +352,60 @@ function ColorStatusListField({ title, canEdit, items, onAdd, onUpdate, onRemove
   );
 }
 
+// Compact 3-way picker shared by the existing-status rows and the add-new
+// form below — this is what determines which of the 3 sections (Confirmed/
+// Tentative/Not Avail) a status's contractors show up under on an Event.
+function BucketPicker({ value, onChange }) {
+  return (
+    <div className="flex gap-1">
+      {BUCKETS.map((b) => (
+        <button
+          key={b.value}
+          type="button"
+          onClick={() => onChange(b.value)}
+          className={`px-2 py-1 rounded-md text-xs font-semibold border ${
+            value === b.value ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+          }`}
+        >
+          {b.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function InquiryStatusListField({ canEdit }) {
   const { inquiryStatuses, addInquiryStatus, updateInquiryStatus, removeInquiryStatus } = useData();
   const [label, setLabel] = useState('');
   const [color, setColor] = useState('#6366f1');
-  const [isConfirmed, setIsConfirmed] = useState(false);
+  const [bucket, setBucket] = useState('tentative');
 
   function handleAdd(e) {
     e.preventDefault();
     if (!label.trim()) return;
-    addInquiryStatus({ label: label.trim(), color, isConfirmed });
+    addInquiryStatus({ label: label.trim(), color, bucket, isConfirmed: bucket === 'confirmed' });
     setLabel('');
-    setIsConfirmed(false);
+    setBucket('tentative');
+  }
+
+  function handleBucketChange(status, nextBucket) {
+    updateInquiryStatus(status.id, { bucket: nextBucket, isConfirmed: nextBucket === 'confirmed' });
   }
 
   return (
     <div>
       <h3 className="text-sm font-bold text-slate-700 mb-1">Contractor "Inquiry Status"</h3>
       <p className="text-xs text-slate-400 mb-2">
-        Tracks the response after a contractor is contacted about a gig. Statuses marked "counts as confirmed" mark an event's vendor status Confirmed once every contractor on it reaches one.
+        Tracks the response after a contractor is contacted about a gig. Each status belongs to one of 3 groups — Confirmed, Tentative, or Not Avail — which is how contractors are sectioned on an event; an event's own vendor status turns Confirmed once every contractor on it reaches a Confirmed status.
       </p>
       <div className="space-y-2 mb-3">
         {inquiryStatuses.map((s) => (
-          <div key={s.id} className="flex items-center gap-3 border border-slate-200 rounded-lg px-3 py-2">
+          <div key={s.id} className="flex items-center gap-3 border border-slate-200 rounded-lg px-3 py-2 flex-wrap">
             <Badge color={s.color}>{s.label}</Badge>
-            <div className="flex-1">
+            <div className="flex-1 min-w-[120px]">
               <ColorPicker value={s.color} onChange={(c) => updateInquiryStatus(s.id, { color: c })} />
             </div>
-            <label className="flex items-center gap-1.5 text-xs text-slate-500 whitespace-nowrap">
-              <input type="checkbox" checked={!!s.isConfirmed} onChange={(e) => updateInquiryStatus(s.id, { isConfirmed: e.target.checked })} />
-              Counts as confirmed
-            </label>
+            <BucketPicker value={statusBucket(s)} onChange={(nextBucket) => handleBucketChange(s, nextBucket)} />
             {canEdit && (
               <button type="button" onClick={() => removeInquiryStatus(s.id)} className="text-slate-400 hover:text-red-600 px-1" aria-label={`Remove ${s.label}`}>✕</button>
             )}
@@ -392,10 +416,7 @@ function InquiryStatusListField({ canEdit }) {
         <form onSubmit={handleAdd} className="flex flex-col gap-2 max-w-sm">
           <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="New inquiry status" className={inputClass} />
           <ColorPicker value={color} onChange={setColor} />
-          <label className="flex items-center gap-1.5 text-xs text-slate-500">
-            <input type="checkbox" checked={isConfirmed} onChange={(e) => setIsConfirmed(e.target.checked)} />
-            Counts as confirmed
-          </label>
+          <BucketPicker value={bucket} onChange={setBucket} />
           <button type="submit" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 self-start">Add Status</button>
         </form>
       )}

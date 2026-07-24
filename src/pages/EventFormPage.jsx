@@ -20,11 +20,33 @@ import { getPrepContractors, renderPrepSheetEmail } from '../lib/prepSheet';
 import { generatePrepSheetPdf, generatePrepSheetPdfAttachment } from '../lib/prepSheetPdf';
 import { listDocuments, uploadDocument, deleteDocument, documentDownloadUrl } from '../lib/documents';
 import { InfoIcon, MapPinIcon, ClockIcon, UsersIcon, ClipboardIcon, NoteIcon, FileIcon } from '../components/ui/icons';
+import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 const cardClass = 'bg-white rounded-2xl border border-slate-200 p-6';
 const cardTitleClass = 'text-base font-bold text-slate-800 mb-5';
+
+// One collapsible group per contractor status bucket (Confirmed/Tentative/
+// Not Avail) on the Contractors tab — see src/lib/inquiryStatusBucket.js.
+function ContractorBucketSection({ label, count, defaultOpen, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-2 text-left mb-3"
+      >
+        <span className={`text-slate-400 text-xs transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
+        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide">{label}</h4>
+        <span className="text-xs font-semibold text-slate-400">{count}</span>
+        <span className="flex-1 border-t border-slate-100" />
+      </button>
+      {open && children}
+    </div>
+  );
+}
 
 // Gives each Prep tab widget (Event Details, Location, Schedule, Crew,
 // Requests, Notes, Documents) its own color + icon so they read as distinct
@@ -336,6 +358,16 @@ export default function EventFormPage() {
   const visibleEntries = form.contractorBookings
     .map((booking, index) => ({ booking, index }))
     .filter(({ booking }) => matchesActiveCategoryTab(booking.contractorId));
+
+  // Sectioned into Confirmed/Tentative/Not Avail for display — see
+  // src/lib/inquiryStatusBucket.js. Each entry still carries its original
+  // master-array index, so drag-and-drop within a section keeps working
+  // exactly like the single flat list did.
+  const entriesByBucket = Object.fromEntries(BUCKETS.map((b) => [b.value, []]));
+  visibleEntries.forEach((entry) => {
+    const status = inquiryStatuses.find((s) => s.id === entry.booking.inquiryStatusId);
+    entriesByBucket[statusBucket(status)].push(entry);
+  });
   const availableContractorsForActiveTab = availableContractors.filter((c) => matchesActiveCategoryTab(c.id));
 
   const totalCost = form.contractorBookings.reduce((sum, b) => {
@@ -343,9 +375,9 @@ export default function EventFormPage() {
     return sum + (c ? getTierPrice(c, b.pricingTierId) : 0);
   }, 0);
 
-  function getOrCreateInquiryStatus(label, color) {
+  function getOrCreateInquiryStatus(label, color, bucket = 'tentative') {
     const existing = inquiryStatuses.find((s) => s.label.toLowerCase() === label.toLowerCase());
-    return existing || addInquiryStatus({ label, color, isConfirmed: false });
+    return existing || addInquiryStatus({ label, color, bucket, isConfirmed: bucket === 'confirmed' });
   }
 
   function addContractorToEvent(contractorId, pricingTierId) {
@@ -1087,29 +1119,39 @@ export default function EventFormPage() {
               {hasCategories ? 'No contractors in this category yet.' : 'No contractors added yet.'}
             </div>
           ) : (
-            <div className="space-y-3">
-              {visibleEntries.map(({ booking: b, index: i }) => (
-                <ContractorPickerRow
-                  key={b.contractorId}
-                  booking={b}
-                  index={i}
-                  contractor={contractors.find((c) => c.id === b.contractorId)}
-                  inquiryStatuses={inquiryStatuses}
-                  emailTemplates={emailTemplates}
-                  threadSummary={threadSummaries[b.contractorId]}
-                  onStatusChange={changeBookingStatus}
-                  onTierChange={changeBookingTier}
-                  onTimeChange={changeBookingTime}
-                  onRemove={removeContractorFromEvent}
-                  onRequestSend={handleRequestSend}
-                  onOpenContractor={setEditingContractor}
-                  onOpenThread={setOpenThreadContractorId}
-                  onDragStart={(idx) => { dragIndex.current = idx; }}
-                  onDragOver={(idx) => setDragOverIndex(idx)}
-                  onDrop={handleDrop}
-                  isDragging={dragOverIndex === i && dragIndex.current !== i}
-                />
-              ))}
+            <div className="space-y-5">
+              {BUCKETS.map((b) => {
+                const entries = entriesByBucket[b.value];
+                if (entries.length === 0) return null;
+                return (
+                  <ContractorBucketSection key={b.value} label={b.label} count={entries.length} defaultOpen={b.value !== 'unavailable'}>
+                    <div className="space-y-3">
+                      {entries.map(({ booking: bk, index: i }) => (
+                        <ContractorPickerRow
+                          key={bk.contractorId}
+                          booking={bk}
+                          index={i}
+                          contractor={contractors.find((c) => c.id === bk.contractorId)}
+                          inquiryStatuses={inquiryStatuses}
+                          emailTemplates={emailTemplates}
+                          threadSummary={threadSummaries[bk.contractorId]}
+                          onStatusChange={changeBookingStatus}
+                          onTierChange={changeBookingTier}
+                          onTimeChange={changeBookingTime}
+                          onRemove={removeContractorFromEvent}
+                          onRequestSend={handleRequestSend}
+                          onOpenContractor={setEditingContractor}
+                          onOpenThread={setOpenThreadContractorId}
+                          onDragStart={(idx) => { dragIndex.current = idx; }}
+                          onDragOver={(idx) => setDragOverIndex(idx)}
+                          onDrop={handleDrop}
+                          isDragging={dragOverIndex === i && dragIndex.current !== i}
+                        />
+                      ))}
+                    </div>
+                  </ContractorBucketSection>
+                );
+              })}
             </div>
           )}
 

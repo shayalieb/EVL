@@ -26,13 +26,13 @@ export function buildSeedUserData() {
   ];
 
   const inquiryStatuses = [
-    { id: uid('inq'), label: 'Added', color: '#94a3b8', isConfirmed: false },
-    { id: uid('inq'), label: 'Not Contacted', color: '#94a3b8', isConfirmed: false },
-    { id: uid('inq'), label: 'Emailed', color: '#eab308', isConfirmed: false },
-    { id: uid('inq'), label: 'Called', color: '#eab308', isConfirmed: false },
-    { id: uid('inq'), label: 'Confirmed', color: '#22c55e', isConfirmed: true },
-    { id: uid('inq'), label: 'Not Available', color: '#ef4444', isConfirmed: false },
-    { id: uid('inq'), label: 'Declined', color: '#ef4444', isConfirmed: false },
+    { id: uid('inq'), label: 'Added', color: '#94a3b8', isConfirmed: false, bucket: 'tentative' },
+    { id: uid('inq'), label: 'Not Contacted', color: '#94a3b8', isConfirmed: false, bucket: 'tentative' },
+    { id: uid('inq'), label: 'Emailed', color: '#eab308', isConfirmed: false, bucket: 'tentative' },
+    { id: uid('inq'), label: 'Called', color: '#eab308', isConfirmed: false, bucket: 'tentative' },
+    { id: uid('inq'), label: 'Confirmed', color: '#22c55e', isConfirmed: true, bucket: 'confirmed' },
+    { id: uid('inq'), label: 'Not Available', color: '#ef4444', isConfirmed: false, bucket: 'unavailable' },
+    { id: uid('inq'), label: 'Declined', color: '#ef4444', isConfirmed: false, bucket: 'unavailable' },
   ];
 
   const bookingStatuses = buildDefaultBookingStatuses();
