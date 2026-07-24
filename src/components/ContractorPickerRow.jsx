@@ -59,6 +59,38 @@ export default function ContractorPickerRow({
           </div>
         </button>
 
+        <div className="shrink-0 flex items-center gap-1">
+          <div className="flex gap-1">
+            {BUCKETS.map((b) => {
+              const active = currentBucket === b.value;
+              const disabled = statusesByBucket[b.value].length === 0;
+              return (
+                <button
+                  key={b.value}
+                  type="button"
+                  onClick={() => handleBucketClick(b.value)}
+                  disabled={disabled}
+                  title={disabled ? `No "${b.label}" inquiry status configured in Settings` : b.label}
+                  className="px-2 py-1.5 rounded-lg border text-xs font-semibold disabled:opacity-30 disabled:cursor-not-allowed border-slate-300 text-slate-500 hover:bg-slate-50"
+                  style={active ? { color: status.color, borderColor: `${status.color}55`, backgroundColor: `${status.color}11` } : undefined}
+                >
+                  {b.label}
+                </button>
+              );
+            })}
+          </div>
+          {currentBucket !== 'unavailable' && statusesByBucket[currentBucket].length > 1 && (
+            <select
+              value={booking.inquiryStatusId || ''}
+              onChange={(e) => onStatusChange(booking.contractorId, e.target.value)}
+              title="Specific status"
+              className="w-28 px-1.5 py-1.5 rounded-lg border border-slate-300 text-xs"
+            >
+              {statusesByBucket[currentBucket].map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          )}
+        </div>
+
         <button
           type="button"
           onClick={() => onOpenThread(booking.contractorId)}
@@ -107,38 +139,6 @@ export default function ContractorPickerRow({
             </button>
           </>
         )}
-
-        <div className="shrink-0 ml-3 flex items-center gap-1">
-          <div className="flex gap-1">
-            {BUCKETS.map((b) => {
-              const active = currentBucket === b.value;
-              const disabled = statusesByBucket[b.value].length === 0;
-              return (
-                <button
-                  key={b.value}
-                  type="button"
-                  onClick={() => handleBucketClick(b.value)}
-                  disabled={disabled}
-                  title={disabled ? `No "${b.label}" inquiry status configured in Settings` : b.label}
-                  className="px-2 py-1.5 rounded-lg border text-xs font-semibold disabled:opacity-30 disabled:cursor-not-allowed border-slate-300 text-slate-500 hover:bg-slate-50"
-                  style={active ? { color: status.color, borderColor: `${status.color}55`, backgroundColor: `${status.color}11` } : undefined}
-                >
-                  {b.label}
-                </button>
-              );
-            })}
-          </div>
-          {currentBucket !== 'unavailable' && statusesByBucket[currentBucket].length > 1 && (
-            <select
-              value={booking.inquiryStatusId || ''}
-              onChange={(e) => onStatusChange(booking.contractorId, e.target.value)}
-              title="Specific status"
-              className="w-28 px-1.5 py-1.5 rounded-lg border border-slate-300 text-xs"
-            >
-              {statusesByBucket[currentBucket].map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </select>
-          )}
-        </div>
 
         {tiers.length > 1 && (
           <select
