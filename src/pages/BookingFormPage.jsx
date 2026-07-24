@@ -510,6 +510,10 @@ export default function BookingFormPage() {
   // sending skips the Stripe-connected gate and the public pay page shows
   // no Pay button, just the document. Defaults on for every new invoice.
   const [newInvoiceAcceptPayment, setNewInvoiceAcceptPayment] = useState(true);
+  // True right after "Create Deposit Invoice" pre-fills the composer, so the
+  // "Copied from your Proposal" note below doesn't show for offerings that
+  // actually came from the Deposit fields instead.
+  const [newInvoiceFromDeposit, setNewInvoiceFromDeposit] = useState(false);
   // The account's running invoice-number sequence and sticky footer memo —
   // what the composer resets to after a save or a cancelled edit. Advances
   // locally right after each save so the next invoice picks up from there
@@ -939,6 +943,7 @@ export default function BookingFormPage() {
     setNewInvoiceOfferings([]);
     setNewInvoiceDueDate('');
     setNewInvoiceAcceptPayment(true);
+    setNewInvoiceFromDeposit(false);
     setShowInvoicePreview(false);
   }
 
@@ -971,6 +976,22 @@ export default function BookingFormPage() {
     setNewInvoiceRecipientName(client ? `${client.firstName} ${client.lastName}`.trim() : '');
     setNewInvoiceNumber(invoiceDefaults.number);
     setNewInvoiceMemo(invoiceDefaults.memo);
+  }
+
+  // Pre-fills a fresh invoice from the Deposit fields on Booking Info and
+  // drops straight into the Invoices tab to review/send — bridges the
+  // deposit note into a real, collectible invoice instead of leaving it a
+  // manual honor-system checkbox.
+  function handleCreateDepositInvoice() {
+    resetInvoiceComposer();
+    setNewInvoiceOfferings([
+      { id: uid('offitem'), name: 'Deposit', details: '', type: 'general', amount: Number(form.depositAmount) || 0, unitCount: '', ratePerUnit: '' },
+    ]);
+    setNewInvoiceDueDate(form.depositDueDate || '');
+    setNewInvoiceRecipientEmail(client?.email || '');
+    setNewInvoiceRecipientName(client ? `${client.firstName} ${client.lastName}`.trim() : '');
+    setNewInvoiceFromDeposit(true);
+    setActiveTab('invoices');
   }
 
   async function handleSaveInvoiceDraft() {
@@ -1429,6 +1450,23 @@ export default function BookingFormPage() {
                     Deposit paid
                   </label>
                 </div>
+              </div>
+              <div className="flex justify-end -mt-1">
+                <button
+                  type="button"
+                  onClick={handleCreateDepositInvoice}
+                  disabled={!booking || !form.depositAmount || contract?.status !== 'fully_signed'}
+                  title={
+                    !booking ? 'Save this booking first'
+                      : !form.depositAmount ? 'Enter a deposit amount first'
+                      : contract?.status !== 'fully_signed' ? 'Available once the contract is fully signed'
+                      : undefined
+                  }
+                  data-testid="booking-form-create-deposit-invoice-button"
+                  className="px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                >
+                  Create Deposit Invoice →
+                </button>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -2254,7 +2292,11 @@ export default function BookingFormPage() {
                       </div>
                     </div>
                     <div className="max-w-2xl mb-5">
-                      {!editingInvoiceId && booking.proposal?.offerings?.length > 0 && (
+                      {newInvoiceFromDeposit ? (
+                        <p className="text-xs text-slate-400 mb-3">
+                          Pre-filled from the Deposit fields on Booking Info — edit freely, this won't change those fields.
+                        </p>
+                      ) : !editingInvoiceId && booking.proposal?.offerings?.length > 0 && (
                         <p className="text-xs text-slate-400 mb-3">
                           Copied from your Proposal — edit freely, this won't change the Proposal itself.
                         </p>
