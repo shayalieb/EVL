@@ -53,12 +53,31 @@ router.post('/connect', asyncHandler(async (req, res) => {
     });
   }
 
-  const accountLink = await stripe.accountLinks.create({
+  // Once onboarding has actually finished, re-clicking Connect should let
+  // the business edit what they already submitted (bank account, business
+  // info, etc.) rather than restart the same onboarding flow — Stripe's
+  // 'account_update' link type is the edit-mode equivalent of
+  // 'account_onboarding'. Our cached stripeChargesEnabled can lag Stripe's
+  // own view of "fully done", and Stripe rejects 'account_update' for an
+  // account that still has open requirements — so try it when our cache
+  // says charges are enabled, and fall back to 'account_onboarding' if
+  // Stripe still disagrees, rather than 400ing the whole request.
+  const linkParams = {
     account: account.stripeAccountId,
     refresh_url: `${frontendUrl()}/settings?stripeRefresh=1`,
     return_url: `${frontendUrl()}/settings?stripeReturn=1`,
-    type: 'account_onboarding',
-  });
+  };
+  let accountLink;
+  if (account.stripeChargesEnabled) {
+    try {
+      accountLink = await stripe.accountLinks.create({ ...linkParams, type: 'account_update' });
+    } catch (err) {
+      if (!err?.message?.includes('Valid types for this account')) throw err;
+    }
+  }
+  if (!accountLink) {
+    accountLink = await stripe.accountLinks.create({ ...linkParams, type: 'account_onboarding' });
+  }
 
   res.json({ url: accountLink.url });
 }));
