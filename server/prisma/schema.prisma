@@ -347,6 +347,11 @@ model Invoice {
   snapshot        Json     // { businessInfo, client, lineItems: Offering[] }
   dueDate         DateTime?
   memo            String?  @db.Text
+  // Off for invoices whose actual payment is handled outside GigWorks (a
+  // separate invoicing tool, a check already arranged, etc.) — sending one
+  // then skips the Stripe-connected gate entirely, and the public pay page
+  // shows no Pay button, just the document itself.
+  acceptPayment   Boolean  @default(true)
 
   status          String   @default("draft") // 'draft' | 'sent' | 'partial' | 'paid' | 'void'
   // How much of the total has been recorded as paid — set to the full total

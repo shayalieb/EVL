@@ -82,7 +82,7 @@ export default function InvoicePayPage() {
     );
   }
 
-  const { number, snapshot, dueDate, memo, status, total, paidAmount, sentAt, createdAt } = invoice;
+  const { number, snapshot, dueDate, memo, status, total, paidAmount, sentAt, createdAt, acceptPayment } = invoice;
   const remaining = total - (paidAmount || 0);
 
   return (
@@ -125,7 +125,7 @@ export default function InvoicePayPage() {
         />
       </div>
 
-      {(status === 'sent' || status === 'partial') && (
+      {(status === 'sent' || status === 'partial') && acceptPayment !== false && (
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
           <div className="max-w-2xl mx-auto flex items-center justify-between gap-3">
             <span className="text-xs text-slate-400 hidden sm:block">Secure payment powered by Stripe</span>

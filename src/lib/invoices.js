@@ -5,10 +5,10 @@ export async function listInvoices(bookingId) {
   return data.invoices;
 }
 
-export async function createInvoice({ bookingId, recipientEmail, recipientName, snapshot, dueDate, memo, number }) {
+export async function createInvoice({ bookingId, recipientEmail, recipientName, snapshot, dueDate, memo, number, acceptPayment }) {
   const data = await apiFetch('/invoices', {
     method: 'POST',
-    body: JSON.stringify({ bookingId, recipientEmail, recipientName, snapshot, dueDate, memo, number }),
+    body: JSON.stringify({ bookingId, recipientEmail, recipientName, snapshot, dueDate, memo, number, acceptPayment }),
   });
   return data.invoice;
 }

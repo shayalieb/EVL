@@ -38,6 +38,7 @@ function serializeForOwner(invoice) {
     dueDate: invoice.dueDate,
     memo: invoice.memo,
     status: invoice.status,
+    acceptPayment: invoice.acceptPayment,
     recipientEmail: invoice.recipientEmail,
     recipientName: invoice.recipientName,
     total: invoiceTotal(invoice),
@@ -61,6 +62,7 @@ function serializeForPublic(invoice) {
     dueDate: invoice.dueDate,
     memo: invoice.memo,
     status: invoice.status,
+    acceptPayment: invoice.acceptPayment,
     recipientName: invoice.recipientName,
     total: invoiceTotal(invoice),
     paidAmount: invoice.paidAmount ?? 0,
@@ -104,7 +106,7 @@ function parsePositiveInt(value) {
 }
 
 router.post('/', asyncHandler(async (req, res) => {
-  const { bookingId, recipientEmail, recipientName, snapshot, dueDate, memo, number } = req.body || {};
+  const { bookingId, recipientEmail, recipientName, snapshot, dueDate, memo, number, acceptPayment } = req.body || {};
   if (!bookingId?.trim() || !recipientEmail?.trim() || !snapshot) {
     return res.status(400).json({ error: 'bookingId, recipientEmail, and snapshot are required.' });
   }
@@ -124,6 +126,7 @@ router.post('/', asyncHandler(async (req, res) => {
       dueDate: dueDate ? new Date(dueDate) : null,
       memo: memo || null,
       status: 'draft',
+      acceptPayment: acceptPayment !== undefined ? !!acceptPayment : true,
       recipientEmail,
       recipientName: recipientName || null,
       ownerEmail: owner.email,
@@ -155,7 +158,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Only draft invoices can be edited.' });
   }
 
-  const { recipientEmail, recipientName, snapshot, dueDate, memo, number } = req.body || {};
+  const { recipientEmail, recipientName, snapshot, dueDate, memo, number, acceptPayment } = req.body || {};
   const parsedNumber = parsePositiveInt(number);
   const updated = await prisma.invoice.update({
     where: { id: invoice.id },
@@ -166,6 +169,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       ...(dueDate !== undefined ? { dueDate: dueDate ? new Date(dueDate) : null } : {}),
       ...(memo !== undefined ? { memo: memo || null } : {}),
       ...(parsedNumber !== null ? { number: parsedNumber } : {}),
+      ...(acceptPayment !== undefined ? { acceptPayment: !!acceptPayment } : {}),
     },
   });
 
@@ -198,9 +202,13 @@ router.post('/:id/send', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Add at least one line item before sending.' });
   }
 
-  const account = await prisma.account.findUnique({ where: { id: req.membership.accountId } });
-  if (!account.stripeChargesEnabled) {
-    return res.status(400).json({ error: 'Connect your Stripe account in Settings → Billing before sending invoices.' });
+  // Invoices whose payment is arranged outside GigWorks skip the
+  // Stripe-connected gate entirely — the pay link just shows the document.
+  if (invoice.acceptPayment) {
+    const account = await prisma.account.findUnique({ where: { id: req.membership.accountId } });
+    if (!account.stripeChargesEnabled) {
+      return res.status(400).json({ error: 'Connect your Stripe account in Settings → Billing before sending invoices, or turn off Accept Payment for this invoice.' });
+    }
   }
 
   const payToken = generateToken();
@@ -414,6 +422,9 @@ publicInvoicesRouter.post('/:token/checkout', asyncHandler(async (req, res) => {
   }
   if (invoice.status !== 'sent' && invoice.status !== 'partial') {
     return res.status(400).json({ error: 'This invoice is no longer payable.' });
+  }
+  if (!invoice.acceptPayment) {
+    return res.status(400).json({ error: 'This invoice is not set up to accept online payment. Please contact the business directly.' });
   }
 
   const account = await prisma.account.findUnique({ where: { id: invoice.accountId } });

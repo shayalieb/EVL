@@ -513,6 +513,10 @@ export default function BookingFormPage() {
   const [newInvoiceDueDate, setNewInvoiceDueDate] = useState('');
   const [newInvoiceMemo, setNewInvoiceMemo] = useState('');
   const [newInvoiceNumber, setNewInvoiceNumber] = useState('');
+  // Off for invoices whose actual payment is arranged outside GigWorks —
+  // sending skips the Stripe-connected gate and the public pay page shows
+  // no Pay button, just the document. Defaults on for every new invoice.
+  const [newInvoiceAcceptPayment, setNewInvoiceAcceptPayment] = useState(true);
   // The account's running invoice-number sequence and sticky footer memo —
   // what the composer resets to after a save or a cancelled edit. Advances
   // locally right after each save so the next invoice picks up from there
@@ -941,6 +945,7 @@ export default function BookingFormPage() {
     setEditingInvoiceId(null);
     setNewInvoiceOfferings([]);
     setNewInvoiceDueDate('');
+    setNewInvoiceAcceptPayment(true);
     setShowInvoicePreview(false);
   }
 
@@ -962,6 +967,7 @@ export default function BookingFormPage() {
     setNewInvoiceMemo(inv.memo || '');
     setNewInvoiceNumber(inv.number != null ? String(inv.number) : '');
     setNewInvoiceOfferings(inv.snapshot?.lineItems || []);
+    setNewInvoiceAcceptPayment(inv.acceptPayment !== false);
     setShowInvoicePreview(false);
   }
 
@@ -988,6 +994,7 @@ export default function BookingFormPage() {
         dueDate: newInvoiceDueDate || null,
         memo: newInvoiceMemo || null,
         number: newInvoiceNumber ? Number(newInvoiceNumber) : undefined,
+        acceptPayment: newInvoiceAcceptPayment,
       };
       const invoice = editingInvoiceId
         ? await updateInvoice(editingInvoiceId, payload)
@@ -1021,6 +1028,7 @@ export default function BookingFormPage() {
         dueDate: newInvoiceDueDate || null,
         memo: newInvoiceMemo || null,
         number: newInvoiceNumber ? Number(newInvoiceNumber) : undefined,
+        acceptPayment: newInvoiceAcceptPayment,
       };
       const draft = editingInvoiceId
         ? await updateInvoice(editingInvoiceId, payload)
@@ -2145,6 +2153,24 @@ export default function BookingFormPage() {
                     className={inputClass}
                   />
                 </div>
+                <div className="max-w-2xl mb-5">
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newInvoiceAcceptPayment}
+                      onChange={(e) => setNewInvoiceAcceptPayment(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold text-slate-700">Accept Payment</span>
+                      <span className="block text-xs text-slate-500">
+                        {newInvoiceAcceptPayment
+                          ? 'Recipient can pay online via Stripe. Turn off if this invoice is being paid outside GigWorks.'
+                          : 'This invoice will be sent as a document only — no online payment option, no Stripe required.'}
+                      </span>
+                    </span>
+                  </label>
+                </div>
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -2221,6 +2247,7 @@ export default function BookingFormPage() {
                             <div>
                               <div className="flex items-center gap-2 mb-1">
                                 <Badge color={statusMeta.color}>{statusMeta.label}</Badge>
+                                {inv.acceptPayment === false && <Badge color="#94a3b8">No online payment</Badge>}
                                 {inv.number != null && <span className="text-xs font-semibold text-slate-400">#{inv.number}</span>}
                                 <span className="text-sm font-bold text-slate-800">
                                   {inv.status === 'partial' ? `${currency(inv.paidAmount)} of ${currency(inv.total)}` : currency(inv.total)}
