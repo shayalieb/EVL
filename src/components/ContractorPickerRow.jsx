@@ -1,13 +1,16 @@
 import { useState } from 'react';
+import Badge from './ui/Badge';
 import { formatCurrency as currency } from '../lib/format';
 import { getPricingTier, getPricingTiers } from '../lib/pricingTiers';
 import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
 
 const timeInputClass = 'px-2 py-1 rounded-lg border border-slate-300 text-xs focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
+const PAYMENT_METHOD_LABELS = { ach: 'ACH', check: 'Check', card: 'Card', other: 'Other' };
 
 export default function ContractorPickerRow({
   booking, contractor, inquiryStatuses, index, emailTemplates, threadSummary,
   onStatusChange, onRemove, onRequestSend, onOpenContractor, onOpenThread, onTierChange, onTimeChange,
+  onPayClick, onMarkUnpaid,
   onDragStart, onDragOver, onDrop, isDragging,
 }) {
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
@@ -153,6 +156,40 @@ export default function ContractorPickerRow({
         <div className="w-20 text-right text-sm font-semibold text-slate-700 shrink-0">
           {currency(activeTier?.price)}
         </div>
+
+        {/* Payment only makes sense once a contractor is actually
+            confirmed to work the gig — Tentative/Not Avail don't get a
+            Pay action. */}
+        {currentBucket === 'confirmed' && (
+          booking.paymentStatus === 'paid' ? (
+            <div className="shrink-0 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => onPayClick(booking.contractorId)}
+                title={`${currency(booking.paidAmount)}${booking.paymentMethod ? ` via ${PAYMENT_METHOD_LABELS[booking.paymentMethod] || booking.paymentMethod}` : ''}${booking.paymentMethod === 'check' && booking.paymentReference ? ` #${booking.paymentReference}` : ''} — click to edit`}
+              >
+                <Badge color="#22c55e">Paid</Badge>
+              </button>
+              <button
+                type="button"
+                onClick={() => onMarkUnpaid(booking.contractorId)}
+                className="text-slate-300 hover:text-red-600 px-0.5"
+                aria-label="Mark unpaid"
+                title="Mark unpaid"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onPayClick(booking.contractorId)}
+              className="shrink-0 px-3 py-1.5 rounded-lg border border-emerald-300 text-emerald-700 text-xs font-semibold hover:bg-emerald-50"
+            >
+              Pay
+            </button>
+          )
+        )}
 
         <button
           type="button"

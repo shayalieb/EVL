@@ -2372,9 +2372,18 @@ export default function BookingFormPage() {
 
       <AcceptPaymentModal
         open={!!acceptPaymentInvoice}
-        invoice={acceptPaymentInvoice}
+        amountDue={acceptPaymentInvoice?.total}
+        amountLabel="Invoice amount"
         onClose={() => setAcceptPaymentInvoice(null)}
-        onAccepted={(updated) => {
+        onAccept={async (payload) => {
+          const updated = await markInvoicePayment(acceptPaymentInvoice.id, {
+            status: 'paid',
+            paidAmount: payload.amount,
+            paidAt: payload.paymentDate,
+            paymentMethod: payload.method,
+            paymentReference: payload.checkNumber,
+            paymentMemo: payload.memo,
+          });
           setInvoices((prev) => prev.map((inv) => (inv.id === updated.id ? updated : inv)));
           showToast('Payment accepted');
         }}

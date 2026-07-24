@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import Modal from './ui/Modal';
 import MoneyInput from './ui/MoneyInput';
-import { markInvoicePayment } from '../lib/invoices';
 import { formatCurrency as currency } from '../lib/format';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -20,12 +19,13 @@ function todayLocalDate() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// Manual "accept a payment" flow — for money collected outside Stripe
-// (ACH, check, card run elsewhere, etc.). Opened from the Mark Paid action
-// in a booking's Invoice History; submitting calls the same mark-payment
-// endpoint the quick-action buttons use, just with the fuller payload this
-// form collects.
-export default function AcceptPaymentModal({ open, invoice, onClose, onAccepted }) {
+// Generic "accept a payment" popover — for money that moved outside Stripe
+// (ACH, check, card run elsewhere, cash, etc.) and just needs to be
+// recorded. Used both for marking a client invoice paid and for paying a
+// contractor after a gig; the caller owns what actually happens with the
+// collected values via `onAccept` (async — throwing shows the error inline
+// and keeps the modal open, same as a failed fetch would).
+export default function AcceptPaymentModal({ open, title = 'Accept Payment', amountDue, amountLabel = 'Amount due', initialValues, onClose, onAccept }) {
   const [amount, setAmount] = useState('');
   const [paymentDate, setPaymentDate] = useState(todayLocalDate());
   const [method, setMethod] = useState('');
@@ -35,17 +35,21 @@ export default function AcceptPaymentModal({ open, invoice, onClose, onAccepted 
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (open && invoice) {
-      setAmount(String(invoice.total ?? ''));
-      setPaymentDate(todayLocalDate());
-      setMethod('');
-      setCheckNumber('');
-      setMemo('');
+    if (open) {
+      setAmount(String(initialValues?.amount ?? amountDue ?? ''));
+      setPaymentDate(initialValues?.paymentDate || todayLocalDate());
+      setMethod(initialValues?.method || '');
+      setCheckNumber(initialValues?.checkNumber || '');
+      setMemo(initialValues?.memo || '');
       setError('');
     }
-  }, [open, invoice]);
+    // Only meant to reset when the popover opens, not on every keystroke of
+    // its own state or every re-render with a fresh amountDue/initialValues
+    // object reference.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
-  if (!open || !invoice) return null;
+  if (!open) return null;
 
   async function handleAccept() {
     if (!(Number(amount) > 0)) {
@@ -67,15 +71,13 @@ export default function AcceptPaymentModal({ open, invoice, onClose, onAccepted 
     setError('');
     setSubmitting(true);
     try {
-      const updated = await markInvoicePayment(invoice.id, {
-        status: 'paid',
-        paidAmount: Number(amount),
-        paidAt: paymentDate,
-        paymentMethod: method,
-        paymentReference: method === 'check' ? checkNumber.trim() : undefined,
-        paymentMemo: memo.trim() || undefined,
+      await onAccept({
+        amount: Number(amount),
+        paymentDate,
+        method,
+        checkNumber: method === 'check' ? checkNumber.trim() : undefined,
+        memo: memo.trim() || undefined,
       });
-      onAccepted(updated);
       onClose();
     } catch (err) {
       setError(err.message || 'Failed to accept payment');
@@ -85,14 +87,14 @@ export default function AcceptPaymentModal({ open, invoice, onClose, onAccepted 
   }
 
   return (
-    <Modal open={open} onClose={submitting ? undefined : onClose} title="Accept Payment">
+    <Modal open={open} onClose={submitting ? undefined : onClose} title={title}>
       <div className="space-y-4">
         {error && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
         <div>
           <label className={labelClass}>Amount</label>
           <MoneyInput value={amount} onChange={setAmount} className={moneyInputClass} />
-          <div className="text-xs text-slate-400 mt-1">Invoice amount: {currency(invoice.total)}</div>
+          {amountDue !== undefined && <div className="text-xs text-slate-400 mt-1">{amountLabel}: {currency(amountDue)}</div>}
         </div>
 
         <div>

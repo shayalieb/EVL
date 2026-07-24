@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ContractorPickerRow from '../components/ContractorPickerRow';
 import ContractorModal from '../components/ContractorModal';
+import AcceptPaymentModal from '../components/AcceptPaymentModal';
 import EmailPreviewModal from '../components/EmailPreviewModal';
 import EmailThreadModal from '../components/EmailThreadModal';
 import PrepEmailModal from '../components/PrepEmailModal';
@@ -29,7 +30,7 @@ const cardTitleClass = 'text-base font-bold text-slate-800 mb-5';
 
 // One collapsible group per contractor status bucket (Confirmed/Tentative/
 // Not Avail) on the Contractors tab — see src/lib/inquiryStatusBucket.js.
-function ContractorBucketSection({ label, count, total, defaultOpen, children }) {
+function ContractorBucketSection({ label, count, total, paid, defaultOpen, children }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div>
@@ -44,7 +45,12 @@ function ContractorBucketSection({ label, count, total, defaultOpen, children })
         <span className="flex-1 border-t border-slate-100" />
         {/* Not Avail sections pass no total — that money isn't actually
             being spent, so there's nothing worth showing here. */}
-        {total !== undefined && <span className="text-xs font-bold text-slate-600">{currency(total)}</span>}
+        {total !== undefined && (
+          <span className="text-xs font-bold text-slate-600">
+            {paid > 0 && <span className="font-semibold text-emerald-600">{currency(paid)} paid · </span>}
+            {currency(total)}
+          </span>
+        )}
       </button>
       {open && children}
     </div>
@@ -184,6 +190,7 @@ export default function EventFormPage() {
   const [previewSending, setPreviewSending] = useState(false);
   const [threadSummaries, setThreadSummaries] = useState({});
   const [openThreadContractorId, setOpenThreadContractorId] = useState(null);
+  const [payingContractorId, setPayingContractorId] = useState(null); // contractorId currently open in the Pay Contractor popover, or null
   const [activeTab, setActiveTab] = useState('details');
   const [activeCategoryTab, setActiveCategoryTab] = useState('');
   const [documents, setDocuments] = useState([]);
@@ -382,6 +389,10 @@ export default function EventFormPage() {
     return sum + (c ? getTierPrice(c, b.pricingTierId) : 0);
   }, 0);
 
+  const payingBooking = form.contractorBookings.find((b) => b.contractorId === payingContractorId);
+  const payingContractor = payingBooking ? contractors.find((c) => c.id === payingBooking.contractorId) : null;
+  const payingAmountDue = payingBooking && payingContractor ? getTierPrice(payingContractor, payingBooking.pricingTierId) : undefined;
+
   function getOrCreateInquiryStatus(label, color, bucket = 'tentative') {
     const existing = inquiryStatuses.find((s) => s.label.toLowerCase() === label.toLowerCase());
     return existing || addInquiryStatus({ label, color, bucket, isConfirmed: bucket === 'confirmed' });
@@ -438,6 +449,35 @@ export default function EventFormPage() {
       ...f,
       contractorBookings: f.contractorBookings.map((b) => (b.contractorId === contractorId ? { ...b, [field]: value } : b)),
     }));
+  }
+
+  // Manual payment tracking, not a real payout — the business actually pays
+  // the contractor outside the app (Zelle, check, cash, etc.) and records
+  // it here. Lives on the booking itself, saved through the same autosave
+  // as everything else on the event, same reasoning as inquiryStatusId.
+  function markContractorPaid(contractorId, payload) {
+    setForm((f) => ({
+      ...f,
+      contractorBookings: f.contractorBookings.map((b) => (b.contractorId === contractorId ? {
+        ...b,
+        paymentStatus: 'paid',
+        paidAmount: payload.amount,
+        paidAt: payload.paymentDate,
+        paymentMethod: payload.method,
+        paymentReference: payload.checkNumber || null,
+        paymentMemo: payload.memo || null,
+      } : b)),
+    }));
+  }
+
+  function markContractorUnpaid(contractorId) {
+    setForm((f) => ({
+      ...f,
+      contractorBookings: f.contractorBookings.map((b) => (b.contractorId === contractorId ? {
+        ...b, paymentStatus: 'unpaid', paidAmount: null, paidAt: null, paymentMethod: null, paymentReference: null, paymentMemo: null,
+      } : b)),
+    }));
+    showToast('Marked unpaid');
   }
 
   function addScheduleItem() {
@@ -1134,8 +1174,11 @@ export default function EventFormPage() {
                   const c = contractors.find((x) => x.id === bk.contractorId);
                   return sum + (c ? getTierPrice(c, bk.pricingTierId) : 0);
                 }, 0);
+                const sectionPaid = b.value !== 'confirmed' ? 0 : entries.reduce((sum, { booking: bk }) => (
+                  bk.paymentStatus === 'paid' ? sum + (Number(bk.paidAmount) || 0) : sum
+                ), 0);
                 return (
-                  <ContractorBucketSection key={b.value} label={b.label} count={entries.length} total={sectionTotal} defaultOpen={b.value !== 'unavailable'}>
+                  <ContractorBucketSection key={b.value} label={b.label} count={entries.length} total={sectionTotal} paid={sectionPaid} defaultOpen={b.value !== 'unavailable'}>
                     <div className="space-y-3">
                       {entries.map(({ booking: bk, index: i }) => (
                         <ContractorPickerRow
@@ -1153,6 +1196,8 @@ export default function EventFormPage() {
                           onRequestSend={handleRequestSend}
                           onOpenContractor={setEditingContractor}
                           onOpenThread={setOpenThreadContractorId}
+                          onPayClick={setPayingContractorId}
+                          onMarkUnpaid={markContractorUnpaid}
                           onDragStart={(idx) => { dragIndex.current = idx; }}
                           onDragOver={(idx) => setDragOverIndex(idx)}
                           onDrop={handleDrop}
@@ -1400,6 +1445,25 @@ export default function EventFormPage() {
         open={!!editingContractor}
         onClose={() => setEditingContractor(null)}
         contractor={editingContractor}
+      />
+
+      <AcceptPaymentModal
+        open={!!payingContractorId}
+        title={`Pay ${payingContractor ? `${payingContractor.firstName} ${payingContractor.lastName}` : 'Contractor'}`}
+        amountDue={payingAmountDue}
+        amountLabel="Rate"
+        initialValues={payingBooking?.paymentStatus === 'paid' ? {
+          amount: payingBooking.paidAmount,
+          paymentDate: payingBooking.paidAt,
+          method: payingBooking.paymentMethod,
+          checkNumber: payingBooking.paymentReference,
+          memo: payingBooking.paymentMemo,
+        } : undefined}
+        onClose={() => setPayingContractorId(null)}
+        onAccept={async (payload) => {
+          markContractorPaid(payingContractorId, payload);
+          showToast('Payment recorded');
+        }}
       />
 
       <Modal
