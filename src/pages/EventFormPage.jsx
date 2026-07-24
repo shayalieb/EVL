@@ -29,7 +29,7 @@ const cardTitleClass = 'text-base font-bold text-slate-800 mb-5';
 
 // One collapsible group per contractor status bucket (Confirmed/Tentative/
 // Not Avail) on the Contractors tab — see src/lib/inquiryStatusBucket.js.
-function ContractorBucketSection({ label, count, defaultOpen, children }) {
+function ContractorBucketSection({ label, count, total, defaultOpen, children }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div>
@@ -42,6 +42,9 @@ function ContractorBucketSection({ label, count, defaultOpen, children }) {
         <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide">{label}</h4>
         <span className="text-xs font-semibold text-slate-400">{count}</span>
         <span className="flex-1 border-t border-slate-100" />
+        {/* Not Avail sections pass no total — that money isn't actually
+            being spent, so there's nothing worth showing here. */}
+        {total !== undefined && <span className="text-xs font-bold text-slate-600">{currency(total)}</span>}
       </button>
       {open && children}
     </div>
@@ -370,7 +373,11 @@ export default function EventFormPage() {
   });
   const availableContractorsForActiveTab = availableContractors.filter((c) => matchesActiveCategoryTab(c.id));
 
+  // Not Avail contractors don't count toward cost — they're not actually
+  // being booked/paid, so their rate shouldn't inflate the event total.
   const totalCost = form.contractorBookings.reduce((sum, b) => {
+    const status = inquiryStatuses.find((s) => s.id === b.inquiryStatusId);
+    if (statusBucket(status) === 'unavailable') return sum;
     const c = contractors.find((x) => x.id === b.contractorId);
     return sum + (c ? getTierPrice(c, b.pricingTierId) : 0);
   }, 0);
@@ -1123,8 +1130,12 @@ export default function EventFormPage() {
               {BUCKETS.map((b) => {
                 const entries = entriesByBucket[b.value];
                 if (entries.length === 0) return null;
+                const sectionTotal = b.value === 'unavailable' ? undefined : entries.reduce((sum, { booking: bk }) => {
+                  const c = contractors.find((x) => x.id === bk.contractorId);
+                  return sum + (c ? getTierPrice(c, bk.pricingTierId) : 0);
+                }, 0);
                 return (
-                  <ContractorBucketSection key={b.value} label={b.label} count={entries.length} defaultOpen={b.value !== 'unavailable'}>
+                  <ContractorBucketSection key={b.value} label={b.label} count={entries.length} total={sectionTotal} defaultOpen={b.value !== 'unavailable'}>
                     <div className="space-y-3">
                       {entries.map(({ booking: bk, index: i }) => (
                         <ContractorPickerRow
