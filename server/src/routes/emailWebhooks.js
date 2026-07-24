@@ -1,11 +1,28 @@
 import { Router } from 'express';
 import { Webhook } from 'svix';
+import sanitizeHtml from 'sanitize-html';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getResendClient } from '../lib/resend.js';
-import { sendMail, buildFromHeader } from '../lib/mailer.js';
+import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
 
 const router = Router();
+
+// A reply's `full.html` is a whole inbound email — from whoever's on the
+// thread, not just the account owner — so it goes through a strict allowlist
+// (no script/style/img/iframe/on*-handlers/javascript: URLs) before it's
+// forwarded into the admin notification below, rather than trusted as-is
+// the way a self-authored template body is elsewhere in this app.
+const REPLY_HTML_SANITIZE_OPTIONS = {
+  allowedTags: ['p', 'br', 'b', 'strong', 'i', 'em', 'u', 'a', 'ul', 'ol', 'li', 'blockquote', 'div', 'span'],
+  allowedAttributes: { a: ['href'] },
+  allowedSchemes: ['http', 'https', 'mailto'],
+};
+
+function safeReplyHtml(full) {
+  if (full?.html) return sanitizeHtml(full.html, REPLY_HTML_SANITIZE_OPTIONS);
+  return escapeHtml(full?.text || '');
+}
 
 function extractThreadId(addresses) {
   for (const addr of addresses || []) {
@@ -69,7 +86,7 @@ async function handleSupportReply(res, rawId, event) {
       from: buildFromHeader(),
       to: process.env.SUPPORT_NOTIFICATION_EMAIL || 'shayalieberman@gmail.com',
       subject: `[Support] ${thread.subject}`,
-      html: `<p>New reply by email:</p><p>${full?.html || full?.text || ''}</p>`,
+      html: `<p>New reply by email:</p><p>${safeReplyHtml(full)}</p>`,
     });
   } catch {
     // best effort — the message is already saved regardless of whether this send succeeds
