@@ -10,13 +10,6 @@ const STATUS_META = {
   void: { label: 'Void', color: '#ef4444' },
 };
 
-// A cuid is unguessable and already used as a public-safe identifier
-// elsewhere in the app, so slicing it into a short reference number avoids
-// needing a real sequential-numbering column just for display.
-function invoiceNumber(invoiceId) {
-  return invoiceId ? invoiceId.slice(-6).toUpperCase() : null;
-}
-
 // Event vendors (catering, DJs, photo booths, etc.) bill per-event, so this
 // is styled like a formal line-item invoice — number, bill-to, the event
 // it's for, a proper item table, and a running balance — rather than the
@@ -28,7 +21,7 @@ function invoiceNumber(invoiceId) {
 // previews is exactly what the client will see.
 export default function InvoiceDocument({
   businessInfo, client, event, lineItems, dueDate, memo, total,
-  status, paidAmount, invoiceId, issueDate,
+  status, paidAmount, number, issueDate,
 }) {
   const items = lineItems || [];
   const grandTotal = total ?? computeOfferingsTotal(items);
@@ -50,7 +43,7 @@ export default function InvoiceDocument({
         </div>
         <div className="text-right">
           <div className="text-lg font-bold text-slate-800 tracking-wide">INVOICE</div>
-          <div className="text-xs text-slate-400">{invoiceNumber(invoiceId) ? `#${invoiceNumber(invoiceId)}` : 'Draft'}</div>
+          <div className="text-xs text-slate-400">{number != null && number !== '' ? `#${number}` : 'Draft'}</div>
           <div className="text-xs text-slate-400">{formatEventDate(issueDate ? issueDate.slice(0, 10) : new Date().toISOString().slice(0, 10))}</div>
           {statusMeta && <div className="mt-1.5"><Badge color={statusMeta.color}>{statusMeta.label}</Badge></div>}
         </div>

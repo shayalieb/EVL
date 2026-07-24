@@ -82,7 +82,7 @@ export default function InvoicePayPage() {
     );
   }
 
-  const { id, snapshot, dueDate, memo, status, total, paidAmount, sentAt, createdAt } = invoice;
+  const { number, snapshot, dueDate, memo, status, total, paidAmount, sentAt, createdAt } = invoice;
   const remaining = total - (paidAmount || 0);
 
   return (
@@ -120,7 +120,7 @@ export default function InvoicePayPage() {
           total={total}
           status={status}
           paidAmount={paidAmount}
-          invoiceId={id}
+          number={number}
           issueDate={sentAt || createdAt}
         />
       </div>

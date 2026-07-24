@@ -5,12 +5,19 @@ export async function listInvoices(bookingId) {
   return data.invoices;
 }
 
-export async function createInvoice({ bookingId, recipientEmail, recipientName, snapshot, dueDate, memo }) {
+export async function createInvoice({ bookingId, recipientEmail, recipientName, snapshot, dueDate, memo, number }) {
   const data = await apiFetch('/invoices', {
     method: 'POST',
-    body: JSON.stringify({ bookingId, recipientEmail, recipientName, snapshot, dueDate, memo }),
+    body: JSON.stringify({ bookingId, recipientEmail, recipientName, snapshot, dueDate, memo, number }),
   });
   return data.invoice;
+}
+
+// The number/memo a new invoice's composer should start from — the
+// account's running sequence and sticky footer memo, carried forward until
+// edited (see POST / and PATCH /:id, which advance/update them).
+export async function getNextInvoiceInfo() {
+  return apiFetch('/invoices/next-number');
 }
 
 // Only works while the invoice is still a draft — locked once sent.

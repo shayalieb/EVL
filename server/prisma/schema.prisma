@@ -53,6 +53,13 @@ model Account {
   stripeDetailsSubmitted Boolean  @default(false)
   stripeChargesEnabled   Boolean  @default(false)
   stripePayoutsEnabled   Boolean  @default(false)
+
+  // Running invoice-numbering sequence and sticky footer memo — carried
+  // into each new invoice's composer as a default, and advanced/updated
+  // whenever an invoice is created or edited with an explicit number/memo.
+  // See server/src/routes/invoices.js's GET /next-number.
+  nextInvoiceNumber  Int     @default(1)
+  defaultInvoiceMemo String? @db.Text
 }
 
 model Membership {
@@ -333,6 +340,10 @@ model Invoice {
 
   bookingId       String   // opaque localStorage id, same non-FK pattern as Contract.bookingId
 
+  // Editable by the owner; defaults to Account.nextInvoiceNumber at create
+  // time. Not DB-unique — editing it to fix/jump the sequence is expected,
+  // and enforcing uniqueness would turn that into an error-prone edit.
+  number          Int?
   snapshot        Json     // { businessInfo, client, lineItems: Offering[] }
   dueDate         DateTime?
   memo            String?  @db.Text

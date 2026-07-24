@@ -11,7 +11,7 @@ import { uid } from '../lib/storage';
 import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, bookingDocumentDownloadUrl } from '../lib/bookingDocuments';
 import { generateProposalPdf, generateProposalPdfAttachment } from '../lib/proposalPdf';
 import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms } from '../lib/contracts';
-import { listInvoices, createInvoice, updateInvoice, sendInvoice, markInvoicePayment, sendReceipt, voidInvoice } from '../lib/invoices';
+import { listInvoices, createInvoice, updateInvoice, sendInvoice, markInvoicePayment, sendReceipt, voidInvoice, getNextInvoiceInfo } from '../lib/invoices';
 import { generateContractPdf, getContractPdfDataUrl } from '../lib/contractPdf';
 import { sendEmail } from '../lib/email/send';
 import { formatCurrency as currency, formatEventDate, formatVenueLine, formatEventTime } from '../lib/format';
@@ -509,6 +509,13 @@ export default function BookingFormPage() {
   const [newInvoiceRecipientName, setNewInvoiceRecipientName] = useState('');
   const [newInvoiceDueDate, setNewInvoiceDueDate] = useState('');
   const [newInvoiceMemo, setNewInvoiceMemo] = useState('');
+  const [newInvoiceNumber, setNewInvoiceNumber] = useState('');
+  // The account's running invoice-number sequence and sticky footer memo —
+  // what the composer resets to after a save or a cancelled edit. Advances
+  // locally right after each save so the next invoice picks up from there
+  // without a round-trip; see the booking-load effect below for the initial
+  // fetch via GET /invoices/next-number.
+  const [invoiceDefaults, setInvoiceDefaults] = useState({ number: '', memo: '' });
   const [invoiceOfferingPickerOpen, setInvoiceOfferingPickerOpen] = useState(false);
   const [showInvoicePreview, setShowInvoicePreview] = useState(false);
   const [savingInvoiceDraft, setSavingInvoiceDraft] = useState(false);
@@ -641,9 +648,17 @@ export default function BookingFormPage() {
     setEditingInvoiceId(null);
     setNewInvoiceOfferings(booking.proposal?.offerings || []);
     setNewInvoiceDueDate('');
-    setNewInvoiceMemo('');
     setLastInvoicePayLink(null);
     setShowInvoicePreview(false);
+    let cancelled = false;
+    getNextInvoiceInfo().then(({ number, memo }) => {
+      if (cancelled) return;
+      const defaults = { number: String(number), memo: memo || '' };
+      setInvoiceDefaults(defaults);
+      setNewInvoiceNumber(defaults.number);
+      setNewInvoiceMemo(defaults.memo);
+    }).catch(() => {});
+    return () => { cancelled = true; };
   }, [booking?.id]);
 
   useEffect(() => {
@@ -915,12 +930,24 @@ export default function BookingFormPage() {
     setInvoices((prev) => (isNew ? [invoice, ...prev] : prev.map((inv) => (inv.id === invoice.id ? invoice : inv))));
   }
 
+  // Number/memo aren't reset here — they're sticky defaults, set explicitly
+  // from invoiceDefaults (cancel) or the just-saved invoice (save/send)
+  // instead of being cleared back to blank like the rest of the composer.
   function resetInvoiceComposer() {
     setEditingInvoiceId(null);
     setNewInvoiceOfferings([]);
     setNewInvoiceDueDate('');
-    setNewInvoiceMemo('');
     setShowInvoicePreview(false);
+  }
+
+  // Advances the sticky number by one (ready for the next invoice) and
+  // carries the just-used memo forward as-is — called right after a
+  // successful create/update, mirroring the server's own forward-only sync.
+  function applyInvoiceDefaultsAfterSave(invoice) {
+    const defaults = { number: String((invoice.number || 0) + 1), memo: invoice.memo || '' };
+    setInvoiceDefaults(defaults);
+    setNewInvoiceNumber(defaults.number);
+    setNewInvoiceMemo(defaults.memo);
   }
 
   function handleEditInvoiceClick(inv) {
@@ -929,6 +956,7 @@ export default function BookingFormPage() {
     setNewInvoiceRecipientName(inv.recipientName || '');
     setNewInvoiceDueDate(inv.dueDate ? inv.dueDate.slice(0, 10) : '');
     setNewInvoiceMemo(inv.memo || '');
+    setNewInvoiceNumber(inv.number != null ? String(inv.number) : '');
     setNewInvoiceOfferings(inv.snapshot?.lineItems || []);
     setShowInvoicePreview(false);
   }
@@ -938,6 +966,8 @@ export default function BookingFormPage() {
     setNewInvoiceOfferings(booking.proposal?.offerings || []);
     setNewInvoiceRecipientEmail(client?.email || '');
     setNewInvoiceRecipientName(client ? `${client.firstName} ${client.lastName}`.trim() : '');
+    setNewInvoiceNumber(invoiceDefaults.number);
+    setNewInvoiceMemo(invoiceDefaults.memo);
   }
 
   async function handleSaveInvoiceDraft() {
@@ -953,12 +983,14 @@ export default function BookingFormPage() {
         snapshot: buildInvoiceSnapshot(),
         dueDate: newInvoiceDueDate || null,
         memo: newInvoiceMemo || null,
+        number: newInvoiceNumber ? Number(newInvoiceNumber) : undefined,
       };
       const invoice = editingInvoiceId
         ? await updateInvoice(editingInvoiceId, payload)
         : await createInvoice({ bookingId: booking.id, ...payload });
       upsertInvoiceInList(invoice, { isNew: !editingInvoiceId });
       resetInvoiceComposer();
+      applyInvoiceDefaultsAfterSave(invoice);
       showToast(editingInvoiceId ? 'Invoice draft updated' : 'Invoice saved as draft');
     } catch (err) {
       showToast(err.message || 'Failed to save invoice', 'error');
@@ -984,6 +1016,7 @@ export default function BookingFormPage() {
         snapshot: buildInvoiceSnapshot(),
         dueDate: newInvoiceDueDate || null,
         memo: newInvoiceMemo || null,
+        number: newInvoiceNumber ? Number(newInvoiceNumber) : undefined,
       };
       const draft = editingInvoiceId
         ? await updateInvoice(editingInvoiceId, payload)
@@ -992,6 +1025,7 @@ export default function BookingFormPage() {
       upsertInvoiceInList(sent, { isNew: !editingInvoiceId });
       setLastInvoicePayLink({ invoiceId: sent.id, link: payLink });
       resetInvoiceComposer();
+      applyInvoiceDefaultsAfterSave(sent);
       if (emailError) showToast(emailError, 'error');
       else showToast(`Invoice sent to ${newInvoiceRecipientEmail.trim()}`);
     } catch (err) {
@@ -2062,7 +2096,18 @@ export default function BookingFormPage() {
                 <p className="text-sm text-slate-500 mb-5 max-w-xl">
                   Paid online via Stripe, straight into your own connected account — see Settings → Billing to connect one first.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5 max-w-2xl">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-5 max-w-3xl">
+                  <div>
+                    <label className={labelClass}>Invoice #</label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={newInvoiceNumber}
+                      onChange={(e) => setNewInvoiceNumber(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
                   <div>
                     <label className={labelClass}>Recipient Email *</label>
                     <input type="email" value={newInvoiceRecipientEmail} onChange={(e) => setNewInvoiceRecipientEmail(e.target.value)} className={inputClass} />
@@ -2090,7 +2135,7 @@ export default function BookingFormPage() {
                   <label className={labelClass}>Memo</label>
                   <textarea
                     rows={2}
-                    placeholder="Optional note shown to the client on the invoice"
+                    placeholder="Shown at the bottom of the invoice — carries over to future invoices until changed"
                     value={newInvoiceMemo}
                     onChange={(e) => setNewInvoiceMemo(e.target.value)}
                     className={inputClass}
@@ -2142,7 +2187,7 @@ export default function BookingFormPage() {
                       dueDate={newInvoiceDueDate}
                       memo={newInvoiceMemo}
                       status="draft"
-                      invoiceId={editingInvoiceId}
+                      number={newInvoiceNumber ? Number(newInvoiceNumber) : null}
                     />
                   </div>
                 )}
@@ -2172,6 +2217,7 @@ export default function BookingFormPage() {
                             <div>
                               <div className="flex items-center gap-2 mb-1">
                                 <Badge color={statusMeta.color}>{statusMeta.label}</Badge>
+                                {inv.number != null && <span className="text-xs font-semibold text-slate-400">#{inv.number}</span>}
                                 <span className="text-sm font-bold text-slate-800">
                                   {inv.status === 'partial' ? `${currency(inv.paidAmount)} of ${currency(inv.total)}` : currency(inv.total)}
                                 </span>

@@ -33,6 +33,7 @@ function serializeForOwner(invoice) {
   return {
     id: invoice.id,
     bookingId: invoice.bookingId,
+    number: invoice.number,
     snapshot: invoice.snapshot,
     dueDate: invoice.dueDate,
     memo: invoice.memo,
@@ -52,6 +53,7 @@ function serializeForOwner(invoice) {
 function serializeForPublic(invoice) {
   return {
     id: invoice.id,
+    number: invoice.number,
     snapshot: invoice.snapshot,
     dueDate: invoice.dueDate,
     memo: invoice.memo,
@@ -84,17 +86,37 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ invoices: invoices.map(serializeForOwner) });
 }));
 
+// What a brand-new invoice composer should start from: the account's
+// running invoice-number sequence and its sticky footer memo (whatever was
+// last used, carried forward until someone types over it — see POST / and
+// PATCH /:id below, which are what actually advance/update these).
+router.get('/next-number', asyncHandler(async (req, res) => {
+  const account = await prisma.account.findUnique({ where: { id: req.membership.accountId } });
+  res.json({ number: account.nextInvoiceNumber, memo: account.defaultInvoiceMemo || '' });
+}));
+
+function parsePositiveInt(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 router.post('/', asyncHandler(async (req, res) => {
-  const { bookingId, recipientEmail, recipientName, snapshot, dueDate, memo } = req.body || {};
+  const { bookingId, recipientEmail, recipientName, snapshot, dueDate, memo, number } = req.body || {};
   if (!bookingId?.trim() || !recipientEmail?.trim() || !snapshot) {
     return res.status(400).json({ error: 'bookingId, recipientEmail, and snapshot are required.' });
   }
 
-  const owner = await prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } });
+  const [owner, account] = await Promise.all([
+    prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } }),
+    prisma.account.findUnique({ where: { id: req.membership.accountId } }),
+  ]);
+  const usedNumber = parsePositiveInt(number) ?? account.nextInvoiceNumber;
+
   const invoice = await prisma.invoice.create({
     data: {
       accountId: req.membership.accountId,
       bookingId,
+      number: usedNumber,
       snapshot,
       dueDate: dueDate ? new Date(dueDate) : null,
       memo: memo || null,
@@ -104,11 +126,23 @@ router.post('/', asyncHandler(async (req, res) => {
       ownerEmail: owner.email,
     },
   });
+
+  // Only ever moves the counter forward — typing a lower number by mistake
+  // shouldn't roll the whole sequence backward for future invoices.
+  await prisma.account.update({
+    where: { id: req.membership.accountId },
+    data: {
+      nextInvoiceNumber: Math.max(account.nextInvoiceNumber, usedNumber + 1),
+      ...(memo !== undefined ? { defaultInvoiceMemo: memo || null } : {}),
+    },
+  });
+
   res.status(201).json({ invoice: serializeForOwner(invoice) });
 }));
 
-// Snapshot/dueDate/memo/recipient stay editable only while still a draft —
-// once sent, a pay link is out in the world pointing at this exact content.
+// Snapshot/dueDate/memo/recipient/number stay editable only while still a
+// draft — once sent, a pay link is out in the world pointing at this exact
+// content.
 router.patch('/:id', asyncHandler(async (req, res) => {
   const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
   if (!invoice || invoice.accountId !== req.membership.accountId) {
@@ -118,7 +152,8 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Only draft invoices can be edited.' });
   }
 
-  const { recipientEmail, recipientName, snapshot, dueDate, memo } = req.body || {};
+  const { recipientEmail, recipientName, snapshot, dueDate, memo, number } = req.body || {};
+  const parsedNumber = parsePositiveInt(number);
   const updated = await prisma.invoice.update({
     where: { id: invoice.id },
     data: {
@@ -127,8 +162,24 @@ router.patch('/:id', asyncHandler(async (req, res) => {
       ...(snapshot !== undefined ? { snapshot } : {}),
       ...(dueDate !== undefined ? { dueDate: dueDate ? new Date(dueDate) : null } : {}),
       ...(memo !== undefined ? { memo: memo || null } : {}),
+      ...(parsedNumber !== null ? { number: parsedNumber } : {}),
     },
   });
+
+  // Same forward-only sync as POST / — editing a draft's number/memo should
+  // carry forward into the next invoice's defaults too, same as creating
+  // one with those values in the first place.
+  if (parsedNumber !== null || memo !== undefined) {
+    const account = await prisma.account.findUnique({ where: { id: req.membership.accountId } });
+    await prisma.account.update({
+      where: { id: req.membership.accountId },
+      data: {
+        ...(parsedNumber !== null ? { nextInvoiceNumber: Math.max(account.nextInvoiceNumber, parsedNumber + 1) } : {}),
+        ...(memo !== undefined ? { defaultInvoiceMemo: memo || null } : {}),
+      },
+    });
+  }
+
   res.json({ invoice: serializeForOwner(updated) });
 }));
 
