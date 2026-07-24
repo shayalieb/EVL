@@ -5,7 +5,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachUser, requirePlatformAdmin, allPermissions } from '../lib/membership.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
-import { sendMail, buildFromHeader } from '../lib/mailer.js';
+import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
 
 const router = Router();
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
@@ -278,7 +278,7 @@ router.post('/support/threads/:id/messages', uploadFiles, asyncHandler(async (re
         from: buildFromHeader(),
         to: owner.user.email,
         subject: `Re: ${thread.subject}`,
-        html: `<p>You have a new reply to your support request "${thread.subject}":</p><p>${body.trim()}</p><p>Reply to this email to continue the conversation, or sign in to GigWorks.</p>`,
+        html: `<p>You have a new reply to your support request "${escapeHtml(thread.subject)}":</p><p>${escapeHtml(body.trim())}</p><p>Reply to this email to continue the conversation, or sign in to GigWorks.</p>`,
         replyTo: thread.replyToAlias || undefined,
         headers,
         attachments: attachments.length ? attachments : undefined,

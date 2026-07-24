@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
-import { sendMail, buildFromHeader } from '../lib/mailer.js';
+import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { getStripeClient } from '../lib/stripe.js';
 
@@ -230,7 +230,7 @@ router.post('/:id/send', asyncHandler(async (req, res) => {
       from: buildFromHeader(fromName),
       to: invoice.recipientEmail,
       subject: `Invoice for ${totalLabel} from ${fromName}`,
-      html: `<p>Hi ${invoice.recipientName || 'there'},</p><p>You have a new invoice for ${totalLabel}${invoice.dueDate ? ` due ${new Date(invoice.dueDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}` : ''}.</p><p><a href="${payUrl}">${payUrl}</a></p><p>${fromName}</p>`,
+      html: `<p>Hi ${escapeHtml(invoice.recipientName) || 'there'},</p><p>You have a new invoice for ${totalLabel}${invoice.dueDate ? ` due ${new Date(invoice.dueDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}` : ''}.</p><p><a href="${payUrl}">${payUrl}</a></p><p>${escapeHtml(fromName)}</p>`,
     });
   } catch {
     emailError = 'Invoice was sent, but the email could not be delivered — copy the link below to share it manually.';
@@ -317,10 +317,10 @@ router.post('/:id/send-receipt', asyncHandler(async (req, res) => {
     : null;
   const methodLabel = { ach: 'ACH', check: 'Check', card: 'Credit/Debit Card', other: 'Other' }[invoice.paymentMethod];
   const methodLine = methodLabel
-    ? `<p>Method: ${methodLabel}${invoice.paymentMethod === 'check' && invoice.paymentReference ? ` #${invoice.paymentReference}` : ''}</p>`
+    ? `<p>Method: ${methodLabel}${invoice.paymentMethod === 'check' && invoice.paymentReference ? ` #${escapeHtml(invoice.paymentReference)}` : ''}</p>`
     : '';
   const lineItemsHtml = (invoice.snapshot?.lineItems || [])
-    .map((item) => `<tr><td style="padding:4px 16px 4px 0">${item.name || 'Item'}</td><td style="padding:4px 0;text-align:right">${lineItemTotal(item).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</td></tr>`)
+    .map((item) => `<tr><td style="padding:4px 16px 4px 0">${escapeHtml(item.name) || 'Item'}</td><td style="padding:4px 0;text-align:right">${lineItemTotal(item).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</td></tr>`)
     .join('');
 
   let emailError = null;
@@ -329,7 +329,7 @@ router.post('/:id/send-receipt', asyncHandler(async (req, res) => {
       from: buildFromHeader(fromName),
       to: invoice.recipientEmail,
       subject: `Receipt for ${totalLabel} from ${fromName}`,
-      html: `<p>Hi ${invoice.recipientName || 'there'},</p><p>This confirms your payment of ${totalLabel}${paidDateLabel ? ` received ${paidDateLabel}` : ''}.</p>${methodLine}<table>${lineItemsHtml}</table><p>Thank you for your business!</p><p>${fromName}</p>`,
+      html: `<p>Hi ${escapeHtml(invoice.recipientName) || 'there'},</p><p>This confirms your payment of ${totalLabel}${paidDateLabel ? ` received ${paidDateLabel}` : ''}.</p>${methodLine}<table>${lineItemsHtml}</table><p>Thank you for your business!</p><p>${escapeHtml(fromName)}</p>`,
     });
   } catch {
     emailError = 'Could not send the receipt email — check the recipient address and try again.';

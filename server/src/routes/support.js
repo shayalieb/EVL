@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
-import { sendMail, buildFromHeader } from '../lib/mailer.js';
+import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_FILES = 3;
@@ -19,7 +19,7 @@ async function notifyAdmin(thread, message) {
       from: buildFromHeader(),
       to: process.env.SUPPORT_NOTIFICATION_EMAIL || 'shayalieberman@gmail.com',
       subject: `[Support] ${thread.subject}`,
-      html: `<p>New support message:</p><p>${message}</p>`,
+      html: `<p>New support message:</p><p>${escapeHtml(message)}</p>`,
     });
   } catch {
     // best effort — the message is already saved regardless of whether this send succeeds
