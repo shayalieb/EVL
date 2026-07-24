@@ -9,6 +9,7 @@ import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/Toast';
 import { uid } from '../lib/storage';
+import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
 import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, bookingDocumentDownloadUrl } from '../lib/bookingDocuments';
 import { generateProposalPdf, generateProposalPdfAttachment } from '../lib/proposalPdf';
 import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms } from '../lib/contracts';
@@ -28,6 +29,7 @@ const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 const cardClass = 'bg-white rounded-2xl border border-slate-200 p-6';
 const cardTitleClass = 'text-base font-bold text-slate-800 mb-5';
+const primaryButtonClass = 'px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700';
 
 export const PRIORITIES = [
   { value: 'hot', label: 'Hot', color: '#ef4444' },
@@ -78,34 +80,9 @@ function emptyForm() {
 // nothing to auto-save to the server yet. But the tab itself can still be
 // discarded by the browser (backgrounded to save memory) or reloaded, which
 // wipes that in-progress React state outright. Mirroring the draft into
-// sessionStorage means a reload picks up right where the user left off
-// instead of silently losing everything they'd typed.
+// sessionStorage (see lib/draftStorage.js) means a reload picks up right
+// where the user left off instead of silently losing everything they'd typed.
 const NEW_BOOKING_DRAFT_KEY = 'gigworks:newBookingDraft';
-
-function loadNewBookingDraft() {
-  try {
-    const raw = sessionStorage.getItem(NEW_BOOKING_DRAFT_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveNewBookingDraft(form) {
-  try {
-    sessionStorage.setItem(NEW_BOOKING_DRAFT_KEY, JSON.stringify(form));
-  } catch {
-    // storage full/unavailable — draft recovery just won't work this time
-  }
-}
-
-function clearNewBookingDraft() {
-  try {
-    sessionStorage.removeItem(NEW_BOOKING_DRAFT_KEY);
-  } catch {
-    // ignore
-  }
-}
 
 function DocumentSection({ category, docs, uploading, onUpload, onRequestDelete }) {
   const label = category === 'proposal' ? 'Proposal' : 'Contract';
@@ -584,7 +561,7 @@ export default function BookingFormPage() {
       // background refresh doesn't wipe that in-progress, not-yet-saved draft.
       if (hydratedBookingIdRef.current === bookingId) return;
       hydratedBookingIdRef.current = bookingId;
-      setForm(loadNewBookingDraft() || emptyForm());
+      setForm(loadDraft(NEW_BOOKING_DRAFT_KEY) || emptyForm());
     }
     setError('');
     setAddingType(false);
@@ -599,10 +576,10 @@ export default function BookingFormPage() {
 
   // Mirrors the in-progress draft of a brand-new (not-yet-saved) booking into
   // sessionStorage on every change, so a discarded/reloaded tab can recover
-  // it — see loadNewBookingDraft above.
+  // it — see lib/draftStorage.js.
   useEffect(() => {
     if (booking) return;
-    saveNewBookingDraft(form);
+    saveDraft(NEW_BOOKING_DRAFT_KEY, form);
   }, [form, booking]);
 
   // Auto-saves an existing booking shortly after any field changes — no
@@ -837,13 +814,13 @@ export default function BookingFormPage() {
     const wasNew = !booking;
     persistBooking();
     setSaving(false);
-    if (wasNew) clearNewBookingDraft();
+    if (wasNew) clearDraft(NEW_BOOKING_DRAFT_KEY);
     showToast(booking ? 'Booking updated' : 'Booking added');
     navigate('/bookings');
   }
 
   function handleLeaveWithoutSaving() {
-    if (!booking) clearNewBookingDraft();
+    if (!booking) clearDraft(NEW_BOOKING_DRAFT_KEY);
     navigate('/bookings');
   }
 
@@ -1266,7 +1243,7 @@ export default function BookingFormPage() {
         <button
           type="button"
           onClick={() => navigate('/bookings')}
-          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
+          className={primaryButtonClass}
         >
           Back to Bookings
         </button>
@@ -1307,7 +1284,7 @@ export default function BookingFormPage() {
             type="submit"
             form="booking-form"
             disabled={saving}
-            className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
+            className={`${primaryButtonClass} disabled:opacity-60 flex items-center gap-2`}
           >
             {saving && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
             {isEditing ? 'Save Changes' : 'Add Booking'}
@@ -1629,7 +1606,7 @@ export default function BookingFormPage() {
               <button
                 type="button"
                 onClick={handlePushToProposal}
-                className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
+                className={primaryButtonClass}
               >
                 Push to Proposal
               </button>
@@ -1760,7 +1737,7 @@ export default function BookingFormPage() {
                       onClick={handleSendProposal}
                       disabled={sendingProposal || !client?.email}
                       title={!client?.email ? "Add an email address for this client first" : undefined}
-                      className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      className={`${primaryButtonClass} disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
                     >
                       {sendingProposal && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
                       {form.proposal.sentAt ? 'Resend Proposal' : 'Send Proposal'}
@@ -1863,7 +1840,7 @@ export default function BookingFormPage() {
                   type="button"
                   onClick={handleSendContract}
                   disabled={sendingContract || !contractRecipientEmail.trim()}
-                  className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className={`${primaryButtonClass} disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
                 >
                   {sendingContract && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
                   Send Contract for Signature
@@ -2034,7 +2011,7 @@ export default function BookingFormPage() {
                           type="button"
                           onClick={handleOwnerSign}
                           disabled={signingOwner}
-                          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
+                          className={`${primaryButtonClass} disabled:opacity-60 flex items-center gap-2`}
                         >
                           {signingOwner && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
                           Sign Contract
@@ -2201,7 +2178,7 @@ export default function BookingFormPage() {
                     type="button"
                     onClick={handleSendNewInvoice}
                     disabled={sendingNewInvoice || savingInvoiceDraft}
-                    className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    className={`${primaryButtonClass} disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
                   >
                     {sendingNewInvoice && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
                     Send Invoice

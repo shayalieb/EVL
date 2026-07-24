@@ -5,6 +5,10 @@ import { getPricingTier, getPricingTiers } from '../lib/pricingTiers';
 import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
 
 const timeInputClass = 'px-2 py-1 rounded-lg border border-slate-300 text-xs focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
+const emailHistoryButtonClass = 'relative shrink-0 w-12 h-12 flex items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50';
+const unreadBadgeClass = 'absolute -top-2 -right-2 min-w-[22px] h-[22px] px-1.5 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center border-2 border-white';
+const sendEmailButtonClass = 'shrink-0 px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5';
+const bucketButtonClass = 'px-2 py-1.5 rounded-lg border text-xs font-semibold disabled:opacity-30 disabled:cursor-not-allowed border-slate-300 text-slate-500 hover:bg-slate-50';
 const PAYMENT_METHOD_LABELS = { ach: 'ACH', check: 'Check', card: 'Card', other: 'Other' };
 
 export default function ContractorPickerRow({
@@ -76,7 +80,7 @@ export default function ContractorPickerRow({
         <button
           type="button"
           onClick={() => onOpenThread(booking.contractorId)}
-          className="relative shrink-0 w-12 h-12 flex items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50"
+          className={emailHistoryButtonClass}
           aria-label="View email history"
           title="Email history"
         >
@@ -94,7 +98,7 @@ export default function ContractorPickerRow({
             <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
           </svg>
           {unreadCount > 0 && (
-            <span className="absolute -top-2 -right-2 min-w-[22px] h-[22px] px-1.5 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center border-2 border-white">
+            <span className={unreadBadgeClass}>
               {unreadCount}
             </span>
           )}
@@ -115,7 +119,7 @@ export default function ContractorPickerRow({
               type="button"
               onClick={handleSend}
               disabled={!contractor.email || !selectedTemplateId}
-              className={`shrink-0 px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 ${contractor.email ? '' : 'invisible'}`}
+              className={`${sendEmailButtonClass} ${contractor.email ? '' : 'invisible'}`}
             >
               Send Email
             </button>
@@ -133,7 +137,7 @@ export default function ContractorPickerRow({
                 onClick={() => handleBucketClick(b.value)}
                 disabled={disabled}
                 title={disabled ? `No "${b.label}" inquiry status configured in Settings` : b.label}
-                className="px-2 py-1.5 rounded-lg border text-xs font-semibold disabled:opacity-30 disabled:cursor-not-allowed border-slate-300 text-slate-500 hover:bg-slate-50"
+                className={bucketButtonClass}
                 style={active ? { color: status.color, borderColor: `${status.color}55`, backgroundColor: `${status.color}11` } : undefined}
               >
                 {b.label}

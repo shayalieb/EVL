@@ -15,6 +15,7 @@ import { useToast } from '../components/ui/Toast';
 import { getThreadSummaries, sendThreadedEmail } from '../lib/email/threads';
 import { renderEmailTemplate } from '../lib/mergeFields';
 import { uid } from '../lib/storage';
+import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
 import { formatCurrency as currency, formatEventDate, formatEventTime } from '../lib/format';
 import { getPricingTiers, getTierPrice } from '../lib/pricingTiers';
 import { getPrepContractors, renderPrepSheetEmail } from '../lib/prepSheet';
@@ -129,34 +130,9 @@ function emptyRequestItem() {
 // auto-save to the server yet. But the tab itself can still be discarded by
 // the browser (backgrounded to save memory) or reloaded, which wipes that
 // in-progress React state outright. Mirroring the draft into sessionStorage
-// means a reload picks up right where the user left off instead of silently
-// losing everything they'd typed.
+// (see lib/draftStorage.js) means a reload picks up right where the user
+// left off instead of silently losing everything they'd typed.
 const NEW_EVENT_DRAFT_KEY = 'gigworks:newEventDraft';
-
-function loadNewEventDraft() {
-  try {
-    const raw = sessionStorage.getItem(NEW_EVENT_DRAFT_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveNewEventDraft(form) {
-  try {
-    sessionStorage.setItem(NEW_EVENT_DRAFT_KEY, JSON.stringify(form));
-  } catch {
-    // storage full/unavailable — draft recovery just won't work this time
-  }
-}
-
-function clearNewEventDraft() {
-  try {
-    sessionStorage.removeItem(NEW_EVENT_DRAFT_KEY);
-  } catch {
-    // ignore
-  }
-}
 
 export default function EventFormPage() {
   const { eventId } = useParams();
@@ -253,7 +229,7 @@ export default function EventFormPage() {
       // refresh doesn't wipe that in-progress, not-yet-saved draft.
       if (hydratedEventIdRef.current === eventId) return;
       hydratedEventIdRef.current = eventId;
-      setForm(loadNewEventDraft() || emptyForm());
+      setForm(loadDraft(NEW_EVENT_DRAFT_KEY) || emptyForm());
     }
     setError('');
     setAddingType(false);
@@ -262,10 +238,10 @@ export default function EventFormPage() {
 
   // Mirrors the in-progress draft of a brand-new (not-yet-saved) event into
   // sessionStorage on every change, so a discarded/reloaded tab can recover
-  // it — see loadNewEventDraft above.
+  // it — see lib/draftStorage.js.
   useEffect(() => {
     if (event) return;
-    saveNewEventDraft(form);
+    saveDraft(NEW_EVENT_DRAFT_KEY, form);
   }, [form, event]);
 
   const latestSummariesEventIdRef = useRef(null);
@@ -711,7 +687,7 @@ export default function EventFormPage() {
     if (err) { setError(err); setActiveTab('details'); return; }
     const wasNew = !event;
     persistEvent(draftStatus?.id);
-    if (wasNew) clearNewEventDraft();
+    if (wasNew) clearDraft(NEW_EVENT_DRAFT_KEY);
     showToast('Saved as draft');
     navigate('/events');
   }
@@ -725,7 +701,7 @@ export default function EventFormPage() {
     setTimeout(() => {
       const confirmedStatus = eventStatuses.find((s) => s.label.toLowerCase() === 'confirmed');
       persistEvent(event?.eventStatus || confirmedStatus?.id || draftStatus?.id);
-      if (wasNew) clearNewEventDraft();
+      if (wasNew) clearDraft(NEW_EVENT_DRAFT_KEY);
       setSaving(false);
       showToast(event ? 'Event updated' : 'Event added');
       navigate('/events');
@@ -733,7 +709,7 @@ export default function EventFormPage() {
   }
 
   function handleLeaveWithoutSaving() {
-    if (!event) clearNewEventDraft();
+    if (!event) clearDraft(NEW_EVENT_DRAFT_KEY);
     navigate('/events');
   }
 

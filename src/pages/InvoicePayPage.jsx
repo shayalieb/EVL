@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import Logo from '../components/ui/Logo';
+import SubmitButton from '../components/ui/SubmitButton';
 import InvoiceDocument from '../components/InvoiceDocument';
 import { viewInvoiceByToken, startInvoiceCheckout } from '../lib/invoices';
 import { formatCurrency as currency, formatEventDate } from '../lib/format';
@@ -68,14 +69,7 @@ export default function InvoicePayPage() {
               onChange={(e) => setEmail(e.target.value)}
               className={inputClass}
             />
-            <button
-              type="submit"
-              disabled={verifying}
-              className="w-full py-2.5 rounded-lg bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-700 disabled:opacity-60 flex items-center justify-center gap-2"
-            >
-              {verifying && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
-              Continue
-            </button>
+            <SubmitButton loading={verifying}>Continue</SubmitButton>
           </form>
         </div>
       </div>
