@@ -7,6 +7,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { allPermissions, getMembershipWithAccount, serializeMembership } from '../lib/membership.js';
 import { sendMail, buildFromHeader } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
+import { MIN_PASSWORD_LENGTH, passwordTooWeak } from '../lib/password.js';
 
 const router = Router();
 const SALT_ROUNDS = 12;
@@ -43,6 +44,9 @@ router.post('/signup', credentialsLimiter, asyncHandler(async (req, res) => {
   const { firstName, lastName, email, phone, password } = req.body || {};
   if (!firstName?.trim() || !lastName?.trim() || !email?.trim() || !password) {
     return res.status(400).json({ error: 'First name, last name, email, and password are required.' });
+  }
+  if (passwordTooWeak(password)) {
+    return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
   }
 
   const normalizedEmail = email.trim().toLowerCase();
@@ -111,6 +115,9 @@ router.post('/change-password', requireAuth, asyncHandler(async (req, res) => {
   if (!newPassword) {
     return res.status(400).json({ error: 'New password is required.' });
   }
+  if (passwordTooWeak(newPassword)) {
+    return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
+  }
 
   const user = await prisma.user.findUnique({ where: { id: req.session.userId } });
   const match = user?.passwordHash ? await bcrypt.compare(currentPassword || '', user.passwordHash) : true;
@@ -161,6 +168,9 @@ router.post('/reset-password', passwordResetLimiter, asyncHandler(async (req, re
   const { token, newPassword } = req.body || {};
   if (!token || !newPassword) {
     return res.status(400).json({ error: 'Token and new password are required.' });
+  }
+  if (passwordTooWeak(newPassword)) {
+    return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
   }
 
   const record = await prisma.passwordResetToken.findUnique({ where: { tokenHash: hashToken(token) } });

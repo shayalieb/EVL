@@ -288,7 +288,7 @@ function AddMemberModal({ open, onClose, onAdded }) {
 
         <div>
           <label className={labelClass}>Temporary Password</label>
-          <input required type="text" value={form.password} onChange={(e) => update('password', e.target.value)} data-testid="settings-users-add-password-input" className={inputClass} />
+          <input required type="text" minLength={8} value={form.password} onChange={(e) => update('password', e.target.value)} data-testid="settings-users-add-password-input" className={inputClass} />
         </div>
 
         <div>

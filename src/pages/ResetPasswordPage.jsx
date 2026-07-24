@@ -20,6 +20,10 @@ export default function ResetPasswordPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match.');
       return;
@@ -60,7 +64,7 @@ export default function ResetPasswordPage() {
                 {error}
               </div>
             )}
-            <input type="password" required placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} data-testid="reset-password-new-password-input" className={inputClass} />
+            <input type="password" required minLength={8} placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} data-testid="reset-password-new-password-input" className={inputClass} />
             <input type="password" required placeholder="Confirm new password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} data-testid="reset-password-confirm-password-input" className={inputClass} />
             <SubmitButton loading={submitting} testId="reset-password-submit-button">Reset Password</SubmitButton>
           </form>

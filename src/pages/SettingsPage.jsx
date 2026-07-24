@@ -73,12 +73,12 @@ function UserInfoTab() {
   async function handleChangePassword(e) {
     e.preventDefault();
     setPwError('');
-    if (newPassword !== confirmPassword) {
-      setPwError('New passwords do not match.');
+    if (newPassword.length < 8) {
+      setPwError('New password must be at least 8 characters.');
       return;
     }
-    if (newPassword.length < 4) {
-      setPwError('New password is too short.');
+    if (newPassword !== confirmPassword) {
+      setPwError('New passwords do not match.');
       return;
     }
     const result = await changePassword({ currentPassword, newPassword });
@@ -124,7 +124,7 @@ function UserInfoTab() {
         <h3 className="text-sm font-bold text-slate-700">Change Password</h3>
         {pwError && <div data-testid="settings-user-password-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{pwError}</div>}
         <input type="password" placeholder="Current password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} data-testid="settings-user-current-password-input" className={inputClass} />
-        <input type="password" placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} data-testid="settings-user-new-password-input" className={inputClass} />
+        <input type="password" minLength={8} placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} data-testid="settings-user-new-password-input" className={inputClass} />
         <input type="password" placeholder="Confirm new password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} data-testid="settings-user-confirm-password-input" className={inputClass} />
         <button type="submit" data-testid="settings-user-update-password-button" className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50">
           Update Password

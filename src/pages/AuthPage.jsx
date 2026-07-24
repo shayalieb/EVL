@@ -64,6 +64,10 @@ export default function AuthPage() {
       setLocalError('Please fill in all required fields.');
       return;
     }
+    if (password.length < 8) {
+      setLocalError('Password must be at least 8 characters.');
+      return;
+    }
     if (password !== confirmPassword) {
       setLocalError('Passwords do not match.');
       return;
@@ -145,7 +149,7 @@ export default function AuthPage() {
             </div>
             <input type="email" required placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="auth-signup-email-input" className={inputClass} />
             <input type="tel" placeholder="Contact phone number" value={phone} onChange={(e) => setPhone(e.target.value)} data-testid="auth-signup-phone-input" className={inputClass} />
-            <input type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} data-testid="auth-signup-password-input" className={inputClass} />
+            <input type="password" required minLength={8} placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} data-testid="auth-signup-password-input" className={inputClass} />
             <input type="password" required placeholder="Confirm password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} data-testid="auth-signup-confirm-password-input" className={inputClass} />
             <SubmitButton loading={submitting} testId="auth-signup-submit-button">Create Account</SubmitButton>
           </form>
