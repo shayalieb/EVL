@@ -24,6 +24,16 @@ function safeReplyHtml(full) {
   return escapeHtml(full?.text || '');
 }
 
+// For SupportMessage.body, which is rendered as plain JSX text elsewhere in
+// the app (not dangerouslySetInnerHTML) — storing HTML tags here would just
+// show up as literal, unreadable markup, so this strips to plain text
+// instead of preserving any formatting.
+function safeReplyText(full) {
+  if (full?.text) return full.text;
+  if (full?.html) return sanitizeHtml(full.html, { allowedTags: [], allowedAttributes: {} });
+  return '';
+}
+
 function extractThreadId(addresses) {
   for (const addr of addresses || []) {
     const match = /^reply\+([^@]+)@/.exec(addr);
@@ -69,7 +79,7 @@ async function handleSupportReply(res, rawId, event) {
         threadId: thread.id,
         direction: 'user',
         senderUserId: owner?.userId || thread.accountId,
-        body: full?.html || full?.text || '',
+        body: safeReplyText(full),
         resendMessageId: event.data.email_id,
       },
     });
