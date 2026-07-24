@@ -48,21 +48,21 @@ export default function ResetPasswordPage() {
           </p>
         ) : done ? (
           <div className="space-y-4 text-center">
-            <p className="text-sm text-slate-600">Your password has been reset.</p>
-            <Link to="/auth" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
+            <p data-testid="reset-password-done-message" className="text-sm text-slate-600">Your password has been reset.</p>
+            <Link to="/auth" data-testid="reset-password-back-to-signin-link" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
               Back to sign in
             </Link>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-3">
             {error && (
-              <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+              <div data-testid="reset-password-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
                 {error}
               </div>
             )}
-            <input type="password" required placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className={inputClass} />
-            <input type="password" required placeholder="Confirm new password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className={inputClass} />
-            <SubmitButton loading={submitting}>Reset Password</SubmitButton>
+            <input type="password" required placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} data-testid="reset-password-new-password-input" className={inputClass} />
+            <input type="password" required placeholder="Confirm new password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} data-testid="reset-password-confirm-password-input" className={inputClass} />
+            <SubmitButton loading={submitting} testId="reset-password-submit-button">Reset Password</SubmitButton>
           </form>
         )}
       </div>

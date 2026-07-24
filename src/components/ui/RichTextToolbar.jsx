@@ -47,12 +47,12 @@ export default function RichTextToolbar({ editorRef, onFormat }) {
 
   return (
     <div className="flex items-center gap-1 mb-1.5">
-      <button type="button" title="Bold" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('bold')} className={`${buttonClass} font-bold ${active.bold ? activeClass : ''}`}>B</button>
-      <button type="button" title="Italic" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('italic')} className={`${buttonClass} italic ${active.italic ? activeClass : ''}`}>I</button>
-      <button type="button" title="Underline" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('underline')} className={`${buttonClass} underline ${active.underline ? activeClass : ''}`}>U</button>
+      <button type="button" title="Bold" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('bold')} data-testid="rich-text-toolbar-bold-button" className={`${buttonClass} font-bold ${active.bold ? activeClass : ''}`}>B</button>
+      <button type="button" title="Italic" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('italic')} data-testid="rich-text-toolbar-italic-button" className={`${buttonClass} italic ${active.italic ? activeClass : ''}`}>I</button>
+      <button type="button" title="Underline" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('underline')} data-testid="rich-text-toolbar-underline-button" className={`${buttonClass} underline ${active.underline ? activeClass : ''}`}>U</button>
       <div className="w-px h-4 bg-slate-200 mx-1" />
-      <button type="button" title="Smaller text" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('fontSize', '2')} className={`${buttonClass} text-xs`}>A-</button>
-      <button type="button" title="Larger text" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('fontSize', '5')} className={`${buttonClass} text-base`}>A+</button>
+      <button type="button" title="Smaller text" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('fontSize', '2')} data-testid="rich-text-toolbar-smaller-button" className={`${buttonClass} text-xs`}>A-</button>
+      <button type="button" title="Larger text" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat('fontSize', '5')} data-testid="rich-text-toolbar-larger-button" className={`${buttonClass} text-base`}>A+</button>
     </div>
   );
 }

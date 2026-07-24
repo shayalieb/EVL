@@ -81,6 +81,7 @@ export default function SignatureCanvas({ onChange, height = 160 }) {
       <canvas
         ref={canvasRef}
         style={{ height, touchAction: 'none' }}
+        data-testid="signature-canvas"
         className="w-full rounded-lg border border-slate-300 bg-white cursor-crosshair"
         onMouseDown={start}
         onMouseMove={move}
@@ -93,7 +94,7 @@ export default function SignatureCanvas({ onChange, height = 160 }) {
       <div className="flex items-center justify-between mt-1.5">
         <span className="text-xs text-slate-400">Sign above with your mouse, trackpad, or finger</span>
         {hasDrawn && (
-          <button type="button" onClick={handleClear} className="text-xs font-semibold text-slate-400 hover:text-red-600">
+          <button type="button" onClick={handleClear} data-testid="signature-canvas-clear-button" className="text-xs font-semibold text-slate-400 hover:text-red-600">
             Clear
           </button>
         )}

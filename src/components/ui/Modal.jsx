@@ -9,6 +9,7 @@ export default function Modal({ open, onClose, title, children, widthClass = 'ma
           <button
             type="button"
             onClick={onClose}
+            data-testid="modal-close-button"
             className="text-slate-400 hover:text-slate-600 rounded-lg p-1"
             aria-label="Close"
           >

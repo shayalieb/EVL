@@ -39,7 +39,7 @@ export default function AdminAdminsPage() {
     }
   }
 
-  if (loadError) return <div className="text-sm text-red-600">{loadError}</div>;
+  if (loadError) return <div data-testid="admin-admins-load-error-banner" className="text-sm text-red-600">{loadError}</div>;
   if (!admins) return <div className="text-sm text-slate-400">Loading…</div>;
 
   const hasFilters = !!(search || roleFilter);
@@ -61,6 +61,7 @@ export default function AdminAdminsPage() {
           <button
             type="button"
             onClick={() => setGrantOpen(true)}
+            data-testid="admin-admins-grant-access-button"
             className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
             Grant to Existing Account
@@ -68,6 +69,7 @@ export default function AdminAdminsPage() {
           <button
             type="button"
             onClick={() => setInviteOpen(true)}
+            data-testid="admin-admins-invite-button"
             className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
           >
             + Invite New Admin
@@ -76,7 +78,7 @@ export default function AdminAdminsPage() {
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search by name or email…" className="w-72" />
+        <SearchInput value={search} onChange={setSearch} placeholder="Search by name or email…" className="w-72" testId="admin-admins-search-input" />
         <FilterSelect
           value={roleFilter}
           onChange={setRoleFilter}
@@ -85,11 +87,13 @@ export default function AdminAdminsPage() {
             { value: 'owner', label: 'Owner' },
             { value: 'admin', label: 'Admin' },
           ]}
+          testId="admin-admins-role-filter"
         />
         {hasFilters && (
           <button
             type="button"
             onClick={() => { setSearch(''); setRoleFilter(''); }}
+            data-testid="admin-admins-clear-filters-button"
             className="text-sm font-semibold text-slate-500 hover:text-slate-700"
           >
             Clear
@@ -116,7 +120,7 @@ export default function AdminAdminsPage() {
               </tr>
             )}
             {filteredAdmins.map((a) => (
-              <tr key={a.id} className="border-b border-slate-50 last:border-0">
+              <tr key={a.id} data-testid="admin-admin-row" className="border-b border-slate-50 last:border-0">
                 <td className="px-4 py-3 font-medium text-slate-800">{a.firstName} {a.lastName}</td>
                 <td className="px-4 py-3 text-slate-500">{a.email}</td>
                 <td className="px-4 py-3">
@@ -131,6 +135,7 @@ export default function AdminAdminsPage() {
                     <button
                       type="button"
                       onClick={() => setRevokeTarget(a)}
+                      data-testid="admin-admin-row-revoke-button"
                       className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
                       aria-label={`Remove admin access for ${a.firstName}`}
                     >
@@ -206,15 +211,15 @@ function GrantAccessModal({ open, onClose, onGranted }) {
   return (
     <Modal open={open} onClose={onClose} title="Grant Admin Access">
       <form onSubmit={handleSubmit} className="space-y-3">
-        {error && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
+        {error && <div data-testid="admin-admins-grant-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
         <div>
           <label className="block text-xs font-semibold text-slate-500 mb-1">Email</label>
-          <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
+          <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="admin-admins-grant-email-input" className={inputClass} />
           <p className="mt-1 text-xs text-slate-400">Must already have an account — use "Invite New Admin" instead if they don't.</p>
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
-          <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+          <button type="button" onClick={onClose} data-testid="admin-admins-grant-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button type="submit" disabled={saving} data-testid="admin-admins-grant-submit-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
             {saving ? 'Granting…' : 'Grant Access'}
           </button>
         </div>
@@ -259,28 +264,28 @@ function InviteAdminModal({ open, onClose, onInvited }) {
   return (
     <Modal open={open} onClose={onClose} title="Invite New Admin">
       <form onSubmit={handleSubmit} className="space-y-3">
-        {error && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
+        {error && <div data-testid="admin-admins-invite-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-semibold text-slate-500 mb-1">First Name</label>
-            <input required value={form.firstName} onChange={(e) => update('firstName', e.target.value)} className={inputClass} />
+            <input required value={form.firstName} onChange={(e) => update('firstName', e.target.value)} data-testid="admin-admins-invite-firstname-input" className={inputClass} />
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-500 mb-1">Last Name</label>
-            <input required value={form.lastName} onChange={(e) => update('lastName', e.target.value)} className={inputClass} />
+            <input required value={form.lastName} onChange={(e) => update('lastName', e.target.value)} data-testid="admin-admins-invite-lastname-input" className={inputClass} />
           </div>
         </div>
 
         <div>
           <label className="block text-xs font-semibold text-slate-500 mb-1">Email</label>
-          <input required type="email" value={form.email} onChange={(e) => update('email', e.target.value)} className={inputClass} />
+          <input required type="email" value={form.email} onChange={(e) => update('email', e.target.value)} data-testid="admin-admins-invite-email-input" className={inputClass} />
           <p className="mt-1 text-xs text-slate-400">Creates a new account with admin access already on, and emails them a link to set their password.</p>
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
-          <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+          <button type="button" onClick={onClose} data-testid="admin-admins-invite-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button type="submit" disabled={saving} data-testid="admin-admins-invite-submit-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
             {saving ? 'Sending…' : 'Send Invite'}
           </button>
         </div>

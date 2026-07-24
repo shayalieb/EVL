@@ -49,16 +49,16 @@ export default function OfferingModal({ open, onClose, offering, onSaved }) {
   return (
     <Modal open={open} onClose={onClose} title={offering ? 'Edit Offering' : 'Add Offering'}>
       <form onSubmit={handleSubmit} className="space-y-4">
-        {error && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
+        {error && <div data-testid="offering-modal-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
         <div>
           <label className={labelClass}>Offering Name *</label>
-          <input required autoFocus value={form.name} onChange={(e) => update('name', e.target.value)} className={inputClass} />
+          <input required autoFocus value={form.name} onChange={(e) => update('name', e.target.value)} data-testid="offering-modal-name-input" className={inputClass} />
         </div>
 
         <div>
           <label className={labelClass}>Offering Details</label>
-          <textarea rows={3} value={form.details} onChange={(e) => update('details', e.target.value)} className={inputClass} />
+          <textarea rows={3} value={form.details} onChange={(e) => update('details', e.target.value)} data-testid="offering-modal-details-textarea" className={inputClass} />
         </div>
 
         <div>
@@ -67,6 +67,7 @@ export default function OfferingModal({ open, onClose, offering, onSaved }) {
             <button
               type="button"
               onClick={() => update('type', 'general')}
+              data-testid="offering-modal-type-general-button"
               className={`flex-1 px-3 py-2 rounded-lg border text-sm font-semibold ${
                 form.type === 'general' ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
               }`}
@@ -76,6 +77,7 @@ export default function OfferingModal({ open, onClose, offering, onSaved }) {
             <button
               type="button"
               onClick={() => update('type', 'perUnit')}
+              data-testid="offering-modal-type-perunit-button"
               className={`flex-1 px-3 py-2 rounded-lg border text-sm font-semibold ${
                 form.type === 'perUnit' ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
               }`}
@@ -89,17 +91,17 @@ export default function OfferingModal({ open, onClose, offering, onSaved }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelClass}>Unit Count</label>
-              <input type="number" min="0" value={form.unitCount} onChange={(e) => update('unitCount', e.target.value)} className={inputClass} />
+              <input type="number" min="0" value={form.unitCount} onChange={(e) => update('unitCount', e.target.value)} data-testid="offering-modal-unitcount-input" className={inputClass} />
             </div>
             <div>
               <label className={labelClass}>$ Per Unit</label>
-              <MoneyInput value={form.ratePerUnit} onChange={(v) => update('ratePerUnit', v)} className={moneyInputClass} />
+              <MoneyInput value={form.ratePerUnit} onChange={(v) => update('ratePerUnit', v)} testId="offering-modal-rate-per-unit-input" className={moneyInputClass} />
             </div>
           </div>
         ) : (
           <div>
             <label className={labelClass}>Amount</label>
-            <MoneyInput value={form.amount} onChange={(v) => update('amount', v)} className={moneyInputClass} />
+            <MoneyInput value={form.amount} onChange={(v) => update('amount', v)} testId="offering-modal-amount-input" className={moneyInputClass} />
           </div>
         )}
 
@@ -108,8 +110,8 @@ export default function OfferingModal({ open, onClose, offering, onSaved }) {
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
-          <button type="submit" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
+          <button type="button" onClick={onClose} data-testid="offering-modal-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button type="submit" data-testid="offering-modal-save-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
             {offering ? 'Save Changes' : 'Add Offering'}
           </button>
         </div>

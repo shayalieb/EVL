@@ -25,6 +25,7 @@ export default function GroupChipSelector({
               <button
                 type="button"
                 onClick={() => onSelectGroup(g)}
+                data-testid="group-chip-select-button"
                 className={`pl-3.5 pr-1.5 py-1.5 rounded-md text-sm font-semibold transition-colors ${
                   activeGroup === g ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                 }`}
@@ -37,6 +38,7 @@ export default function GroupChipSelector({
             <button
               type="button"
               onClick={() => onRemoveGroup(g)}
+              data-testid="group-chip-remove-button"
               className="pr-2.5 text-slate-300 hover:text-red-600"
               aria-label={`Remove ${g}`}
             >
@@ -50,6 +52,7 @@ export default function GroupChipSelector({
           <select
             value={selectedToAdd}
             onChange={(e) => setSelectedToAdd(e.target.value)}
+            data-testid="group-chip-add-select"
             className="px-2 py-1.5 rounded-lg border border-slate-300 text-xs"
           >
             <option value="">{addLabel}</option>
@@ -59,6 +62,7 @@ export default function GroupChipSelector({
             type="button"
             onClick={handleAdd}
             disabled={!selectedToAdd}
+            data-testid="group-chip-add-button"
             className="px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             + Add

@@ -21,7 +21,7 @@ function PendingFiles({ files, onRemove }) {
         <span key={i} className="inline-flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-full bg-slate-100 text-xs text-slate-600">
           <FileIcon className="w-3.5 h-3.5 text-slate-400" />
           {f.name}
-          <button type="button" onClick={() => onRemove(i)} className="w-4 h-4 flex items-center justify-center rounded-full text-slate-400 hover:text-red-600 hover:bg-red-50" aria-label={`Remove ${f.name}`}>
+          <button type="button" onClick={() => onRemove(i)} data-testid="admin-support-pending-file-remove-button" className="w-4 h-4 flex items-center justify-center rounded-full text-slate-400 hover:text-red-600 hover:bg-red-50" aria-label={`Remove ${f.name}`}>
             ×
           </button>
         </span>
@@ -67,7 +67,7 @@ export default function AdminSupportPage() {
 
   useEffect(load, []);
 
-  if (loadError) return <div className="text-sm text-red-600">{loadError}</div>;
+  if (loadError) return <div data-testid="admin-support-load-error-banner" className="text-sm text-red-600">{loadError}</div>;
   if (!threads) return <div className="text-sm text-slate-400">Loading…</div>;
 
   const active = threads.find((t) => t.id === activeId);
@@ -83,7 +83,7 @@ export default function AdminSupportPage() {
     <div className="max-w-5xl">
       <h2 className="text-2xl font-bold text-slate-800 mb-4">Support</h2>
       <div className="flex items-center gap-2 flex-wrap mb-4">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search threads…" className="w-64" />
+        <SearchInput value={search} onChange={setSearch} placeholder="Search threads…" className="w-64" testId="admin-support-search-input" />
         <FilterSelect
           value={statusFilter}
           onChange={setStatusFilter}
@@ -92,6 +92,7 @@ export default function AdminSupportPage() {
             { value: 'open', label: 'Open' },
             { value: 'closed', label: 'Closed' },
           ]}
+          testId="admin-support-status-filter"
         />
         <FilterSelect
           value={replyFilter}
@@ -101,11 +102,13 @@ export default function AdminSupportPage() {
             { value: 'needs-reply', label: 'Needs Reply' },
             { value: 'read', label: 'Read' },
           ]}
+          testId="admin-support-reply-filter"
         />
         {hasFilters && (
           <button
             type="button"
             onClick={() => { setSearch(''); setStatusFilter(''); setReplyFilter(''); }}
+            data-testid="admin-support-clear-filters-button"
             className="text-sm font-semibold text-slate-500 hover:text-slate-700"
           >
             Clear
@@ -124,6 +127,7 @@ export default function AdminSupportPage() {
               key={t.id}
               type="button"
               onClick={() => setActiveId(t.id)}
+              data-testid="admin-support-thread-row"
               className={`w-full text-left px-4 py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50 ${activeId === t.id ? 'bg-indigo-50' : ''}`}
             >
               <div className="flex items-center justify-between gap-2">
@@ -235,7 +239,7 @@ function ThreadDetail({ thread, onChanged }) {
           <div className="font-bold text-slate-800">{detail.subject}</div>
           <div className="text-xs text-slate-500">{detail.account.owner?.email}</div>
         </div>
-        <button type="button" onClick={toggleStatus} className="text-xs font-semibold text-slate-500 hover:text-slate-700">
+        <button type="button" onClick={toggleStatus} data-testid="admin-support-toggle-status-button" className="text-xs font-semibold text-slate-500 hover:text-slate-700">
           {thread.status === 'closed' ? 'Reopen' : 'Close'}
         </button>
       </div>
@@ -244,6 +248,7 @@ function ThreadDetail({ thread, onChanged }) {
         <button
           type="button"
           onClick={() => setTab('messages')}
+          data-testid="admin-support-messages-tab"
           className={`px-3 py-2 text-xs font-semibold border-b-2 -mb-px ${tab === 'messages' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
         >
           Messages
@@ -251,6 +256,7 @@ function ThreadDetail({ thread, onChanged }) {
         <button
           type="button"
           onClick={() => setTab('notes')}
+          data-testid="admin-support-notes-tab"
           className={`px-3 py-2 text-xs font-semibold border-b-2 -mb-px flex items-center gap-1.5 ${tab === 'notes' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
         >
           Notes
@@ -278,6 +284,7 @@ function ThreadDetail({ thread, onChanged }) {
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 placeholder="Reply…"
+                data-testid="admin-support-reply-input"
                 className="flex-1 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
               />
               <label className={`px-3 py-2 rounded-lg border text-sm font-semibold cursor-pointer flex items-center ${files.length >= MAX_FILES ? 'border-slate-200 text-slate-300 cursor-not-allowed' : 'border-slate-300 text-slate-500 hover:bg-slate-50'}`}>
@@ -287,10 +294,11 @@ function ThreadDetail({ thread, onChanged }) {
                   multiple
                   disabled={files.length >= MAX_FILES}
                   onChange={(e) => { setFiles((prev) => pickFiles(prev, e.target.files)); e.target.value = ''; }}
+                  data-testid="admin-support-reply-file-input"
                   className="hidden"
                 />
               </label>
-              <button type="submit" disabled={sending} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+              <button type="submit" disabled={sending} data-testid="admin-support-reply-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
                 Send
               </button>
             </div>
@@ -315,9 +323,10 @@ function ThreadDetail({ thread, onChanged }) {
               value={noteBody}
               onChange={(e) => setNoteBody(e.target.value)}
               placeholder="Add an internal note…"
+              data-testid="admin-support-note-input"
               className="flex-1 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
             />
-            <button type="submit" disabled={savingNote} className="px-4 py-2 rounded-lg bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-60">
+            <button type="submit" disabled={savingNote} data-testid="admin-support-note-submit-button" className="px-4 py-2 rounded-lg bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-60">
               Add
             </button>
           </form>

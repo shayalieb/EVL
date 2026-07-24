@@ -29,9 +29,9 @@ function PanelHeading({ children, color, icon }) {
   );
 }
 
-function StatTile({ label, value, color = '#64748b', icon }) {
+function StatTile({ label, value, color = '#64748b', icon, testId }) {
   return (
-    <div className="relative bg-white rounded-xl border border-slate-200 px-5 py-4 overflow-hidden">
+    <div data-testid={testId} className="relative bg-white rounded-xl border border-slate-200 px-5 py-4 overflow-hidden">
       <span className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: color }} />
       <div className="flex items-start justify-between gap-2 mb-1.5">
         <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</div>
@@ -99,16 +99,17 @@ export default function HomePage() {
       <h2 className="text-2xl font-bold text-slate-800 mb-4">Home</h2>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-        <StatTile label="Total Events" value={stats.totalEvents} color="#64748b" icon={<CalendarIcon />} />
-        <StatTile label="Upcoming Events" value={stats.upcomingCount} color="#2563eb" icon={<ClockIcon />} />
-        <StatTile label="Pipeline Value" value={currency(stats.pipelineValue)} color="#4f46e5" icon={<DollarIcon />} />
-        <StatTile label="Total Clients" value={clients.length} color="#7c3aed" icon={<UsersIcon />} />
-        <StatTile label="Total Contractors" value={contractors.length} color="#0d9488" icon={<WrenchIcon />} />
+        <StatTile label="Total Events" value={stats.totalEvents} color="#64748b" icon={<CalendarIcon />} testId="home-stat-total-events" />
+        <StatTile label="Upcoming Events" value={stats.upcomingCount} color="#2563eb" icon={<ClockIcon />} testId="home-stat-upcoming-events" />
+        <StatTile label="Pipeline Value" value={currency(stats.pipelineValue)} color="#4f46e5" icon={<DollarIcon />} testId="home-stat-pipeline-value" />
+        <StatTile label="Total Clients" value={clients.length} color="#7c3aed" icon={<UsersIcon />} testId="home-stat-total-clients" />
+        <StatTile label="Total Contractors" value={contractors.length} color="#0d9488" icon={<WrenchIcon />} testId="home-stat-total-contractors" />
         <StatTile
           label="Needs Confirmation"
           value={stats.needsConfirmation}
           color={stats.needsConfirmation > 0 ? '#d97706' : '#94a3b8'}
           icon={<AlertIcon />}
+          testId="home-stat-needs-confirmation"
         />
       </div>
 
@@ -127,6 +128,7 @@ export default function HomePage() {
                     key={e.id}
                     type="button"
                     onClick={() => navigate(`/events/${e.id}`)}
+                    data-testid="home-upcoming-event-card"
                     className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 text-left"
                   >
                     <div className="min-w-0">
@@ -156,7 +158,7 @@ export default function HomePage() {
             ) : (
               <div className="space-y-3">
                 {stats.topContractors.map(({ contractor, count }) => (
-                  <div key={contractor.id} className="flex items-center justify-between text-sm">
+                  <div key={contractor.id} data-testid="home-top-contractor-row" className="flex items-center justify-between text-sm">
                     <div className="min-w-0">
                       <div className="font-medium text-slate-700 truncate">{contractor.firstName} {contractor.lastName}</div>
                       <div className="text-xs text-slate-400">{contractor.contractorType1}</div>
@@ -179,6 +181,7 @@ export default function HomePage() {
                     key={client.id}
                     type="button"
                     onClick={() => navigate('/clients')}
+                    data-testid="home-followup-client-row"
                     className="w-full flex items-center justify-between text-sm hover:bg-slate-50 rounded-lg px-1 py-1 -mx-1"
                   >
                     <div className="font-medium text-slate-700 truncate">{client.firstName} {client.lastName}</div>

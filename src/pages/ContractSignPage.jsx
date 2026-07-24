@@ -91,7 +91,7 @@ export default function ContractSignPage() {
           </div>
           <form onSubmit={handleVerify} className="space-y-3">
             {error && (
-              <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>
+              <div data-testid="contract-sign-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>
             )}
             <input
               type="email"
@@ -100,9 +100,10 @@ export default function ContractSignPage() {
               placeholder="Email address this was sent to"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              data-testid="contract-sign-email-input"
               className={inputClass}
             />
-            <SubmitButton loading={verifying}>Continue</SubmitButton>
+            <SubmitButton loading={verifying} testId="contract-sign-verify-submit-button">Continue</SubmitButton>
           </form>
         </div>
       </div>
@@ -130,21 +131,22 @@ export default function ContractSignPage() {
             type="button"
             onClick={handleDownload}
             disabled={downloading}
+            data-testid="contract-sign-download-button"
             className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-white disabled:opacity-60 shrink-0"
           >
             {downloading ? 'Preparing…' : 'Download a copy (PDF)'}
           </button>
         </div>
 
-        {error && <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
+        {error && <div data-testid="contract-sign-error-banner" className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
         {status === 'fully_signed' && (
-          <div className="mb-4 text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+          <div data-testid="contract-sign-fully-signed-banner" className="mb-4 text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
             This contract has been signed by both parties.
           </div>
         )}
         {alreadySigned && status !== 'fully_signed' && (
-          <div className="mb-4 text-sm text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+          <div data-testid="contract-sign-waiting-banner" className="mb-4 text-sm text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
             You've signed this contract. Waiting on the other party.
           </div>
         )}
@@ -173,6 +175,7 @@ export default function ContractSignPage() {
               type="button"
               onClick={handleSignClick}
               disabled={submitting}
+              data-testid="contract-sign-submit-button"
               className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-700 disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {submitting && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}

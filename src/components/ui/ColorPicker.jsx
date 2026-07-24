@@ -8,6 +8,7 @@ export default function ColorPicker({ value, onChange }) {
           key={color}
           type="button"
           onClick={() => onChange(color)}
+          data-testid="color-picker-swatch-button"
           className="w-6 h-6 rounded-full ring-offset-2"
           style={{ backgroundColor: color, boxShadow: value === color ? `0 0 0 2px white, 0 0 0 4px ${color}` : 'none' }}
           aria-label={`Choose color ${color}`}

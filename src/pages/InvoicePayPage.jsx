@@ -58,7 +58,7 @@ export default function InvoicePayPage() {
           </div>
           <form onSubmit={handleVerify} className="space-y-3">
             {error && (
-              <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>
+              <div data-testid="invoice-pay-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>
             )}
             <input
               type="email"
@@ -67,9 +67,10 @@ export default function InvoicePayPage() {
               placeholder="Email address this was sent to"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              data-testid="invoice-pay-email-input"
               className={inputClass}
             />
-            <SubmitButton loading={verifying}>Continue</SubmitButton>
+            <SubmitButton loading={verifying} testId="invoice-pay-verify-submit-button">Continue</SubmitButton>
           </form>
         </div>
       </div>
@@ -86,20 +87,20 @@ export default function InvoicePayPage() {
           <Logo className="h-10 w-auto" />
         </div>
 
-        {error && <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
+        {error && <div data-testid="invoice-pay-error-banner" className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
         {status === 'paid' && (
-          <div className="mb-4 text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+          <div data-testid="invoice-pay-paid-banner" className="mb-4 text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
             Paid{invoice.paidAt ? ` on ${formatEventDate(invoice.paidAt.slice(0, 10))}` : ''}. Thank you!
           </div>
         )}
         {status === 'partial' && (
-          <div className="mb-4 text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+          <div data-testid="invoice-pay-partial-banner" className="mb-4 text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
             {currency(paidAmount)} of {currency(total)} received — {currency(remaining)} still due.
           </div>
         )}
         {status === 'void' && (
-          <div className="mb-4 text-sm text-slate-600 bg-slate-100 border border-slate-200 rounded-lg px-3 py-2">
+          <div data-testid="invoice-pay-void-banner" className="mb-4 text-sm text-slate-600 bg-slate-100 border border-slate-200 rounded-lg px-3 py-2">
             This invoice has been voided and is no longer payable.
           </div>
         )}
@@ -127,6 +128,7 @@ export default function InvoicePayPage() {
               type="button"
               onClick={handlePayNow}
               disabled={payingNow}
+              data-testid="invoice-pay-now-button"
               className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-700 disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {payingNow && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}

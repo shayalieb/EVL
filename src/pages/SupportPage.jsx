@@ -15,7 +15,7 @@ function PendingFiles({ files, onRemove }) {
         <span key={i} className="inline-flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-full bg-slate-100 text-xs text-slate-600">
           <FileIcon className="w-3.5 h-3.5 text-slate-400" />
           {f.name}
-          <button type="button" onClick={() => onRemove(i)} className="w-4 h-4 flex items-center justify-center rounded-full text-slate-400 hover:text-red-600 hover:bg-red-50" aria-label={`Remove ${f.name}`}>
+          <button type="button" onClick={() => onRemove(i)} data-testid="support-pending-file-remove-button" className="w-4 h-4 flex items-center justify-center rounded-full text-slate-400 hover:text-red-600 hover:bg-red-50" aria-label={`Remove ${f.name}`}>
             ×
           </button>
         </span>
@@ -101,7 +101,7 @@ export default function SupportPage() {
     }
   }
 
-  if (loadError) return <div className="text-sm text-red-600">{loadError}</div>;
+  if (loadError) return <div data-testid="support-load-error-banner" className="text-sm text-red-600">{loadError}</div>;
   if (!threads) return <div className="text-sm text-slate-400">Loading…</div>;
 
   const openThread = threads.find((t) => t.status === 'open') || threads[0];
@@ -113,8 +113,8 @@ export default function SupportPage() {
       {!openThread ? (
         <form onSubmit={handleStart} className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
           <p className="text-sm text-slate-500">Have an issue or a question? Send us a message and we'll get back to you.</p>
-          <input required placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} className={inputClass} />
-          <textarea required placeholder="Describe your issue…" rows={4} value={body} onChange={(e) => setBody(e.target.value)} className={inputClass} />
+          <input required placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} data-testid="support-start-subject-input" className={inputClass} />
+          <textarea required placeholder="Describe your issue…" rows={4} value={body} onChange={(e) => setBody(e.target.value)} data-testid="support-start-body-textarea" className={inputClass} />
           <PendingFiles files={startFiles} onRemove={(i) => setStartFiles((prev) => prev.filter((_, idx) => idx !== i))} />
           <div className="flex items-center justify-between">
             <label className={`text-xs font-semibold cursor-pointer ${startFiles.length >= MAX_FILES ? 'text-slate-300 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-700'}`}>
@@ -124,10 +124,11 @@ export default function SupportPage() {
                 multiple
                 disabled={startFiles.length >= MAX_FILES}
                 onChange={(e) => { setStartFiles((prev) => pickFiles(prev, e.target.files)); e.target.value = ''; }}
+                data-testid="support-start-attach-file-input"
                 className="hidden"
               />
             </label>
-            <button type="submit" disabled={sending} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+            <button type="submit" disabled={sending} data-testid="support-start-send-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
               {sending ? 'Sending…' : 'Send Message'}
             </button>
           </div>
@@ -158,6 +159,7 @@ export default function SupportPage() {
                 value={replyBody}
                 onChange={(e) => setReplyBody(e.target.value)}
                 placeholder="Reply…"
+                data-testid="support-reply-body-input"
                 className="flex-1 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
               />
               <label className={`px-3 py-2 rounded-lg border text-sm font-semibold cursor-pointer flex items-center ${replyFiles.length >= MAX_FILES ? 'border-slate-200 text-slate-300 cursor-not-allowed' : 'border-slate-300 text-slate-500 hover:bg-slate-50'}`}>
@@ -167,10 +169,11 @@ export default function SupportPage() {
                   multiple
                   disabled={replyFiles.length >= MAX_FILES}
                   onChange={(e) => { setReplyFiles((prev) => pickFiles(prev, e.target.files)); e.target.value = ''; }}
+                  data-testid="support-reply-attach-file-input"
                   className="hidden"
                 />
               </label>
-              <button type="submit" disabled={sending} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+              <button type="submit" disabled={sending} data-testid="support-reply-send-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
                 Send
               </button>
             </div>

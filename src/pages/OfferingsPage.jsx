@@ -51,6 +51,7 @@ export default function OfferingsPage() {
           type="button"
           onClick={openAdd}
           disabled={!canEdit}
+          data-testid="offerings-add-button"
           className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           + Add Offering
@@ -58,7 +59,7 @@ export default function OfferingsPage() {
       </div>
 
       <div className="flex items-center gap-2 flex-wrap mb-4">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search offerings…" className="w-64" />
+        <SearchInput value={search} onChange={setSearch} placeholder="Search offerings…" className="w-64" testId="offerings-search-input" />
         <FilterSelect
           value={typeFilter}
           onChange={setTypeFilter}
@@ -67,11 +68,13 @@ export default function OfferingsPage() {
             { value: 'general', label: 'General' },
             { value: 'perUnit', label: 'Per Unit' },
           ]}
+          testId="offerings-type-filter"
         />
         {hasFilters && (
           <button
             type="button"
             onClick={() => { setSearch(''); setTypeFilter(''); }}
+            data-testid="offerings-clear-filters-button"
             className="text-sm font-semibold text-slate-500 hover:text-slate-700"
           >
             Clear
@@ -101,10 +104,10 @@ export default function OfferingsPage() {
                 </tr>
               )}
               {filteredOfferings.map((o) => (
-                <tr key={o.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                <tr key={o.id} data-testid="offering-row" className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                   <td className="px-4 py-3 font-medium text-slate-800">
                     {canEdit ? (
-                      <button type="button" onClick={() => openEdit(o)} className="hover:text-indigo-600 hover:underline text-left">
+                      <button type="button" onClick={() => openEdit(o)} data-testid="offering-row-name-link" className="hover:text-indigo-600 hover:underline text-left">
                         {o.name}
                       </button>
                     ) : (
@@ -119,6 +122,7 @@ export default function OfferingsPage() {
                         <button
                           type="button"
                           onClick={() => openEdit(o)}
+                          data-testid="offering-row-edit-button"
                           className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
                           aria-label={`Edit ${o.name}`}
                         >
@@ -127,6 +131,7 @@ export default function OfferingsPage() {
                         <button
                           type="button"
                           onClick={() => setDeleteTarget(o)}
+                          data-testid="offering-row-delete-button"
                           className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
                           aria-label={`Delete ${o.name}`}
                         >

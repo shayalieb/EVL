@@ -70,6 +70,7 @@ export default function ContractorsPage() {
           type="button"
           onClick={openAdd}
           disabled={!canEdit}
+          data-testid="contractors-add-button"
           className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           + Add Contractor
@@ -77,18 +78,20 @@ export default function ContractorsPage() {
       </div>
 
       <div className="flex items-center gap-2 flex-wrap mb-4">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search contractors…" className="w-64" />
+        <SearchInput value={search} onChange={setSearch} placeholder="Search contractors…" className="w-64" testId="contractors-search-input" />
         <FilterSelect
           value={categoryFilter}
           onChange={setCategoryFilter}
           allLabel="All Categories"
           options={categoryOptions}
+          testId="contractors-category-filter"
         />
         <FilterSelect
           value={roleFilter}
           onChange={setRoleFilter}
           allLabel="All Roles"
           options={roleOptions}
+          testId="contractors-role-filter"
         />
         <FilterSelect
           value={priceFilter}
@@ -99,11 +102,13 @@ export default function ContractorsPage() {
             { value: '500-1500', label: '$500 – $1,500' },
             { value: '1500-plus', label: '$1,500+' },
           ]}
+          testId="contractors-price-filter"
         />
         {hasFilters && (
           <button
             type="button"
             onClick={() => { setSearch(''); setCategoryFilter(''); setRoleFilter(''); setPriceFilter(''); }}
+            data-testid="contractors-clear-filters-button"
             className="text-sm font-semibold text-slate-500 hover:text-slate-700"
           >
             Clear
@@ -137,12 +142,13 @@ export default function ContractorsPage() {
                 </tr>
               )}
               {filteredContractors.map((c) => (
-                <tr key={c.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                <tr key={c.id} data-testid="contractor-row" className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                   <td className="px-4 py-3 font-medium text-slate-800">
                     {canEdit ? (
                       <button
                         type="button"
                         onClick={() => openEdit(c)}
+                        data-testid="contractor-row-name-link"
                         className="hover:text-indigo-600 hover:underline text-left"
                       >
                         {c.firstName} {c.middleName ? `${c.middleName} ` : ''}{c.lastName}
@@ -187,6 +193,7 @@ export default function ContractorsPage() {
                         <button
                           type="button"
                           onClick={() => openEdit(c)}
+                          data-testid="contractor-row-edit-button"
                           className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
                           aria-label="Edit contractor"
                         >
@@ -195,6 +202,7 @@ export default function ContractorsPage() {
                         <button
                           type="button"
                           onClick={() => setDeleteTarget(c)}
+                          data-testid="contractor-row-delete-button"
                           className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
                           aria-label="Delete contractor"
                         >

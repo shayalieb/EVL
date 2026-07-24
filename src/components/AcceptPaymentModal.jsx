@@ -89,17 +89,17 @@ export default function AcceptPaymentModal({ open, title = 'Accept Payment', amo
   return (
     <Modal open={open} onClose={submitting ? undefined : onClose} title={title}>
       <div className="space-y-4">
-        {error && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
+        {error && <div data-testid="accept-payment-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
         <div>
           <label className={labelClass}>Amount</label>
-          <MoneyInput value={amount} onChange={setAmount} className={moneyInputClass} />
+          <MoneyInput value={amount} onChange={setAmount} testId="accept-payment-amount-input" className={moneyInputClass} />
           {amountDue !== undefined && <div className="text-xs text-slate-400 mt-1">{amountLabel}: {currency(amountDue)}</div>}
         </div>
 
         <div>
           <label className={labelClass}>Payment Date</label>
-          <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className={inputClass} />
+          <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} data-testid="accept-payment-date-input" className={inputClass} />
         </div>
 
         <div>
@@ -110,6 +110,7 @@ export default function AcceptPaymentModal({ open, title = 'Accept Payment', amo
                 key={m.value}
                 type="button"
                 onClick={() => setMethod(m.value)}
+                data-testid="accept-payment-method-button"
                 className={`px-3 py-2 rounded-lg border text-sm font-semibold ${
                   method === m.value ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
                 }`}
@@ -123,7 +124,7 @@ export default function AcceptPaymentModal({ open, title = 'Accept Payment', amo
         {method === 'check' && (
           <div>
             <label className={labelClass}>Check Number</label>
-            <input autoFocus value={checkNumber} onChange={(e) => setCheckNumber(e.target.value)} className={inputClass} />
+            <input autoFocus value={checkNumber} onChange={(e) => setCheckNumber(e.target.value)} data-testid="accept-payment-check-number-input" className={inputClass} />
           </div>
         )}
 
@@ -134,6 +135,7 @@ export default function AcceptPaymentModal({ open, title = 'Accept Payment', amo
             placeholder="Optional internal note about this payment"
             value={memo}
             onChange={(e) => setMemo(e.target.value)}
+            data-testid="accept-payment-memo-textarea"
             className={inputClass}
           />
         </div>
@@ -143,6 +145,7 @@ export default function AcceptPaymentModal({ open, title = 'Accept Payment', amo
             type="button"
             onClick={onClose}
             disabled={submitting}
+            data-testid="accept-payment-cancel-button"
             className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-60"
           >
             Cancel
@@ -151,6 +154,7 @@ export default function AcceptPaymentModal({ open, title = 'Accept Payment', amo
             type="button"
             onClick={handleAccept}
             disabled={submitting}
+            data-testid="accept-payment-accept-button"
             className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-2"
           >
             {submitting && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}

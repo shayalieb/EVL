@@ -77,7 +77,7 @@ export default function UsersTab() {
     }
   }
 
-  if (loadError) return <div className="text-sm text-red-600">{loadError}</div>;
+  if (loadError) return <div data-testid="settings-users-error-banner" className="text-sm text-red-600">{loadError}</div>;
   if (!members) return <div className="text-sm text-slate-400">Loading…</div>;
 
   const hasFilters = !!(search || roleFilter || permissionFilter);
@@ -94,6 +94,7 @@ export default function UsersTab() {
         <button
           type="button"
           onClick={() => setAddOpen(true)}
+          data-testid="settings-users-invite-button"
           className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
         >
           + Add Member
@@ -101,7 +102,7 @@ export default function UsersTab() {
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search by name or email…" className="w-72" />
+        <SearchInput value={search} onChange={setSearch} placeholder="Search by name or email…" className="w-72" testId="settings-users-search-input" />
         <FilterSelect
           value={roleFilter}
           onChange={setRoleFilter}
@@ -111,17 +112,20 @@ export default function UsersTab() {
             { value: 'admin', label: 'Admin' },
             { value: 'member', label: 'Member' },
           ]}
+          testId="settings-users-role-filter"
         />
         <FilterSelect
           value={permissionFilter}
           onChange={setPermissionFilter}
           allLabel="All Permissions"
           options={PERMISSION_FIELDS.map((p) => ({ value: p.key, label: p.label }))}
+          testId="settings-users-permission-filter"
         />
         {hasFilters && (
           <button
             type="button"
             onClick={() => { setSearch(''); setRoleFilter(''); setPermissionFilter(''); }}
+            data-testid="settings-users-clear-filters-button"
             className="text-sm font-semibold text-slate-500 hover:text-slate-700"
           >
             Clear
@@ -149,7 +153,7 @@ export default function UsersTab() {
               </tr>
             )}
             {filteredMembers.map((m) => (
-              <tr key={m.id} className="border-b border-slate-50 last:border-0">
+              <tr key={m.id} data-testid="settings-users-row" className="border-b border-slate-50 last:border-0">
                 <td className="px-4 py-3 font-medium text-slate-800">{m.firstName} {m.lastName}</td>
                 <td className="px-4 py-3 text-slate-500">{m.email}</td>
                 <td className="px-4 py-3">
@@ -158,6 +162,7 @@ export default function UsersTab() {
                     <select
                       value={m.role}
                       onChange={(e) => handleRoleChange(m, e.target.value)}
+                      data-testid="settings-users-row-role-select"
                       className="text-xs border border-slate-300 rounded-md px-2 py-1"
                     >
                       <option value="member">Member</option>
@@ -175,6 +180,7 @@ export default function UsersTab() {
                             type="checkbox"
                             checked={!!m.permissions[p.key]}
                             onChange={(e) => handlePermissionToggle(m, p.key, e.target.checked)}
+                            data-testid="settings-users-row-permission-checkbox"
                           />
                           {p.label}
                         </label>
@@ -189,6 +195,7 @@ export default function UsersTab() {
                     <button
                       type="button"
                       onClick={() => setRemoveTarget(m)}
+                      data-testid="settings-users-row-remove-button"
                       className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
                       aria-label={`Remove ${m.firstName}`}
                     >
@@ -261,27 +268,27 @@ function AddMemberModal({ open, onClose, onAdded }) {
   return (
     <Modal open={open} onClose={onClose} title="Add Team Member">
       <form onSubmit={handleSubmit} className="space-y-3">
-        {error && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
+        {error && <div data-testid="settings-users-add-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>First Name</label>
-            <input required value={form.firstName} onChange={(e) => update('firstName', e.target.value)} className={inputClass} />
+            <input required value={form.firstName} onChange={(e) => update('firstName', e.target.value)} data-testid="settings-users-add-firstname-input" className={inputClass} />
           </div>
           <div>
             <label className={labelClass}>Last Name</label>
-            <input required value={form.lastName} onChange={(e) => update('lastName', e.target.value)} className={inputClass} />
+            <input required value={form.lastName} onChange={(e) => update('lastName', e.target.value)} data-testid="settings-users-add-lastname-input" className={inputClass} />
           </div>
         </div>
 
         <div>
           <label className={labelClass}>Email</label>
-          <input required type="email" value={form.email} onChange={(e) => update('email', e.target.value)} className={inputClass} />
+          <input required type="email" value={form.email} onChange={(e) => update('email', e.target.value)} data-testid="settings-users-add-email-input" className={inputClass} />
         </div>
 
         <div>
           <label className={labelClass}>Temporary Password</label>
-          <input required type="text" value={form.password} onChange={(e) => update('password', e.target.value)} className={inputClass} />
+          <input required type="text" value={form.password} onChange={(e) => update('password', e.target.value)} data-testid="settings-users-add-password-input" className={inputClass} />
         </div>
 
         <div>
@@ -293,6 +300,7 @@ function AddMemberModal({ open, onClose, onAdded }) {
                   type="checkbox"
                   checked={permissions[p.key]}
                   onChange={(e) => setPermissions((prev) => ({ ...prev, [p.key]: e.target.checked }))}
+                  data-testid="settings-users-add-permission-checkbox"
                 />
                 {p.label}
               </label>
@@ -301,8 +309,8 @@ function AddMemberModal({ open, onClose, onAdded }) {
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
-          <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+          <button type="button" onClick={onClose} data-testid="settings-users-add-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button type="submit" disabled={saving} data-testid="settings-users-add-submit-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
             {saving ? 'Adding…' : 'Add Member'}
           </button>
         </div>

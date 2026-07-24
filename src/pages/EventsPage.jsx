@@ -63,6 +63,7 @@ export default function EventsPage() {
           type="button"
           onClick={() => navigate('/events/new')}
           disabled={!canEdit}
+          data-testid="events-add-button"
           className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           + Add Event
@@ -72,12 +73,13 @@ export default function EventsPage() {
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
         <Tabs tabs={VIEW_TABS} activeTab={activeTab} onChange={setActiveTab} />
         <div className="flex items-center gap-2 flex-wrap">
-          <SearchInput value={search} onChange={setSearch} placeholder="Search events…" className="w-56" />
+          <SearchInput value={search} onChange={setSearch} placeholder="Search events…" className="w-56" testId="events-search-input" />
           <FilterSelect
             value={statusFilter}
             onChange={setStatusFilter}
             allLabel="All Statuses"
             options={eventStatuses.map((s) => ({ value: s.id, label: s.label }))}
+            testId="events-status-filter"
           />
           <FilterSelect
             value={vendorFilter}
@@ -88,12 +90,14 @@ export default function EventsPage() {
               { value: 'pending', label: 'Pending' },
               { value: 'none', label: 'None' },
             ]}
+            testId="events-vendor-filter"
           />
           <FilterSelect
             value={eventTypeFilter}
             onChange={setEventTypeFilter}
             allLabel="All Event Types"
             options={eventTypes.map((t) => ({ value: t, label: t }))}
+            testId="events-event-type-filter"
           />
           <FilterSelect
             value={contractorsFilter}
@@ -103,11 +107,13 @@ export default function EventsPage() {
               { value: 'has', label: 'Has Contractors' },
               { value: 'none', label: 'No Contractors' },
             ]}
+            testId="events-contractors-filter"
           />
           {hasFilters && (
             <button
               type="button"
               onClick={() => { setSearch(''); setStatusFilter(''); setVendorFilter(''); setEventTypeFilter(''); setContractorsFilter(''); }}
+              data-testid="events-clear-filters-button"
               className="text-sm font-semibold text-slate-500 hover:text-slate-700"
             >
               Clear
@@ -154,7 +160,7 @@ export default function EventsPage() {
                 const count = evt.contractorBookings.length;
 
                 return (
-                  <tr key={evt.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                  <tr key={evt.id} data-testid="event-row" className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                     <td className="px-4 py-3">
                       {status && <Badge color={status.color}>{status.label}</Badge>}
                     </td>
@@ -163,6 +169,7 @@ export default function EventsPage() {
                         <button
                           type="button"
                           onClick={() => navigate(`/events/${evt.id}`)}
+                          data-testid="event-row-name-link"
                           className="hover:text-indigo-600 hover:underline text-left"
                         >
                           {evt.name}
@@ -232,6 +239,7 @@ export default function EventsPage() {
                           <button
                             type="button"
                             onClick={() => navigate(`/events/${evt.id}`)}
+                            data-testid="event-row-edit-button"
                             className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
                             aria-label="Edit event"
                           >
@@ -240,6 +248,7 @@ export default function EventsPage() {
                           <button
                             type="button"
                             onClick={() => setDeleteTarget(evt)}
+                            data-testid="event-row-delete-button"
                             className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
                             aria-label="Delete event"
                           >

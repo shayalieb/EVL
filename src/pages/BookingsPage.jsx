@@ -81,6 +81,7 @@ export default function BookingsPage() {
           type="button"
           onClick={openAdd}
           disabled={!canEdit}
+          data-testid="bookings-add-button"
           className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           + Add Booking
@@ -88,24 +89,27 @@ export default function BookingsPage() {
       </div>
 
       <div className="flex items-center gap-2 flex-wrap mb-4">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search bookings…" className="w-64" />
+        <SearchInput value={search} onChange={setSearch} placeholder="Search bookings…" className="w-64" testId="bookings-search-input" />
         <FilterSelect
           value={statusFilter}
           onChange={setStatusFilter}
           allLabel="All Statuses"
           options={bookingStatuses.map((s) => ({ value: s.id, label: s.label }))}
+          testId="bookings-status-filter"
         />
         <FilterSelect
           value={priorityFilter}
           onChange={setPriorityFilter}
           allLabel="All Priorities"
           options={PRIORITIES.map((p) => ({ value: p.value, label: p.label }))}
+          testId="bookings-priority-filter"
         />
         <FilterSelect
           value={eventTypeFilter}
           onChange={setEventTypeFilter}
           allLabel="All Event Types"
           options={eventTypes.map((t) => ({ value: t, label: t }))}
+          testId="bookings-event-type-filter"
         />
         <FilterSelect
           value={depositFilter}
@@ -116,11 +120,13 @@ export default function BookingsPage() {
             { value: 'due', label: 'Deposit Due' },
             { value: 'none', label: 'No Deposit' },
           ]}
+          testId="bookings-deposit-filter"
         />
         {hasFilters && (
           <button
             type="button"
             onClick={() => { setSearch(''); setStatusFilter(''); setPriorityFilter(''); setEventTypeFilter(''); setDepositFilter(''); }}
+            data-testid="bookings-clear-filters-button"
             className="text-sm font-semibold text-slate-500 hover:text-slate-700"
           >
             Clear
@@ -161,7 +167,7 @@ export default function BookingsPage() {
                 const tone = followUpTone(b.nextFollowUpDate);
 
                 return (
-                  <tr key={b.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                  <tr key={b.id} data-testid="booking-row" className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                     <td className="px-4 py-3">
                       {status && <Badge color={status.color}>{status.label}</Badge>}
                     </td>
@@ -173,7 +179,7 @@ export default function BookingsPage() {
                           </Tooltip>
                         )}
                         {canEdit ? (
-                          <button type="button" onClick={() => openEdit(b)} className="hover:text-indigo-600 hover:underline text-left">
+                          <button type="button" onClick={() => openEdit(b)} data-testid="booking-row-client-link" className="hover:text-indigo-600 hover:underline text-left">
                             {client ? `${client.firstName} ${client.lastName}` : '—'}
                           </button>
                         ) : (
@@ -223,6 +229,7 @@ export default function BookingsPage() {
                             <button
                               type="button"
                               onClick={() => navigate(`/events/${b.convertedEventId}`)}
+                              data-testid="booking-row-view-event-link"
                               className="px-2 py-1 rounded-lg text-xs font-semibold text-indigo-600 hover:bg-indigo-50 whitespace-nowrap"
                             >
                               View Event →
@@ -231,6 +238,7 @@ export default function BookingsPage() {
                             <button
                               type="button"
                               onClick={() => handleConvert(b)}
+                              data-testid="booking-row-convert-button"
                               className="px-2 py-1 rounded-lg text-xs font-semibold text-indigo-600 hover:bg-indigo-50 whitespace-nowrap"
                             >
                               Convert to Event →
@@ -239,6 +247,7 @@ export default function BookingsPage() {
                           <button
                             type="button"
                             onClick={() => openEdit(b)}
+                            data-testid="booking-row-edit-button"
                             className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
                             aria-label="Edit booking"
                           >
@@ -247,6 +256,7 @@ export default function BookingsPage() {
                           <button
                             type="button"
                             onClick={() => setDeleteTarget(b)}
+                            data-testid="booking-row-delete-button"
                             className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
                             aria-label="Delete booking"
                           >

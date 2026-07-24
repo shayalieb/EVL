@@ -4,7 +4,7 @@ import { useState } from 'react';
 // once you click away, while staying a plain editable number while focused.
 // `value`/`onChange` are the raw numeric string the rest of the form already
 // expects (e.g. "1500" or ""), same contract as a bare <input type="number">.
-export default function MoneyInput({ value, onChange, placeholder, className = '' }) {
+export default function MoneyInput({ value, onChange, placeholder, className = '', testId }) {
   const [focused, setFocused] = useState(false);
 
   const displayValue = focused || value === '' || value === null || value === undefined
@@ -29,6 +29,7 @@ export default function MoneyInput({ value, onChange, placeholder, className = '
           const cleaned = firstDot === -1 ? raw : raw.slice(0, firstDot + 1) + raw.slice(firstDot + 1).replace(/\./g, '');
           onChange(cleaned);
         }}
+        data-testid={testId}
         className={`${className} pl-6`}
       />
     </div>

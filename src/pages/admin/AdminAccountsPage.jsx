@@ -64,7 +64,7 @@ export default function AdminAccountsPage() {
     }
   }
 
-  if (loadError) return <div className="text-sm text-red-600">{loadError}</div>;
+  if (loadError) return <div data-testid="admin-accounts-load-error-banner" className="text-sm text-red-600">{loadError}</div>;
   if (!accounts) return <div className="text-sm text-slate-400">Loading…</div>;
 
   function teamSizeBucket(a) {
@@ -87,6 +87,7 @@ export default function AdminAccountsPage() {
         <button
           type="button"
           onClick={() => setAddOpen(true)}
+          data-testid="admin-accounts-add-button"
           className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
         >
           + New Account
@@ -94,7 +95,7 @@ export default function AdminAccountsPage() {
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search by owner name or email…" className="w-72" />
+        <SearchInput value={search} onChange={setSearch} placeholder="Search by owner name or email…" className="w-72" testId="admin-accounts-search-input" />
         <FilterSelect
           value={statusFilter}
           onChange={setStatusFilter}
@@ -104,6 +105,7 @@ export default function AdminAccountsPage() {
             { value: 'pending', label: 'Pending' },
             { value: 'disabled', label: 'Disabled' },
           ]}
+          testId="admin-accounts-status-filter"
         />
         <FilterSelect
           value={teamSizeFilter}
@@ -114,11 +116,13 @@ export default function AdminAccountsPage() {
             { value: 'small', label: 'Small (2–5)' },
             { value: 'large', label: 'Large (6+)' },
           ]}
+          testId="admin-accounts-team-size-filter"
         />
         {hasFilters && (
           <button
             type="button"
             onClick={() => { setSearch(''); setStatusFilter(''); setTeamSizeFilter(''); }}
+            data-testid="admin-accounts-clear-filters-button"
             className="text-sm font-semibold text-slate-500 hover:text-slate-700"
           >
             Clear
@@ -147,7 +151,7 @@ export default function AdminAccountsPage() {
               </tr>
             )}
             {filteredAccounts.map((a) => (
-              <tr key={a.id} className="border-b border-slate-50 last:border-0">
+              <tr key={a.id} data-testid="admin-account-row" className="border-b border-slate-50 last:border-0">
                 <td className="px-4 py-3">
                   <div className="font-medium text-slate-800">{a.owner ? `${a.owner.firstName} ${a.owner.lastName}` : '—'}</div>
                   <div className="text-slate-500 text-xs">{a.owner?.email}</div>
@@ -170,6 +174,7 @@ export default function AdminAccountsPage() {
                   <button
                     type="button"
                     onClick={() => setDisableTarget(a)}
+                    data-testid="admin-account-row-toggle-disabled-button"
                     className="text-xs font-semibold text-slate-500 hover:text-slate-700"
                   >
                     {a.disabledAt ? 'Enable' : 'Disable'}
@@ -177,6 +182,7 @@ export default function AdminAccountsPage() {
                   <button
                     type="button"
                     onClick={() => setDeleteTarget(a)}
+                    data-testid="admin-account-row-delete-button"
                     className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
                     aria-label="Delete account"
                   >
@@ -255,28 +261,28 @@ function NewAccountModal({ open, onClose, onCreated }) {
   return (
     <Modal open={open} onClose={onClose} title="New Account">
       <form onSubmit={handleSubmit} className="space-y-3">
-        {error && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
+        {error && <div data-testid="admin-accounts-new-account-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>First Name</label>
-            <input required value={form.firstName} onChange={(e) => update('firstName', e.target.value)} className={inputClass} />
+            <input required value={form.firstName} onChange={(e) => update('firstName', e.target.value)} data-testid="admin-accounts-new-account-firstname-input" className={inputClass} />
           </div>
           <div>
             <label className={labelClass}>Last Name</label>
-            <input required value={form.lastName} onChange={(e) => update('lastName', e.target.value)} className={inputClass} />
+            <input required value={form.lastName} onChange={(e) => update('lastName', e.target.value)} data-testid="admin-accounts-new-account-lastname-input" className={inputClass} />
           </div>
         </div>
 
         <div>
           <label className={labelClass}>Email</label>
-          <input required type="email" value={form.email} onChange={(e) => update('email', e.target.value)} className={inputClass} />
+          <input required type="email" value={form.email} onChange={(e) => update('email', e.target.value)} data-testid="admin-accounts-new-account-email-input" className={inputClass} />
           <p className="mt-1 text-xs text-slate-400">They'll get an email with a link to set their own password.</p>
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
-          <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+          <button type="button" onClick={onClose} data-testid="admin-accounts-new-account-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button type="submit" disabled={saving} data-testid="admin-accounts-new-account-submit-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
             {saving ? 'Sending…' : 'Send Invite'}
           </button>
         </div>

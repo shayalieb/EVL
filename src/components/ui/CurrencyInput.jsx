@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { formatCurrency } from '../../lib/format';
 
-export default function CurrencyInput({ value, onChange, className = '', ...props }) {
+export default function CurrencyInput({ value, onChange, className = '', testId, ...props }) {
   const [focused, setFocused] = useState(false);
   const displayValue = focused ? value : (value === '' ? '' : formatCurrency(Number(value) || 0));
 
@@ -15,6 +15,7 @@ export default function CurrencyInput({ value, onChange, className = '', ...prop
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         onChange={(e) => onChange(e.target.value.replace(/[^0-9.]/g, ''))}
+        data-testid={testId}
         className={`pl-6 pr-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 ${className}`}
         {...props}
       />

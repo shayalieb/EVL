@@ -6,6 +6,7 @@ export default function Tabs({ tabs, activeTab, onChange }) {
           key={tab.id}
           type="button"
           onClick={() => onChange(tab.id)}
+          data-testid={`tabs-tab-${tab.id}-button`}
           className={`px-3.5 py-1.5 rounded-md text-sm font-semibold transition-colors ${
             activeTab === tab.id
               ? 'bg-white text-indigo-600 shadow-sm'

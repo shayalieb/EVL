@@ -54,16 +54,16 @@ export default function ClientModal({ open, onClose, client, onSaved }) {
   return (
     <Modal open={open} onClose={onClose} title={client ? 'Edit Client' : 'Add Client'}>
       <form onSubmit={handleSubmit} className="space-y-4">
-        {error && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
+        {error && <div data-testid="client-modal-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>First Name *</label>
-            <input required value={form.firstName} onChange={(e) => update('firstName', e.target.value)} className={inputClass} />
+            <input required value={form.firstName} onChange={(e) => update('firstName', e.target.value)} data-testid="client-modal-firstname-input" className={inputClass} />
           </div>
           <div>
             <label className={labelClass}>Last Name *</label>
-            <input required value={form.lastName} onChange={(e) => update('lastName', e.target.value)} className={inputClass} />
+            <input required value={form.lastName} onChange={(e) => update('lastName', e.target.value)} data-testid="client-modal-lastname-input" className={inputClass} />
           </div>
         </div>
 
@@ -75,6 +75,7 @@ export default function ClientModal({ open, onClose, client, onSaved }) {
               placeholder="(555) 555-0100"
               value={form.phone}
               onChange={(e) => update('phone', formatPhoneNumber(e.target.value))}
+              data-testid="client-modal-phone-input"
               className={inputClass}
             />
           </div>
@@ -84,6 +85,7 @@ export default function ClientModal({ open, onClose, client, onSaved }) {
               type="email"
               value={form.email}
               onChange={(e) => update('email', formatEmailInput(e.target.value))}
+              data-testid="client-modal-email-input"
               className={inputClass}
             />
           </div>
@@ -92,39 +94,39 @@ export default function ClientModal({ open, onClose, client, onSaved }) {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>Address 1</label>
-            <input value={form.address1} onChange={(e) => update('address1', e.target.value)} className={inputClass} />
+            <input value={form.address1} onChange={(e) => update('address1', e.target.value)} data-testid="client-modal-address1-input" className={inputClass} />
           </div>
           <div>
             <label className={labelClass}>Address 2</label>
-            <input value={form.address2} onChange={(e) => update('address2', e.target.value)} className={inputClass} />
+            <input value={form.address2} onChange={(e) => update('address2', e.target.value)} data-testid="client-modal-address2-input" className={inputClass} />
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>City</label>
-            <input value={form.city} onChange={(e) => update('city', e.target.value)} className={inputClass} />
+            <input value={form.city} onChange={(e) => update('city', e.target.value)} data-testid="client-modal-city-input" className={inputClass} />
           </div>
           <div className="flex gap-2">
             <div className="flex-1">
               <label className={labelClass}>State</label>
-              <input value={form.state} onChange={(e) => update('state', e.target.value)} className={inputClass} />
+              <input value={form.state} onChange={(e) => update('state', e.target.value)} data-testid="client-modal-state-input" className={inputClass} />
             </div>
             <div className="w-24">
               <label className={labelClass}>Zip</label>
-              <input value={form.zip} onChange={(e) => update('zip', e.target.value)} className={inputClass} />
+              <input value={form.zip} onChange={(e) => update('zip', e.target.value)} data-testid="client-modal-zip-input" className={inputClass} />
             </div>
           </div>
         </div>
 
         <div>
           <label className={labelClass}>Client Notes</label>
-          <textarea rows={2} value={form.notes} onChange={(e) => update('notes', e.target.value)} className={inputClass} />
+          <textarea rows={2} value={form.notes} onChange={(e) => update('notes', e.target.value)} data-testid="client-modal-notes-textarea" className={inputClass} />
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
-          <button type="submit" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
+          <button type="button" onClick={onClose} data-testid="client-modal-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button type="submit" data-testid="client-modal-save-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
             {client ? 'Save Changes' : 'Add Client'}
           </button>
         </div>

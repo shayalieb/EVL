@@ -20,6 +20,7 @@ export function SavingIndicatorProvider({ children }) {
     <SavingIndicatorContext.Provider value={notifySaving}>
       {children}
       <div
+        data-testid="saving-indicator"
         className={`fixed bottom-4 left-4 z-50 transition-opacity duration-300 ${visible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         aria-live="polite"
       >

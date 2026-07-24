@@ -27,15 +27,15 @@ function QuickItemForm({ onAdd, onCancel }) {
     <form onSubmit={handleSubmit} className="space-y-3 border border-dashed border-slate-300 rounded-lg p-3">
       <div>
         <label className="block text-xs font-semibold text-slate-500 mb-1">Item Name</label>
-        <input autoFocus value={name} onChange={(e) => setName(e.target.value)} className={inputClass} placeholder="e.g. Rush delivery fee" />
+        <input autoFocus value={name} onChange={(e) => setName(e.target.value)} className={inputClass} placeholder="e.g. Rush delivery fee" data-testid="offering-picker-quick-item-name-input" />
       </div>
       <div>
         <label className="block text-xs font-semibold text-slate-500 mb-1">Amount</label>
-        <MoneyInput value={amount} onChange={setAmount} className={moneyInputClass} />
+        <MoneyInput value={amount} onChange={setAmount} testId="offering-picker-quick-item-amount-input" className={moneyInputClass} />
       </div>
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel} className="px-3 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
-        <button type="submit" className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">Add Item</button>
+        <button type="button" onClick={onCancel} data-testid="offering-picker-quick-item-cancel-button" className="px-3 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+        <button type="submit" data-testid="offering-picker-quick-item-add-button" className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">Add Item</button>
       </div>
     </form>
   );
@@ -85,6 +85,7 @@ export default function OfferingPickerModal({ open, onClose, onSelect }) {
             <button
               type="button"
               onClick={() => setAddingQuickItem(true)}
+              data-testid="offering-picker-modal-quick-item-button"
               className="flex-1 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
             >
               + One-time item
@@ -92,6 +93,7 @@ export default function OfferingPickerModal({ open, onClose, onSelect }) {
             <button
               type="button"
               onClick={() => setCreatingOffering(true)}
+              data-testid="offering-picker-modal-create-offering-button"
               className="flex-1 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
             >
               + Create new offering
@@ -104,6 +106,7 @@ export default function OfferingPickerModal({ open, onClose, onSelect }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search offerings…"
+            data-testid="offering-picker-modal-search-input"
             className={inputClass}
           />
         )}
@@ -120,6 +123,7 @@ export default function OfferingPickerModal({ open, onClose, onSelect }) {
                 key={o.id}
                 type="button"
                 onClick={() => handleSelect(o)}
+                data-testid="offering-picker-item"
                 className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 text-left"
               >
                 <div className="min-w-0">

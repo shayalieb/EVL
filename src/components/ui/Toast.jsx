@@ -20,6 +20,7 @@ export function ToastProvider({ children }) {
         {toasts.map((toast) => (
           <div
             key={toast.id}
+            data-testid="toast-message"
             className={`animate-toast-in px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium text-white ${
               toast.variant === 'error' ? 'bg-red-600' : 'bg-slate-800'
             }`}

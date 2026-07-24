@@ -13,6 +13,7 @@ export default function NoAccountAccessPage() {
         <button
           type="button"
           onClick={logout}
+          data-testid="no-account-access-logout-button"
           className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
         >
           Log Out

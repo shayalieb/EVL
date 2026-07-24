@@ -92,6 +92,7 @@ function MergeFieldReference() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search fields…"
+          data-testid="email-templates-field-search-input"
           className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
         />
       </div>
@@ -109,6 +110,7 @@ function MergeFieldReference() {
                     key={f.token}
                     type="button"
                     onClick={() => handleCopy(f.token)}
+                    data-testid="email-templates-field-copy-button"
                     className="w-full flex items-center justify-between gap-3 px-2.5 py-1.5 rounded-lg hover:bg-slate-50 text-left"
                     title={`Copy ${f.token}`}
                   >
@@ -181,6 +183,7 @@ function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, can
       <button
         type="button"
         onClick={onToggleExpand}
+        data-testid="email-template-row-toggle-button"
         className="w-full flex items-center justify-between gap-4 px-6 py-4 text-left hover:bg-slate-50"
       >
         <div className="min-w-0">
@@ -194,11 +197,11 @@ function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, can
         <div className="px-6 pb-6 pt-1 space-y-4 border-t border-slate-100">
           <div>
             <label className={labelClass}>Template Name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
+            <input value={name} onChange={(e) => setName(e.target.value)} data-testid="email-template-row-name-input" className={inputClass} />
           </div>
           <div>
             <label className={labelClass}>Subject</label>
-            <input value={subject} onChange={(e) => setSubject(e.target.value)} className={inputClass} />
+            <input value={subject} onChange={(e) => setSubject(e.target.value)} data-testid="email-template-row-subject-input" className={inputClass} />
           </div>
           <div>
             <div className="flex items-center justify-between mb-1">
@@ -207,6 +210,7 @@ function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, can
                 <button
                   type="button"
                   onClick={() => setMode('visual')}
+                  data-testid="email-template-row-visual-mode-button"
                   className={`px-2.5 py-1 ${mode === 'visual' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
                 >
                   Visual
@@ -214,6 +218,7 @@ function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, can
                 <button
                   type="button"
                   onClick={() => setMode('html')}
+                  data-testid="email-template-row-html-mode-button"
                   className={`px-2.5 py-1 ${mode === 'html' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
                 >
                   HTML
@@ -229,11 +234,12 @@ function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, can
                   contentEditable
                   suppressContentEditableWarning
                   onInput={handleBodyInput}
+                  data-testid="email-template-row-body-editable"
                   className={`${inputClass} min-h-[150px] bg-white`}
                 />
               </>
             ) : (
-              <textarea rows={7} value={body} onChange={(e) => setBody(e.target.value)} className={`${inputClass} font-mono text-xs`} />
+              <textarea rows={7} value={body} onChange={(e) => setBody(e.target.value)} data-testid="email-template-row-body-textarea" className={`${inputClass} font-mono text-xs`} />
             )}
           </div>
 
@@ -242,6 +248,7 @@ function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, can
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                data-testid="email-template-row-delete-button"
                 className="text-sm text-slate-400 hover:text-red-600"
               >
                 Delete Template
@@ -252,6 +259,7 @@ function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, can
                 <button
                   type="button"
                   onClick={handleReset}
+                  data-testid="email-template-row-reset-button"
                   className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100"
                 >
                   Reset
@@ -261,6 +269,7 @@ function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, can
                 type="button"
                 onClick={handleSave}
                 disabled={!dirty || !canEdit}
+                data-testid="email-template-row-save-button"
                 className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40"
               >
                 Save
@@ -302,6 +311,7 @@ export default function EmailTemplatesPage() {
           type="button"
           onClick={handleAdd}
           disabled={!canEdit}
+          data-testid="email-templates-add-button"
           className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           + New Template

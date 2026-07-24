@@ -96,6 +96,7 @@ function DocumentSection({ category, docs, uploading, onUpload, onRequestDelete 
             type="file"
             onChange={(e) => { onUpload(category, e.target.files?.[0]); e.target.value = ''; }}
             disabled={uploading}
+            data-testid={`booking-form-${category}-doc-upload-input`}
             className="hidden"
           />
         </label>
@@ -107,15 +108,16 @@ function DocumentSection({ category, docs, uploading, onUpload, onRequestDelete 
       ) : (
         <div className="space-y-1.5">
           {docs.map((d) => (
-            <div key={d.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-slate-200 text-sm">
+            <div key={d.id} data-testid={`booking-form-${category}-doc-row`} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-slate-200 text-sm">
               <FileIcon className="w-4 h-4 text-slate-400 shrink-0" />
-              <a href={bookingDocumentDownloadUrl(d.id)} target="_blank" rel="noreferrer" className="flex-1 min-w-0 truncate text-indigo-600 hover:underline">
+              <a href={bookingDocumentDownloadUrl(d.id)} target="_blank" rel="noreferrer" data-testid={`booking-form-${category}-doc-link`} className="flex-1 min-w-0 truncate text-indigo-600 hover:underline">
                 {d.filename}
               </a>
               <span className="text-xs text-slate-400 shrink-0">{(d.size / 1024).toFixed(0)} KB</span>
               <button
                 type="button"
                 onClick={() => onRequestDelete(d)}
+                data-testid={`booking-form-${category}-doc-remove-button`}
                 className="shrink-0 w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
                 aria-label={`Remove ${d.filename}`}
               >
@@ -155,7 +157,7 @@ function OfferingsEditor({ offerings, onChange, onAddClick }) {
     <div>
       <div className="flex items-center justify-between mb-2">
         <label className={labelClass}>Offerings</label>
-        <button type="button" onClick={onAddClick} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">
+        <button type="button" onClick={onAddClick} data-testid="booking-form-offering-add-button" className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">
           + Add Offering
         </button>
       </div>
@@ -166,17 +168,19 @@ function OfferingsEditor({ offerings, onChange, onAddClick }) {
       ) : (
         <div className="space-y-2">
           {offerings.map((o) => (
-            <div key={o.id} className="border border-slate-200 rounded-lg p-3">
+            <div key={o.id} data-testid="booking-form-offering-row" className="border border-slate-200 rounded-lg p-3">
               <div className="flex items-center gap-2 mb-2">
                 <input
                   value={o.name}
                   onChange={(e) => handleUpdate(o.id, { name: e.target.value })}
                   placeholder="Offering name"
+                  data-testid="booking-form-offering-name-input"
                   className={`${inputClass} font-semibold flex-1 min-w-0`}
                 />
                 <select
                   value={o.type}
                   onChange={(e) => handleUpdate(o.id, { type: e.target.value })}
+                  data-testid="booking-form-offering-type-select"
                   className="px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 w-32 shrink-0"
                 >
                   <option value="general">General</option>
@@ -185,6 +189,7 @@ function OfferingsEditor({ offerings, onChange, onAddClick }) {
                 <button
                   type="button"
                   onClick={() => handleRemove(o.id)}
+                  data-testid="booking-form-offering-remove-button"
                   className="shrink-0 w-8 h-8 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
                   aria-label={`Remove ${o.name || 'offering'}`}
                 >
@@ -196,6 +201,7 @@ function OfferingsEditor({ offerings, onChange, onAddClick }) {
                 value={o.details}
                 onChange={(e) => handleUpdate(o.id, { details: e.target.value })}
                 placeholder="Details (optional)"
+                data-testid="booking-form-offering-details-textarea"
                 className={`${inputClass} mb-2`}
               />
               {o.type === 'perUnit' ? (
@@ -207,6 +213,7 @@ function OfferingsEditor({ offerings, onChange, onAddClick }) {
                       min="0"
                       value={o.unitCount}
                       onChange={(e) => handleUpdate(o.id, { unitCount: e.target.value })}
+                      data-testid="booking-form-offering-unit-count-input"
                       className={inputClass}
                     />
                   </div>
@@ -215,6 +222,7 @@ function OfferingsEditor({ offerings, onChange, onAddClick }) {
                     <MoneyInput
                       value={o.ratePerUnit}
                       onChange={(v) => handleUpdate(o.id, { ratePerUnit: v })}
+                      testId="booking-form-offering-rate-per-unit-input"
                       className="w-full py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                     />
                   </div>
@@ -225,6 +233,7 @@ function OfferingsEditor({ offerings, onChange, onAddClick }) {
                   <MoneyInput
                     value={o.amount}
                     onChange={(v) => handleUpdate(o.id, { amount: v })}
+                    testId="booking-form-offering-amount-input"
                     className="w-full py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                   />
                 </div>
@@ -272,17 +281,19 @@ function SectionsEditor({ sections, onChange }) {
       {sections.length > 0 && (
         <div className="space-y-2 mb-3">
           {sections.map((s) => (
-            <div key={s.id} className="border border-slate-200 rounded-lg p-3">
+            <div key={s.id} data-testid="booking-form-section-row" className="border border-slate-200 rounded-lg p-3">
               <div className="flex items-center gap-2 mb-2">
                 <input
                   value={s.title}
                   onChange={(e) => handleUpdate(s.id, 'title', e.target.value)}
                   placeholder="Section title"
+                  data-testid="booking-form-section-title-input"
                   className={`${inputClass} font-semibold`}
                 />
                 <button
                   type="button"
                   onClick={() => handleRemove(s.id)}
+                  data-testid="booking-form-section-remove-button"
                   className="shrink-0 w-8 h-8 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
                   aria-label={`Remove ${s.title || 'section'}`}
                 >
@@ -295,12 +306,14 @@ function SectionsEditor({ sections, onChange }) {
                   value={s.text}
                   onChange={(e) => handleUpdate(s.id, 'text', e.target.value)}
                   placeholder="Text (optional)"
+                  data-testid="booking-form-section-text-textarea"
                   className={inputClass}
                 />
                 <input
                   value={s.value}
                   onChange={(e) => handleUpdate(s.id, 'value', e.target.value)}
                   placeholder="Value (optional)"
+                  data-testid="booking-form-section-value-input"
                   className={inputClass}
                 />
               </div>
@@ -309,12 +322,12 @@ function SectionsEditor({ sections, onChange }) {
         </div>
       )}
       <div className="border border-dashed border-slate-300 rounded-lg p-3">
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="New section title" className={`${inputClass} mb-2`} />
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="New section title" data-testid="booking-form-section-new-title-input" className={`${inputClass} mb-2`} />
         <div className="grid grid-cols-2 gap-2 mb-2">
-          <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)} placeholder="Text (optional)" className={inputClass} />
-          <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Value (optional)" className={inputClass} />
+          <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)} placeholder="Text (optional)" data-testid="booking-form-section-new-text-textarea" className={inputClass} />
+          <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Value (optional)" data-testid="booking-form-section-new-value-input" className={inputClass} />
         </div>
-        <button type="button" onClick={handleAdd} className="px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50">+ Add Section</button>
+        <button type="button" onClick={handleAdd} data-testid="booking-form-section-add-button" className="px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50">+ Add Section</button>
       </div>
     </div>
   );
@@ -323,13 +336,14 @@ function SectionsEditor({ sections, onChange }) {
 // Collapses variable-length, often-empty blocks (pricing, custom sections)
 // so a booking with nothing in them doesn't force a long scroll past empty
 // state — starts open once there's something worth seeing.
-function CollapsibleSection({ title, subtitle, defaultOpen, badge, children, className = 'mt-6 pt-6 border-t border-slate-100' }) {
+function CollapsibleSection({ title, subtitle, defaultOpen, badge, children, className = 'mt-6 pt-6 border-t border-slate-100', testId }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className={className}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
+        data-testid={testId}
         className="w-full flex items-center justify-between gap-3 text-left"
       >
         <div>
@@ -361,6 +375,7 @@ function ClientCombobox({ clients, value, onChange }) {
         onChange={(e) => setQuery(e.target.value)}
         onFocus={() => { setQuery(''); setOpen(true); }}
         placeholder="Search clients…"
+        data-testid="booking-form-client-combobox-input"
         className={inputClass}
       />
       {open && (
@@ -377,6 +392,7 @@ function ClientCombobox({ clients, value, onChange }) {
                 key={c.id}
                 type="button"
                 onClick={() => { onChange(c.id); setQuery(''); setOpen(false); }}
+                data-testid="booking-form-client-combobox-option"
                 className="block w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
               >
                 <div className="font-medium text-slate-700">{c.firstName} {c.lastName}</div>
@@ -1243,6 +1259,7 @@ export default function BookingFormPage() {
         <button
           type="button"
           onClick={() => navigate('/bookings')}
+          data-testid="booking-form-not-found-back-button"
           className={primaryButtonClass}
         >
           Back to Bookings
@@ -1260,6 +1277,7 @@ export default function BookingFormPage() {
           <button
             type="button"
             onClick={handleLeaveWithoutSaving}
+            data-testid="booking-form-back-button"
             className="w-9 h-9 shrink-0 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100"
             aria-label="Back to Bookings"
           >
@@ -1272,18 +1290,20 @@ export default function BookingFormPage() {
             <button
               type="button"
               onClick={handleConvert}
+              data-testid="booking-form-convert-button"
               className="px-4 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
             >
               Convert to Event →
             </button>
           )}
-          <button type="button" onClick={handleLeaveWithoutSaving} className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">
+          <button type="button" onClick={handleLeaveWithoutSaving} data-testid="booking-form-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">
             Cancel
           </button>
           <button
             type="submit"
             form="booking-form"
             disabled={saving}
+            data-testid="booking-form-submit-button"
             className={`${primaryButtonClass} disabled:opacity-60 flex items-center gap-2`}
           >
             {saving && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
@@ -1293,11 +1313,12 @@ export default function BookingFormPage() {
       </div>
 
       {booking?.convertedEventId && (
-        <div className="flex items-center justify-between gap-3 text-sm bg-blue-50 border border-blue-100 text-blue-700 rounded-lg px-3 py-2 mb-6">
+        <div data-testid="booking-form-converted-banner" className="flex items-center justify-between gap-3 text-sm bg-blue-50 border border-blue-100 text-blue-700 rounded-lg px-3 py-2 mb-6">
           <span>Converted to an event.</span>
           <button
             type="button"
             onClick={() => navigate(`/events/${booking.convertedEventId}`)}
+            data-testid="booking-form-converted-view-event-button"
             className="font-semibold hover:underline shrink-0"
           >
             View Event →
@@ -1315,6 +1336,7 @@ export default function BookingFormPage() {
               key={t.id}
               type="button"
               onClick={() => setActiveTab(t.id)}
+              data-testid={`booking-form-tab-${t.id}`}
               className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px flex items-center gap-2 ${
                 activeTab === t.id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
@@ -1330,7 +1352,7 @@ export default function BookingFormPage() {
         })}
       </div>
 
-      {error && <div className="mb-6 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
+      {error && <div data-testid="booking-form-error-banner" className="mb-6 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
       <form
         id="booking-form"
@@ -1347,7 +1369,7 @@ export default function BookingFormPage() {
             <div className="space-y-5">
               <div>
                 <label className={labelClass}>Event Name</label>
-                <input value={form.eventName} onChange={(e) => update('eventName', e.target.value)} className={inputClass} />
+                <input value={form.eventName} onChange={(e) => update('eventName', e.target.value)} data-testid="booking-form-event-name-input" className={inputClass} />
               </div>
 
               <div>
@@ -1359,6 +1381,7 @@ export default function BookingFormPage() {
                   <button
                     type="button"
                     onClick={() => setNewClientModalOpen(true)}
+                    data-testid="booking-form-new-client-button"
                     className="shrink-0 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
                   >
                     + New Client
@@ -1369,23 +1392,23 @@ export default function BookingFormPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Event Date (tentative is fine)</label>
-                  <input type="date" value={form.eventDate} onChange={(e) => update('eventDate', e.target.value)} className={inputClass} />
+                  <input type="date" value={form.eventDate} onChange={(e) => update('eventDate', e.target.value)} data-testid="booking-form-event-date-input" className={inputClass} />
                 </div>
                 <div>
                   <label className={labelClass}>Event Type</label>
                   {!addingType ? (
                     <div className="flex gap-2">
-                      <select value={form.eventType} onChange={(e) => update('eventType', e.target.value)} className={inputClass}>
+                      <select value={form.eventType} onChange={(e) => update('eventType', e.target.value)} data-testid="booking-form-event-type-select" className={inputClass}>
                         <option value="">Select a type…</option>
                         {eventTypes.map((t) => <option key={t} value={t}>{t}</option>)}
                       </select>
-                      <button type="button" onClick={() => setAddingType(true)} className="shrink-0 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50">+ Add</button>
+                      <button type="button" onClick={() => setAddingType(true)} data-testid="booking-form-add-event-type-button" className="shrink-0 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50">+ Add</button>
                     </div>
                   ) : (
                     <div className="flex gap-2">
-                      <input autoFocus value={newTypeLabel} onChange={(e) => setNewTypeLabel(e.target.value)} placeholder="New event type" className={inputClass} />
-                      <button type="button" onClick={handleAddType} className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">Save</button>
-                      <button type="button" onClick={() => setAddingType(false)} className="shrink-0 px-3 py-2 rounded-lg text-slate-500 text-sm">Cancel</button>
+                      <input autoFocus value={newTypeLabel} onChange={(e) => setNewTypeLabel(e.target.value)} placeholder="New event type" data-testid="booking-form-new-event-type-input" className={inputClass} />
+                      <button type="button" onClick={handleAddType} data-testid="booking-form-save-event-type-button" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">Save</button>
+                      <button type="button" onClick={() => setAddingType(false)} data-testid="booking-form-cancel-event-type-button" className="shrink-0 px-3 py-2 rounded-lg text-slate-500 text-sm">Cancel</button>
                     </div>
                   )}
                 </div>
@@ -1394,15 +1417,15 @@ export default function BookingFormPage() {
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className={labelClass}>Deposit Amount</label>
-                  <MoneyInput value={form.depositAmount} onChange={(v) => update('depositAmount', v)} className={inputClass} />
+                  <MoneyInput value={form.depositAmount} onChange={(v) => update('depositAmount', v)} testId="booking-form-deposit-amount-input" className={inputClass} />
                 </div>
                 <div>
                   <label className={labelClass}>Deposit Due Date</label>
-                  <input type="date" value={form.depositDueDate} onChange={(e) => update('depositDueDate', e.target.value)} className={inputClass} />
+                  <input type="date" value={form.depositDueDate} onChange={(e) => update('depositDueDate', e.target.value)} data-testid="booking-form-deposit-due-date-input" className={inputClass} />
                 </div>
                 <div className="flex items-end pb-2.5">
                   <label className="flex items-center gap-1.5 text-sm text-slate-600">
-                    <input type="checkbox" checked={form.depositPaid} onChange={(e) => update('depositPaid', e.target.checked)} />
+                    <input type="checkbox" checked={form.depositPaid} onChange={(e) => update('depositPaid', e.target.checked)} data-testid="booking-form-deposit-paid-checkbox" />
                     Deposit paid
                   </label>
                 </div>
@@ -1411,13 +1434,13 @@ export default function BookingFormPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Booking Status</label>
-                  <select value={form.bookingStatus} onChange={(e) => update('bookingStatus', e.target.value)} className={inputClass}>
+                  <select value={form.bookingStatus} onChange={(e) => update('bookingStatus', e.target.value)} data-testid="booking-form-status-select" className={inputClass}>
                     {bookingStatuses.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className={labelClass}>Priority</label>
-                  <select value={form.priority} onChange={(e) => update('priority', e.target.value)} className={inputClass}>
+                  <select value={form.priority} onChange={(e) => update('priority', e.target.value)} data-testid="booking-form-priority-select" className={inputClass}>
                     <option value="">None</option>
                     {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
                   </select>
@@ -1427,11 +1450,11 @@ export default function BookingFormPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Next Follow-up Date</label>
-                  <input type="date" value={form.nextFollowUpDate} onChange={(e) => update('nextFollowUpDate', e.target.value)} className={inputClass} />
+                  <input type="date" value={form.nextFollowUpDate} onChange={(e) => update('nextFollowUpDate', e.target.value)} data-testid="booking-form-next-followup-date-input" className={inputClass} />
                 </div>
                 <div>
                   <label className={labelClass}>Referral Source</label>
-                  <input value={form.referralSource} onChange={(e) => update('referralSource', e.target.value)} className={inputClass} />
+                  <input value={form.referralSource} onChange={(e) => update('referralSource', e.target.value)} data-testid="booking-form-referral-source-input" className={inputClass} />
                 </div>
               </div>
             </div>
@@ -1443,31 +1466,31 @@ export default function BookingFormPage() {
             <div className="space-y-5">
               <div>
                 <label className={labelClass}>Venue Name</label>
-                <input value={form.venue.name} onChange={(e) => updateVenue('name', e.target.value)} className={inputClass} />
+                <input value={form.venue.name} onChange={(e) => updateVenue('name', e.target.value)} data-testid="booking-form-venue-name-input" className={inputClass} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Address 1</label>
-                  <input value={form.venue.address1} onChange={(e) => updateVenue('address1', e.target.value)} className={inputClass} />
+                  <input value={form.venue.address1} onChange={(e) => updateVenue('address1', e.target.value)} data-testid="booking-form-venue-address1-input" className={inputClass} />
                 </div>
                 <div>
                   <label className={labelClass}>Address 2</label>
-                  <input value={form.venue.address2} onChange={(e) => updateVenue('address2', e.target.value)} className={inputClass} />
+                  <input value={form.venue.address2} onChange={(e) => updateVenue('address2', e.target.value)} data-testid="booking-form-venue-address2-input" className={inputClass} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>City</label>
-                  <input value={form.venue.city} onChange={(e) => updateVenue('city', e.target.value)} className={inputClass} />
+                  <input value={form.venue.city} onChange={(e) => updateVenue('city', e.target.value)} data-testid="booking-form-venue-city-input" className={inputClass} />
                 </div>
                 <div className="flex gap-2">
                   <div className="flex-1">
                     <label className={labelClass}>State</label>
-                    <input value={form.venue.state} onChange={(e) => updateVenue('state', e.target.value)} className={inputClass} />
+                    <input value={form.venue.state} onChange={(e) => updateVenue('state', e.target.value)} data-testid="booking-form-venue-state-input" className={inputClass} />
                   </div>
                   <div className="w-24">
                     <label className={labelClass}>Zip</label>
-                    <input value={form.venue.zip} onChange={(e) => updateVenue('zip', e.target.value)} className={inputClass} />
+                    <input value={form.venue.zip} onChange={(e) => updateVenue('zip', e.target.value)} data-testid="booking-form-venue-zip-input" className={inputClass} />
                   </div>
                 </div>
               </div>
@@ -1478,6 +1501,7 @@ export default function BookingFormPage() {
                   placeholder="e.g. Loading dock around back, no elevator access"
                   value={form.venue.locationNote}
                   onChange={(e) => updateVenue('locationNote', e.target.value)}
+                  data-testid="booking-form-venue-location-note-textarea"
                   className={inputClass}
                 />
               </div>
@@ -1488,6 +1512,7 @@ export default function BookingFormPage() {
                   placeholder="e.g. Load in through the back entrance, freight elevator to 2nd floor"
                   value={form.venue.loadInInfo}
                   onChange={(e) => updateVenue('loadInInfo', e.target.value)}
+                  data-testid="booking-form-venue-load-in-textarea"
                   className={inputClass}
                 />
               </div>
@@ -1504,6 +1529,7 @@ export default function BookingFormPage() {
             <button
               type="button"
               onClick={addScheduleItem}
+              data-testid="booking-form-schedule-add-button"
               className="shrink-0 text-xs font-semibold text-indigo-600 hover:text-indigo-700"
             >
               + Add Line
@@ -1516,28 +1542,32 @@ export default function BookingFormPage() {
           ) : (
             <div className="space-y-2">
               {form.schedule.map((item) => (
-                <div key={item.id} className="flex items-start gap-2">
+                <div key={item.id} data-testid="booking-form-schedule-row" className="flex items-start gap-2">
                   <input
                     type="time"
                     value={item.time}
                     onChange={(e) => updateScheduleItem(item.id, { time: e.target.value })}
+                    data-testid="booking-form-schedule-time-input"
                     className="shrink-0 w-32 px-2.5 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                   />
                   <input
                     value={item.name}
                     onChange={(e) => updateScheduleItem(item.id, { name: e.target.value })}
                     placeholder="e.g. Ceremony"
+                    data-testid="booking-form-schedule-name-input"
                     className="shrink-0 w-48 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                   />
                   <input
                     value={item.details}
                     onChange={(e) => updateScheduleItem(item.id, { details: e.target.value })}
                     placeholder="Details…"
+                    data-testid="booking-form-schedule-details-input"
                     className="flex-1 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                   />
                   <button
                     type="button"
                     onClick={() => removeScheduleItem(item.id)}
+                    data-testid="booking-form-schedule-remove-button"
                     className="shrink-0 w-9 h-9 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
                     aria-label="Remove schedule line"
                   >
@@ -1554,7 +1584,7 @@ export default function BookingFormPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div>
               <label className={labelClass}>Notes</label>
-              <textarea rows={3} value={form.notes} onChange={(e) => update('notes', e.target.value)} className={inputClass} />
+              <textarea rows={3} value={form.notes} onChange={(e) => update('notes', e.target.value)} data-testid="booking-form-notes-textarea" className={inputClass} />
             </div>
 
             {booking && (
@@ -1565,10 +1595,11 @@ export default function BookingFormPage() {
                     value={newActivityText}
                     onChange={(e) => setNewActivityText(e.target.value)}
                     placeholder="e.g. Called, left voicemail"
+                    data-testid="booking-form-activity-input"
                     className={inputClass}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddActivity(); } }}
                   />
-                  <button type="button" onClick={handleAddActivity} className="shrink-0 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50">Add</button>
+                  <button type="button" onClick={handleAddActivity} data-testid="booking-form-activity-add-button" className="shrink-0 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50">Add</button>
                 </div>
                 {form.activityLog.length > 0 ? (
                   <div className="space-y-1.5 max-h-64 overflow-y-auto border border-slate-200 rounded-lg px-3 py-2">
@@ -1606,6 +1637,7 @@ export default function BookingFormPage() {
               <button
                 type="button"
                 onClick={handlePushToProposal}
+                data-testid="booking-form-push-to-proposal-button"
                 className={primaryButtonClass}
               >
                 Push to Proposal
@@ -1654,6 +1686,7 @@ export default function BookingFormPage() {
                       step="0.5"
                       value={form.proposal.hours}
                       onChange={(e) => update('proposal', { ...form.proposal, hours: e.target.value })}
+                      data-testid="booking-form-proposal-hours-input"
                       className={inputClass}
                     />
                   </div>
@@ -1669,6 +1702,7 @@ export default function BookingFormPage() {
                   <CollapsibleSection
                     title="Schedule"
                     defaultOpen
+                    testId="booking-form-proposal-schedule-toggle"
                   >
                     <div className="space-y-1 text-sm">
                       {form.schedule.filter((s) => s.time || s.name || s.details).map((s) => (
@@ -1686,6 +1720,7 @@ export default function BookingFormPage() {
                   title="Pricing"
                   defaultOpen={(form.proposal.offerings || []).length > 0}
                   badge={<span className="text-sm font-bold text-slate-800">{currency(computeGrandTotal(form.proposal.lineItems, form.proposal.offerings))}</span>}
+                  testId="booking-form-proposal-pricing-toggle"
                 >
                   <OfferingsEditor
                     offerings={form.proposal.offerings || []}
@@ -1704,6 +1739,7 @@ export default function BookingFormPage() {
                   badge={(form.proposal.sections || []).length > 0 ? (
                     <span className="text-xs font-semibold text-slate-400">{form.proposal.sections.length}</span>
                   ) : null}
+                  testId="booking-form-proposal-sections-toggle"
                 >
                   <SectionsEditor
                     sections={form.proposal.sections || []}
@@ -1714,7 +1750,7 @@ export default function BookingFormPage() {
 
               <div className={cardClass}>
                 <div className="flex items-center justify-between flex-wrap gap-3">
-                  <div className="text-sm text-slate-500">
+                  <div className="text-sm text-slate-500" data-testid="booking-form-proposal-sent-status">
                     {form.proposal.sentAt ? (
                       <span>
                         Sent {new Date(form.proposal.sentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} to{' '}
@@ -1728,6 +1764,7 @@ export default function BookingFormPage() {
                     <button
                       type="button"
                       onClick={handleDownloadProposal}
+                      data-testid="booking-form-proposal-download-button"
                       className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
                     >
                       Download PDF
@@ -1737,6 +1774,7 @@ export default function BookingFormPage() {
                       onClick={handleSendProposal}
                       disabled={sendingProposal || !client?.email}
                       title={!client?.email ? "Add an email address for this client first" : undefined}
+                      data-testid="booking-form-proposal-send-button"
                       className={`${primaryButtonClass} disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
                     >
                       {sendingProposal && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
@@ -1774,21 +1812,21 @@ export default function BookingFormPage() {
               </p>
               <div className="max-w-2xl mb-5">
                 <label className={labelClass}>Contract Title</label>
-                <input value={contractTitle} onChange={(e) => setContractTitle(e.target.value)} className={inputClass} />
+                <input value={contractTitle} onChange={(e) => setContractTitle(e.target.value)} data-testid="booking-form-contract-title-input" className={inputClass} />
                 <p className="mt-1 text-xs text-slate-400">Saved as your default title for future contracts, until changed.</p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5 max-w-2xl">
                 <div>
                   <label className={labelClass}>Recipient Email *</label>
-                  <input type="email" value={contractRecipientEmail} onChange={(e) => setContractRecipientEmail(e.target.value)} className={inputClass} />
+                  <input type="email" value={contractRecipientEmail} onChange={(e) => setContractRecipientEmail(e.target.value)} data-testid="booking-form-contract-recipient-email-input" className={inputClass} />
                 </div>
                 <div>
                   <label className={labelClass}>Recipient Name</label>
-                  <input value={contractRecipientName} onChange={(e) => setContractRecipientName(e.target.value)} className={inputClass} />
+                  <input value={contractRecipientName} onChange={(e) => setContractRecipientName(e.target.value)} data-testid="booking-form-contract-recipient-name-input" className={inputClass} />
                 </div>
                 <div>
                   <label className={labelClass}>Estimated Hours</label>
-                  <input type="number" min="0" step="0.5" value={contractHours} onChange={(e) => setContractHours(e.target.value)} className={inputClass} />
+                  <input type="number" min="0" step="0.5" value={contractHours} onChange={(e) => setContractHours(e.target.value)} data-testid="booking-form-contract-hours-input" className={inputClass} />
                 </div>
               </div>
               <CollapsibleSection
@@ -1796,6 +1834,7 @@ export default function BookingFormPage() {
                 title="Pricing"
                 defaultOpen={contractOfferings.length > 0}
                 badge={<span className="text-sm font-bold text-slate-800">{currency(computeGrandTotal(contractLineItems, contractOfferings))}</span>}
+                testId="booking-form-contract-pricing-toggle"
               >
                 <OfferingsEditor
                   offerings={contractOfferings}
@@ -1812,6 +1851,7 @@ export default function BookingFormPage() {
                 subtitle="Saved as your default sections for future contracts, until changed"
                 defaultOpen={contractSections.length > 0}
                 badge={contractSections.length > 0 ? <span className="text-xs font-semibold text-slate-400">{contractSections.length}</span> : null}
+                testId="booking-form-contract-sections-toggle"
               >
                 <SectionsEditor sections={contractSections} onChange={setContractSections} />
               </CollapsibleSection>
@@ -1822,6 +1862,7 @@ export default function BookingFormPage() {
                   placeholder="e.g. Cancellation policy, payment schedule, rider requirements…"
                   value={contractTerms}
                   onChange={(e) => setContractTerms(e.target.value)}
+                  data-testid="booking-form-contract-terms-textarea"
                   className={inputClass}
                 />
                 <p className="mt-1 text-xs text-slate-400">Stays editable after the contract is sent — everything else here locks.</p>
@@ -1831,6 +1872,7 @@ export default function BookingFormPage() {
                   type="button"
                   onClick={handleTogglePreview}
                   disabled={loadingContractPreview}
+                  data-testid="booking-form-contract-preview-button"
                   className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60 flex items-center gap-2"
                 >
                   {loadingContractPreview && <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 border-t-slate-600 animate-spin" />}
@@ -1840,6 +1882,7 @@ export default function BookingFormPage() {
                   type="button"
                   onClick={handleSendContract}
                   disabled={sendingContract || !contractRecipientEmail.trim()}
+                  data-testid="booking-form-contract-send-button"
                   className={`${primaryButtonClass} disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
                 >
                   {sendingContract && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
@@ -1848,7 +1891,7 @@ export default function BookingFormPage() {
               </div>
               {showContractPreview && contractPreviewUrl && (
                 <div className="mt-5 rounded-xl border border-slate-200 overflow-hidden">
-                  <iframe title="Contract preview" src={contractPreviewUrl} className="w-full h-[70vh]" />
+                  <iframe title="Contract preview" src={contractPreviewUrl} data-testid="booking-form-contract-preview-frame" className="w-full h-[70vh]" />
                 </div>
               )}
             </div>
@@ -1857,7 +1900,7 @@ export default function BookingFormPage() {
               <div className={cardClass}>
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <div>
-                    <div className="text-sm font-semibold text-slate-700">
+                    <div className="text-sm font-semibold text-slate-700" data-testid="booking-form-contract-status-banner">
                       {contract.status === 'sent' && 'Waiting on signatures'}
                       {contract.status === 'client_signed' && 'Client signed — your turn to countersign'}
                       {contract.status === 'owner_signed' && "You've signed — waiting on the client"}
@@ -1871,6 +1914,7 @@ export default function BookingFormPage() {
                   <button
                     type="button"
                     onClick={handleDownloadContract}
+                    data-testid="booking-form-contract-download-button"
                     className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
                   >
                     Download PDF
@@ -1879,12 +1923,13 @@ export default function BookingFormPage() {
                 {(lastSignLink || lastOwnerSignLink) && (
                   <div className="mt-4 space-y-2">
                     {lastSignLink && (
-                      <div className="flex items-center gap-2 text-xs bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-lg px-3 py-2">
+                      <div className="flex items-center gap-2 text-xs bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-lg px-3 py-2" data-testid="booking-form-contract-client-link-banner">
                         <span className="font-semibold shrink-0">Client link:</span>
                         <span className="flex-1 truncate">{lastSignLink}</span>
                         <button
                           type="button"
                           onClick={() => { navigator.clipboard.writeText(lastSignLink); showToast('Link copied'); }}
+                          data-testid="booking-form-contract-copy-client-link-button"
                           className="font-semibold hover:underline shrink-0"
                         >
                           Copy
@@ -1892,12 +1937,13 @@ export default function BookingFormPage() {
                       </div>
                     )}
                     {lastOwnerSignLink && (
-                      <div className="flex items-center gap-2 text-xs bg-slate-50 border border-slate-200 text-slate-600 rounded-lg px-3 py-2">
+                      <div className="flex items-center gap-2 text-xs bg-slate-50 border border-slate-200 text-slate-600 rounded-lg px-3 py-2" data-testid="booking-form-contract-owner-link-banner">
                         <span className="font-semibold shrink-0">Your link:</span>
                         <span className="flex-1 truncate">{lastOwnerSignLink}</span>
                         <button
                           type="button"
                           onClick={() => { navigator.clipboard.writeText(lastOwnerSignLink); showToast('Link copied'); }}
+                          data-testid="booking-form-contract-copy-owner-link-button"
                           className="font-semibold hover:underline shrink-0"
                         >
                           Copy
@@ -1962,6 +2008,7 @@ export default function BookingFormPage() {
                   placeholder="e.g. Cancellation policy, payment schedule, rider requirements…"
                   value={contractTerms}
                   onChange={(e) => setContractTerms(e.target.value)}
+                  data-testid="booking-form-contract-terms-textarea"
                   className={inputClass}
                 />
                 <p className="mt-1 text-xs text-slate-400">Editable any time, saves automatically.</p>
@@ -2004,13 +2051,14 @@ export default function BookingFormPage() {
                       <div className="space-y-4 max-w-md">
                         <div>
                           <label className={labelClass}>Full Legal Name</label>
-                          <input value={ownerSignerName} onChange={(e) => setOwnerSignerName(e.target.value)} className={inputClass} />
+                          <input value={ownerSignerName} onChange={(e) => setOwnerSignerName(e.target.value)} data-testid="booking-form-contract-owner-name-input" className={inputClass} />
                         </div>
                         <SignatureCanvas onChange={setOwnerSignatureImage} />
                         <button
                           type="button"
                           onClick={handleOwnerSign}
                           disabled={signingOwner}
+                          data-testid="booking-form-contract-sign-button"
                           className={`${primaryButtonClass} disabled:opacity-60 flex items-center gap-2`}
                         >
                           {signingOwner && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
@@ -2052,6 +2100,7 @@ export default function BookingFormPage() {
                     <button
                       type="button"
                       onClick={() => navigate(`/events/${booking.convertedEventId}`)}
+                      data-testid="booking-form-contract-view-event-button"
                       className="px-4 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
                     >
                       View Event →
@@ -2094,20 +2143,21 @@ export default function BookingFormPage() {
                       step="1"
                       value={newInvoiceNumber}
                       onChange={(e) => setNewInvoiceNumber(e.target.value)}
+                      data-testid="booking-form-invoice-number-input"
                       className={inputClass}
                     />
                   </div>
                   <div>
                     <label className={labelClass}>Recipient Email *</label>
-                    <input type="email" value={newInvoiceRecipientEmail} onChange={(e) => setNewInvoiceRecipientEmail(e.target.value)} className={inputClass} />
+                    <input type="email" value={newInvoiceRecipientEmail} onChange={(e) => setNewInvoiceRecipientEmail(e.target.value)} data-testid="booking-form-invoice-recipient-email-input" className={inputClass} />
                   </div>
                   <div>
                     <label className={labelClass}>Recipient Name</label>
-                    <input value={newInvoiceRecipientName} onChange={(e) => setNewInvoiceRecipientName(e.target.value)} className={inputClass} />
+                    <input value={newInvoiceRecipientName} onChange={(e) => setNewInvoiceRecipientName(e.target.value)} data-testid="booking-form-invoice-recipient-name-input" className={inputClass} />
                   </div>
                   <div>
                     <label className={labelClass}>Due Date</label>
-                    <input type="date" value={newInvoiceDueDate} onChange={(e) => setNewInvoiceDueDate(e.target.value)} className={inputClass} />
+                    <input type="date" value={newInvoiceDueDate} onChange={(e) => setNewInvoiceDueDate(e.target.value)} data-testid="booking-form-invoice-due-date-input" className={inputClass} />
                   </div>
                 </div>
                 <div className="max-w-2xl mb-5">
@@ -2127,6 +2177,7 @@ export default function BookingFormPage() {
                     placeholder="Shown at the bottom of the invoice — carries over to future invoices until changed"
                     value={newInvoiceMemo}
                     onChange={(e) => setNewInvoiceMemo(e.target.value)}
+                    data-testid="booking-form-invoice-memo-textarea"
                     className={inputClass}
                   />
                 </div>
@@ -2136,6 +2187,7 @@ export default function BookingFormPage() {
                       type="checkbox"
                       checked={newInvoiceAcceptPayment}
                       onChange={(e) => setNewInvoiceAcceptPayment(e.target.checked)}
+                      data-testid="booking-form-invoice-accept-payment-checkbox"
                       className="mt-0.5 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                     />
                     <span>
@@ -2152,6 +2204,7 @@ export default function BookingFormPage() {
                   <button
                     type="button"
                     onClick={() => setShowInvoicePreview((v) => !v)}
+                    data-testid="booking-form-invoice-preview-button"
                     className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
                   >
                     {showInvoicePreview ? 'Hide Preview' : 'Preview'}
@@ -2161,6 +2214,7 @@ export default function BookingFormPage() {
                       type="button"
                       onClick={handleCancelEditInvoice}
                       disabled={savingInvoiceDraft || sendingNewInvoice}
+                      data-testid="booking-form-invoice-cancel-edit-button"
                       className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60"
                     >
                       Cancel
@@ -2170,6 +2224,7 @@ export default function BookingFormPage() {
                     type="button"
                     onClick={handleSaveInvoiceDraft}
                     disabled={savingInvoiceDraft || sendingNewInvoice}
+                    data-testid="booking-form-invoice-save-draft-button"
                     className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60"
                   >
                     {savingInvoiceDraft ? 'Saving…' : editingInvoiceId ? 'Save Changes' : 'Save Draft'}
@@ -2178,6 +2233,7 @@ export default function BookingFormPage() {
                     type="button"
                     onClick={handleSendNewInvoice}
                     disabled={sendingNewInvoice || savingInvoiceDraft}
+                    data-testid="booking-form-invoice-send-button"
                     className={`${primaryButtonClass} disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
                   >
                     {sendingNewInvoice && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
@@ -2185,7 +2241,7 @@ export default function BookingFormPage() {
                   </button>
                 </div>
                 {showInvoicePreview && (
-                  <div className="mt-5 max-w-2xl">
+                  <div className="mt-5 max-w-2xl" data-testid="booking-form-invoice-preview-container">
                     <InvoiceDocument
                       businessInfo={currentUser.businessInfo}
                       client={client}
@@ -2219,7 +2275,7 @@ export default function BookingFormPage() {
                       // track invoices by hand, without going through the Stripe-gated Send.
                       const canMarkPayment = ['draft', 'sent', 'partial', 'paid'].includes(inv.status);
                       return (
-                        <div key={inv.id} className="border border-slate-200 rounded-lg p-4">
+                        <div key={inv.id} data-testid="booking-form-invoice-row" className="border border-slate-200 rounded-lg p-4">
                           <div className="flex items-center justify-between flex-wrap gap-3">
                             <div>
                               <div className="flex items-center gap-2 mb-1">
@@ -2244,6 +2300,7 @@ export default function BookingFormPage() {
                                   type="button"
                                   onClick={() => handleEditInvoiceClick(inv)}
                                   disabled={acting}
+                                  data-testid="booking-form-invoice-edit-button"
                                   className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-50 disabled:opacity-50"
                                 >
                                   Edit
@@ -2254,6 +2311,7 @@ export default function BookingFormPage() {
                                   type="button"
                                   onClick={() => handleSendExistingInvoice(inv.id)}
                                   disabled={acting}
+                                  data-testid="booking-form-invoice-send-existing-button"
                                   className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50"
                                 >
                                   {acting ? 'Sending…' : 'Send'}
@@ -2266,6 +2324,7 @@ export default function BookingFormPage() {
                                 <button
                                   type="button"
                                   onClick={() => handleCopyInvoiceLink(payLink)}
+                                  data-testid="booking-form-invoice-copy-link-button"
                                   className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-50"
                                 >
                                   Copy Pay Link
@@ -2282,6 +2341,7 @@ export default function BookingFormPage() {
                                       autoFocus
                                       value={partialAmountDraft.value}
                                       onChange={(e) => setPartialAmountDraft({ invoiceId: inv.id, value: e.target.value })}
+                                      data-testid="booking-form-invoice-partial-amount-input"
                                       className="w-24 pl-5 pr-2 py-1.5 rounded-lg border border-slate-300 text-xs"
                                     />
                                   </div>
@@ -2289,6 +2349,7 @@ export default function BookingFormPage() {
                                     type="button"
                                     onClick={() => handleMarkInvoicePayment(inv.id, 'partial', Number(partialAmountDraft.value))}
                                     disabled={acting || !(Number(partialAmountDraft.value) > 0)}
+                                    data-testid="booking-form-invoice-partial-save-button"
                                     className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50"
                                   >
                                     Save
@@ -2296,6 +2357,7 @@ export default function BookingFormPage() {
                                   <button
                                     type="button"
                                     onClick={() => setPartialAmountDraft(null)}
+                                    data-testid="booking-form-invoice-partial-cancel-button"
                                     className="px-2 py-1.5 text-xs text-slate-400 hover:text-slate-600"
                                   >
                                     Cancel
@@ -2308,6 +2370,7 @@ export default function BookingFormPage() {
                                       type="button"
                                       onClick={() => handleMarkInvoicePayment(inv.id, 'sent', null)}
                                       disabled={acting}
+                                      data-testid="booking-form-invoice-mark-open-button"
                                       className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-50 disabled:opacity-50"
                                     >
                                       Mark Open
@@ -2318,6 +2381,7 @@ export default function BookingFormPage() {
                                       type="button"
                                       onClick={() => setPartialAmountDraft({ invoiceId: inv.id, value: inv.paidAmount ? String(inv.paidAmount) : '' })}
                                       disabled={acting}
+                                      data-testid="booking-form-invoice-mark-partial-button"
                                       className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-50 disabled:opacity-50"
                                     >
                                       Mark Partial
@@ -2328,6 +2392,7 @@ export default function BookingFormPage() {
                                       type="button"
                                       onClick={() => setAcceptPaymentInvoice(inv)}
                                       disabled={acting}
+                                      data-testid="booking-form-invoice-mark-paid-button"
                                       className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50"
                                     >
                                       Mark Paid
@@ -2340,6 +2405,7 @@ export default function BookingFormPage() {
                                   type="button"
                                   onClick={() => handleSendReceiptClick(inv.id)}
                                   disabled={acting}
+                                  data-testid="booking-form-invoice-send-receipt-button"
                                   className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-50 disabled:opacity-50"
                                 >
                                   {acting ? 'Sending…' : inv.receiptSentAt ? 'Resend Receipt' : 'Send Receipt'}
@@ -2350,6 +2416,7 @@ export default function BookingFormPage() {
                                   type="button"
                                   onClick={() => handleVoidInvoiceClick(inv.id)}
                                   disabled={acting}
+                                  data-testid="booking-form-invoice-void-button"
                                   className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-50 disabled:opacity-50"
                                 >
                                   {acting ? 'Voiding…' : 'Void'}

@@ -60,6 +60,7 @@ function SignHereSlot({ label, signerName, onSignerNameChange, onSignatureChange
         value={signerName}
         onChange={(e) => onSignerNameChange(e.target.value)}
         placeholder="Type your full legal name"
+        data-testid="contract-document-signer-name-input"
         className="w-full mb-2 px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
       />
       <SignatureCanvas onChange={onSignatureChange} height={110} />

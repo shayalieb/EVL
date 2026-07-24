@@ -48,6 +48,7 @@ export default function ContractorPickerRow({
       onDragStart={() => onDragStart(index)}
       onDragOver={(e) => { e.preventDefault(); onDragOver(index); }}
       onDrop={() => onDrop(index)}
+      data-testid="contractor-picker-row"
       className={`rounded-lg border-l-4 border-l-indigo-400 border border-slate-200 bg-white ${isDragging ? 'opacity-40' : ''}`}
     >
       <div className="flex items-center gap-3 px-3.5 pt-3.5 pb-2.5">
@@ -56,6 +57,7 @@ export default function ContractorPickerRow({
         <button
           type="button"
           onClick={() => onOpenContractor(contractor)}
+          data-testid="contractor-picker-row-name-button"
           className="flex-1 min-w-0 text-left"
         >
           <div className="text-sm font-medium text-slate-800 truncate hover:text-indigo-600 hover:underline">
@@ -71,6 +73,7 @@ export default function ContractorPickerRow({
             value={booking.inquiryStatusId || ''}
             onChange={(e) => onStatusChange(booking.contractorId, e.target.value)}
             title="Specific status"
+            data-testid="contractor-picker-row-status-select"
             className="shrink-0 w-28 px-1.5 py-1.5 rounded-lg border border-slate-300 text-xs"
           >
             {statusesByBucket[currentBucket].map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
@@ -80,6 +83,7 @@ export default function ContractorPickerRow({
         <button
           type="button"
           onClick={() => onOpenThread(booking.contractorId)}
+          data-testid="contractor-picker-row-email-history-button"
           className={emailHistoryButtonClass}
           aria-label="View email history"
           title="Email history"
@@ -110,6 +114,7 @@ export default function ContractorPickerRow({
               value={selectedTemplateId}
               onChange={(e) => setSelectedTemplateId(e.target.value)}
               disabled={!contractor.email}
+              data-testid="contractor-picker-row-template-select"
               className={`shrink-0 w-36 px-2 py-1.5 rounded-lg border border-slate-300 text-xs ${contractor.email ? '' : 'invisible'}`}
             >
               <option value="">Select template…</option>
@@ -119,6 +124,7 @@ export default function ContractorPickerRow({
               type="button"
               onClick={handleSend}
               disabled={!contractor.email || !selectedTemplateId}
+              data-testid="contractor-picker-row-send-email-button"
               className={`${sendEmailButtonClass} ${contractor.email ? '' : 'invisible'}`}
             >
               Send Email
@@ -137,6 +143,7 @@ export default function ContractorPickerRow({
                 onClick={() => handleBucketClick(b.value)}
                 disabled={disabled}
                 title={disabled ? `No "${b.label}" inquiry status configured in Settings` : b.label}
+                data-testid={`contractor-picker-row-bucket-${b.value}-button`}
                 className={bucketButtonClass}
                 style={active ? { color: status.color, borderColor: `${status.color}55`, backgroundColor: `${status.color}11` } : undefined}
               >
@@ -150,6 +157,7 @@ export default function ContractorPickerRow({
           <select
             value={activeTier?.id || ''}
             onChange={(e) => onTierChange(booking.contractorId, e.target.value)}
+            data-testid="contractor-picker-row-tier-select"
             className="shrink-0 w-24 px-1.5 py-1.5 rounded-lg border border-slate-300 text-xs"
           >
             {tiers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -170,6 +178,7 @@ export default function ContractorPickerRow({
                 type="button"
                 onClick={() => onPayClick(booking.contractorId)}
                 title={`${currency(booking.paidAmount)}${booking.paymentMethod ? ` via ${PAYMENT_METHOD_LABELS[booking.paymentMethod] || booking.paymentMethod}` : ''}${booking.paymentMethod === 'check' && booking.paymentReference ? ` #${booking.paymentReference}` : ''} — click to edit`}
+                data-testid="contractor-picker-row-paid-badge-button"
               >
                 <Badge color="#22c55e">Paid</Badge>
               </button>
@@ -179,6 +188,7 @@ export default function ContractorPickerRow({
                 className="text-slate-300 hover:text-red-600 px-0.5"
                 aria-label="Mark unpaid"
                 title="Mark unpaid"
+                data-testid="contractor-picker-row-mark-unpaid-button"
               >
                 ✕
               </button>
@@ -187,6 +197,7 @@ export default function ContractorPickerRow({
             <button
               type="button"
               onClick={() => onPayClick(booking.contractorId)}
+              data-testid="contractor-picker-row-pay-button"
               className="shrink-0 px-3 py-1.5 rounded-lg border border-emerald-300 text-emerald-700 text-xs font-semibold hover:bg-emerald-50"
             >
               Pay
@@ -199,6 +210,7 @@ export default function ContractorPickerRow({
           onClick={() => onRemove(booking.contractorId)}
           className="shrink-0 w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
           aria-label="Remove contractor"
+          data-testid="contractor-picker-row-remove-button"
         >
           ✕
         </button>
@@ -210,6 +222,7 @@ export default function ContractorPickerRow({
           type="time"
           value={booking.startTime || ''}
           onChange={(e) => onTimeChange(booking.contractorId, 'startTime', e.target.value)}
+          data-testid="contractor-picker-row-start-time-input"
           className={timeInputClass}
         />
         <label className="text-xs font-semibold text-slate-400 ml-2">End</label>
@@ -217,6 +230,7 @@ export default function ContractorPickerRow({
           type="time"
           value={booking.endTime || ''}
           onChange={(e) => onTimeChange(booking.contractorId, 'endTime', e.target.value)}
+          data-testid="contractor-picker-row-end-time-input"
           className={timeInputClass}
         />
       </div>

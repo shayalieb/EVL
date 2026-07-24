@@ -86,6 +86,7 @@ export default function AuthPage() {
             <button
               type="button"
               onClick={() => switchTab('signin')}
+              data-testid="auth-tab-signin"
               className={`flex-1 py-2 font-semibold border-b-2 ${tab === 'signin' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}
             >
               Sign In
@@ -93,6 +94,7 @@ export default function AuthPage() {
             <button
               type="button"
               onClick={() => switchTab('signup')}
+              data-testid="auth-tab-signup"
               className={`flex-1 py-2 font-semibold border-b-2 ${tab === 'signup' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}
             >
               Sign Up
@@ -101,7 +103,7 @@ export default function AuthPage() {
         )}
 
         {(authError || localError) && (
-          <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+          <div data-testid="auth-error-banner" className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
             {localError || authError}
           </div>
         )}
@@ -109,43 +111,43 @@ export default function AuthPage() {
         {tab === 'forgot' ? (
           resetSent ? (
             <div className="space-y-4 text-center">
-              <p className="text-sm text-slate-600">
+              <p data-testid="auth-reset-sent-message" className="text-sm text-slate-600">
                 If an account exists for that email, we've sent a link to reset the password.
               </p>
-              <button type="button" onClick={backToSignIn} className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
+              <button type="button" onClick={backToSignIn} data-testid="auth-back-to-signin-link" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
                 Back to sign in
               </button>
             </div>
           ) : (
             <form onSubmit={handleForgotPassword} className="space-y-3">
               <p className="text-sm text-slate-500">Enter your email and we'll send you a reset link.</p>
-              <input type="email" required placeholder="Email address" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} className={inputClass} />
-              <SubmitButton loading={submitting}>Send Reset Link</SubmitButton>
-              <button type="button" onClick={backToSignIn} className="w-full text-sm font-semibold text-slate-500 hover:text-slate-700">
+              <input type="email" required placeholder="Email address" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} data-testid="auth-forgot-email-input" className={inputClass} />
+              <SubmitButton loading={submitting} testId="auth-forgot-submit-button">Send Reset Link</SubmitButton>
+              <button type="button" onClick={backToSignIn} data-testid="auth-forgot-back-button" className="w-full text-sm font-semibold text-slate-500 hover:text-slate-700">
                 Back to sign in
               </button>
             </form>
           )
         ) : tab === 'signin' ? (
           <form onSubmit={handleSignIn} className="space-y-3">
-            <input type="email" required placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
-            <input type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputClass} />
-            <SubmitButton loading={submitting}>Sign In</SubmitButton>
-            <button type="button" onClick={() => switchTab('forgot')} className="w-full text-sm font-medium text-indigo-600 hover:text-indigo-700">
+            <input type="email" required placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="auth-signin-email-input" className={inputClass} />
+            <input type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} data-testid="auth-signin-password-input" className={inputClass} />
+            <SubmitButton loading={submitting} testId="auth-signin-submit-button">Sign In</SubmitButton>
+            <button type="button" onClick={() => switchTab('forgot')} data-testid="auth-forgot-password-link" className="w-full text-sm font-medium text-indigo-600 hover:text-indigo-700">
               Forgot password?
             </button>
           </form>
         ) : (
           <form onSubmit={handleSignUp} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <input required placeholder="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} className={inputClass} />
-              <input required placeholder="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} className={inputClass} />
+              <input required placeholder="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} data-testid="auth-signup-firstname-input" className={inputClass} />
+              <input required placeholder="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} data-testid="auth-signup-lastname-input" className={inputClass} />
             </div>
-            <input type="email" required placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
-            <input type="tel" placeholder="Contact phone number" value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClass} />
-            <input type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputClass} />
-            <input type="password" required placeholder="Confirm password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className={inputClass} />
-            <SubmitButton loading={submitting}>Create Account</SubmitButton>
+            <input type="email" required placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="auth-signup-email-input" className={inputClass} />
+            <input type="tel" placeholder="Contact phone number" value={phone} onChange={(e) => setPhone(e.target.value)} data-testid="auth-signup-phone-input" className={inputClass} />
+            <input type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} data-testid="auth-signup-password-input" className={inputClass} />
+            <input type="password" required placeholder="Confirm password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} data-testid="auth-signup-confirm-password-input" className={inputClass} />
+            <SubmitButton loading={submitting} testId="auth-signup-submit-button">Create Account</SubmitButton>
           </form>
         )}
       </div>
