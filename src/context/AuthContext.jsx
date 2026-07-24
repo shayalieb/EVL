@@ -200,11 +200,14 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  const clearAuthError = useCallback(() => setAuthError(''), []);
+
   const value = {
     currentUser,
     role: serverUser?.role ?? null,
     can,
     authError,
+    clearAuthError,
     authLoading,
     signUp,
     signIn,
