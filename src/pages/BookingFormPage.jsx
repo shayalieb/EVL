@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ClientModal from '../components/ClientModal';
 import InvoiceDocument from '../components/InvoiceDocument';
+import AcceptPaymentModal from '../components/AcceptPaymentModal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Badge from '../components/ui/Badge';
 import { useData } from '../context/DataContext';
@@ -42,6 +43,8 @@ const TABS = [
 ];
 
 const DEFAULT_CONTRACT_ACCENT_COLOR = '#6366f1';
+
+const PAYMENT_METHOD_LABELS = { ach: 'ACH', check: 'Check', card: 'Card', other: 'Other' };
 
 // Mirrors EventFormPage's venue shape exactly — a booking's location carries
 // straight into the event created from it, so a partial object here would
@@ -523,6 +526,7 @@ export default function BookingFormPage() {
   const [invoiceActionId, setInvoiceActionId] = useState(null);
   const [lastInvoicePayLink, setLastInvoicePayLink] = useState(null); // { invoiceId, link } — only known right after sending, same as contract sign links
   const [partialAmountDraft, setPartialAmountDraft] = useState(null); // { invoiceId, value } — inline "$ paid so far" editor for one row at a time
+  const [acceptPaymentInvoice, setAcceptPaymentInvoice] = useState(null); // invoice currently open in the Accept Payment popover, or null
   const [contractPreviewUrl, setContractPreviewUrl] = useState('');
   const [showContractPreview, setShowContractPreview] = useState(false);
   const [loadingContractPreview, setLoadingContractPreview] = useState(false);
@@ -2226,6 +2230,7 @@ export default function BookingFormPage() {
                                 {inv.recipientName || inv.recipientEmail}
                                 {inv.dueDate && ` · Due ${formatEventDate(inv.dueDate.slice(0, 10))}`}
                                 {inv.paidAt && ` · Paid ${formatEventDate(inv.paidAt.slice(0, 10))}`}
+                                {inv.paymentMethod && ` via ${PAYMENT_METHOD_LABELS[inv.paymentMethod] || inv.paymentMethod}${inv.paymentMethod === 'check' && inv.paymentReference ? ` #${inv.paymentReference}` : ''}`}
                                 {inv.receiptSentAt && ` · Receipt sent ${formatEventDate(inv.receiptSentAt.slice(0, 10))}`}
                               </div>
                             </div>
@@ -2317,7 +2322,7 @@ export default function BookingFormPage() {
                                   {canMarkPayment && inv.status !== 'paid' && (
                                     <button
                                       type="button"
-                                      onClick={() => handleMarkInvoicePayment(inv.id, 'paid', null)}
+                                      onClick={() => setAcceptPaymentInvoice(inv)}
                                       disabled={acting}
                                       className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50"
                                     >
@@ -2363,6 +2368,16 @@ export default function BookingFormPage() {
         open={newClientModalOpen}
         onClose={() => setNewClientModalOpen(false)}
         onSaved={(record) => update('clientId', record.id)}
+      />
+
+      <AcceptPaymentModal
+        open={!!acceptPaymentInvoice}
+        invoice={acceptPaymentInvoice}
+        onClose={() => setAcceptPaymentInvoice(null)}
+        onAccepted={(updated) => {
+          setInvoices((prev) => prev.map((inv) => (inv.id === updated.id ? updated : inv)));
+          showToast('Payment accepted');
+        }}
       />
 
       <ConfirmDialog

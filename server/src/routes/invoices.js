@@ -42,6 +42,9 @@ function serializeForOwner(invoice) {
     recipientName: invoice.recipientName,
     total: invoiceTotal(invoice),
     paidAmount: invoice.paidAmount ?? 0,
+    paymentMethod: invoice.paymentMethod,
+    paymentReference: invoice.paymentReference,
+    paymentMemo: invoice.paymentMemo,
     sentAt: invoice.sentAt,
     paidAt: invoice.paidAt,
     voidedAt: invoice.voidedAt,
@@ -245,19 +248,37 @@ router.post('/:id/mark-payment', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'A voided invoice cannot have its payment status changed.' });
   }
 
-  const { status } = req.body || {};
+  const { status, paidAmount, paidAt, paymentMethod, paymentReference, paymentMemo } = req.body || {};
   const total = invoiceTotal(invoice);
   let data;
   if (status === 'paid') {
-    data = { status: 'paid', paidAmount: total, paidAt: new Date() };
+    // From the "Accept Payment" popover — amount defaults to the full total
+    // but is editable (e.g. a small write-off), and method/date/memo are
+    // all optional since a business might just want the status flipped
+    // without filling out every field.
+    const amount = paidAmount !== undefined && paidAmount !== null && paidAmount !== '' ? Number(paidAmount) : total;
+    if (!(amount > 0)) {
+      return res.status(400).json({ error: 'Amount must be greater than $0.' });
+    }
+    if (paymentMethod && !['ach', 'check', 'card', 'other'].includes(paymentMethod)) {
+      return res.status(400).json({ error: 'Invalid payment method.' });
+    }
+    data = {
+      status: 'paid',
+      paidAmount: amount,
+      paidAt: paidAt ? new Date(paidAt) : new Date(),
+      paymentMethod: paymentMethod || null,
+      paymentReference: paymentMethod === 'check' ? (paymentReference || null) : null,
+      paymentMemo: paymentMemo || null,
+    };
   } else if (status === 'partial') {
-    const amount = Number(req.body?.paidAmount);
+    const amount = Number(paidAmount);
     if (!(amount > 0) || amount >= total) {
       return res.status(400).json({ error: 'Partial amount must be greater than $0 and less than the invoice total.' });
     }
-    data = { status: 'partial', paidAmount: amount, paidAt: null };
+    data = { status: 'partial', paidAmount: amount, paidAt: null, paymentMethod: null, paymentReference: null, paymentMemo: null };
   } else if (status === 'sent') {
-    data = { status: 'sent', paidAmount: null, paidAt: null };
+    data = { status: 'sent', paidAmount: null, paidAt: null, paymentMethod: null, paymentReference: null, paymentMemo: null };
   } else {
     return res.status(400).json({ error: "status must be 'sent', 'partial', or 'paid'." });
   }
@@ -286,6 +307,10 @@ router.post('/:id/send-receipt', asyncHandler(async (req, res) => {
   const paidDateLabel = invoice.paidAt
     ? new Date(invoice.paidAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
     : null;
+  const methodLabel = { ach: 'ACH', check: 'Check', card: 'Credit/Debit Card', other: 'Other' }[invoice.paymentMethod];
+  const methodLine = methodLabel
+    ? `<p>Method: ${methodLabel}${invoice.paymentMethod === 'check' && invoice.paymentReference ? ` #${invoice.paymentReference}` : ''}</p>`
+    : '';
   const lineItemsHtml = (invoice.snapshot?.lineItems || [])
     .map((item) => `<tr><td style="padding:4px 16px 4px 0">${item.name || 'Item'}</td><td style="padding:4px 0;text-align:right">${lineItemTotal(item).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</td></tr>`)
     .join('');
@@ -296,7 +321,7 @@ router.post('/:id/send-receipt', asyncHandler(async (req, res) => {
       from: buildFromHeader(fromName),
       to: invoice.recipientEmail,
       subject: `Receipt for ${totalLabel} from ${fromName}`,
-      html: `<p>Hi ${invoice.recipientName || 'there'},</p><p>This confirms your payment of ${totalLabel}${paidDateLabel ? ` received ${paidDateLabel}` : ''}.</p><table>${lineItemsHtml}</table><p>Thank you for your business!</p><p>${fromName}</p>`,
+      html: `<p>Hi ${invoice.recipientName || 'there'},</p><p>This confirms your payment of ${totalLabel}${paidDateLabel ? ` received ${paidDateLabel}` : ''}.</p>${methodLine}<table>${lineItemsHtml}</table><p>Thank you for your business!</p><p>${fromName}</p>`,
     });
   } catch {
     emailError = 'Could not send the receipt email — check the recipient address and try again.';

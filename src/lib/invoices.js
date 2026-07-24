@@ -35,11 +35,13 @@ export async function sendInvoice(invoiceId) {
 
 // Manual payment-status override (open/partially paid/paid) for money
 // collected outside Stripe — see server/src/routes/invoices.js's
-// POST /:id/mark-payment for the source-status rules.
-export async function markInvoicePayment(invoiceId, { status, paidAmount } = {}) {
+// POST /:id/mark-payment for the source-status rules. The paidAt/method/
+// reference/memo fields only apply (and are only collected) when marking
+// 'paid', via the Accept Payment popover.
+export async function markInvoicePayment(invoiceId, { status, paidAmount, paidAt, paymentMethod, paymentReference, paymentMemo } = {}) {
   const data = await apiFetch(`/invoices/${invoiceId}/mark-payment`, {
     method: 'POST',
-    body: JSON.stringify({ status, paidAmount }),
+    body: JSON.stringify({ status, paidAmount, paidAt, paymentMethod, paymentReference, paymentMemo }),
   });
   return data.invoice;
 }

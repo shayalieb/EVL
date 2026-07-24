@@ -353,6 +353,12 @@ model Invoice {
   // automatically by the Stripe webhook, or entered by hand when marking an
   // offline (cash/check/etc.) payment. Null/0 while still 'sent'.
   paidAmount      Float?
+  // Only set by the manual "Accept Payment" popover (mark-payment status
+  // 'paid') — Stripe's own webhook payments leave these null since the
+  // method/reference are implicit (always a card, via the pay link).
+  paymentMethod    String? // 'ach' | 'check' | 'card' | 'other'
+  paymentReference String? // check number, only meaningful when method is 'check'
+  paymentMemo      String? @db.Text // internal note about the payment, separate from the client-facing `memo` above
 
   recipientEmail  String
   recipientName   String?
