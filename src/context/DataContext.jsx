@@ -17,6 +17,8 @@ const LIST_FIELDS = {
   bookingStatuses: 'bookingStatuses',
   emailTemplates: 'emailTemplates',
   offerings: 'offerings',
+  proposalTemplates: 'proposalTemplates',
+  contractTemplates: 'contractTemplates',
 };
 
 export function DataProvider({ children }) {
@@ -184,6 +186,50 @@ export function DataProvider({ children }) {
     patchList(LIST_FIELDS.emailTemplates, (currentUser.emailTemplates || []).filter((t) => t.id !== id));
   }, [currentUser, patchList]);
 
+  // ---- Proposal templates ----
+  // Named, reusable sets of custom sections a business can load into a new
+  // proposal — replaces the old single silently-auto-cached
+  // currentUser.proposalTemplate object, which stays untouched in the blob
+  // (harmless dead data) rather than being migrated automatically here; see
+  // settings/TemplatesTab.jsx for the one-time opt-in migration.
+  const addProposalTemplate = useCallback((template) => {
+    if (!currentUser) return;
+    const record = { id: uid('ptmpl'), name: '', sections: [], ...template };
+    patchList(LIST_FIELDS.proposalTemplates, [...(currentUser.proposalTemplates || []), record]);
+    return record;
+  }, [currentUser, patchList]);
+
+  const updateProposalTemplate = useCallback((id, patch) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.proposalTemplates, (currentUser.proposalTemplates || []).map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  }, [currentUser, patchList]);
+
+  const removeProposalTemplate = useCallback((id) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.proposalTemplates, (currentUser.proposalTemplates || []).filter((t) => t.id !== id));
+  }, [currentUser, patchList]);
+
+  // ---- Contract templates ----
+  // Same idea as proposal templates above, plus a `title` field (what shows
+  // on the contract document itself, distinct from `name` which is just the
+  // template's label in this management list).
+  const addContractTemplate = useCallback((template) => {
+    if (!currentUser) return;
+    const record = { id: uid('ctmpl'), name: '', title: '', sections: [], ...template };
+    patchList(LIST_FIELDS.contractTemplates, [...(currentUser.contractTemplates || []), record]);
+    return record;
+  }, [currentUser, patchList]);
+
+  const updateContractTemplate = useCallback((id, patch) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.contractTemplates, (currentUser.contractTemplates || []).map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  }, [currentUser, patchList]);
+
+  const removeContractTemplate = useCallback((id) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.contractTemplates, (currentUser.contractTemplates || []).filter((t) => t.id !== id));
+  }, [currentUser, patchList]);
+
   // ---- Offerings (reusable line items for proposals/contracts) ----
   const addOffering = useCallback((offering) => {
     if (!currentUser) return;
@@ -309,6 +355,8 @@ export function DataProvider({ children }) {
     bookingStatuses: currentUser?.bookingStatuses || [],
     emailTemplates: currentUser?.emailTemplates || [],
     offerings: currentUser?.offerings || [],
+    proposalTemplates: currentUser?.proposalTemplates || [],
+    contractTemplates: currentUser?.contractTemplates || [],
     addContractor,
     updateContractor,
     deleteContractor,
@@ -336,6 +384,12 @@ export function DataProvider({ children }) {
     addEmailTemplate,
     updateEmailTemplate,
     removeEmailTemplate,
+    addProposalTemplate,
+    updateProposalTemplate,
+    removeProposalTemplate,
+    addContractTemplate,
+    updateContractTemplate,
+    removeContractTemplate,
     addOffering,
     updateOffering,
     deleteOffering,
@@ -357,6 +411,8 @@ export function DataProvider({ children }) {
     addEventStatus, updateEventStatus, removeEventStatus,
     addInquiryStatus, updateInquiryStatus, removeInquiryStatus,
     addEmailTemplate, updateEmailTemplate, removeEmailTemplate,
+    addProposalTemplate, updateProposalTemplate, removeProposalTemplate,
+    addContractTemplate, updateContractTemplate, removeContractTemplate,
     addOffering, updateOffering, deleteOffering,
     addEvent, updateEvent, deleteEvent,
     getContractorById, computeDurationHours, computeEventTotalCost, computeVendorStatus,

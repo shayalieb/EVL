@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import ClientModal from '../components/ClientModal';
 import InvoiceDocument from '../components/InvoiceDocument';
 import AcceptPaymentModal from '../components/AcceptPaymentModal';
+import SectionsEditor from '../components/SectionsEditor';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Badge from '../components/ui/Badge';
 import { useData } from '../context/DataContext';
@@ -15,6 +16,7 @@ import { generateProposalPdf, generateProposalPdfAttachment } from '../lib/propo
 import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms } from '../lib/contracts';
 import { listInvoices, createInvoice, updateInvoice, sendInvoice, markInvoicePayment, sendReceipt, voidInvoice, getNextInvoiceInfo } from '../lib/invoices';
 import { generateContractPdf, getContractPdfDataUrl } from '../lib/contractPdf';
+import { generateInvoicePdf } from '../lib/invoicePdf';
 import { sendEmail } from '../lib/email/send';
 import { formatCurrency as currency, formatEventDate, formatVenueLine, formatEventTime } from '../lib/format';
 import { FileIcon } from '../components/ui/icons';
@@ -249,90 +251,6 @@ function OfferingsEditor({ offerings, onChange, onAddClick }) {
   );
 }
 
-// A custom section = a title (rendered as a highlighted separator bar in the
-// PDF) plus an optional short value and/or a longer free-text block — used
-// for both the Proposal and Contract so either document can carry arbitrary
-// extra content (riders, policies, custom line notes) beyond the fixed
-// fields above.
-function SectionsEditor({ sections, onChange }) {
-  const [title, setTitle] = useState('');
-  const [text, setText] = useState('');
-  const [value, setValue] = useState('');
-
-  function handleAdd() {
-    if (!title.trim()) return;
-    onChange([...sections, { id: uid('section'), title: title.trim(), text: text.trim(), value: value.trim() }]);
-    setTitle('');
-    setText('');
-    setValue('');
-  }
-
-  function handleRemove(id) {
-    onChange(sections.filter((s) => s.id !== id));
-  }
-
-  function handleUpdate(id, field, val) {
-    onChange(sections.map((s) => (s.id === id ? { ...s, [field]: val } : s)));
-  }
-
-  return (
-    <div>
-      <label className={labelClass}>Custom Sections</label>
-      {sections.length > 0 && (
-        <div className="space-y-2 mb-3">
-          {sections.map((s) => (
-            <div key={s.id} data-testid="booking-form-section-row" className="border border-slate-200 rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <input
-                  value={s.title}
-                  onChange={(e) => handleUpdate(s.id, 'title', e.target.value)}
-                  placeholder="Section title"
-                  data-testid="booking-form-section-title-input"
-                  className={`${inputClass} font-semibold`}
-                />
-                <button
-                  type="button"
-                  onClick={() => handleRemove(s.id)}
-                  data-testid="booking-form-section-remove-button"
-                  className="shrink-0 w-8 h-8 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
-                  aria-label={`Remove ${s.title || 'section'}`}
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <textarea
-                  rows={2}
-                  value={s.text}
-                  onChange={(e) => handleUpdate(s.id, 'text', e.target.value)}
-                  placeholder="Text (optional)"
-                  data-testid="booking-form-section-text-textarea"
-                  className={inputClass}
-                />
-                <input
-                  value={s.value}
-                  onChange={(e) => handleUpdate(s.id, 'value', e.target.value)}
-                  placeholder="Value (optional)"
-                  data-testid="booking-form-section-value-input"
-                  className={inputClass}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="border border-dashed border-slate-300 rounded-lg p-3">
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="New section title" data-testid="booking-form-section-new-title-input" className={`${inputClass} mb-2`} />
-        <div className="grid grid-cols-2 gap-2 mb-2">
-          <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)} placeholder="Text (optional)" data-testid="booking-form-section-new-text-textarea" className={inputClass} />
-          <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Value (optional)" data-testid="booking-form-section-new-value-input" className={inputClass} />
-        </div>
-        <button type="button" onClick={handleAdd} data-testid="booking-form-section-add-button" className="px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50">+ Add Section</button>
-      </div>
-    </div>
-  );
-}
-
 // Collapses variable-length, often-empty blocks (pricing, custom sections)
 // so a booking with nothing in them doesn't force a long scroll past empty
 // state — starts open once there's something worth seeing.
@@ -462,8 +380,9 @@ export default function BookingFormPage() {
   const {
     bookings, clients, eventTypes, addEventType, bookingStatuses,
     addBooking, updateBooking, convertBookingToEvent, addEvent,
+    proposalTemplates, addProposalTemplate, contractTemplates, addContractTemplate,
   } = useData();
-  const { can, currentUser, updateCurrentUser } = useAuth();
+  const { can, currentUser } = useAuth();
   const { showToast } = useToast();
   const notifySaving = useSavingIndicator();
 
@@ -496,6 +415,13 @@ export default function BookingFormPage() {
   const [contractTitle, setContractTitle] = useState('Event Contract');
   const [contractSections, setContractSections] = useState([]);
   const [contractOfferings, setContractOfferings] = useState([]);
+  // "Save as Template" inline name-prompt state — one pair per document
+  // type, shown/hidden independently since a business could be mid-way
+  // through saving one while the other stays closed.
+  const [savingProposalTemplateAs, setSavingProposalTemplateAs] = useState(false);
+  const [newProposalTemplateName, setNewProposalTemplateName] = useState('');
+  const [savingContractTemplateAs, setSavingContractTemplateAs] = useState(false);
+  const [newContractTemplateName, setNewContractTemplateName] = useState('');
   const [proposalOfferingPickerOpen, setProposalOfferingPickerOpen] = useState(false);
   const [contractOfferingPickerOpen, setContractOfferingPickerOpen] = useState(false);
   const [invoices, setInvoices] = useState([]);
@@ -542,8 +468,6 @@ export default function BookingFormPage() {
   const client = clients.find((c) => c.id === form.clientId);
   const autoSaveSkipRef = useRef(true);
   const termsSkipRef = useRef(true);
-  const contractTemplateSkipRef = useRef(true);
-  const proposalTemplateSkipRef = useRef(true);
   const autoCreatedEventRef = useRef(false);
   // Background refreshes (e.g. the window-focus refetch in AuthContext) hand
   // back a brand-new `booking` object even when nothing changed, which would
@@ -590,7 +514,6 @@ export default function BookingFormPage() {
     // would otherwise immediately re-persist the just-loaded data as if the
     // user had typed something.
     autoSaveSkipRef.current = true;
-    proposalTemplateSkipRef.current = true;
     autoCreatedEventRef.current = false;
   }, [bookingId, booking, bookingStatuses]);
 
@@ -731,37 +654,17 @@ export default function BookingFormPage() {
     } else {
       setContractTitle(currentUser.contractTemplate?.title || 'Event Contract');
       // Prefer this specific proposal's own sections (same auto-carry as
-      // offerings/line items/hours below); only fall back to the account-wide
-      // default when the proposal doesn't have any of its own yet.
+      // offerings/line items/hours below); only fall back to the legacy
+      // account-wide default when the proposal doesn't have any of its own
+      // yet — that default is read-only now (see settings/TemplatesTab.jsx's
+      // one-time migration into a real named template), nothing writes back
+      // to it anymore.
       setContractSections(
         booking?.proposal?.sections?.length ? booking.proposal.sections : (currentUser.contractTemplate?.sections || [])
       );
     }
-    contractTemplateSkipRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [booking?.id, contract?.id]);
-
-  useEffect(() => {
-    if (contract) return; // already locked into the sent snapshot
-    if (contractTemplateSkipRef.current) { contractTemplateSkipRef.current = false; return; }
-    const timer = setTimeout(() => {
-      updateCurrentUser({ contractTemplate: { title: contractTitle, sections: contractSections } });
-    }, 800);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contractTitle, contractSections]);
-
-  // Proposal sections follow the same reusable-template pattern, synced to
-  // the account default while a proposal is still a draft.
-  useEffect(() => {
-    if (!form.proposal) return;
-    if (proposalTemplateSkipRef.current) { proposalTemplateSkipRef.current = false; return; }
-    const timer = setTimeout(() => {
-      updateCurrentUser({ proposalTemplate: { sections: form.proposal.sections || [] } });
-    }, 800);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.proposal?.sections]);
 
   // Once both signatures are in, the event is created automatically — no
   // button to click. Guarded by a ref (not just booking.convertedEventId)
@@ -776,6 +679,41 @@ export default function BookingFormPage() {
 
   function update(field, val) {
     setForm((f) => ({ ...f, [field]: val }));
+  }
+
+  // Explicit, visible template load — replaces whatever's currently in the
+  // sections editor rather than the old silent-auto-cache-on-every-keystroke
+  // behavior it replaces (see settings/TemplatesTab.jsx for where these
+  // named templates are managed).
+  function handleLoadProposalTemplate(templateId) {
+    const template = proposalTemplates.find((t) => t.id === templateId);
+    if (!template) return;
+    update('proposal', { ...form.proposal, sections: template.sections || [] });
+    showToast(`Loaded "${template.name}"`);
+  }
+
+  function handleSaveProposalTemplateAs() {
+    if (!newProposalTemplateName.trim()) return;
+    addProposalTemplate({ name: newProposalTemplateName.trim(), sections: form.proposal?.sections || [] });
+    showToast('Template saved');
+    setSavingProposalTemplateAs(false);
+    setNewProposalTemplateName('');
+  }
+
+  function handleLoadContractTemplate(templateId) {
+    const template = contractTemplates.find((t) => t.id === templateId);
+    if (!template) return;
+    setContractTitle(template.title || 'Event Contract');
+    setContractSections(template.sections || []);
+    showToast(`Loaded "${template.name}"`);
+  }
+
+  function handleSaveContractTemplateAs() {
+    if (!newContractTemplateName.trim()) return;
+    addContractTemplate({ name: newContractTemplateName.trim(), title: contractTitle, sections: contractSections });
+    showToast('Template saved');
+    setSavingContractTemplateAs(false);
+    setNewContractTemplateName('');
   }
 
   function updateVenue(field, val) {
@@ -914,7 +852,11 @@ export default function BookingFormPage() {
       offerings: contractOfferings,
       title: contractTitle,
       sections: contractSections,
-      style: { accentColor: currentUser.businessInfo?.accentColor || DEFAULT_ACCENT_COLOR },
+      style: {
+        accentColor: currentUser.businessInfo?.accentColor || DEFAULT_ACCENT_COLOR,
+        documentLayout: currentUser.businessInfo?.documentLayout,
+        documentTextScale: currentUser.businessInfo?.documentTextScale,
+      },
     };
   }
 
@@ -1058,6 +1000,43 @@ export default function BookingFormPage() {
       showToast(err.message || 'Failed to send invoice', 'error');
     } finally {
       setSendingNewInvoice(false);
+    }
+  }
+
+  async function handleDownloadInvoice() {
+    try {
+      await generateInvoicePdf({
+        businessInfo: currentUser.businessInfo,
+        client,
+        event: { type: form.eventType, date: form.eventDate, venue: formatVenueLine(form.venue) },
+        lineItems: newInvoiceOfferings,
+        dueDate: newInvoiceDueDate,
+        memo: newInvoiceMemo,
+        status: 'draft',
+        number: newInvoiceNumber ? Number(newInvoiceNumber) : null,
+      });
+    } catch (err) {
+      showToast(err.message || 'Failed to generate PDF', 'error');
+    }
+  }
+
+  async function handleDownloadExistingInvoice(inv) {
+    try {
+      await generateInvoicePdf({
+        businessInfo: inv.snapshot?.businessInfo,
+        client: inv.snapshot?.client,
+        event: inv.snapshot?.event,
+        lineItems: inv.snapshot?.lineItems,
+        dueDate: inv.dueDate,
+        memo: inv.memo,
+        total: inv.total,
+        status: inv.status,
+        paidAmount: inv.paidAmount,
+        number: inv.number,
+        issueDate: inv.sentAt || inv.createdAt,
+      });
+    } catch (err) {
+      showToast(err.message || 'Failed to generate PDF', 'error');
     }
   }
 
@@ -1793,6 +1772,44 @@ export default function BookingFormPage() {
                   ) : null}
                   testId="booking-form-proposal-sections-toggle"
                 >
+                  <div className="flex items-center gap-2 mb-3 flex-wrap">
+                    {proposalTemplates.length > 0 && (
+                      <select
+                        value=""
+                        onChange={(e) => { if (e.target.value) handleLoadProposalTemplate(e.target.value); }}
+                        data-testid="booking-form-proposal-load-template-select"
+                        className="px-2 py-1.5 rounded-lg border border-slate-300 text-xs"
+                      >
+                        <option value="">Load from Template…</option>
+                        {proposalTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </select>
+                    )}
+                    {savingProposalTemplateAs ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          autoFocus
+                          value={newProposalTemplateName}
+                          onChange={(e) => setNewProposalTemplateName(e.target.value)}
+                          placeholder="Template name"
+                          data-testid="booking-form-proposal-new-template-name-input"
+                          className="px-2 py-1.5 rounded-lg border border-slate-300 text-xs w-36"
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSaveProposalTemplateAs(); } }}
+                        />
+                        <button type="button" onClick={handleSaveProposalTemplateAs} data-testid="booking-form-proposal-save-template-confirm-button" className="px-2 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700">Save</button>
+                        <button type="button" onClick={() => { setSavingProposalTemplateAs(false); setNewProposalTemplateName(''); }} data-testid="booking-form-proposal-save-template-cancel-button" className="text-xs text-slate-500 px-1">Cancel</button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setSavingProposalTemplateAs(true)}
+                        disabled={(form.proposal.sections || []).length === 0}
+                        data-testid="booking-form-proposal-save-template-button"
+                        className="px-2 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Save as Template
+                      </button>
+                    )}
+                  </div>
                   <SectionsEditor
                     sections={form.proposal.sections || []}
                     onChange={(sections) => update('proposal', { ...form.proposal, sections })}
@@ -1947,11 +1964,49 @@ export default function BookingFormPage() {
               <CollapsibleSection
                 className="max-w-2xl mb-5"
                 title="Additional Sections"
-                subtitle="Saved as your default sections for future contracts, until changed"
+                subtitle="Riders, policies, or any other custom content"
                 defaultOpen={contractSections.length > 0}
                 badge={contractSections.length > 0 ? <span className="text-xs font-semibold text-slate-400">{contractSections.length}</span> : null}
                 testId="booking-form-contract-sections-toggle"
               >
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  {contractTemplates.length > 0 && (
+                    <select
+                      value=""
+                      onChange={(e) => { if (e.target.value) handleLoadContractTemplate(e.target.value); }}
+                      data-testid="booking-form-contract-load-template-select"
+                      className="px-2 py-1.5 rounded-lg border border-slate-300 text-xs"
+                    >
+                      <option value="">Load from Template…</option>
+                      {contractTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  )}
+                  {savingContractTemplateAs ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        autoFocus
+                        value={newContractTemplateName}
+                        onChange={(e) => setNewContractTemplateName(e.target.value)}
+                        placeholder="Template name"
+                        data-testid="booking-form-contract-new-template-name-input"
+                        className="px-2 py-1.5 rounded-lg border border-slate-300 text-xs w-36"
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSaveContractTemplateAs(); } }}
+                      />
+                      <button type="button" onClick={handleSaveContractTemplateAs} data-testid="booking-form-contract-save-template-confirm-button" className="px-2 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700">Save</button>
+                      <button type="button" onClick={() => { setSavingContractTemplateAs(false); setNewContractTemplateName(''); }} data-testid="booking-form-contract-save-template-cancel-button" className="text-xs text-slate-500 px-1">Cancel</button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setSavingContractTemplateAs(true)}
+                      disabled={contractSections.length === 0}
+                      data-testid="booking-form-contract-save-template-button"
+                      className="px-2 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Save as Template
+                    </button>
+                  )}
+                </div>
                 <SectionsEditor sections={contractSections} onChange={setContractSections} />
               </CollapsibleSection>
               <div className="max-w-2xl mb-5">
@@ -2349,6 +2404,14 @@ export default function BookingFormPage() {
                       >
                         {showInvoicePreview ? 'Hide Preview' : 'Preview'}
                       </button>
+                      <button
+                        type="button"
+                        onClick={handleDownloadInvoice}
+                        data-testid="booking-form-invoice-download-button"
+                        className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
+                      >
+                        Download PDF
+                      </button>
                       {editingInvoiceId && (
                         <button
                           type="button"
@@ -2472,6 +2535,14 @@ export default function BookingFormPage() {
                                   Copy Pay Link
                                 </button>
                               )}
+                              <button
+                                type="button"
+                                onClick={() => handleDownloadExistingInvoice(inv)}
+                                data-testid="booking-form-invoice-download-existing-button"
+                                className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-50"
+                              >
+                                Download
+                              </button>
                               {editingPartialAmount ? (
                                 <>
                                   <div className="relative">

@@ -26,7 +26,7 @@ function seedBlob(profile) {
     firstName: profile.firstName,
     lastName: profile.lastName,
     phone: profile.phone || '',
-    businessInfo: { name: '', address: '', phone: '', email: '', logo: '', accentColor: '#6366f1' },
+    businessInfo: { name: '', address: '', phone: '', email: '', logo: '', accentColor: '#6366f1', documentLayout: 'classic', documentTextScale: 1 },
     contractTemplate: { title: 'Event Contract', sections: [] },
     proposalTemplate: { sections: [] },
     ...buildSeedUserData(),

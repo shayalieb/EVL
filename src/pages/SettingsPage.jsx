@@ -6,8 +6,10 @@ import ColorPicker from '../components/ui/ColorPicker';
 import Badge from '../components/ui/Badge';
 import UsersTab from './settings/UsersTab';
 import BillingTab from './settings/BillingTab';
+import TemplatesTab from './settings/TemplatesTab';
 import { resizeImageToDataUrl } from '../lib/resizeImage';
 import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
+import { DOCUMENT_LAYOUTS, TEXT_SCALE_STEPS, DEFAULT_LAYOUT_ID, DEFAULT_TEXT_SCALE } from '../lib/documentLayouts';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -19,6 +21,7 @@ export default function SettingsPage() {
     { id: 'user', label: 'User Info' },
     { id: 'business', label: 'Business Info' },
     { id: 'fields', label: 'Custom Fields' },
+    { id: 'templates', label: 'Templates' },
     ...(isAdminOrOwner ? [{ id: 'users', label: 'Users' }] : []),
     ...(isAdminOrOwner ? [{ id: 'billing', label: 'Billing' }] : []),
   ];
@@ -46,6 +49,7 @@ export default function SettingsPage() {
       {tab === 'user' && <UserInfoTab />}
       {tab === 'business' && <BusinessInfoTab />}
       {tab === 'fields' && <CustomFieldsTab />}
+      {tab === 'templates' && <TemplatesTab />}
       {tab === 'users' && isAdminOrOwner && <UsersTab />}
       {tab === 'billing' && isAdminOrOwner && <BillingTab />}
     </div>
@@ -138,7 +142,7 @@ function BusinessInfoTab() {
   const { currentUser, updateCurrentUser, can } = useAuth();
   const canEdit = can('manageSettings');
   const { showToast } = useToast();
-  const [form, setForm] = useState({ accentColor: '#6366f1', ...currentUser.businessInfo });
+  const [form, setForm] = useState({ accentColor: '#6366f1', documentLayout: DEFAULT_LAYOUT_ID, documentTextScale: DEFAULT_TEXT_SCALE, ...currentUser.businessInfo });
   const [resizingLogo, setResizingLogo] = useState(false);
 
   function handleSubmit(e) {
@@ -215,6 +219,50 @@ function BusinessInfoTab() {
         <label className={labelClass}>Brand Accent Color</label>
         <ColorPicker value={form.accentColor} onChange={(c) => setForm((f) => ({ ...f, accentColor: c }))} />
         <p className="mt-1 text-xs text-slate-400">Used for separators, headings, and table accents on proposals, contracts, prep sheets, and invoices — pick from the palette or click the wheel for any custom color.</p>
+      </div>
+      <div>
+        <label className={labelClass}>Document Layout</label>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {DOCUMENT_LAYOUTS.map((layout) => (
+            <button
+              key={layout.id}
+              type="button"
+              onClick={() => setForm((f) => ({ ...f, documentLayout: layout.id }))}
+              disabled={!canEdit}
+              data-testid="settings-business-document-layout-button"
+              className={`text-left px-3 py-2 rounded-lg border text-xs disabled:cursor-not-allowed ${
+                (form.documentLayout || DEFAULT_LAYOUT_ID) === layout.id
+                  ? 'border-indigo-500 ring-2 ring-indigo-100 bg-indigo-50'
+                  : 'border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <div className="font-semibold text-slate-700">{layout.name}</div>
+              <div className="text-slate-400 mt-0.5">{layout.description}</div>
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 text-xs text-slate-400">Applies to proposals, contracts, and invoices — both PDFs and on-screen previews.</p>
+      </div>
+      <div>
+        <label className={labelClass}>Document Text Size</label>
+        <div className="flex gap-2">
+          {TEXT_SCALE_STEPS.map((step) => (
+            <button
+              key={step.label}
+              type="button"
+              onClick={() => setForm((f) => ({ ...f, documentTextScale: step.value }))}
+              disabled={!canEdit}
+              data-testid="settings-business-text-scale-button"
+              className={`px-3 py-1.5 rounded-lg border text-xs font-semibold disabled:cursor-not-allowed ${
+                (form.documentTextScale ?? DEFAULT_TEXT_SCALE) === step.value
+                  ? 'border-indigo-500 bg-indigo-50 text-indigo-600'
+                  : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {step.label}
+            </button>
+          ))}
+        </div>
       </div>
       <button type="submit" disabled={!canEdit} data-testid="settings-business-save-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed">
         Save Business Info

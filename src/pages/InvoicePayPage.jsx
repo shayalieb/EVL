@@ -5,6 +5,7 @@ import SubmitButton from '../components/ui/SubmitButton';
 import InvoiceDocument from '../components/InvoiceDocument';
 import { viewInvoiceByToken, startInvoiceCheckout } from '../lib/invoices';
 import { formatCurrency as currency, formatEventDate } from '../lib/format';
+import { generateInvoicePdf } from '../lib/invoicePdf';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -80,6 +81,26 @@ export default function InvoicePayPage() {
   const { number, snapshot, dueDate, memo, status, total, paidAmount, sentAt, createdAt, acceptPayment } = invoice;
   const remaining = total - (paidAmount || 0);
 
+  async function handleDownloadPdf() {
+    try {
+      await generateInvoicePdf({
+        businessInfo: snapshot.businessInfo,
+        client: snapshot.client,
+        event: snapshot.event,
+        lineItems: snapshot.lineItems,
+        dueDate,
+        memo,
+        total,
+        status,
+        paidAmount,
+        number,
+        issueDate: sentAt || createdAt,
+      });
+    } catch (err) {
+      setError(err.message || 'Failed to generate PDF');
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-8 pb-28">
       <div className="max-w-2xl mx-auto">
@@ -104,6 +125,17 @@ export default function InvoicePayPage() {
             This invoice has been voided and is no longer payable.
           </div>
         )}
+
+        <div className="flex justify-end mb-3">
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            data-testid="invoice-pay-download-pdf-button"
+            className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-50"
+          >
+            Download PDF
+          </button>
+        </div>
 
         <InvoiceDocument
           businessInfo={snapshot.businessInfo}

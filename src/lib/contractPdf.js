@@ -1,15 +1,8 @@
 import { formatCurrency as currency, formatEventDate, formatVenueLine } from './format';
 import { computeOfferingTotal, computeOfferingsTotal } from './offerings';
-import { DEFAULT_ACCENT_COLOR, hexToRgb, lightenRgb } from './colorTheme';
-
-function loadImageDimensions(dataUrl) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
-    img.onerror = () => resolve(null);
-    img.src = dataUrl;
-  });
-}
+import { lightenRgb } from './colorTheme';
+import { getDocumentStyle } from './documentLayouts';
+import { loadImageDimensions, scaleFont, setFontStyle, drawLetterhead, drawHeaderRule, drawSectionBlock, getAutoTableStyle } from './documentPdfKit';
 
 function signatureBlock(signature) {
   if (signature?.signedAt) {
@@ -31,39 +24,14 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
   const businessInfo = snapshot.businessInfo || {};
   const client = snapshot.client || {};
   const booking = snapshot.booking || {};
-  const accentRgb = hexToRgb(snapshot.style?.accentColor || DEFAULT_ACCENT_COLOR);
+  const { layout, scale, accentRgb } = getDocumentStyle(snapshot.style);
+  const tableStyle = getAutoTableStyle(layout, scale, accentRgb);
   let y = 18;
 
-  let textX = marginX;
-  if (businessInfo.logo) {
-    const dims = await loadImageDimensions(businessInfo.logo);
-    if (dims) {
-      const h = 16;
-      const w = h * (dims.width / dims.height);
-      doc.addImage(businessInfo.logo, 'PNG', marginX, y - 5, w, h);
-      textX = marginX + w + 5;
-    }
-  }
-  doc.setFontSize(15);
-  doc.setTextColor(20);
-  doc.text(businessInfo.name || 'Event Contract', textX, y);
-  y += 6;
-  doc.setFontSize(9);
-  doc.setTextColor(110);
-  const contactLine = [businessInfo.address, businessInfo.phone, businessInfo.email].filter(Boolean).join('   ·   ');
-  if (contactLine) {
-    doc.text(contactLine, textX, y);
-    y += 5;
-  }
+  y = await drawLetterhead(doc, { businessInfo, layout, scale, marginX, pageWidth, y, fallbackName: 'Event Contract' });
+  y = drawHeaderRule(doc, { layout, accentRgb, marginX, pageWidth, y });
 
-  y = Math.max(y, 28) + 4;
-  doc.setDrawColor(...accentRgb);
-  doc.setLineWidth(0.6);
-  doc.line(marginX, y, pageWidth - marginX, y);
-  doc.setLineWidth(0.2);
-  y += 11;
-
-  doc.setFontSize(20);
+  doc.setFontSize(scaleFont(20, scale));
   doc.setTextColor(20);
   doc.text(snapshot.title || 'Event Contract', pageWidth / 2, y, { align: 'center' });
   y += 10;
@@ -76,47 +44,47 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
   const clientName = client ? `${client.firstName || ''} ${client.lastName || ''}`.trim() || '—' : '—';
 
   const lineGap = 5.5;
-  doc.setFontSize(9);
+  doc.setFontSize(scaleFont(9, scale));
   doc.setTextColor(140);
   doc.text('BETWEEN', centerX, y, { align: 'center' });
   y += lineGap;
 
   const gap = 5;
-  doc.setFontSize(12);
-  doc.setFont(undefined, 'bold');
+  doc.setFontSize(scaleFont(12, scale));
+  setFontStyle(doc, layout, 'bold');
   const businessW = doc.getTextWidth(businessName);
   const clientW = doc.getTextWidth(clientName);
-  doc.setFontSize(11);
-  doc.setFont(undefined, 'normal');
+  doc.setFontSize(scaleFont(11, scale));
+  setFontStyle(doc, layout, 'normal');
   const andW = doc.getTextWidth('AND');
   const totalW = businessW + gap + andW + gap + clientW;
   let partyX = centerX - totalW / 2;
   const businessBlockCenterX = partyX + businessW / 2;
 
-  doc.setFontSize(12);
-  doc.setFont(undefined, 'bold');
+  doc.setFontSize(scaleFont(12, scale));
+  setFontStyle(doc, layout, 'bold');
   doc.setTextColor(30);
   doc.text(businessName, partyX, y);
   partyX += businessW + gap;
 
-  doc.setFontSize(11);
-  doc.setFont(undefined, 'normal');
+  doc.setFontSize(scaleFont(11, scale));
+  setFontStyle(doc, layout, 'normal');
   doc.setTextColor(120);
   doc.text('AND', partyX, y);
   partyX += andW + gap;
 
   const clientBlockCenterX = partyX + clientW / 2;
-  doc.setFontSize(12);
-  doc.setFont(undefined, 'bold');
+  doc.setFontSize(scaleFont(12, scale));
+  setFontStyle(doc, layout, 'bold');
   doc.setTextColor(30);
   doc.text(clientName, partyX, y);
-  doc.setFont(undefined, 'normal');
+  setFontStyle(doc, layout, 'normal');
   y += lineGap;
 
   // Each email sits centered under its own party's name — name + email read
   // as one cohesive block per party, rather than the email line being laid
   // out independently of the names above it.
-  doc.setFontSize(9);
+  doc.setFontSize(scaleFont(9, scale));
   doc.setTextColor(110);
   if (businessInfo.email) doc.text(businessInfo.email, businessBlockCenterX, y, { align: 'center' });
   if (client.email) doc.text(client.email, clientBlockCenterX, y, { align: 'center' });
@@ -134,9 +102,7 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
     margin: { left: marginX, right: marginX },
     head: [['Event Details', '']],
     body: eventRows,
-    theme: 'striped',
-    styles: { fontSize: 10 },
-    headStyles: { fillColor: accentRgb },
+    ...tableStyle,
     columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } },
   });
   y = doc.lastAutoTable.finalY + 10;
@@ -156,9 +122,7 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
     margin: { left: marginX, right: marginX },
     head: [['Pricing', '']],
     body: pricingRows,
-    theme: 'striped',
-    styles: { fontSize: 10 },
-    headStyles: { fillColor: accentRgb },
+    ...tableStyle,
     columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } },
     didParseCell: (data) => {
       if (data.section === 'body' && data.row.raw[0] === 'Grand Total') {
@@ -182,42 +146,20 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
       margin: { left: marginX, right: marginX },
       head: [['Offerings', '']],
       body: offeringRows,
-      theme: 'striped',
-      styles: { fontSize: 10 },
-      headStyles: { fillColor: accentRgb },
+      ...tableStyle,
       columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } },
     });
     y = doc.lastAutoTable.finalY + 10;
   }
 
-  // Custom sections — a colored title bar (tinted to the chosen accent)
-  // followed by whichever of text/value the section was given.
+  // Custom sections — styled per the chosen layout (filled bar / left
+  // border / underline / boxed outline), tinted to the account's accent.
   const sections = (snapshot.sections || []).filter((s) => s.title);
   for (const section of sections) {
-    if (y > 255) { doc.addPage(); y = 20; }
-    doc.setFillColor(...accentRgb);
-    doc.rect(marginX, y, pageWidth - marginX * 2, 7.5, 'F');
-    doc.setFontSize(10);
-    doc.setTextColor(255);
-    doc.text(section.title, marginX + 3, y + 5.3);
-    y += 7.5 + 6;
-
-    if (section.value) {
-      doc.setFontSize(11);
-      doc.setTextColor(30);
-      doc.text(section.value, marginX, y);
-      y += 7;
-    }
-    if (section.text) {
-      doc.setFontSize(10);
-      doc.setTextColor(90);
-      const lines = doc.splitTextToSize(section.text, pageWidth - marginX * 2);
-      doc.text(lines, marginX, y);
-      y += lines.length * 5 + 4;
-    }
-    y += 4;
+    y = drawSectionBlock(doc, { section, layout, accentRgb, marginX, pageWidth, scale, y });
   }
 
+  setFontStyle(doc, layout, 'normal');
   const customFields = (snapshot.customFields || []).filter((f) => f.label);
   if (customFields.length) {
     autoTable(doc, {
@@ -225,20 +167,18 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
       margin: { left: marginX, right: marginX },
       head: [['Additional Details', '']],
       body: customFields.map((f) => [f.label, f.value || '—']),
-      theme: 'striped',
-      styles: { fontSize: 10 },
-      headStyles: { fillColor: accentRgb },
+      ...tableStyle,
       columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } },
     });
     y = doc.lastAutoTable.finalY + 10;
   }
 
   if (booking.notes) {
-    doc.setFontSize(11);
+    doc.setFontSize(scaleFont(11, scale));
     doc.setTextColor(30);
     doc.text('Notes', marginX, y);
     y += 6;
-    doc.setFontSize(10);
+    doc.setFontSize(scaleFont(10, scale));
     doc.setTextColor(90);
     const notesLines = doc.splitTextToSize(booking.notes, pageWidth - marginX * 2);
     doc.text(notesLines, marginX, y);
@@ -246,11 +186,11 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
   }
 
   if (terms) {
-    doc.setFontSize(11);
+    doc.setFontSize(scaleFont(11, scale));
     doc.setTextColor(30);
     doc.text('Terms', marginX, y);
     y += 6;
-    doc.setFontSize(10);
+    doc.setFontSize(scaleFont(10, scale));
     doc.setTextColor(90);
     const termsLines = doc.splitTextToSize(terms, pageWidth - marginX * 2);
     doc.text(termsLines, marginX, y);
@@ -270,7 +210,7 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
   const rightX = marginX + colWidth + 10;
   let sigLabelY = sigY + 10;
 
-  doc.setFontSize(10);
+  doc.setFontSize(scaleFont(10, scale));
   doc.setTextColor(140);
   doc.text('CLIENT SIGNATURE', leftX, sigLabelY);
   doc.text('BUSINESS SIGNATURE', rightX, sigLabelY);
@@ -287,7 +227,7 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
   }
   sigLabelY += sigImgH + 4;
 
-  doc.setFontSize(9);
+  doc.setFontSize(scaleFont(9, scale));
   doc.setTextColor(90);
   doc.text(signatureBlock(clientSignature), leftX, sigLabelY);
   doc.text(signatureBlock(ownerSignature), rightX, sigLabelY);

@@ -1,15 +1,8 @@
 import { formatCurrency as currency, formatEventDate, formatVenueLine, formatEventTime } from './format';
 import { computeOfferingTotal, computeOfferingsTotal } from './offerings';
-import { DEFAULT_ACCENT_COLOR, hexToRgb, lightenRgb } from './colorTheme';
-
-function loadImageDimensions(dataUrl) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
-    img.onerror = () => resolve(null);
-    img.src = dataUrl;
-  });
-}
+import { lightenRgb } from './colorTheme';
+import { getDocumentStyle } from './documentLayouts';
+import { scaleFont, setFontStyle, drawLetterhead, drawHeaderRule, drawSectionBlock, getAutoTableStyle } from './documentPdfKit';
 
 function todayLabel() {
   return formatEventDate(new Date().toISOString().slice(0, 10));
@@ -28,56 +21,30 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
   const doc = new jsPDF();
   const marginX = 14;
   const pageWidth = doc.internal.pageSize.getWidth();
-  const accentRgb = hexToRgb(businessInfo?.accentColor || DEFAULT_ACCENT_COLOR);
+  const { layout, scale, accentRgb } = getDocumentStyle(businessInfo);
+  const tableStyle = getAutoTableStyle(layout, scale, accentRgb);
   let y = 18;
 
-  // Letterhead — company logo (if set) beside the business name/contact info.
-  let textX = marginX;
-  if (businessInfo?.logo) {
-    const dims = await loadImageDimensions(businessInfo.logo);
-    if (dims) {
-      const h = 16;
-      const w = h * (dims.width / dims.height);
-      doc.addImage(businessInfo.logo, 'PNG', marginX, y - 5, w, h);
-      textX = marginX + w + 5;
-    }
-  }
-  doc.setFontSize(15);
-  doc.setTextColor(20);
-  doc.text(businessInfo?.name || 'Event Proposal', textX, y);
-  y += 6;
-  doc.setFontSize(9);
-  doc.setTextColor(110);
-  const contactLine = [businessInfo?.address, businessInfo?.phone, businessInfo?.email].filter(Boolean).join('   ·   ');
-  if (contactLine) {
-    doc.text(contactLine, textX, y);
-    y += 5;
-  }
+  y = await drawLetterhead(doc, { businessInfo, layout, scale, marginX, pageWidth, y, fallbackName: 'Event Proposal' });
+  y = drawHeaderRule(doc, { layout, accentRgb, marginX, pageWidth, y });
 
-  y = Math.max(y, 28) + 4;
-  doc.setDrawColor(...accentRgb);
-  doc.setLineWidth(0.6);
-  doc.line(marginX, y, pageWidth - marginX, y);
-  doc.setLineWidth(0.2);
-  y += 11;
-
-  doc.setFontSize(20);
+  doc.setFontSize(scaleFont(20, scale));
   doc.setTextColor(20);
   doc.text('Event Proposal', marginX, y);
-  doc.setFontSize(10);
+  doc.setFontSize(scaleFont(10, scale));
   doc.setTextColor(110);
   doc.text(todayLabel(), pageWidth - marginX, y, { align: 'right' });
   y += 12;
 
-  doc.setFontSize(10);
+  doc.setFontSize(scaleFont(10, scale));
   doc.setTextColor(140);
   doc.text('PREPARED FOR', marginX, y);
   y += 6;
-  doc.setFontSize(12);
+  doc.setFontSize(scaleFont(12, scale));
   doc.setTextColor(30);
   doc.text(client ? `${client.firstName} ${client.lastName}` : '—', marginX, y);
   y += 6;
-  doc.setFontSize(10);
+  doc.setFontSize(scaleFont(10, scale));
   doc.setTextColor(90);
   const clientContact = [client?.email, client?.phone].filter(Boolean).join('   ·   ');
   if (clientContact) {
@@ -97,9 +64,7 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
     margin: { left: marginX, right: marginX },
     head: [['Event Details', '']],
     body: eventRows,
-    theme: 'striped',
-    styles: { fontSize: 10 },
-    headStyles: { fillColor: accentRgb },
+    ...tableStyle,
     columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } },
   });
   y = doc.lastAutoTable.finalY + 10;
@@ -118,9 +83,7 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
     margin: { left: marginX, right: marginX },
     head: [['Investment', '']],
     body: investmentRows,
-    theme: 'striped',
-    styles: { fontSize: 10 },
-    headStyles: { fillColor: accentRgb },
+    ...tableStyle,
     columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } },
     didParseCell: (data) => {
       if (data.section === 'body' && data.row.raw[0] === 'Grand Total') {
@@ -139,9 +102,7 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
       margin: { left: marginX, right: marginX },
       head: [['Time', 'Schedule']],
       body: scheduleRows,
-      theme: 'striped',
-      styles: { fontSize: 10 },
-      headStyles: { fillColor: accentRgb },
+      ...tableStyle,
       columnStyles: { 0: { fontStyle: 'bold', cellWidth: 30 } },
     });
     y = doc.lastAutoTable.finalY + 10;
@@ -160,9 +121,7 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
       margin: { left: marginX, right: marginX },
       head: [['Offerings', '']],
       body: offeringRows,
-      theme: 'striped',
-      styles: { fontSize: 10 },
-      headStyles: { fillColor: accentRgb },
+      ...tableStyle,
       columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } },
     });
     y = doc.lastAutoTable.finalY + 10;
@@ -170,43 +129,23 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
 
   const sections = (booking.proposal?.sections || []).filter((s) => s.title);
   for (const section of sections) {
-    if (y > 255) { doc.addPage(); y = 20; }
-    doc.setFillColor(...accentRgb);
-    doc.rect(marginX, y, pageWidth - marginX * 2, 7.5, 'F');
-    doc.setFontSize(10);
-    doc.setTextColor(255);
-    doc.text(section.title, marginX + 3, y + 5.3);
-    y += 7.5 + 6;
-
-    if (section.value) {
-      doc.setFontSize(11);
-      doc.setTextColor(30);
-      doc.text(section.value, marginX, y);
-      y += 7;
-    }
-    if (section.text) {
-      doc.setFontSize(10);
-      doc.setTextColor(90);
-      const lines = doc.splitTextToSize(section.text, pageWidth - marginX * 2);
-      doc.text(lines, marginX, y);
-      y += lines.length * 5 + 4;
-    }
-    y += 4;
+    y = drawSectionBlock(doc, { section, layout, accentRgb, marginX, pageWidth, scale, y });
   }
 
+  setFontStyle(doc, layout, 'normal');
   if (booking.notes) {
-    doc.setFontSize(11);
+    doc.setFontSize(scaleFont(11, scale));
     doc.setTextColor(30);
     doc.text('Additional Details', marginX, y);
     y += 6;
-    doc.setFontSize(10);
+    doc.setFontSize(scaleFont(10, scale));
     doc.setTextColor(90);
     const notesLines = doc.splitTextToSize(booking.notes, pageWidth - marginX * 2);
     doc.text(notesLines, marginX, y);
     y += notesLines.length * 5 + 6;
   }
 
-  doc.setFontSize(9);
+  doc.setFontSize(scaleFont(9, scale));
   doc.setTextColor(140);
   doc.text(`Thank you for considering ${businessInfo?.name || 'us'} for your event!`, marginX, Math.max(y + 4, 280));
 
