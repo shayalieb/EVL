@@ -368,6 +368,24 @@ function pipelineSteps(booking, proposal, contract, invoices) {
   ];
 }
 
+// Quick-glance status badges shown at the top of the page, alongside the
+// PipelineStepper — same underlying data (proposal.sentAt, contract.status)
+// as the stepper and each tab's own status banner, just surfaced where a
+// stakeholder can see it without clicking into either tab.
+function proposalStatusInfo(proposal) {
+  if (!proposal) return { label: 'Not Started', color: '#94a3b8' };
+  if (!proposal.sentAt) return { label: 'Draft', color: '#94a3b8' };
+  return { label: 'Sent', color: '#22c55e' };
+}
+
+function contractStatusInfo(contract) {
+  if (!contract) return { label: 'Not Started', color: '#94a3b8' };
+  if (contract.status === 'fully_signed') return { label: 'Fully Signed', color: '#22c55e' };
+  if (contract.status === 'client_signed') return { label: 'Awaiting Your Signature', color: '#eab308' };
+  if (contract.status === 'owner_signed') return { label: 'Awaiting Client Signature', color: '#eab308' };
+  return { label: 'Awaiting Signatures', color: '#eab308' }; // status === 'sent'
+}
+
 function PipelineStepper({ steps }) {
   return (
     <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mb-5">
@@ -1490,6 +1508,11 @@ export default function BookingFormPage() {
       )}
 
       <PipelineStepper steps={pipelineSteps(booking, form.proposal, contract, invoices)} />
+
+      <div className="flex items-center gap-2 mb-5 flex-wrap">
+        <Badge color={proposalStatusInfo(form.proposal).color}>Proposal: {proposalStatusInfo(form.proposal).label}</Badge>
+        <Badge color={contractStatusInfo(contract).color}>Contract: {contractStatusInfo(contract).label}</Badge>
+      </div>
 
       <div className="flex border-b border-slate-200 mb-6">
         {TABS.map((t) => {
