@@ -785,7 +785,7 @@ export default function BookingFormPage() {
   function handleConvert() {
     const event = convertBookingToEvent(booking.id);
     if (!event) return;
-    showToast('Booking converted to event');
+    showToast('Event created');
     navigate(`/events/${event.id}`);
   }
 
@@ -1249,8 +1249,7 @@ export default function BookingFormPage() {
     }
   }
 
-  const status = bookingStatuses.find((s) => s.id === form.bookingStatus);
-  const canConvert = booking && !booking.convertedEventId && status?.isBooked;
+  const canConvert = booking && !booking.convertedEventId;
 
   if (isEditing && !booking) {
     return (
@@ -1286,14 +1285,23 @@ export default function BookingFormPage() {
           <h2 className="text-2xl font-bold text-slate-800 truncate">{title}</h2>
         </div>
         <div className="flex gap-2 shrink-0">
-          {canConvert && (
+          {booking?.convertedEventId ? (
+            <button
+              type="button"
+              onClick={() => navigate(`/events/${booking.convertedEventId}`)}
+              data-testid="booking-form-view-event-button"
+              className="px-4 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
+            >
+              View Event →
+            </button>
+          ) : canConvert && (
             <button
               type="button"
               onClick={handleConvert}
               data-testid="booking-form-convert-button"
               className="px-4 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
             >
-              Convert to Event →
+              Create Event →
             </button>
           )}
           <button type="button" onClick={handleLeaveWithoutSaving} data-testid="booking-form-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">

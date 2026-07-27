@@ -69,7 +69,7 @@ export default function BookingsPage() {
   function handleConvert(booking) {
     const event = convertBookingToEvent(booking.id);
     if (!event) return;
-    showToast('Booking converted to event');
+    showToast('Event created');
     navigate(`/events/${event.id}`);
   }
 
@@ -162,7 +162,7 @@ export default function BookingsPage() {
               {filteredBookings.map((b) => {
                 const status = bookingStatuses.find((s) => s.id === b.bookingStatus);
                 const client = clients.find((c) => c.id === b.clientId);
-                const canConvert = !b.convertedEventId && status?.isBooked;
+                const canConvert = !b.convertedEventId;
                 const priority = PRIORITIES.find((p) => p.value === b.priority);
                 const tone = followUpTone(b.nextFollowUpDate);
 
@@ -241,7 +241,7 @@ export default function BookingsPage() {
                               data-testid="booking-row-convert-button"
                               className="px-2 py-1 rounded-lg text-xs font-semibold text-indigo-600 hover:bg-indigo-50 whitespace-nowrap"
                             >
-                              Convert to Event →
+                              Create Event →
                             </button>
                           )}
                           <button
