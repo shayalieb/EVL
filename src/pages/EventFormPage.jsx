@@ -21,6 +21,7 @@ import { getPricingTiers, getTierPrice } from '../lib/pricingTiers';
 import { getPrepContractors, renderPrepSheetEmail } from '../lib/prepSheet';
 import { generatePrepSheetPdf, generatePrepSheetPdfAttachment } from '../lib/prepSheetPdf';
 import { listDocuments, uploadDocument, deleteDocument, documentDownloadUrl } from '../lib/documents';
+import { listInvoices } from '../lib/invoices';
 import { InfoIcon, MapPinIcon, ClockIcon, UsersIcon, ClipboardIcon, NoteIcon, FileIcon } from '../components/ui/icons';
 import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
 
@@ -116,6 +117,10 @@ function emptyForm() {
     prepGroups: [],
     prepNotes: '',
     requests: [emptyRequestItem()],
+    // Manual overhead lines for costs nothing else tracks (venue rental,
+    // permits, equipment) — feeds the Financials tab's P&L alongside the
+    // computed contractor cost total.
+    otherExpenses: [],
   };
 }
 
@@ -141,8 +146,9 @@ export default function EventFormPage() {
   const {
     events, eventTypes, addEventType, eventStatuses, inquiryStatuses, addInquiryStatus, emailTemplates,
     contractors, contractorTypes, clients, addEvent, updateEvent, computeDurationHours,
+    bookings, computeEventTotalCost,
   } = useData();
-  const { can, currentUser } = useAuth();
+  const { can, currentUser, role } = useAuth();
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -151,6 +157,9 @@ export default function EventFormPage() {
 
   const isEditing = !!eventId;
   const event = isEditing ? events.find((e) => e.id === eventId) : null;
+  // Profit/loss is sensitive financial data — same owner/admin-only gate
+  // already used for Settings -> Users/Billing.
+  const isAdminOrOwner = role === 'owner' || role === 'admin';
 
   const [form, setForm] = useState(emptyForm());
   const [addingType, setAddingType] = useState(false);
@@ -223,6 +232,7 @@ export default function EventFormPage() {
         prepGroups: event.prepGroups || [],
         prepNotes: event.prepNotes || '',
         requests: event.requests || [emptyRequestItem()],
+        otherExpenses: event.otherExpenses || [],
       });
     } else {
       // eventId is undefined for the whole time you're drafting a brand-new
@@ -284,6 +294,19 @@ export default function EventFormPage() {
   useEffect(() => {
     if (form.id) refreshDocuments(form.id);
   }, [form.id, refreshDocuments]);
+
+  // Event has no bookingId back-reference (only Booking -> convertedEventId
+  // -> Event) — reverse-lookup the booking this event came from so the
+  // Financials tab can pull its invoices for Revenue. Events created
+  // directly (not converted from a booking) simply have no sourceBooking.
+  const sourceBooking = event ? bookings.find((b) => b.convertedEventId === event.id) : null;
+  const [eventInvoices, setEventInvoices] = useState([]);
+  useEffect(() => {
+    if (!sourceBooking) { setEventInvoices([]); return; }
+    let cancelled = false;
+    listInvoices(sourceBooking.id).then((list) => { if (!cancelled) setEventInvoices(list); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [sourceBooking?.id]);
 
   function update(field, val) {
     setForm((f) => ({ ...f, [field]: val }));
@@ -357,14 +380,26 @@ export default function EventFormPage() {
   });
   const availableContractorsForActiveTab = availableContractors.filter((c) => matchesActiveCategoryTab(c.id));
 
-  // Not Avail contractors don't count toward cost — they're not actually
-  // being booked/paid, so their rate shouldn't inflate the event total.
-  const totalCost = form.contractorBookings.reduce((sum, b) => {
-    const status = inquiryStatuses.find((s) => s.id === b.inquiryStatusId);
-    if (statusBucket(status) === 'unavailable') return sum;
-    const c = contractors.find((x) => x.id === b.contractorId);
-    return sum + (c ? getTierPrice(c, b.pricingTierId) : 0);
-  }, 0);
+  const totalCost = computeEventTotalCost(form);
+
+  // Revenue is the full invoiced total (not just what's been collected) so
+  // the deal's value shows up as soon as an invoice goes out; "collected"
+  // is tracked separately below for cash-in-hand visibility.
+  const revenueTotal = eventInvoices.filter((inv) => inv.status !== 'void').reduce((sum, inv) => sum + (inv.total || 0), 0);
+  const collectedTotal = eventInvoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0);
+  const otherExpensesTotal = (form.otherExpenses || []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const netProfit = revenueTotal - totalCost - otherExpensesTotal;
+  const profitMargin = revenueTotal > 0 ? (netProfit / revenueTotal) * 100 : null;
+
+  function addOtherExpense() {
+    setForm((f) => ({ ...f, otherExpenses: [...(f.otherExpenses || []), { id: uid('expense'), label: '', amount: '' }] }));
+  }
+  function updateOtherExpense(id, patch) {
+    setForm((f) => ({ ...f, otherExpenses: f.otherExpenses.map((e) => (e.id === id ? { ...e, ...patch } : e)) }));
+  }
+  function removeOtherExpense(id) {
+    setForm((f) => ({ ...f, otherExpenses: f.otherExpenses.filter((e) => e.id !== id) }));
+  }
 
   const payingBooking = form.contractorBookings.find((b) => b.contractorId === payingContractorId);
   const payingContractor = payingBooking ? contractors.find((c) => c.id === payingBooking.contractorId) : null;
@@ -839,6 +874,18 @@ export default function EventFormPage() {
         >
           Prep
         </button>
+        {isAdminOrOwner && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('financials')}
+            data-testid="event-form-tab-financials"
+            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px ${
+              activeTab === 'financials' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Financials
+          </button>
+        )}
       </div>
 
       {error && <div data-testid="event-form-error-banner" className="mb-6 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
@@ -1448,6 +1495,94 @@ export default function EventFormPage() {
             )}
           </PrepSection>
         </div>
+
+        {isAdminOrOwner && (
+          <div className={activeTab === 'financials' ? cardClass : 'hidden'}>
+            <h3 className={cardTitleClass}>Profit &amp; Loss</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              <div className="rounded-xl border border-slate-200 p-4">
+                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Revenue</div>
+                {sourceBooking ? (
+                  <>
+                    <div className="text-xl font-bold text-slate-800" data-testid="event-form-financials-revenue">{currency(revenueTotal)}</div>
+                    <div className="text-xs text-slate-400 mt-1">{currency(collectedTotal)} collected so far</div>
+                  </>
+                ) : (
+                  <div className="text-sm text-slate-400 mt-1">No linked invoices</div>
+                )}
+              </div>
+              <div className="rounded-xl border border-slate-200 p-4">
+                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Contractor Costs</div>
+                <div className="text-xl font-bold text-slate-800" data-testid="event-form-financials-contractor-costs">{currency(totalCost)}</div>
+              </div>
+              <div className="rounded-xl border border-slate-200 p-4">
+                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Other Expenses</div>
+                <div className="text-xl font-bold text-slate-800" data-testid="event-form-financials-other-expenses">{currency(otherExpensesTotal)}</div>
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 mb-6 flex items-center justify-between flex-wrap gap-2">
+              <span className="text-sm font-bold text-slate-700">Net Profit</span>
+              <span
+                data-testid="event-form-financials-net-profit"
+                className={`text-2xl font-bold ${netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}
+              >
+                {currency(netProfit)}
+                {profitMargin !== null && <span className="text-sm font-semibold text-slate-400 ml-2">({profitMargin.toFixed(1)}% margin)</span>}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-bold text-slate-700">Other Expenses</h4>
+              <button
+                type="button"
+                onClick={addOtherExpense}
+                data-testid="event-form-add-expense-button"
+                className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+              >
+                + Add Expense
+              </button>
+            </div>
+            {(form.otherExpenses || []).length === 0 ? (
+              <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
+                No other expenses logged yet.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {form.otherExpenses.map((exp) => (
+                  <div key={exp.id} data-testid="event-form-expense-row" className="flex items-center gap-2">
+                    <input
+                      value={exp.label}
+                      onChange={(e) => updateOtherExpense(exp.id, { label: e.target.value })}
+                      placeholder="e.g. Venue rental"
+                      data-testid="event-form-expense-label-input"
+                      className={`flex-1 ${inputClass}`}
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={exp.amount}
+                      onChange={(e) => updateOtherExpense(exp.id, { amount: e.target.value })}
+                      placeholder="0.00"
+                      data-testid="event-form-expense-amount-input"
+                      className={`w-32 ${inputClass}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeOtherExpense(exp.id)}
+                      data-testid="event-form-expense-remove-button"
+                      className="shrink-0 w-9 h-9 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
+                      aria-label="Remove expense"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </form>
 
       <ContractorModal

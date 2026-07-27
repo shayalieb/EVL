@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { uid } from '../lib/storage';
 import { getTierPrice } from '../lib/pricingTiers';
+import { statusBucket } from '../lib/inquiryStatusBucket';
 
 const DataContext = createContext(null);
 
@@ -309,12 +310,16 @@ export function DataProvider({ children }) {
     return minutes / 60;
   }, []);
 
+  // Not Avail contractors don't count toward cost — they're not actually
+  // being booked/paid, so their rate shouldn't inflate the event total.
   const computeEventTotalCost = useCallback((event) => {
     return event.contractorBookings.reduce((sum, b) => {
+      const status = currentUser?.inquiryStatuses?.find((s) => s.id === b.inquiryStatusId);
+      if (statusBucket(status) === 'unavailable') return sum;
       const contractor = getContractorById(b.contractorId);
       return sum + (contractor ? getTierPrice(contractor, b.pricingTierId) : 0);
     }, 0);
-  }, [getContractorById]);
+  }, [getContractorById, currentUser]);
 
   const computeClientEventCounts = useCallback((clientId) => {
     const clientEvents = (currentUser?.events || []).filter((e) => e.clientId === clientId);
