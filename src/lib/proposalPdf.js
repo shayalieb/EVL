@@ -159,6 +159,13 @@ export async function generateProposalPdf(args) {
   doc.save(filename);
 }
 
+// Same document as generateProposalPdf, but returned as a data URI for an
+// inline <iframe> preview instead of triggering a file download.
+export async function getProposalPdfDataUrl(args) {
+  const { doc } = await buildProposalDoc(args);
+  return doc.output('datauristring');
+}
+
 // Returns the same PDF as a base64 string so it can be sent as an email
 // attachment without a round-trip through document storage.
 export async function generateProposalPdfAttachment(args) {

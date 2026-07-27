@@ -13,7 +13,7 @@ import { useToast } from '../components/ui/Toast';
 import { uid } from '../lib/storage';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
 import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, bookingDocumentDownloadUrl } from '../lib/bookingDocuments';
-import { generateProposalPdf, generateProposalPdfAttachment } from '../lib/proposalPdf';
+import { generateProposalPdf, generateProposalPdfAttachment, getProposalPdfDataUrl } from '../lib/proposalPdf';
 import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms, addContractLogNote } from '../lib/contracts';
 import { listInvoices, createInvoice, updateInvoice, sendInvoice, markInvoicePayment, sendReceipt, voidInvoice, getNextInvoiceInfo } from '../lib/invoices';
 import { generateContractPdf, getContractPdfDataUrl } from '../lib/contractPdf';
@@ -483,6 +483,9 @@ export default function BookingFormPage() {
   const [lastInvoicePayLink, setLastInvoicePayLink] = useState(null); // { invoiceId, link } — only known right after sending, same as contract sign links
   const [partialAmountDraft, setPartialAmountDraft] = useState(null); // { invoiceId, value } — inline "$ paid so far" editor for one row at a time
   const [acceptPaymentInvoice, setAcceptPaymentInvoice] = useState(null); // invoice currently open in the Accept Payment popover, or null
+  const [proposalPreviewUrl, setProposalPreviewUrl] = useState('');
+  const [showProposalPreview, setShowProposalPreview] = useState(false);
+  const [loadingProposalPreview, setLoadingProposalPreview] = useState(false);
   const [contractPreviewUrl, setContractPreviewUrl] = useState('');
   const [showContractPreview, setShowContractPreview] = useState(false);
   const [loadingContractPreview, setLoadingContractPreview] = useState(false);
@@ -822,6 +825,28 @@ export default function BookingFormPage() {
       await generateProposalPdf({ booking: patch, client, businessInfo: currentUser.businessInfo || {} });
     } catch (err) {
       showToast(err.message || 'Failed to generate PDF', 'error');
+    }
+  }
+
+  // Renders exactly what Download/Send would produce, inline, so it's easy
+  // to confirm what's actually in the PDF (venue, custom sections, pricing,
+  // etc.) without leaving the page — same pattern as the Contract tab's
+  // Preview (see handleTogglePreview below).
+  async function handleToggleProposalPreview() {
+    if (showProposalPreview) {
+      setShowProposalPreview(false);
+      return;
+    }
+    setLoadingProposalPreview(true);
+    try {
+      const patch = persistBooking();
+      const url = await getProposalPdfDataUrl({ booking: patch, client, businessInfo: currentUser.businessInfo || {} });
+      setProposalPreviewUrl(url);
+      setShowProposalPreview(true);
+    } catch (err) {
+      showToast(err.message || 'Failed to build preview', 'error');
+    } finally {
+      setLoadingProposalPreview(false);
     }
   }
 
@@ -1929,6 +1954,16 @@ export default function BookingFormPage() {
                   <div className="flex gap-2">
                     <button
                       type="button"
+                      onClick={handleToggleProposalPreview}
+                      disabled={loadingProposalPreview}
+                      data-testid="booking-form-proposal-preview-button"
+                      className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60 flex items-center gap-2"
+                    >
+                      {loadingProposalPreview && <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 border-t-slate-600 animate-spin" />}
+                      {showProposalPreview ? 'Hide Preview' : 'Preview'}
+                    </button>
+                    <button
+                      type="button"
                       onClick={handleDownloadProposal}
                       data-testid="booking-form-proposal-download-button"
                       className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
@@ -1994,6 +2029,11 @@ export default function BookingFormPage() {
                         Cancel
                       </button>
                     </div>
+                  </div>
+                )}
+                {showProposalPreview && proposalPreviewUrl && (
+                  <div className="mt-5 rounded-xl border border-slate-200 overflow-hidden">
+                    <iframe title="Proposal preview" src={proposalPreviewUrl} data-testid="booking-form-proposal-preview-frame" className="w-full h-[70vh]" />
                   </div>
                 )}
               </div>
