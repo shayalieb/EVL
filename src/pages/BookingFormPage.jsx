@@ -1851,7 +1851,7 @@ export default function BookingFormPage() {
 
                 <CollapsibleSection
                   title="Pricing"
-                  defaultOpen={(form.proposal.offerings || []).length > 0}
+                  defaultOpen
                   badge={<span className="text-sm font-bold text-slate-800">{currency(computeGrandTotal(form.proposal.lineItems, form.proposal.offerings))}</span>}
                   testId="booking-form-proposal-pricing-toggle"
                 >
@@ -1928,7 +1928,7 @@ export default function BookingFormPage() {
                 <CollapsibleSection
                   title="Additional Sections"
                   subtitle="Riders, policies, or any other custom content"
-                  defaultOpen={(form.proposal.sections || []).length > 0}
+                  defaultOpen
                   badge={(form.proposal.sections || []).length > 0 ? (
                     <span className="text-xs font-semibold text-slate-400">{form.proposal.sections.length}</span>
                   ) : null}
@@ -2187,7 +2187,7 @@ export default function BookingFormPage() {
               <CollapsibleSection
                 className="max-w-2xl mb-5"
                 title="Pricing"
-                defaultOpen={contractOfferings.length > 0}
+                defaultOpen
                 badge={<span className="text-sm font-bold text-slate-800">{currency(computeGrandTotal(contractLineItems, contractOfferings))}</span>}
                 testId="booking-form-contract-pricing-toggle"
               >
@@ -2209,7 +2209,7 @@ export default function BookingFormPage() {
                 className="max-w-2xl mb-5"
                 title="Additional Sections"
                 subtitle="Riders, policies, or any other custom content"
-                defaultOpen={contractSections.length > 0}
+                defaultOpen
                 badge={contractSections.length > 0 ? <span className="text-xs font-semibold text-slate-400">{contractSections.length}</span> : null}
                 testId="booking-form-contract-sections-toggle"
               >
