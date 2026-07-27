@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -10,6 +11,14 @@ const router = Router();
 
 function frontendUrl() {
   return process.env.FRONTEND_URL || 'http://localhost:5173';
+}
+
+// Appends a stamped entry to a contract's `log` Json array — Prisma has no
+// partial-array-append for Json columns, so every write replaces the whole
+// array. `existingLog` is whatever was read off the row before this update.
+function withLogEntry(existingLog, entry) {
+  const log = Array.isArray(existingLog) ? existingLog : [];
+  return [...log, { id: randomUUID(), at: new Date().toISOString(), ...entry }];
 }
 
 function serializeForOwner(contract) {
@@ -29,6 +38,7 @@ function serializeForOwner(contract) {
     ownerSignatureImage: contract.ownerSignatureImage,
     sentAt: contract.sentAt,
     createdAt: contract.createdAt,
+    log: contract.log,
   };
 }
 
@@ -74,9 +84,12 @@ function statusFor({ clientSigned, ownerSigned }) {
 }
 
 router.post('/', asyncHandler(async (req, res) => {
-  const { bookingId, recipientEmail, recipientName, snapshot, terms } = req.body || {};
+  const { bookingId, recipientEmail, recipientName, snapshot, terms, manual, reason } = req.body || {};
   if (!bookingId?.trim() || !recipientEmail?.trim() || !snapshot) {
     return res.status(400).json({ error: 'bookingId, recipientEmail, and snapshot are required.' });
+  }
+  if (manual && !reason?.trim()) {
+    return res.status(400).json({ error: 'A reason is required to mark a contract as sent manually.' });
   }
 
   const owner = await prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } });
@@ -85,6 +98,7 @@ router.post('/', asyncHandler(async (req, res) => {
   // grab their own sign-from-anywhere link immediately too, e.g. to sign
   // right away before the client even opens theirs.
   const ownerToken = generateToken();
+  const sentAt = new Date();
 
   const contract = await prisma.contract.create({
     data: {
@@ -98,27 +112,36 @@ router.post('/', asyncHandler(async (req, res) => {
       ownerEmail: owner.email,
       clientTokenHash: hashToken(clientToken),
       ownerTokenHash: hashToken(ownerToken),
-      sentAt: new Date(),
+      sentAt,
+      // Delivered outside GigWorks (printed, texted, signed in person,
+      // etc.) skips the actual email below, but still gets sign tokens so
+      // the client can come sign online later if that's still useful.
+      log: manual
+        ? withLogEntry([], { type: 'manual_sent', actorEmail: owner.email, note: reason.trim() })
+        : withLogEntry([], { type: 'sent', actorEmail: owner.email, note: null }),
     },
   });
 
   const signUrl = `${frontendUrl()}/sign/${clientToken}`;
   const ownerSignUrl = `${frontendUrl()}/sign/${ownerToken}`;
   const fromName = snapshot.businessInfo?.name || 'GigWorks';
-  // The client's raw token only ever exists here and in the email we're
-  // about to send — only its hash is persisted (see model comment). If the
-  // send fails, still return the link in the response rather than losing it
-  // outright; the owner can share it manually and there's no resend route.
   let emailError = null;
-  try {
-    await sendMail({
-      from: buildFromHeader(fromName),
-      to: recipientEmail,
-      subject: `Contract for your event — ${fromName}`,
-      html: `<p>Hi ${escapeHtml(recipientName) || 'there'},</p><p>Your contract is ready to review and sign. This link is unique to you — please don't forward it.</p><p><a href="${signUrl}">${signUrl}</a></p><p>${escapeHtml(fromName)}</p>`,
-    });
-  } catch {
-    emailError = 'Contract was created, but the email could not be sent — copy the link below to share it manually.';
+  if (!manual) {
+    // The client's raw token only ever exists here and in the email we're
+    // about to send — only its hash is persisted (see model comment). If
+    // the send fails, still return the link in the response rather than
+    // losing it outright; the owner can share it manually and there's no
+    // resend route.
+    try {
+      await sendMail({
+        from: buildFromHeader(fromName),
+        to: recipientEmail,
+        subject: `Contract for your event — ${fromName}`,
+        html: `<p>Hi ${escapeHtml(recipientName) || 'there'},</p><p>Your contract is ready to review and sign. This link is unique to you — please don't forward it.</p><p><a href="${signUrl}">${signUrl}</a></p><p>${escapeHtml(fromName)}</p>`,
+      });
+    } catch {
+      emailError = 'Contract was created, but the email could not be sent — copy the link below to share it manually.';
+    }
   }
 
   res.status(201).json({ contract: serializeForOwner(contract), signLink: signUrl, ownerSignLink: ownerSignUrl, emailError });
@@ -138,6 +161,7 @@ router.post('/:id/owner-sign', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "You've already signed this contract." });
   }
 
+  const owner = await prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } });
   const updated = await prisma.contract.update({
     where: { id: contract.id },
     data: {
@@ -145,6 +169,7 @@ router.post('/:id/owner-sign', asyncHandler(async (req, res) => {
       ownerSignatureName: signatureName.trim(),
       ownerSignatureImage: signatureImage,
       status: statusFor({ clientSigned: !!contract.clientSignedAt, ownerSigned: true }),
+      log: withLogEntry(contract.log, { type: 'owner_signed', actorEmail: owner.email, note: null }),
     },
   });
   res.json({ contract: serializeForOwner(updated) });
@@ -158,7 +183,32 @@ router.patch('/:id/terms', asyncHandler(async (req, res) => {
   if (!contract || contract.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Contract not found.' });
   }
-  const updated = await prisma.contract.update({ where: { id: contract.id }, data: { terms: terms || null } });
+  const owner = await prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } });
+  const updated = await prisma.contract.update({
+    where: { id: contract.id },
+    data: {
+      terms: terms || null,
+      log: withLogEntry(contract.log, { type: 'terms_edited', actorEmail: owner.email, note: null }),
+    },
+  });
+  res.json({ contract: serializeForOwner(updated) });
+}));
+
+// Manual free-text log entries — same idea as a booking's Activity Log,
+// but persisted server-side since Contract has no client-editable blob.
+router.post('/:id/log', asyncHandler(async (req, res) => {
+  const { note } = req.body || {};
+  if (!note?.trim()) return res.status(400).json({ error: 'note is required.' });
+
+  const contract = await prisma.contract.findUnique({ where: { id: req.params.id } });
+  if (!contract || contract.accountId !== req.membership.accountId) {
+    return res.status(404).json({ error: 'Contract not found.' });
+  }
+  const owner = await prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } });
+  const updated = await prisma.contract.update({
+    where: { id: contract.id },
+    data: { log: withLogEntry(contract.log, { type: 'note', actorEmail: owner.email, note: note.trim() }) },
+  });
   res.json({ contract: serializeForOwner(updated) });
 }));
 
@@ -221,6 +271,7 @@ publicContractsRouter.post('/:token/submit', asyncHandler(async (req, res) => {
         clientSignatureName: signatureName.trim(),
         clientSignatureImage: signatureImage,
         status: statusFor({ clientSigned: true, ownerSigned: ownerAlreadySigned }),
+        log: withLogEntry(contract.log, { type: 'client_signed', actorEmail: contract.recipientEmail, note: null }),
       },
     });
 
@@ -260,6 +311,7 @@ publicContractsRouter.post('/:token/submit', asyncHandler(async (req, res) => {
       ownerSignatureName: signatureName.trim(),
       ownerSignatureImage: signatureImage,
       status: statusFor({ clientSigned: !!contract.clientSignedAt, ownerSigned: true }),
+      log: withLogEntry(contract.log, { type: 'owner_signed', actorEmail: contract.ownerEmail, note: null }),
     },
   });
   res.json({ contract: serializeForPublic(updated, role) });

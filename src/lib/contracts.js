@@ -5,11 +5,25 @@ export async function getContractForBooking(bookingId) {
   return data.contract;
 }
 
-export async function sendContract({ bookingId, recipientEmail, recipientName, snapshot, terms }) {
+// `manual`+`reason`: skips the actual outbound email and logs a
+// 'manual_sent' entry with the reason instead of 'sent' — for contracts
+// delivered outside GigWorks (printed, texted, signed in person, etc.).
+export async function sendContract({ bookingId, recipientEmail, recipientName, snapshot, terms, manual, reason }) {
   return apiFetch('/contracts', {
     method: 'POST',
-    body: JSON.stringify({ bookingId, recipientEmail, recipientName, snapshot, terms }),
+    body: JSON.stringify({ bookingId, recipientEmail, recipientName, snapshot, terms, manual, reason }),
   });
+}
+
+// Manual free-text log entry — same idea as a booking's Activity Log, but
+// this one is persisted server-side since Contract has no client-editable
+// blob (see Contract.log in the Prisma schema).
+export async function addContractLogNote(contractId, note) {
+  const data = await apiFetch(`/contracts/${contractId}/log`, {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  });
+  return data.contract;
 }
 
 export async function ownerSignContract(contractId, { signatureName, signatureImage }) {

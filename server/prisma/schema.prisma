@@ -318,6 +318,13 @@ model Contract {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  // Audit trail: { id, at, type, note, actorEmail }[] — 'sent' | 'manual_sent'
+  // | 'owner_signed' | 'client_signed' | 'terms_edited' | 'note'. actorEmail
+  // is always a stamped string snapshot (same reasoning as ownerEmail above),
+  // never a live User reference. Owner-only — never sent to the public,
+  // token-based sign page.
+  log             Json     @default("[]")
+
   @@index([accountId, bookingId])
 }
 

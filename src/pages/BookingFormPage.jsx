@@ -4,6 +4,7 @@ import ClientModal from '../components/ClientModal';
 import InvoiceDocument from '../components/InvoiceDocument';
 import AcceptPaymentModal from '../components/AcceptPaymentModal';
 import SectionsEditor from '../components/SectionsEditor';
+import EventLogPanel from '../components/EventLogPanel';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Badge from '../components/ui/Badge';
 import { useData } from '../context/DataContext';
@@ -13,7 +14,7 @@ import { uid } from '../lib/storage';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
 import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, bookingDocumentDownloadUrl } from '../lib/bookingDocuments';
 import { generateProposalPdf, generateProposalPdfAttachment } from '../lib/proposalPdf';
-import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms } from '../lib/contracts';
+import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms, addContractLogNote } from '../lib/contracts';
 import { listInvoices, createInvoice, updateInvoice, sendInvoice, markInvoicePayment, sendReceipt, voidInvoice, getNextInvoiceInfo } from '../lib/invoices';
 import { generateContractPdf, getContractPdfDataUrl } from '../lib/contractPdf';
 import { generateInvoicePdf } from '../lib/invoicePdf';
@@ -71,7 +72,7 @@ function emptyForm() {
     eventName: '', clientId: '', eventDate: '', eventType: '',
     venue: emptyVenue(),
     schedule: [emptyScheduleItem()],
-    depositAmount: '', depositDueDate: '', depositPaid: false,
+    depositAmount: '', depositDueDate: '', depositPaid: false, depositType: 'fixed', depositPercent: '',
     bookingStatus: '', priority: '', nextFollowUpDate: '',
     contractSignedDate: '', referralSource: '', notes: '', activityLog: [],
     proposal: null,
@@ -142,6 +143,27 @@ function computeGrandTotal(lineItems, offerings) {
   const itemsTotal = (lineItems || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   return itemsTotal + computeOfferingsTotal(offerings);
 }
+
+// Shared shape for the Proposal audit log (see also EventLogPanel and the
+// mirrored server-side helper in contracts.js for Contracts).
+function appendLogEntry(log, entry) {
+  return [...(log || []), { id: uid('log'), at: new Date().toISOString(), ...entry }];
+}
+
+const PROPOSAL_LOG_LABELS = {
+  sent: 'Proposal sent',
+  manual_sent: 'Manually marked as sent',
+  note: 'Note',
+};
+
+const CONTRACT_LOG_LABELS = {
+  sent: 'Contract sent',
+  manual_sent: 'Manually marked as sent',
+  owner_signed: 'You signed',
+  client_signed: 'Client signed',
+  terms_edited: 'Terms edited',
+  note: 'Note',
+};
 
 // Offerings are added via the picker (a saved template cloned in), then
 // edited in place here — the instance is independent of the saved template
@@ -422,6 +444,12 @@ export default function BookingFormPage() {
   const [newProposalTemplateName, setNewProposalTemplateName] = useState('');
   const [savingContractTemplateAs, setSavingContractTemplateAs] = useState(false);
   const [newContractTemplateName, setNewContractTemplateName] = useState('');
+  // "Mark as Sent Manually" inline reason-prompt state — same pair-per-
+  // document-type pattern as the template-name prompts above.
+  const [markingProposalSentManually, setMarkingProposalSentManually] = useState(false);
+  const [proposalManualSentReason, setProposalManualSentReason] = useState('');
+  const [markingContractSentManually, setMarkingContractSentManually] = useState(false);
+  const [contractManualSentReason, setContractManualSentReason] = useState('');
   const [proposalOfferingPickerOpen, setProposalOfferingPickerOpen] = useState(false);
   const [contractOfferingPickerOpen, setContractOfferingPickerOpen] = useState(false);
   const [invoices, setInvoices] = useState([]);
@@ -436,10 +464,11 @@ export default function BookingFormPage() {
   // sending skips the Stripe-connected gate and the public pay page shows
   // no Pay button, just the document. Defaults on for every new invoice.
   const [newInvoiceAcceptPayment, setNewInvoiceAcceptPayment] = useState(true);
-  // True right after "Create Deposit Invoice" pre-fills the composer, so the
-  // "Copied from your Proposal" note below doesn't show for offerings that
-  // actually came from the Deposit fields instead.
-  const [newInvoiceFromDeposit, setNewInvoiceFromDeposit] = useState(false);
+  // Set right after one of the quick-create buttons (Full/Deposit/Final)
+  // pre-fills the composer, so the "Copied from your Proposal" note below
+  // shows the right explanation instead for offerings that actually came
+  // from one of those instead. null | 'deposit' | 'full' | 'final'
+  const [newInvoicePrefillKind, setNewInvoicePrefillKind] = useState(null);
   // The account's running invoice-number sequence and sticky footer memo —
   // what the composer resets to after a save or a cancelled edit. Advances
   // locally right after each save so the next invoice picks up from there
@@ -490,6 +519,8 @@ export default function BookingFormPage() {
         depositAmount: booking.depositAmount ?? '',
         depositDueDate: booking.depositDueDate || '',
         depositPaid: !!booking.depositPaid,
+        depositType: booking.depositType || 'fixed',
+        depositPercent: booking.depositPercent ?? '',
         bookingStatus: booking.bookingStatus || (bookingStatuses[0]?.id || ''),
         priority: booking.priority || '',
         nextFollowUpDate: booking.nextFollowUpDate || '',
@@ -790,7 +821,7 @@ export default function BookingFormPage() {
   }
 
   function handlePushToProposal() {
-    const proposal = { hours: '', lineItems: [], sections: currentUser.proposalTemplate?.sections || [], offerings: [], sentAt: null, sentTo: null };
+    const proposal = { hours: '', lineItems: [], sections: currentUser.proposalTemplate?.sections || [], offerings: [], sentAt: null, sentTo: null, log: [] };
     update('proposal', proposal);
     if (booking) updateBooking(booking.id, { proposal });
   }
@@ -822,7 +853,12 @@ export default function BookingFormPage() {
         fromName,
         pdfAttachment,
       });
-      const sentProposal = { ...(patch.proposal || {}), sentAt: new Date().toISOString(), sentTo: client.email };
+      const sentProposal = {
+        ...(patch.proposal || {}),
+        sentAt: new Date().toISOString(),
+        sentTo: client.email,
+        log: appendLogEntry(patch.proposal?.log, { type: 'sent', actorEmail: currentUser.email, note: null }),
+      };
       updateBooking(booking.id, { proposal: sentProposal });
       update('proposal', sentProposal);
       showToast(`Proposal sent to ${client.email}`);
@@ -831,6 +867,28 @@ export default function BookingFormPage() {
     } finally {
       setSendingProposal(false);
     }
+  }
+
+  // Records that a proposal was delivered outside the app's own send flow
+  // (printed, texted, signed in person, etc.) — same "it's been sent" end
+  // state as handleSendProposal, minus the email, plus a required reason
+  // so there's a real audit trail for why it's marked sent without one.
+  function handleMarkProposalSentManually(reason) {
+    const sentProposal = {
+      ...form.proposal,
+      sentAt: new Date().toISOString(),
+      sentTo: client?.email || form.proposal.sentTo || 'Marked sent manually',
+      log: appendLogEntry(form.proposal.log, { type: 'manual_sent', actorEmail: currentUser.email, note: reason }),
+    };
+    updateBooking(booking.id, { proposal: sentProposal });
+    update('proposal', sentProposal);
+    showToast('Proposal marked as sent');
+  }
+
+  function handleAddProposalLogNote(note) {
+    const updatedProposal = { ...form.proposal, log: appendLogEntry(form.proposal.log, { type: 'note', actorEmail: currentUser.email, note }) };
+    updateBooking(booking.id, { proposal: updatedProposal });
+    update('proposal', updatedProposal);
   }
 
   function buildContractSnapshot() {
@@ -885,7 +943,7 @@ export default function BookingFormPage() {
     setNewInvoiceOfferings([]);
     setNewInvoiceDueDate('');
     setNewInvoiceAcceptPayment(true);
-    setNewInvoiceFromDeposit(false);
+    setNewInvoicePrefillKind(null);
     setShowInvoicePreview(false);
   }
 
@@ -932,7 +990,34 @@ export default function BookingFormPage() {
     setNewInvoiceDueDate(form.depositDueDate || '');
     setNewInvoiceRecipientEmail(client?.email || '');
     setNewInvoiceRecipientName(client ? `${client.firstName} ${client.lastName}`.trim() : '');
-    setNewInvoiceFromDeposit(true);
+    setNewInvoicePrefillKind('deposit');
+    setActiveTab('invoices');
+  }
+
+  // Sibling to handleCreateDepositInvoice — used instead when the business
+  // skips a deposit and bills the whole event in one shot.
+  function handleCreateFullInvoice() {
+    resetInvoiceComposer();
+    setNewInvoiceOfferings([
+      { id: uid('offitem'), name: 'Full Event Balance', details: '', type: 'general', amount: grandTotal, unitCount: '', ratePerUnit: '' },
+    ]);
+    setNewInvoiceRecipientEmail(client?.email || '');
+    setNewInvoiceRecipientName(client ? `${client.firstName} ${client.lastName}`.trim() : '');
+    setNewInvoicePrefillKind('full');
+    setActiveTab('invoices');
+  }
+
+  // Used once something (a deposit, or any other invoice) has already been
+  // invoiced — pre-fills whatever's left of the grand total rather than
+  // making the business do that math by hand.
+  function handleCreateFinalInvoice() {
+    resetInvoiceComposer();
+    setNewInvoiceOfferings([
+      { id: uid('offitem'), name: 'Final Payment', details: '', type: 'general', amount: Math.max(remainingBalance, 0), unitCount: '', ratePerUnit: '' },
+    ]);
+    setNewInvoiceRecipientEmail(client?.email || '');
+    setNewInvoiceRecipientName(client ? `${client.firstName} ${client.lastName}`.trim() : '');
+    setNewInvoicePrefillKind('final');
     setActiveTab('invoices');
   }
 
@@ -1151,6 +1236,42 @@ export default function BookingFormPage() {
     }
   }
 
+  // Records that a contract was delivered outside GigWorks (printed,
+  // texted, signed in person, etc.) — same "it's out" end state as
+  // handleSendContract, minus the email, plus a required reason. A
+  // Contract row doesn't exist until this call (there's no draft state),
+  // so this is an alternate creation path rather than a later status flip.
+  async function handleMarkContractSentManually(reason) {
+    if (!contractRecipientEmail.trim()) {
+      showToast('Recipient email is required', 'error');
+      return;
+    }
+    setSendingContract(true);
+    try {
+      persistBooking();
+      const { contract: created } = await sendContract({
+        bookingId: booking.id,
+        recipientEmail: contractRecipientEmail.trim(),
+        recipientName: contractRecipientName.trim(),
+        snapshot: buildContractSnapshot(),
+        terms: contractTerms,
+        manual: true,
+        reason,
+      });
+      setContract(created);
+      showToast('Contract marked as sent');
+    } catch (err) {
+      showToast(err.message || 'Failed to mark contract as sent', 'error');
+    } finally {
+      setSendingContract(false);
+    }
+  }
+
+  async function handleAddContractLogNote(note) {
+    const updated = await addContractLogNote(contract.id, note);
+    setContract(updated);
+  }
+
   async function handleOwnerSign() {
     if (!ownerSignerName.trim() || !ownerSignatureImage) {
       showToast('Please type your name and draw your signature', 'error');
@@ -1248,6 +1369,16 @@ export default function BookingFormPage() {
       setDocPendingDelete(null);
     }
   }
+
+  // The contract's frozen pricing is authoritative once it exists (it won't
+  // change after signing); otherwise the proposal's still-live pricing is
+  // the best number available. Used to size a percentage deposit and to
+  // work out what's left to invoice after a deposit/full invoice goes out.
+  const grandTotal = contract
+    ? computeGrandTotal(contractLineItems, contractOfferings)
+    : computeGrandTotal(form.proposal?.lineItems, form.proposal?.offerings);
+  const alreadyInvoiced = invoices.filter((inv) => inv.status !== 'void').reduce((sum, inv) => sum + (inv.total || 0), 0);
+  const remainingBalance = grandTotal - alreadyInvoiced;
 
   const canConvert = booking && !booking.convertedEventId;
 
@@ -1420,40 +1551,6 @@ export default function BookingFormPage() {
                     </div>
                   )}
                 </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className={labelClass}>Deposit Amount</label>
-                  <MoneyInput value={form.depositAmount} onChange={(v) => update('depositAmount', v)} testId="booking-form-deposit-amount-input" className={inputClass} />
-                </div>
-                <div>
-                  <label className={labelClass}>Deposit Due Date</label>
-                  <input type="date" value={form.depositDueDate} onChange={(e) => update('depositDueDate', e.target.value)} data-testid="booking-form-deposit-due-date-input" className={inputClass} />
-                </div>
-                <div className="flex items-end pb-2.5">
-                  <label className="flex items-center gap-1.5 text-sm text-slate-600">
-                    <input type="checkbox" checked={form.depositPaid} onChange={(e) => update('depositPaid', e.target.checked)} data-testid="booking-form-deposit-paid-checkbox" />
-                    Deposit paid
-                  </label>
-                </div>
-              </div>
-              <div className="flex justify-end -mt-1">
-                <button
-                  type="button"
-                  onClick={handleCreateDepositInvoice}
-                  disabled={!booking || !form.depositAmount || contract?.status !== 'fully_signed'}
-                  title={
-                    !booking ? 'Save this booking first'
-                      : !form.depositAmount ? 'Enter a deposit amount first'
-                      : contract?.status !== 'fully_signed' ? 'Available once the contract is fully signed'
-                      : undefined
-                  }
-                  data-testid="booking-form-create-deposit-invoice-button"
-                  className="px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                >
-                  Create Deposit Invoice →
-                </button>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1716,25 +1813,17 @@ export default function BookingFormPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelClass}>Estimated Hours</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      value={form.proposal.hours}
-                      onChange={(e) => update('proposal', { ...form.proposal, hours: e.target.value })}
-                      data-testid="booking-form-proposal-hours-input"
-                      className={inputClass}
-                    />
-                  </div>
-                  <div>
-                    <div className={labelClass}>Deposit</div>
-                    <div className="px-3.5 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700">
-                      {form.depositAmount ? currency(form.depositAmount) : '—'}
-                    </div>
-                  </div>
+                <div className="max-w-xs">
+                  <label className={labelClass}>Estimated Hours</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={form.proposal.hours}
+                    onChange={(e) => update('proposal', { ...form.proposal, hours: e.target.value })}
+                    data-testid="booking-form-proposal-hours-input"
+                    className={inputClass}
+                  />
                 </div>
 
                 {(form.schedule || []).some((s) => s.time || s.name || s.details) && (
@@ -1766,6 +1855,66 @@ export default function BookingFormPage() {
                     onChange={(offerings) => update('proposal', { ...form.proposal, offerings })}
                     onAddClick={() => setProposalOfferingPickerOpen(true)}
                   />
+
+                  <div className="mt-5 pt-4 border-t border-slate-100">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-semibold text-slate-500">Deposit</span>
+                      <div className="flex rounded-lg border border-slate-200 overflow-hidden text-[11px] font-semibold shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => update('depositType', 'fixed')}
+                          data-testid="booking-form-proposal-deposit-type-fixed-button"
+                          className={`px-2 py-1 ${form.depositType !== 'percent' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+                        >
+                          Fixed $
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => update('depositType', 'percent')}
+                          disabled={grandTotal <= 0}
+                          title={grandTotal <= 0 ? 'Add pricing above first' : undefined}
+                          data-testid="booking-form-proposal-deposit-type-percent-button"
+                          className={`px-2 py-1 border-l border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed ${form.depositType === 'percent' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+                        >
+                          % of Total
+                        </button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className={labelClass}>Deposit Amount</label>
+                        {form.depositType === 'percent' ? (
+                          <>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={form.depositPercent}
+                              onChange={(e) => {
+                                const pct = e.target.value;
+                                update('depositPercent', pct);
+                                update('depositAmount', pct === '' ? '' : Math.round((Number(pct) / 100) * grandTotal * 100) / 100);
+                              }}
+                              data-testid="booking-form-proposal-deposit-percent-input"
+                              className={inputClass}
+                            />
+                            <p className="mt-1 text-xs text-slate-400">
+                              {form.depositPercent !== ''
+                                ? `= ${currency((Number(form.depositPercent) / 100) * grandTotal)} of ${currency(grandTotal)}`
+                                : `of ${currency(grandTotal)} total`}
+                            </p>
+                          </>
+                        ) : (
+                          <MoneyInput value={form.depositAmount} onChange={(v) => update('depositAmount', v)} testId="booking-form-proposal-deposit-amount-input" className={inputClass} />
+                        )}
+                      </div>
+                      <div>
+                        <label className={labelClass}>Deposit Due Date</label>
+                        <input type="date" value={form.depositDueDate} onChange={(e) => update('depositDueDate', e.target.value)} data-testid="booking-form-proposal-deposit-due-date-input" className={inputClass} />
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="flex justify-end mt-3 text-sm font-bold text-slate-800">
                     Grand Total: {currency(computeGrandTotal(form.proposal.lineItems, form.proposal.offerings))}
                   </div>
@@ -1846,6 +1995,16 @@ export default function BookingFormPage() {
                     >
                       Download PDF
                     </button>
+                    {!markingProposalSentManually && (
+                      <button
+                        type="button"
+                        onClick={() => setMarkingProposalSentManually(true)}
+                        data-testid="booking-form-proposal-mark-sent-manually-button"
+                        className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
+                      >
+                        Mark as Sent Manually
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={handleSendProposal}
@@ -1859,6 +2018,54 @@ export default function BookingFormPage() {
                     </button>
                   </div>
                 </div>
+                {markingProposalSentManually && (
+                  <div className="mt-4 pt-4 border-t border-slate-100">
+                    <label className={labelClass}>Why was this marked as sent manually?</label>
+                    <textarea
+                      autoFocus
+                      rows={2}
+                      value={proposalManualSentReason}
+                      onChange={(e) => setProposalManualSentReason(e.target.value)}
+                      placeholder="e.g. Printed and handed to the client in person"
+                      data-testid="booking-form-proposal-manual-sent-reason-input"
+                      className={inputClass}
+                    />
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!proposalManualSentReason.trim()) return;
+                          handleMarkProposalSentManually(proposalManualSentReason.trim());
+                          setMarkingProposalSentManually(false);
+                          setProposalManualSentReason('');
+                        }}
+                        disabled={!proposalManualSentReason.trim()}
+                        data-testid="booking-form-proposal-manual-sent-confirm-button"
+                        className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setMarkingProposalSentManually(false); setProposalManualSentReason(''); }}
+                        data-testid="booking-form-proposal-manual-sent-cancel-button"
+                        className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className={cardClass}>
+                <h3 className={cardTitleClass}>Proposal Log</h3>
+                <EventLogPanel
+                  entries={form.proposal.log || []}
+                  labelForType={(entry) => PROPOSAL_LOG_LABELS[entry.type] || entry.type}
+                  onAddNote={handleAddProposalLogNote}
+                  testIdPrefix="booking-form-proposal-log"
+                />
               </div>
 
               {(form.proposal.offerings || []).length > 0 && (
@@ -2040,6 +2247,17 @@ export default function BookingFormPage() {
                   {loadingContractPreview && <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 border-t-slate-600 animate-spin" />}
                   {showContractPreview ? 'Hide Preview' : 'Preview'}
                 </button>
+                {!markingContractSentManually && (
+                  <button
+                    type="button"
+                    onClick={() => setMarkingContractSentManually(true)}
+                    disabled={!contractRecipientEmail.trim()}
+                    data-testid="booking-form-contract-mark-sent-manually-button"
+                    className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Mark as Sent Manually
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleSendContract}
@@ -2051,6 +2269,44 @@ export default function BookingFormPage() {
                   Send Contract for Signature
                 </button>
               </div>
+              {markingContractSentManually && (
+                <div className="mt-4 pt-4 border-t border-slate-100 max-w-2xl">
+                  <label className={labelClass}>Why was this marked as sent manually?</label>
+                  <textarea
+                    autoFocus
+                    rows={2}
+                    value={contractManualSentReason}
+                    onChange={(e) => setContractManualSentReason(e.target.value)}
+                    placeholder="e.g. Printed and handed to the client in person"
+                    data-testid="booking-form-contract-manual-sent-reason-input"
+                    className={inputClass}
+                  />
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!contractManualSentReason.trim()) return;
+                        await handleMarkContractSentManually(contractManualSentReason.trim());
+                        setMarkingContractSentManually(false);
+                        setContractManualSentReason('');
+                      }}
+                      disabled={!contractManualSentReason.trim() || sendingContract}
+                      data-testid="booking-form-contract-manual-sent-confirm-button"
+                      className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setMarkingContractSentManually(false); setContractManualSentReason(''); }}
+                      data-testid="booking-form-contract-manual-sent-cancel-button"
+                      className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
               {showContractPreview && contractPreviewUrl && (
                 <div className="mt-5 rounded-xl border border-slate-200 overflow-hidden">
                   <iframe title="Contract preview" src={contractPreviewUrl} data-testid="booking-form-contract-preview-frame" className="w-full h-[70vh]" />
@@ -2114,6 +2370,16 @@ export default function BookingFormPage() {
                     )}
                   </div>
                 )}
+              </div>
+
+              <div className={cardClass}>
+                <h3 className={cardTitleClass}>Contract Log</h3>
+                <EventLogPanel
+                  entries={contract.log || []}
+                  labelForType={(entry) => CONTRACT_LOG_LABELS[entry.type] || entry.type}
+                  onAddNote={handleAddContractLogNote}
+                  testIdPrefix="booking-form-contract-log"
+                />
               </div>
 
               <div className={cardClass}>
@@ -2305,6 +2571,123 @@ export default function BookingFormPage() {
             </div>
           ) : (
             <>
+              <div className={cardClass}>
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className={`${cardTitleClass} mb-0`}>Deposit</h3>
+                  <div className="flex rounded-lg border border-slate-200 overflow-hidden text-[11px] font-semibold shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => update('depositType', 'fixed')}
+                      data-testid="booking-form-deposit-type-fixed-button"
+                      className={`px-2 py-1 ${form.depositType !== 'percent' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+                    >
+                      Fixed $
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => update('depositType', 'percent')}
+                      disabled={grandTotal <= 0}
+                      title={grandTotal <= 0 ? 'Add pricing to your Proposal or Contract first' : undefined}
+                      data-testid="booking-form-deposit-type-percent-button"
+                      className={`px-2 py-1 border-l border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed ${form.depositType === 'percent' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+                    >
+                      % of Total
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className={labelClass}>Deposit Amount</label>
+                    {form.depositType === 'percent' ? (
+                      <>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={form.depositPercent}
+                          onChange={(e) => {
+                            const pct = e.target.value;
+                            update('depositPercent', pct);
+                            update('depositAmount', pct === '' ? '' : Math.round((Number(pct) / 100) * grandTotal * 100) / 100);
+                          }}
+                          data-testid="booking-form-deposit-percent-input"
+                          className={inputClass}
+                        />
+                        <p className="mt-1 text-xs text-slate-400">
+                          {form.depositPercent !== ''
+                            ? `= ${currency((Number(form.depositPercent) / 100) * grandTotal)} of ${currency(grandTotal)}`
+                            : `of ${currency(grandTotal)} total`}
+                        </p>
+                      </>
+                    ) : (
+                      <MoneyInput value={form.depositAmount} onChange={(v) => update('depositAmount', v)} testId="booking-form-deposit-amount-input" className={inputClass} />
+                    )}
+                  </div>
+                  <div>
+                    <label className={labelClass}>Deposit Due Date</label>
+                    <input type="date" value={form.depositDueDate} onChange={(e) => update('depositDueDate', e.target.value)} data-testid="booking-form-deposit-due-date-input" className={inputClass} />
+                  </div>
+                  <div className="flex items-end pb-2.5">
+                    <label className="flex items-center gap-1.5 text-sm text-slate-600">
+                      <input type="checkbox" checked={form.depositPaid} onChange={(e) => update('depositPaid', e.target.checked)} data-testid="booking-form-deposit-paid-checkbox" />
+                      Deposit paid
+                    </label>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 mt-3">
+                  {alreadyInvoiced > 0 ? (
+                    <button
+                      type="button"
+                      onClick={handleCreateFinalInvoice}
+                      disabled={!booking || contract?.status !== 'fully_signed' || remainingBalance <= 0}
+                      title={
+                        !booking ? 'Save this booking first'
+                          : contract?.status !== 'fully_signed' ? 'Available once the contract is fully signed'
+                          : remainingBalance <= 0 ? 'Nothing left to invoice'
+                          : undefined
+                      }
+                      data-testid="booking-form-create-final-invoice-button"
+                      className="px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                    >
+                      Create Final Invoice →
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleCreateFullInvoice}
+                        disabled={!booking || grandTotal <= 0 || contract?.status !== 'fully_signed'}
+                        title={
+                          !booking ? 'Save this booking first'
+                            : grandTotal <= 0 ? 'Add pricing to your Proposal or Contract first'
+                            : contract?.status !== 'fully_signed' ? 'Available once the contract is fully signed'
+                            : undefined
+                        }
+                        data-testid="booking-form-create-full-invoice-button"
+                        className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                      >
+                        Create Full Invoice →
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCreateDepositInvoice}
+                        disabled={!booking || !form.depositAmount || contract?.status !== 'fully_signed'}
+                        title={
+                          !booking ? 'Save this booking first'
+                            : !form.depositAmount ? 'Enter a deposit amount first'
+                            : contract?.status !== 'fully_signed' ? 'Available once the contract is fully signed'
+                            : undefined
+                        }
+                        data-testid="booking-form-create-deposit-invoice-button"
+                        className="px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                      >
+                        Create Deposit Invoice →
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
               {!editingInvoiceId && contract?.status !== 'fully_signed' ? (
                 <div className={cardClass}>
                   <p className="text-sm text-slate-500 text-center pt-8 pb-4 max-w-md mx-auto">
@@ -2355,9 +2738,17 @@ export default function BookingFormPage() {
                       </div>
                     </div>
                     <div className="max-w-2xl mb-5">
-                      {newInvoiceFromDeposit ? (
+                      {newInvoicePrefillKind === 'deposit' ? (
                         <p className="text-xs text-slate-400 mb-3">
                           Pre-filled from the Deposit fields on Booking Info — edit freely, this won't change those fields.
+                        </p>
+                      ) : newInvoicePrefillKind === 'full' ? (
+                        <p className="text-xs text-slate-400 mb-3">
+                          Pre-filled with the full event balance — edit freely.
+                        </p>
+                      ) : newInvoicePrefillKind === 'final' ? (
+                        <p className="text-xs text-slate-400 mb-3">
+                          Pre-filled with what's left after prior invoices — edit freely.
                         </p>
                       ) : !editingInvoiceId && booking.proposal?.offerings?.length > 0 && (
                         <p className="text-xs text-slate-400 mb-3">
