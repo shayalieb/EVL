@@ -212,6 +212,32 @@ router.post('/:id/log', asyncHandler(async (req, res) => {
   res.json({ contract: serializeForOwner(updated) });
 }));
 
+// Regenerate the client's sign link at any time. A manually-sent contract's
+// original link is never emailed anywhere and only its hash persists (same
+// reasoning as clientTokenHash itself) — if it's lost there is no way to
+// recover it, so this issues a fresh one instead. The old link (if any)
+// stops working the moment this runs, since it's a full replace, not an
+// additional valid token.
+router.post('/:id/regenerate-client-link', asyncHandler(async (req, res) => {
+  const contract = await prisma.contract.findUnique({ where: { id: req.params.id } });
+  if (!contract || contract.accountId !== req.membership.accountId) {
+    return res.status(404).json({ error: 'Contract not found.' });
+  }
+  if (contract.clientSignedAt) {
+    return res.status(400).json({ error: 'The client has already signed this contract.' });
+  }
+  const owner = await prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } });
+  const clientToken = generateToken();
+  const updated = await prisma.contract.update({
+    where: { id: contract.id },
+    data: {
+      clientTokenHash: hashToken(clientToken),
+      log: withLogEntry(contract.log, { type: 'client_link_regenerated', actorEmail: owner.email, note: null }),
+    },
+  });
+  res.json({ contract: serializeForOwner(updated), signLink: `${frontendUrl()}/sign/${clientToken}` });
+}));
+
 // ---- Public (unauthenticated, token-based) ----
 // Mounted separately in index.js under a distinct path prefix (see below)
 // so it never passes through the requireAuth/attachMembership pair above.

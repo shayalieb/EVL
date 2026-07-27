@@ -15,7 +15,7 @@ import { uid } from '../lib/storage';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
 import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, bookingDocumentDownloadUrl } from '../lib/bookingDocuments';
 import { generateProposalPdf, generateProposalPdfAttachment, getProposalPdfDataUrl } from '../lib/proposalPdf';
-import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms, addContractLogNote } from '../lib/contracts';
+import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms, addContractLogNote, regenerateClientSignLink } from '../lib/contracts';
 import { listInvoices, createInvoice, updateInvoice, sendInvoice, markInvoicePayment, sendReceipt, voidInvoice, getNextInvoiceInfo } from '../lib/invoices';
 import { generateContractPdf, getContractPdfDataUrl } from '../lib/contractPdf';
 import { generateInvoicePdf } from '../lib/invoicePdf';
@@ -163,6 +163,7 @@ const CONTRACT_LOG_LABELS = {
   owner_signed: 'You signed',
   client_signed: 'Client signed',
   terms_edited: 'Terms edited',
+  client_link_regenerated: 'New client sign link generated',
   note: 'Note',
 };
 
@@ -519,6 +520,7 @@ export default function BookingFormPage() {
   const [showContractPreview, setShowContractPreview] = useState(false);
   const [loadingContractPreview, setLoadingContractPreview] = useState(false);
   const [sendingContract, setSendingContract] = useState(false);
+  const [regeneratingClientLink, setRegeneratingClientLink] = useState(false);
   const [contractSubmitAttempted, setContractSubmitAttempted] = useState(false);
   const [lastSignLink, setLastSignLink] = useState('');
   const [lastOwnerSignLink, setLastOwnerSignLink] = useState('');
@@ -1302,7 +1304,7 @@ export default function BookingFormPage() {
     setSendingContract(true);
     try {
       persistBooking();
-      const { contract: created } = await sendContract({
+      const { contract: created, signLink, ownerSignLink } = await sendContract({
         bookingId: booking.id,
         recipientEmail: contractRecipientEmail.trim(),
         recipientName: contractRecipientName.trim(),
@@ -1312,6 +1314,11 @@ export default function BookingFormPage() {
         reason,
       });
       setContract(created);
+      // Manual mode skips the email, but the server still issues both sign
+      // tokens — without capturing these, there'd be no way to actually get
+      // the client a link to sign from.
+      setLastSignLink(signLink);
+      setLastOwnerSignLink(ownerSignLink);
       showToast('Contract marked as sent');
     } catch (err) {
       showToast(err.message || 'Failed to mark contract as sent', 'error');
@@ -1323,6 +1330,23 @@ export default function BookingFormPage() {
   async function handleAddContractLogNote(note) {
     const updated = await addContractLogNote(contract.id, note);
     setContract(updated);
+  }
+
+  // Covers a lost/never-sent client link — e.g. a contract marked sent
+  // manually, where no email ever went out. Issues a fresh token, so any
+  // previously shared link (if one existed) stops working.
+  async function handleRegenerateClientLink() {
+    setRegeneratingClientLink(true);
+    try {
+      const { contract: updated, signLink } = await regenerateClientSignLink(contract.id);
+      setContract(updated);
+      setLastSignLink(signLink);
+      showToast('New client sign link generated');
+    } catch (err) {
+      showToast(err.message || 'Failed to generate a new link', 'error');
+    } finally {
+      setRegeneratingClientLink(false);
+    }
   }
 
   async function handleOwnerSign() {
@@ -2358,14 +2382,27 @@ export default function BookingFormPage() {
                       <span className="font-semibold text-slate-600">{contract.recipientEmail}</span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleDownloadContract}
-                    data-testid="booking-form-contract-download-button"
-                    className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
-                  >
-                    Download PDF
-                  </button>
+                  <div className="flex gap-2">
+                    {!contract.clientSignedAt && (
+                      <button
+                        type="button"
+                        onClick={handleRegenerateClientLink}
+                        disabled={regeneratingClientLink}
+                        data-testid="booking-form-contract-regenerate-client-link-button"
+                        className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        {regeneratingClientLink ? 'Generating…' : 'Get Client Sign Link'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleDownloadContract}
+                      data-testid="booking-form-contract-download-button"
+                      className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
+                    >
+                      Download PDF
+                    </button>
+                  </div>
                 </div>
                 {(lastSignLink || lastOwnerSignLink) && (
                   <div className="mt-4 space-y-2">

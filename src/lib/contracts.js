@@ -26,6 +26,13 @@ export async function addContractLogNote(contractId, note) {
   return data.contract;
 }
 
+// Issues a fresh client sign link, invalidating whatever the old one was —
+// use when the original link was lost (never emailed, e.g. a manually-sent
+// contract) or the client needs a new one for any other reason.
+export async function regenerateClientSignLink(contractId) {
+  return apiFetch(`/contracts/${contractId}/regenerate-client-link`, { method: 'POST' });
+}
+
 export async function ownerSignContract(contractId, { signatureName, signatureImage }) {
   const data = await apiFetch(`/contracts/${contractId}/owner-sign`, {
     method: 'POST',
