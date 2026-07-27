@@ -751,16 +751,6 @@ export default function BookingFormPage() {
     setForm((f) => ({ ...f, venue: { ...f.venue, [field]: val } }));
   }
 
-  function addScheduleItem() {
-    setForm((f) => ({ ...f, schedule: [...f.schedule, emptyScheduleItem()] }));
-  }
-  function updateScheduleItem(id, patch) {
-    setForm((f) => ({ ...f, schedule: f.schedule.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
-  }
-  function removeScheduleItem(id) {
-    setForm((f) => ({ ...f, schedule: f.schedule.filter((s) => s.id !== id) }));
-  }
-
   function handleAddActivity() {
     if (!newActivityText.trim()) return;
     const entry = { id: uid('activity'), date: new Date().toISOString(), text: newActivityText.trim() };
@@ -988,6 +978,7 @@ export default function BookingFormPage() {
       { id: uid('offitem'), name: 'Deposit', details: '', type: 'general', amount: Number(form.depositAmount) || 0, unitCount: '', ratePerUnit: '' },
     ]);
     setNewInvoiceDueDate(form.depositDueDate || '');
+    setNewInvoiceMemo(`Deposit for ${eventLabel}`);
     setNewInvoiceRecipientEmail(client?.email || '');
     setNewInvoiceRecipientName(client ? `${client.firstName} ${client.lastName}`.trim() : '');
     setNewInvoicePrefillKind('deposit');
@@ -1001,6 +992,7 @@ export default function BookingFormPage() {
     setNewInvoiceOfferings([
       { id: uid('offitem'), name: 'Full Event Balance', details: '', type: 'general', amount: grandTotal, unitCount: '', ratePerUnit: '' },
     ]);
+    setNewInvoiceMemo(`Full balance for ${eventLabel}`);
     setNewInvoiceRecipientEmail(client?.email || '');
     setNewInvoiceRecipientName(client ? `${client.firstName} ${client.lastName}`.trim() : '');
     setNewInvoicePrefillKind('full');
@@ -1015,6 +1007,7 @@ export default function BookingFormPage() {
     setNewInvoiceOfferings([
       { id: uid('offitem'), name: 'Final Payment', details: '', type: 'general', amount: Math.max(remainingBalance, 0), unitCount: '', ratePerUnit: '' },
     ]);
+    setNewInvoiceMemo(`Final payment for ${eventLabel}`);
     setNewInvoiceRecipientEmail(client?.email || '');
     setNewInvoiceRecipientName(client ? `${client.firstName} ${client.lastName}`.trim() : '');
     setNewInvoicePrefillKind('final');
@@ -1379,6 +1372,12 @@ export default function BookingFormPage() {
     : computeGrandTotal(form.proposal?.lineItems, form.proposal?.offerings);
   const alreadyInvoiced = invoices.filter((inv) => inv.status !== 'void').reduce((sum, inv) => sum + (inv.total || 0), 0);
   const remainingBalance = grandTotal - alreadyInvoiced;
+  // Used to make quick-created invoice memos self-explanatory (e.g. "Deposit
+  // for Test Event on Dec 15, 2026") instead of a bare "Deposit" that doesn't
+  // say which event/booking — or which date — it's for.
+  const eventLabel = [form.eventName || form.eventType || 'your event', form.eventDate ? `on ${formatEventDate(form.eventDate)}` : null]
+    .filter(Boolean)
+    .join(' ');
 
   const canConvert = booking && !booking.convertedEventId;
 
@@ -1640,65 +1639,6 @@ export default function BookingFormPage() {
               </div>
             </div>
           </div>
-        </div>
-
-        <div className={cardClass}>
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h3 className={`${cardTitleClass} mb-0`}>Event Schedule</h3>
-              <p className="text-xs text-slate-400 mt-1">Included in the proposal, and carries straight into the event once this booking converts.</p>
-            </div>
-            <button
-              type="button"
-              onClick={addScheduleItem}
-              data-testid="booking-form-schedule-add-button"
-              className="shrink-0 text-xs font-semibold text-indigo-600 hover:text-indigo-700"
-            >
-              + Add Line
-            </button>
-          </div>
-          {form.schedule.length === 0 ? (
-            <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
-              No schedule lines yet.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {form.schedule.map((item) => (
-                <div key={item.id} data-testid="booking-form-schedule-row" className="flex items-start gap-2">
-                  <input
-                    type="time"
-                    value={item.time}
-                    onChange={(e) => updateScheduleItem(item.id, { time: e.target.value })}
-                    data-testid="booking-form-schedule-time-input"
-                    className="shrink-0 w-32 px-2.5 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                  />
-                  <input
-                    value={item.name}
-                    onChange={(e) => updateScheduleItem(item.id, { name: e.target.value })}
-                    placeholder="e.g. Ceremony"
-                    data-testid="booking-form-schedule-name-input"
-                    className="shrink-0 w-48 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                  />
-                  <input
-                    value={item.details}
-                    onChange={(e) => updateScheduleItem(item.id, { details: e.target.value })}
-                    placeholder="Details…"
-                    data-testid="booking-form-schedule-details-input"
-                    className="flex-1 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeScheduleItem(item.id)}
-                    data-testid="booking-form-schedule-remove-button"
-                    className="shrink-0 w-9 h-9 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
-                    aria-label="Remove schedule line"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
         <div className={cardClass}>
