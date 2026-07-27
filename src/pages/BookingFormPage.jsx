@@ -5,6 +5,7 @@ import InvoiceDocument from '../components/InvoiceDocument';
 import AcceptPaymentModal from '../components/AcceptPaymentModal';
 import SectionsEditor from '../components/SectionsEditor';
 import EventLogPanel from '../components/EventLogPanel';
+import OverflowMenu from '../components/ui/OverflowMenu';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Badge from '../components/ui/Badge';
 import { useData } from '../context/DataContext';
@@ -179,9 +180,14 @@ function OfferingsEditor({ offerings, onChange, onAddClick }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-3">
         <label className={labelClass}>Offerings</label>
-        <button type="button" onClick={onAddClick} data-testid="booking-form-offering-add-button" className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">
+        <button
+          type="button"
+          onClick={onAddClick}
+          data-testid="booking-form-offering-add-button"
+          className="px-4 py-2.5 rounded-lg border-2 border-indigo-300 text-indigo-600 text-sm font-bold hover:bg-indigo-50 hover:border-indigo-400"
+        >
           + Add Offering
         </button>
       </div>
@@ -497,6 +503,11 @@ export default function BookingFormPage() {
   const [showInvoicePreview, setShowInvoicePreview] = useState(false);
   const [savingInvoiceDraft, setSavingInvoiceDraft] = useState(false);
   const [sendingNewInvoice, setSendingNewInvoice] = useState(false);
+  // Drives inline validation messages under the composer's fields — true
+  // once a Save/Send has been tried at least once, so errors don't show
+  // before the user has attempted anything; recomputed live off current
+  // field values so they clear themselves the moment the user fixes them.
+  const [invoiceSubmitAttempted, setInvoiceSubmitAttempted] = useState(false);
   const [invoiceActionId, setInvoiceActionId] = useState(null);
   const [lastInvoicePayLink, setLastInvoicePayLink] = useState(null); // { invoiceId, link } — only known right after sending, same as contract sign links
   const [partialAmountDraft, setPartialAmountDraft] = useState(null); // { invoiceId, value } — inline "$ paid so far" editor for one row at a time
@@ -508,6 +519,7 @@ export default function BookingFormPage() {
   const [showContractPreview, setShowContractPreview] = useState(false);
   const [loadingContractPreview, setLoadingContractPreview] = useState(false);
   const [sendingContract, setSendingContract] = useState(false);
+  const [contractSubmitAttempted, setContractSubmitAttempted] = useState(false);
   const [lastSignLink, setLastSignLink] = useState('');
   const [lastOwnerSignLink, setLastOwnerSignLink] = useState('');
   const [ownerSignerName, setOwnerSignerName] = useState('');
@@ -978,6 +990,7 @@ export default function BookingFormPage() {
     setNewInvoiceAcceptPayment(true);
     setNewInvoicePrefillKind(null);
     setShowInvoicePreview(false);
+    setInvoiceSubmitAttempted(false);
   }
 
   // Advances the sticky number by one (ready for the next invoice) and
@@ -1058,6 +1071,7 @@ export default function BookingFormPage() {
   }
 
   async function handleSaveInvoiceDraft() {
+    setInvoiceSubmitAttempted(true);
     if (!newInvoiceRecipientEmail.trim()) {
       showToast('Recipient email is required', 'error');
       return;
@@ -1088,6 +1102,7 @@ export default function BookingFormPage() {
   }
 
   async function handleSendNewInvoice() {
+    setInvoiceSubmitAttempted(true);
     if (!newInvoiceRecipientEmail.trim()) {
       showToast('Recipient email is required', 'error');
       return;
@@ -1246,6 +1261,7 @@ export default function BookingFormPage() {
   }
 
   async function handleSendContract() {
+    setContractSubmitAttempted(true);
     if (!contractRecipientEmail.trim()) {
       showToast('Recipient email is required', 'error');
       return;
@@ -1278,6 +1294,7 @@ export default function BookingFormPage() {
   // Contract row doesn't exist until this call (there's no draft state),
   // so this is an alternate creation path rather than a later status flip.
   async function handleMarkContractSentManually(reason) {
+    setContractSubmitAttempted(true);
     if (!contractRecipientEmail.trim()) {
       showToast('Recipient email is required', 'error');
       return;
@@ -1444,7 +1461,7 @@ export default function BookingFormPage() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
+      <div className="sticky top-0 z-10 bg-slate-50 pt-1 pb-3 -mt-1 flex items-center justify-between gap-4 mb-3 flex-wrap shadow-[0_4px_6px_-6px_rgba(0,0,0,0.1)]">
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
@@ -1985,24 +2002,24 @@ export default function BookingFormPage() {
                       {loadingProposalPreview && <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 border-t-slate-600 animate-spin" />}
                       {showProposalPreview ? 'Hide Preview' : 'Preview'}
                     </button>
-                    <button
-                      type="button"
-                      onClick={handleDownloadProposal}
-                      data-testid="booking-form-proposal-download-button"
-                      className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
-                    >
-                      Download PDF
-                    </button>
-                    {!markingProposalSentManually && (
+                    <OverflowMenu testId="booking-form-proposal-more-actions-button">
+                      <button
+                        type="button"
+                        onClick={handleDownloadProposal}
+                        data-testid="booking-form-proposal-download-button"
+                        className="block w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
+                      >
+                        Download PDF
+                      </button>
                       <button
                         type="button"
                         onClick={() => setMarkingProposalSentManually(true)}
                         data-testid="booking-form-proposal-mark-sent-manually-button"
-                        className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
+                        className="block w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
                       >
                         Mark as Sent Manually
                       </button>
-                    )}
+                    </OverflowMenu>
                     <button
                       type="button"
                       onClick={handleSendProposal}
@@ -2147,7 +2164,16 @@ export default function BookingFormPage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5 max-w-2xl">
                 <div>
                   <label className={labelClass}>Recipient Email *</label>
-                  <input type="email" value={contractRecipientEmail} onChange={(e) => setContractRecipientEmail(e.target.value)} data-testid="booking-form-contract-recipient-email-input" className={inputClass} />
+                  <input
+                    type="email"
+                    value={contractRecipientEmail}
+                    onChange={(e) => setContractRecipientEmail(e.target.value)}
+                    data-testid="booking-form-contract-recipient-email-input"
+                    className={contractSubmitAttempted && !contractRecipientEmail.trim() ? `${inputClass} border-red-300 focus:border-red-400 focus:ring-red-100` : inputClass}
+                  />
+                  {contractSubmitAttempted && !contractRecipientEmail.trim() && (
+                    <p className="mt-1 text-xs text-red-600" data-testid="booking-form-contract-recipient-email-error">Recipient email is required</p>
+                  )}
                 </div>
                 <div>
                   <label className={labelClass}>Recipient Name</label>
@@ -2250,17 +2276,17 @@ export default function BookingFormPage() {
                   {loadingContractPreview && <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 border-t-slate-600 animate-spin" />}
                   {showContractPreview ? 'Hide Preview' : 'Preview'}
                 </button>
-                {!markingContractSentManually && (
+                <OverflowMenu testId="booking-form-contract-more-actions-button">
                   <button
                     type="button"
                     onClick={() => setMarkingContractSentManually(true)}
                     disabled={!contractRecipientEmail.trim()}
                     data-testid="booking-form-contract-mark-sent-manually-button"
-                    className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="block w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Mark as Sent Manually
                   </button>
-                )}
+                </OverflowMenu>
                 <button
                   type="button"
                   onClick={handleSendContract}
@@ -2376,60 +2402,72 @@ export default function BookingFormPage() {
               </div>
 
               <div className={cardClass}>
-                <h3 className={cardTitleClass}>Contract Log</h3>
-                <EventLogPanel
-                  entries={contract.log || []}
-                  labelForType={(entry) => CONTRACT_LOG_LABELS[entry.type] || entry.type}
-                  onAddNote={handleAddContractLogNote}
-                  testIdPrefix="booking-form-contract-log"
-                />
-              </div>
+                <CollapsibleSection
+                  title="Contract Log"
+                  subtitle="Sent/signed history and any notes you've added"
+                  defaultOpen={false}
+                  badge={(contract.log || []).length > 0 ? <span className="text-xs font-semibold text-slate-400">{contract.log.length}</span> : null}
+                  className=""
+                  testId="booking-form-contract-log-toggle"
+                >
+                  <EventLogPanel
+                    entries={contract.log || []}
+                    labelForType={(entry) => CONTRACT_LOG_LABELS[entry.type] || entry.type}
+                    onAddNote={handleAddContractLogNote}
+                    testIdPrefix="booking-form-contract-log"
+                  />
+                </CollapsibleSection>
 
-              <div className={cardClass}>
-                <h3 className={cardTitleClass}>What Was Sent</h3>
-                <div className="space-y-4 text-sm">
-                  <div>
-                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Title</div>
-                    <div className="text-slate-700">{contract.snapshot.title || 'Event Contract'}</div>
-                  </div>
-                  {((contract.snapshot.lineItems || []).length > 0 || (contract.snapshot.offerings || []).length > 0) && (
+                <CollapsibleSection
+                  title="What Was Sent"
+                  subtitle="The frozen snapshot the client received"
+                  defaultOpen={false}
+                  testId="booking-form-contract-what-was-sent-toggle"
+                >
+                  <div className="space-y-4 text-sm">
                     <div>
-                      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Pricing</div>
-                      <div className="space-y-1">
-                        {(contract.snapshot.lineItems || []).map((item) => (
-                          <div key={item.id} className="flex justify-between text-slate-600">
-                            <span>{item.name}</span>
-                            <span className="font-medium">{currency(item.amount)}</span>
+                      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Title</div>
+                      <div className="text-slate-700">{contract.snapshot.title || 'Event Contract'}</div>
+                    </div>
+                    {((contract.snapshot.lineItems || []).length > 0 || (contract.snapshot.offerings || []).length > 0) && (
+                      <div>
+                        <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Pricing</div>
+                        <div className="space-y-1">
+                          {(contract.snapshot.lineItems || []).map((item) => (
+                            <div key={item.id} className="flex justify-between text-slate-600">
+                              <span>{item.name}</span>
+                              <span className="font-medium">{currency(item.amount)}</span>
+                            </div>
+                          ))}
+                          {(contract.snapshot.offerings || []).map((o) => (
+                            <div key={o.id} className="flex justify-between text-slate-600">
+                              <span>{o.name}</span>
+                              <span className="font-medium">{currency(computeOfferingTotal(o))}</span>
+                            </div>
+                          ))}
+                          <div className="flex justify-between font-bold text-slate-800 pt-1 mt-1 border-t border-slate-100">
+                            <span>Grand Total</span>
+                            <span>{currency(computeGrandTotal(contract.snapshot.lineItems, contract.snapshot.offerings))}</span>
                           </div>
-                        ))}
-                        {(contract.snapshot.offerings || []).map((o) => (
-                          <div key={o.id} className="flex justify-between text-slate-600">
-                            <span>{o.name}</span>
-                            <span className="font-medium">{currency(computeOfferingTotal(o))}</span>
-                          </div>
-                        ))}
-                        <div className="flex justify-between font-bold text-slate-800 pt-1 mt-1 border-t border-slate-100">
-                          <span>Grand Total</span>
-                          <span>{currency(computeGrandTotal(contract.snapshot.lineItems, contract.snapshot.offerings))}</span>
                         </div>
                       </div>
-                    </div>
-                  )}
-                  {(contract.snapshot.sections || []).length > 0 && (
-                    <div>
-                      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Additional Sections</div>
-                      <div className="space-y-2">
-                        {contract.snapshot.sections.map((s) => (
-                          <div key={s.id}>
-                            <div className="font-semibold text-slate-700">{s.title}</div>
-                            {s.value && <div className="text-slate-600">{s.value}</div>}
-                            {s.text && <div className="text-slate-500 whitespace-pre-wrap">{s.text}</div>}
-                          </div>
-                        ))}
+                    )}
+                    {(contract.snapshot.sections || []).length > 0 && (
+                      <div>
+                        <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Additional Sections</div>
+                        <div className="space-y-2">
+                          {contract.snapshot.sections.map((s) => (
+                            <div key={s.id}>
+                              <div className="font-semibold text-slate-700">{s.title}</div>
+                              {s.value && <div className="text-slate-600">{s.value}</div>}
+                              {s.text && <div className="text-slate-500 whitespace-pre-wrap">{s.text}</div>}
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                </CollapsibleSection>
               </div>
 
               <div className={cardClass}>
@@ -2729,7 +2767,16 @@ export default function BookingFormPage() {
                       </div>
                       <div>
                         <label className={labelClass}>Recipient Email *</label>
-                        <input type="email" value={newInvoiceRecipientEmail} onChange={(e) => setNewInvoiceRecipientEmail(e.target.value)} data-testid="booking-form-invoice-recipient-email-input" className={inputClass} />
+                        <input
+                          type="email"
+                          value={newInvoiceRecipientEmail}
+                          onChange={(e) => setNewInvoiceRecipientEmail(e.target.value)}
+                          data-testid="booking-form-invoice-recipient-email-input"
+                          className={invoiceSubmitAttempted && !newInvoiceRecipientEmail.trim() ? `${inputClass} border-red-300 focus:border-red-400 focus:ring-red-100` : inputClass}
+                        />
+                        {invoiceSubmitAttempted && !newInvoiceRecipientEmail.trim() && (
+                          <p className="mt-1 text-xs text-red-600" data-testid="booking-form-invoice-recipient-email-error">Recipient email is required</p>
+                        )}
                       </div>
                       <div>
                         <label className={labelClass}>Recipient Name</label>
@@ -2763,6 +2810,9 @@ export default function BookingFormPage() {
                         onChange={setNewInvoiceOfferings}
                         onAddClick={() => setInvoiceOfferingPickerOpen(true)}
                       />
+                      {invoiceSubmitAttempted && newInvoiceOfferings.length === 0 && (
+                        <p className="mt-1 text-xs text-red-600" data-testid="booking-form-invoice-line-items-error">Add at least one line item before sending</p>
+                      )}
                       <div className="flex justify-end mt-3 text-sm font-bold text-slate-800">
                         Total: {currency(computeOfferingsTotal(newInvoiceOfferings))}
                       </div>

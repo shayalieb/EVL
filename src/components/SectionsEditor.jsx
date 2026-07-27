@@ -83,7 +83,14 @@ export default function SectionsEditor({ sections, onChange }) {
           <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)} placeholder="Text (optional)" data-testid="booking-form-section-new-text-textarea" className={inputClass} />
           <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Value (optional)" data-testid="booking-form-section-new-value-input" className={inputClass} />
         </div>
-        <button type="button" onClick={handleAdd} data-testid="booking-form-section-add-button" className="px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50">+ Add Section</button>
+        <button
+          type="button"
+          onClick={handleAdd}
+          data-testid="booking-form-section-add-button"
+          className="px-4 py-2.5 rounded-lg border-2 border-indigo-300 text-indigo-600 text-sm font-bold hover:bg-indigo-50 hover:border-indigo-400"
+        >
+          + Add Section
+        </button>
       </div>
     </div>
   );
