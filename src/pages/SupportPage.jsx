@@ -136,7 +136,7 @@ export default function SupportPage() {
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 flex flex-col h-[500px]">
           <div className="px-5 py-4 border-b border-slate-100">
-            <div className="font-bold text-slate-800">{openThread.subject}</div>
+            <div className="font-bold text-slate-800"><span className="text-slate-400 font-normal">#{openThread.ticketNumber}</span> {openThread.subject}</div>
             <div className="text-xs text-slate-500">{openThread.status === 'closed' ? 'Closed' : 'Open'}</div>
             {openThread.replyToAlias && (
               <div className="text-xs text-slate-400 mt-0.5">You can also reply from your email — just reply to our messages.</div>

@@ -180,12 +180,16 @@ model AccountData {
 // codebase's established pattern for threaded messages.
 model SupportThread {
   id            String   @id @default(cuid())
+  ticketNumber  Int      @unique @default(autoincrement()) // human-facing, sequential across the whole platform
   accountId     String
   account       Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   subject       String
   status        String   @default("open") // 'open' | 'closed'
   priority      String   @default("normal") // 'low' | 'normal' | 'high' | 'urgent'
+  // Required when closing (see PATCH /support/threads/:id) — cleared together on reopen.
+  closedReason       String? // 'completed' | 'not_completed' | 'other'
+  closedReasonDetail String? @db.Text
   lastMessageAt DateTime @default(now())
   createdAt     DateTime @default(now())
 

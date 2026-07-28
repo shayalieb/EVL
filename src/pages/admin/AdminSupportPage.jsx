@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch, useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
+import Modal from '../../components/ui/Modal';
 import SearchInput from '../../components/ui/SearchInput';
 import FilterSelect from '../../components/ui/FilterSelect';
 import { matchesSearch } from '../../lib/search';
@@ -16,6 +17,16 @@ const PRIORITY_OPTIONS = [
   { value: 'urgent', label: 'Urgent', color: '#ef4444' },
 ];
 const PRIORITY_INFO = Object.fromEntries(PRIORITY_OPTIONS.map((p) => [p.value, p]));
+
+const CLOSE_REASON_OPTIONS = [
+  { value: 'completed', label: 'Completed' },
+  { value: 'not_completed', label: 'Not Completed' },
+  { value: 'other', label: 'Other' },
+];
+const CLOSE_REASON_LABEL = Object.fromEntries(CLOSE_REASON_OPTIONS.map((r) => [r.value, r.label]));
+
+const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
+const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 
 function PriorityBadge({ priority }) {
   if (!priority || priority === 'normal') return null;
@@ -182,7 +193,9 @@ export default function AdminSupportPage() {
               className={`w-full text-left px-4 py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50 ${activeId === t.id ? 'bg-indigo-50' : ''}`}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="font-medium text-slate-800 truncate">{t.subject}</span>
+                <span className="font-medium text-slate-800 truncate">
+                  <span className="text-slate-400 font-normal">#{t.ticketNumber}</span> {t.subject}
+                </span>
                 <div className="flex items-center gap-1 shrink-0">
                   <PriorityBadge priority={t.priority} />
                   {t.unreadFromUser > 0 && (
@@ -224,6 +237,7 @@ function ThreadDetail({ thread, assignableAdmins, onChanged }) {
   const [sending, setSending] = useState(false);
   const [noteBody, setNoteBody] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  const [closeModalOpen, setCloseModalOpen] = useState(false);
 
   useEffect(() => {
     setDetail(null);
@@ -276,11 +290,11 @@ function ThreadDetail({ thread, assignableAdmins, onChanged }) {
     }
   }
 
-  async function toggleStatus() {
-    const nextStatus = thread.status === 'closed' ? 'open' : 'closed';
+  async function handleReopen() {
     try {
-      await apiFetch(`/admin/support/threads/${thread.id}`, { method: 'PATCH', body: JSON.stringify({ status: nextStatus }) });
-      showToast(nextStatus === 'closed' ? 'Thread closed' : 'Thread reopened');
+      const data = await apiFetch(`/admin/support/threads/${thread.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'open' }) });
+      setDetail((prev) => ({ ...prev, status: data.status, closedReason: data.closedReason, closedReasonDetail: data.closedReasonDetail }));
+      showToast('Thread reopened');
       onChanged();
     } catch (err) {
       showToast(err.message, 'error');
@@ -316,8 +330,14 @@ function ThreadDetail({ thread, assignableAdmins, onChanged }) {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-wrap gap-2">
         <div>
-          <div className="font-bold text-slate-800">{detail.subject}</div>
+          <div className="font-bold text-slate-800"><span className="text-slate-400 font-normal">#{detail.ticketNumber}</span> {detail.subject}</div>
           <div className="text-xs text-slate-500">{detail.account.owner?.email}</div>
+          {detail.status === 'closed' && detail.closedReason && (
+            <div className="text-xs text-slate-400 mt-0.5">
+              Closed as <span className="font-semibold text-slate-500">{CLOSE_REASON_LABEL[detail.closedReason]}</span>
+              {detail.closedReasonDetail && ` — ${detail.closedReasonDetail}`}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <select
@@ -337,11 +357,28 @@ function ThreadDetail({ thread, assignableAdmins, onChanged }) {
             <option value="">Unassigned</option>
             {assignableAdmins.map((a) => <option key={a.id} value={a.id}>{a.firstName} {a.lastName}</option>)}
           </select>
-          <button type="button" onClick={toggleStatus} data-testid="admin-support-toggle-status-button" className="text-xs font-semibold text-slate-500 hover:text-slate-700">
-            {thread.status === 'closed' ? 'Reopen' : 'Close'}
+          <button
+            type="button"
+            onClick={() => (detail.status === 'closed' ? handleReopen() : setCloseModalOpen(true))}
+            data-testid="admin-support-toggle-status-button"
+            className="text-xs font-semibold text-slate-500 hover:text-slate-700"
+          >
+            {detail.status === 'closed' ? 'Reopen' : 'Close'}
           </button>
         </div>
       </div>
+
+      <CloseThreadModal
+        open={closeModalOpen}
+        threadId={thread.id}
+        onClose={() => setCloseModalOpen(false)}
+        onClosed={(data) => {
+          setDetail((prev) => ({ ...prev, status: data.status, closedReason: data.closedReason, closedReasonDetail: data.closedReasonDetail }));
+          setCloseModalOpen(false);
+          showToast('Thread closed');
+          onChanged();
+        }}
+      />
 
       <div className="flex border-b border-slate-100 px-5">
         <button
@@ -432,5 +469,76 @@ function ThreadDetail({ thread, assignableAdmins, onChanged }) {
         </>
       )}
     </div>
+  );
+}
+
+function CloseThreadModal({ open, threadId, onClose, onClosed }) {
+  const [closedReason, setClosedReason] = useState('completed');
+  const [closedReasonDetail, setClosedReasonDetail] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setClosedReason('completed');
+      setClosedReasonDetail('');
+      setError('');
+    }
+  }, [open]);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!closedReasonDetail.trim()) return;
+    setError('');
+    setSaving(true);
+    try {
+      const data = await apiFetch(`/admin/support/threads/${threadId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'closed', closedReason, closedReasonDetail: closedReasonDetail.trim() }),
+      });
+      onClosed(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Close Ticket">
+      <form onSubmit={handleSubmit} className="space-y-3">
+        {error && <div data-testid="admin-support-close-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
+        <div>
+          <label className={labelClass}>Outcome</label>
+          <select
+            value={closedReason}
+            onChange={(e) => setClosedReason(e.target.value)}
+            data-testid="admin-support-close-reason-select"
+            className={inputClass}
+          >
+            {CLOSE_REASON_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className={labelClass}>Reason</label>
+          <textarea
+            required
+            autoFocus
+            rows={3}
+            value={closedReasonDetail}
+            onChange={(e) => setClosedReasonDetail(e.target.value)}
+            placeholder="What was resolved, or why it's being closed…"
+            data-testid="admin-support-close-reason-textarea"
+            className={inputClass}
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} data-testid="admin-support-close-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button type="submit" disabled={saving || !closedReasonDetail.trim()} data-testid="admin-support-close-confirm-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+            {saving ? 'Closing…' : 'Close Ticket'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }

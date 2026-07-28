@@ -206,9 +206,12 @@ function serializeThread(thread) {
   const unreadFromUser = thread.messages.filter((m) => m.direction === 'user' && !m.readAt).length;
   return {
     id: thread.id,
+    ticketNumber: thread.ticketNumber,
     subject: thread.subject,
     status: thread.status,
     priority: thread.priority,
+    closedReason: thread.closedReason,
+    closedReasonDetail: thread.closedReasonDetail,
     assignedAdminId: thread.assignedAdminId,
     assignedAdmin: thread.assignedAdmin ? { firstName: thread.assignedAdmin.firstName, lastName: thread.assignedAdmin.lastName } : null,
     lastMessageAt: thread.lastMessageAt,
@@ -353,11 +356,25 @@ router.post('/support/threads/:id/messages', uploadFiles, asyncHandler(async (re
 }));
 
 router.patch('/support/threads/:id', asyncHandler(async (req, res) => {
-  const { status, priority, assignedAdminId } = req.body || {};
+  const { status, priority, assignedAdminId, closedReason, closedReasonDetail } = req.body || {};
   const data = {};
   if (status !== undefined) {
     if (!['open', 'closed'].includes(status)) {
       return res.status(400).json({ error: 'status must be "open" or "closed".' });
+    }
+    if (status === 'closed') {
+      if (!['completed', 'not_completed', 'other'].includes(closedReason)) {
+        return res.status(400).json({ error: 'closedReason must be one of completed, not_completed, other.' });
+      }
+      if (!closedReasonDetail?.trim()) {
+        return res.status(400).json({ error: 'A reason is required to close a ticket.' });
+      }
+      data.closedReason = closedReason;
+      data.closedReasonDetail = closedReasonDetail.trim();
+    } else {
+      // Reopening — the closure record no longer describes the ticket's current state.
+      data.closedReason = null;
+      data.closedReasonDetail = null;
     }
     data.status = status;
   }
@@ -378,6 +395,8 @@ router.patch('/support/threads/:id', asyncHandler(async (req, res) => {
     ok: true,
     status: thread.status,
     priority: thread.priority,
+    closedReason: thread.closedReason,
+    closedReasonDetail: thread.closedReasonDetail,
     assignedAdminId: thread.assignedAdminId,
     assignedAdmin: thread.assignedAdmin ? { firstName: thread.assignedAdmin.firstName, lastName: thread.assignedAdmin.lastName } : null,
   });
