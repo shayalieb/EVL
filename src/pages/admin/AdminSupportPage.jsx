@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { apiFetch } from '../../context/AuthContext';
+import { apiFetch, useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
 import SearchInput from '../../components/ui/SearchInput';
 import FilterSelect from '../../components/ui/FilterSelect';
@@ -8,6 +8,28 @@ import { FileIcon } from '../../components/ui/icons';
 import { sendSupportMessage, supportAttachmentDownloadUrl, formatFileSize } from '../../lib/support';
 
 const MAX_FILES = 3;
+
+const PRIORITY_OPTIONS = [
+  { value: 'low', label: 'Low', color: '#94a3b8' },
+  { value: 'normal', label: 'Normal', color: '#64748b' },
+  { value: 'high', label: 'High', color: '#f59e0b' },
+  { value: 'urgent', label: 'Urgent', color: '#ef4444' },
+];
+const PRIORITY_INFO = Object.fromEntries(PRIORITY_OPTIONS.map((p) => [p.value, p]));
+
+function PriorityBadge({ priority }) {
+  if (!priority || priority === 'normal') return null;
+  const info = PRIORITY_INFO[priority];
+  if (!info) return null;
+  return (
+    <span
+      className="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
+      style={{ backgroundColor: `${info.color}22`, color: info.color }}
+    >
+      {info.label}
+    </span>
+  );
+}
 
 function pickFiles(existing, incoming) {
   return [...existing, ...Array.from(incoming || [])].slice(0, MAX_FILES);
@@ -52,12 +74,16 @@ function MessageAttachments({ attachments, dark }) {
 }
 
 export default function AdminSupportPage() {
+  const { currentUser } = useAuth();
   const [threads, setThreads] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [activeId, setActiveId] = useState(null);
+  const [assignableAdmins, setAssignableAdmins] = useState([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [replyFilter, setReplyFilter] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState('');
+  const [assignedFilter, setAssignedFilter] = useState('');
 
   function load() {
     apiFetch('/admin/support/threads')
@@ -66,16 +92,24 @@ export default function AdminSupportPage() {
   }
 
   useEffect(load, []);
+  useEffect(() => {
+    apiFetch('/admin/support/assignable-admins')
+      .then((data) => setAssignableAdmins(data.admins))
+      .catch(() => {});
+  }, []);
 
   if (loadError) return <div data-testid="admin-support-load-error-banner" className="text-sm text-red-600">{loadError}</div>;
   if (!threads) return <div className="text-sm text-slate-400">Loading…</div>;
 
   const active = threads.find((t) => t.id === activeId);
-  const hasFilters = !!(search || statusFilter || replyFilter);
+  const hasFilters = !!(search || statusFilter || replyFilter || priorityFilter || assignedFilter);
   const filteredThreads = threads.filter((t) => {
     if (statusFilter && t.status !== statusFilter) return false;
     if (replyFilter === 'needs-reply' && !(t.unreadFromUser > 0)) return false;
     if (replyFilter === 'read' && t.unreadFromUser > 0) return false;
+    if (priorityFilter && t.priority !== priorityFilter) return false;
+    if (assignedFilter === 'mine' && t.assignedAdminId !== currentUser?.id) return false;
+    if (assignedFilter === 'unassigned' && t.assignedAdminId) return false;
     return matchesSearch(search, [t.subject, t.account.owner?.firstName, t.account.owner?.lastName]);
   });
 
@@ -95,6 +129,23 @@ export default function AdminSupportPage() {
           testId="admin-support-status-filter"
         />
         <FilterSelect
+          value={priorityFilter}
+          onChange={setPriorityFilter}
+          allLabel="All Priorities"
+          options={PRIORITY_OPTIONS.map((p) => ({ value: p.value, label: p.label }))}
+          testId="admin-support-priority-filter"
+        />
+        <FilterSelect
+          value={assignedFilter}
+          onChange={setAssignedFilter}
+          allLabel="Anyone"
+          options={[
+            { value: 'mine', label: 'Assigned to Me' },
+            { value: 'unassigned', label: 'Unassigned' },
+          ]}
+          testId="admin-support-assigned-filter"
+        />
+        <FilterSelect
           value={replyFilter}
           onChange={setReplyFilter}
           allLabel="All Threads"
@@ -107,7 +158,7 @@ export default function AdminSupportPage() {
         {hasFilters && (
           <button
             type="button"
-            onClick={() => { setSearch(''); setStatusFilter(''); setReplyFilter(''); }}
+            onClick={() => { setSearch(''); setStatusFilter(''); setReplyFilter(''); setPriorityFilter(''); setAssignedFilter(''); }}
             data-testid="admin-support-clear-filters-button"
             className="text-sm font-semibold text-slate-500 hover:text-slate-700"
           >
@@ -132,23 +183,29 @@ export default function AdminSupportPage() {
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium text-slate-800 truncate">{t.subject}</span>
-                {t.unreadFromUser > 0 && (
-                  <span className="shrink-0 w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center">
-                    {t.unreadFromUser}
-                  </span>
-                )}
+                <div className="flex items-center gap-1 shrink-0">
+                  <PriorityBadge priority={t.priority} />
+                  {t.unreadFromUser > 0 && (
+                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center">
+                      {t.unreadFromUser}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="text-xs text-slate-500 truncate">
                 {t.account.owner ? `${t.account.owner.firstName} ${t.account.owner.lastName}` : 'Unknown account'}
               </div>
-              <div className="text-xs text-slate-400 mt-0.5">{t.status === 'closed' ? 'Closed' : 'Open'} · {new Date(t.lastMessageAt).toLocaleString()}</div>
+              <div className="text-xs text-slate-400 mt-0.5">
+                {t.status === 'closed' ? 'Closed' : 'Open'} · {new Date(t.lastMessageAt).toLocaleString()}
+                {t.assignedAdmin && ` · ${t.assignedAdmin.firstName}`}
+              </div>
             </button>
           ))}
         </div>
 
         <div className="flex-1 min-w-0 bg-white rounded-xl border border-slate-200">
           {active ? (
-            <ThreadDetail thread={active} onChanged={load} />
+            <ThreadDetail thread={active} assignableAdmins={assignableAdmins} onChanged={load} />
           ) : (
             <div className="p-6 text-sm text-slate-400">Select a thread to view the conversation.</div>
           )}
@@ -158,7 +215,7 @@ export default function AdminSupportPage() {
   );
 }
 
-function ThreadDetail({ thread, onChanged }) {
+function ThreadDetail({ thread, assignableAdmins, onChanged }) {
   const { showToast } = useToast();
   const [detail, setDetail] = useState(null);
   const [tab, setTab] = useState('messages');
@@ -230,18 +287,60 @@ function ThreadDetail({ thread, onChanged }) {
     }
   }
 
+  async function handlePriorityChange(priority) {
+    try {
+      await apiFetch(`/admin/support/threads/${thread.id}`, { method: 'PATCH', body: JSON.stringify({ priority }) });
+      setDetail((prev) => ({ ...prev, priority }));
+      onChanged();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  async function handleAssigneeChange(assignedAdminId) {
+    try {
+      const data = await apiFetch(`/admin/support/threads/${thread.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ assignedAdminId: assignedAdminId || null }),
+      });
+      setDetail((prev) => ({ ...prev, assignedAdminId: data.assignedAdminId, assignedAdmin: data.assignedAdmin }));
+      onChanged();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
   if (!detail) return <div className="p-6 text-sm text-slate-400">Loading…</div>;
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-wrap gap-2">
         <div>
           <div className="font-bold text-slate-800">{detail.subject}</div>
           <div className="text-xs text-slate-500">{detail.account.owner?.email}</div>
         </div>
-        <button type="button" onClick={toggleStatus} data-testid="admin-support-toggle-status-button" className="text-xs font-semibold text-slate-500 hover:text-slate-700">
-          {thread.status === 'closed' ? 'Reopen' : 'Close'}
-        </button>
+        <div className="flex items-center gap-2">
+          <select
+            value={detail.priority || 'normal'}
+            onChange={(e) => handlePriorityChange(e.target.value)}
+            data-testid="admin-support-priority-select"
+            className="text-xs px-2 py-1.5 rounded-lg border border-slate-300 text-slate-600"
+          >
+            {PRIORITY_OPTIONS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+          </select>
+          <select
+            value={detail.assignedAdminId || ''}
+            onChange={(e) => handleAssigneeChange(e.target.value)}
+            data-testid="admin-support-assignee-select"
+            className="text-xs px-2 py-1.5 rounded-lg border border-slate-300 text-slate-600 max-w-[140px]"
+          >
+            <option value="">Unassigned</option>
+            {assignableAdmins.map((a) => <option key={a.id} value={a.id}>{a.firstName} {a.lastName}</option>)}
+          </select>
+          <button type="button" onClick={toggleStatus} data-testid="admin-support-toggle-status-button" className="text-xs font-semibold text-slate-500 hover:text-slate-700">
+            {thread.status === 'closed' ? 'Reopen' : 'Close'}
+          </button>
+        </div>
       </div>
 
       <div className="flex border-b border-slate-100 px-5">

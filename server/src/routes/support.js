@@ -13,11 +13,19 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
 
+// Routes to whoever's assigned to the ticket once it has an owner, instead
+// of always funneling through one shared inbox — the actual scalability
+// fix once tickets can be assigned (see PATCH /admin/support/threads/:id).
 async function notifyAdmin(thread, message) {
+  let to = process.env.SUPPORT_NOTIFICATION_EMAIL || 'shayalieberman@gmail.com';
+  if (thread.assignedAdminId) {
+    const assignee = await prisma.user.findUnique({ where: { id: thread.assignedAdminId }, select: { email: true } });
+    if (assignee) to = assignee.email;
+  }
   try {
     await sendMail({
       from: buildFromHeader(),
-      to: process.env.SUPPORT_NOTIFICATION_EMAIL || 'shayalieberman@gmail.com',
+      to,
       subject: `[Support] ${thread.subject}`,
       html: `<p>New support message:</p><p>${escapeHtml(message)}</p>`,
     });

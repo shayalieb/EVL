@@ -31,12 +31,20 @@ model User {
   membership     Membership?
   passwordResetTokens PasswordResetToken[]
   supportNotes   SupportNote[]
+  assignedThreads SupportThread[]
+  disabledAccounts Account[] @relation("AccountDisabledBy")
 }
 
 model Account {
   id             String          @id @default(cuid())
   createdAt      DateTime        @default(now())
   disabledAt     DateTime?       // set by a platform admin; blocks all account access when non-null
+  // Auditability for the disable action above — who disabled it, and why.
+  // All three (disabledAt/disabledReason/disabledById) are cleared together
+  // when the account is re-enabled.
+  disabledReason String?         @db.Text
+  disabledById   String?
+  disabledBy     User?           @relation("AccountDisabledBy", fields: [disabledById], references: [id], onDelete: SetNull)
   memberships    Membership[]
   emailThreads   EmailThread[]
   eventDocuments EventDocument[]
@@ -177,8 +185,14 @@ model SupportThread {
 
   subject       String
   status        String   @default("open") // 'open' | 'closed'
+  priority      String   @default("normal") // 'low' | 'normal' | 'high' | 'urgent'
   lastMessageAt DateTime @default(now())
   createdAt     DateTime @default(now())
+
+  // Which admin owns this ticket — notifications route to them instead of
+  // the shared support inbox once set (see notifyAdmin in routes/support.js).
+  assignedAdminId String?
+  assignedAdmin    User?  @relation(fields: [assignedAdminId], references: [id], onDelete: SetNull)
 
   // "reply+support-<this.id>@<RESEND_INBOUND_DOMAIN>" — null until a domain
   // is configured. Set once and never recomputed, same reasoning as

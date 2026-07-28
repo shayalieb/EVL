@@ -37,16 +37,15 @@ export default function AdminAccountsPage() {
 
   useEffect(load, []);
 
-  async function handleToggleDisabled() {
+  async function handleReEnable() {
     const account = disableTarget;
-    const nextDisabled = !account.disabledAt;
     try {
       const data = await apiFetch(`/admin/accounts/${account.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ disabled: nextDisabled }),
+        body: JSON.stringify({ disabled: false }),
       });
-      setAccounts((prev) => prev.map((a) => (a.id === account.id ? { ...a, disabledAt: data.disabledAt } : a)));
-      showToast(nextDisabled ? 'Account disabled' : 'Account re-enabled');
+      setAccounts((prev) => prev.map((a) => (a.id === account.id ? { ...a, disabledAt: data.disabledAt, disabledReason: data.disabledReason, disabledBy: data.disabledBy } : a)));
+      showToast('Account re-enabled');
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -165,7 +164,15 @@ export default function AdminAccountsPage() {
                 <td className="px-4 py-3 text-slate-500 text-xs">{new Date(a.createdAt).toLocaleDateString()}</td>
                 <td className="px-4 py-3">
                   {a.disabledAt ? (
-                    <span className="text-xs font-semibold text-red-600">Disabled</span>
+                    <div>
+                      <span className="text-xs font-semibold text-red-600">Disabled</span>
+                      <div className="text-[11px] text-slate-400 mt-0.5 max-w-[180px]">
+                        {a.disabledReason}
+                        {a.disabledBy && ` — ${a.disabledBy.firstName} ${a.disabledBy.lastName}`}
+                        <br />
+                        {new Date(a.disabledAt).toLocaleDateString()}
+                      </div>
+                    </div>
                   ) : a.owner && !a.owner.hasPassword ? (
                     <span className="text-xs font-semibold text-amber-600">Pending</span>
                   ) : (
@@ -203,19 +210,25 @@ export default function AdminAccountsPage() {
 
       <NewAccountModal open={addOpen} onClose={() => setAddOpen(false)} onCreated={() => { setAddOpen(false); load(); }} />
 
-      <ConfirmDialog
-        open={!!disableTarget}
-        onClose={() => setDisableTarget(null)}
-        onConfirm={handleToggleDisabled}
-        title={disableTarget?.disabledAt ? 'Re-enable account?' : 'Disable account?'}
-        description={
-          disableTarget?.disabledAt
-            ? 'This restores access for every member of this account.'
-            : 'This immediately blocks every member of this account from signing in or using the app.'
-        }
-        confirmLabel={disableTarget?.disabledAt ? 'Enable' : 'Disable'}
-        danger={!disableTarget?.disabledAt}
-      />
+      {disableTarget && !disableTarget.disabledAt ? (
+        <DisableAccountModal
+          account={disableTarget}
+          onClose={() => setDisableTarget(null)}
+          onDisabled={(updated) => {
+            setAccounts((prev) => prev.map((a) => (a.id === updated.id ? { ...a, ...updated } : a)));
+            setDisableTarget(null);
+          }}
+        />
+      ) : (
+        <ConfirmDialog
+          open={!!disableTarget?.disabledAt}
+          onClose={() => setDisableTarget(null)}
+          onConfirm={handleReEnable}
+          title="Re-enable account?"
+          description="This restores access for every member of this account."
+          confirmLabel="Enable"
+        />
+      )}
 
       <ConfirmDialog
         open={!!deleteTarget}
@@ -226,6 +239,67 @@ export default function AdminAccountsPage() {
         confirmLabel="Delete"
       />
     </div>
+  );
+}
+
+function DisableAccountModal({ account, onClose, onDisabled }) {
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const { showToast } = useToast();
+
+  useEffect(() => {
+    if (account) {
+      setReason('');
+      setError('');
+    }
+  }, [account]);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!reason.trim()) return;
+    setError('');
+    setSaving(true);
+    try {
+      const data = await apiFetch(`/admin/accounts/${account.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ disabled: true, reason: reason.trim() }),
+      });
+      showToast('Account disabled');
+      onDisabled({ id: account.id, disabledAt: data.disabledAt, disabledReason: data.disabledReason, disabledBy: data.disabledBy });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal open={!!account} onClose={onClose} title="Disable Account">
+      <form onSubmit={handleSubmit} className="space-y-3">
+        {error && <div data-testid="admin-accounts-disable-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
+        <p className="text-sm text-slate-600">This immediately blocks every member of this account from signing in or using the app.</p>
+        <div>
+          <label className={labelClass}>Reason</label>
+          <textarea
+            required
+            autoFocus
+            rows={3}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="e.g. Non-payment, terms violation, customer request"
+            data-testid="admin-accounts-disable-reason-textarea"
+            className={inputClass}
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} data-testid="admin-accounts-disable-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button type="submit" disabled={saving || !reason.trim()} data-testid="admin-accounts-disable-confirm-button" className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 disabled:opacity-60">
+            {saving ? 'Disabling…' : 'Disable Account'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

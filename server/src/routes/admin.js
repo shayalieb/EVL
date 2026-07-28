@@ -59,7 +59,7 @@ function dataSummary(accountData) {
 
 router.get('/accounts', asyncHandler(async (req, res) => {
   const accounts = await prisma.account.findMany({
-    include: { memberships: { include: { user: true } }, accountData: true },
+    include: { memberships: { include: { user: true } }, accountData: true, disabledBy: true },
     orderBy: { createdAt: 'desc' },
   });
   res.json({
@@ -67,6 +67,8 @@ router.get('/accounts', asyncHandler(async (req, res) => {
       id: a.id,
       createdAt: a.createdAt,
       disabledAt: a.disabledAt,
+      disabledReason: a.disabledReason,
+      disabledBy: a.disabledBy ? { firstName: a.disabledBy.firstName, lastName: a.disabledBy.lastName } : null,
       owner: ownerOf(a),
       memberCount: a.memberships.length,
       dataSummary: dataSummary(a.accountData),
@@ -161,15 +163,26 @@ function requireManageAccountStatus(req, res) {
 
 router.patch('/accounts/:id', asyncHandler(async (req, res) => {
   if (!requireManageAccountStatus(req, res)) return;
-  const { disabled } = req.body || {};
+  const { disabled, reason } = req.body || {};
   if (typeof disabled !== 'boolean') {
     return res.status(400).json({ error: 'disabled must be a boolean.' });
   }
+  if (disabled && !reason?.trim()) {
+    return res.status(400).json({ error: 'A reason is required to disable an account.' });
+  }
   const account = await prisma.account.update({
     where: { id: req.params.id },
-    data: { disabledAt: disabled ? new Date() : null },
+    data: disabled
+      ? { disabledAt: new Date(), disabledReason: reason.trim(), disabledById: req.user.id }
+      : { disabledAt: null, disabledReason: null, disabledById: null },
+    include: { disabledBy: true },
   });
-  res.json({ ok: true, disabledAt: account.disabledAt });
+  res.json({
+    ok: true,
+    disabledAt: account.disabledAt,
+    disabledReason: account.disabledReason,
+    disabledBy: account.disabledBy ? { firstName: account.disabledBy.firstName, lastName: account.disabledBy.lastName } : null,
+  });
 }));
 
 router.delete('/accounts/:id', asyncHandler(async (req, res) => {
@@ -195,6 +208,9 @@ function serializeThread(thread) {
     id: thread.id,
     subject: thread.subject,
     status: thread.status,
+    priority: thread.priority,
+    assignedAdminId: thread.assignedAdminId,
+    assignedAdmin: thread.assignedAdmin ? { firstName: thread.assignedAdmin.firstName, lastName: thread.assignedAdmin.lastName } : null,
     lastMessageAt: thread.lastMessageAt,
     createdAt: thread.createdAt,
     unreadFromUser,
@@ -206,10 +222,26 @@ const attachmentSelect = { select: { id: true, filename: true, contentType: true
 
 router.get('/support/threads', asyncHandler(async (req, res) => {
   const threads = await prisma.supportThread.findMany({
-    include: { messages: { include: { attachments: attachmentSelect } }, account: { include: { memberships: { include: { user: true } } } } },
+    include: {
+      messages: { include: { attachments: attachmentSelect } },
+      account: { include: { memberships: { include: { user: true } } } },
+      assignedAdmin: true,
+    },
     orderBy: { lastMessageAt: 'desc' },
   });
   res.json({ threads: threads.map(serializeThread) });
+}));
+
+// Assignee-picker options — deliberately its own route rather than reusing
+// GET /platform-admins, which requires 'manageAdmins' and would 403 for a
+// support-scoped admin populating their own ticket's assignee dropdown.
+router.get('/support/assignable-admins', asyncHandler(async (req, res) => {
+  const admins = await prisma.user.findMany({
+    where: { OR: [{ isPlatformOwner: true }, { isPlatformAdmin: true }] },
+    orderBy: { firstName: 'asc' },
+  });
+  const assignable = admins.filter((a) => a.isPlatformOwner || a.adminPermissions?.manageSupport);
+  res.json({ admins: assignable.map((a) => ({ id: a.id, firstName: a.firstName, lastName: a.lastName })) });
 }));
 
 function serializeNote(note) {
@@ -223,6 +255,7 @@ router.get('/support/threads/:id', asyncHandler(async (req, res) => {
       messages: { orderBy: { createdAt: 'asc' }, include: { attachments: attachmentSelect } },
       notes: { orderBy: { createdAt: 'asc' }, include: { author: true } },
       account: { include: { memberships: { include: { user: true } } } },
+      assignedAdmin: true,
     },
   });
   if (!thread) return res.status(404).json({ error: 'Thread not found.' });
@@ -320,12 +353,34 @@ router.post('/support/threads/:id/messages', uploadFiles, asyncHandler(async (re
 }));
 
 router.patch('/support/threads/:id', asyncHandler(async (req, res) => {
-  const { status } = req.body || {};
-  if (!['open', 'closed'].includes(status)) {
-    return res.status(400).json({ error: 'status must be "open" or "closed".' });
+  const { status, priority, assignedAdminId } = req.body || {};
+  const data = {};
+  if (status !== undefined) {
+    if (!['open', 'closed'].includes(status)) {
+      return res.status(400).json({ error: 'status must be "open" or "closed".' });
+    }
+    data.status = status;
   }
-  const thread = await prisma.supportThread.update({ where: { id: req.params.id }, data: { status } });
-  res.json({ ok: true, status: thread.status });
+  if (priority !== undefined) {
+    if (!['low', 'normal', 'high', 'urgent'].includes(priority)) {
+      return res.status(400).json({ error: 'priority must be one of low, normal, high, urgent.' });
+    }
+    data.priority = priority;
+  }
+  if (assignedAdminId !== undefined) {
+    data.assignedAdminId = assignedAdminId || null;
+  }
+  if (Object.keys(data).length === 0) {
+    return res.status(400).json({ error: 'Nothing to update.' });
+  }
+  const thread = await prisma.supportThread.update({ where: { id: req.params.id }, data, include: { assignedAdmin: true } });
+  res.json({
+    ok: true,
+    status: thread.status,
+    priority: thread.priority,
+    assignedAdminId: thread.assignedAdminId,
+    assignedAdmin: thread.assignedAdmin ? { firstName: thread.assignedAdmin.firstName, lastName: thread.assignedAdmin.lastName } : null,
+  });
 }));
 
 router.get('/support/attachments/:id/download', asyncHandler(async (req, res) => {
