@@ -138,6 +138,25 @@ router.patch('/threads/:id/read', asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
+router.patch('/threads/:id/rating', asyncHandler(async (req, res) => {
+  const { rating, comment } = req.body || {};
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    return res.status(400).json({ error: 'rating must be an integer from 1 to 5.' });
+  }
+  const thread = await prisma.supportThread.findUnique({ where: { id: req.params.id } });
+  if (!thread || thread.accountId !== req.membership.accountId) {
+    return res.status(404).json({ error: 'Thread not found.' });
+  }
+  if (thread.status !== 'closed') {
+    return res.status(400).json({ error: 'You can only rate a closed ticket.' });
+  }
+  const updated = await prisma.supportThread.update({
+    where: { id: thread.id },
+    data: { satisfactionRating: rating, satisfactionComment: comment?.trim() || null },
+  });
+  res.json({ ok: true, satisfactionRating: updated.satisfactionRating, satisfactionComment: updated.satisfactionComment });
+}));
+
 router.get('/attachments/:id/download', asyncHandler(async (req, res) => {
   const attachment = await prisma.supportAttachment.findUnique({
     where: { id: req.params.id },

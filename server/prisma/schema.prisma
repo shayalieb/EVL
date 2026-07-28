@@ -190,6 +190,11 @@ model SupportThread {
   // Required when closing (see PATCH /support/threads/:id) — cleared together on reopen.
   closedReason       String? // 'completed' | 'not_completed' | 'other'
   closedReasonDetail String? @db.Text
+  // Set once by the customer after a thread closes (see PATCH /threads/:id/rating) —
+  // not cleared on reopen, so re-closing later just leaves the prior rating in place
+  // until the customer rates again.
+  satisfactionRating  Int?
+  satisfactionComment String? @db.Text
   lastMessageAt DateTime @default(now())
   createdAt     DateTime @default(now())
 

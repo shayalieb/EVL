@@ -204,6 +204,11 @@ router.delete('/accounts/:id', asyncHandler(async (req, res) => {
 
 function serializeThread(thread) {
   const unreadFromUser = thread.messages.filter((m) => m.direction === 'user' && !m.readAt).length;
+  // Last message overall (regardless of read state) — if the customer spoke last on
+  // an open thread, nobody has answered them yet, which is a different signal than
+  // "unread" (viewing the thread marks messages read without necessarily replying).
+  const lastMessage = thread.messages.reduce((latest, m) => (!latest || m.createdAt > latest.createdAt ? m : latest), null);
+  const awaitingReply = thread.status === 'open' && lastMessage?.direction === 'user';
   return {
     id: thread.id,
     ticketNumber: thread.ticketNumber,
@@ -212,16 +217,21 @@ function serializeThread(thread) {
     priority: thread.priority,
     closedReason: thread.closedReason,
     closedReasonDetail: thread.closedReasonDetail,
+    satisfactionRating: thread.satisfactionRating,
+    satisfactionComment: thread.satisfactionComment,
     assignedAdminId: thread.assignedAdminId,
     assignedAdmin: thread.assignedAdmin ? { firstName: thread.assignedAdmin.firstName, lastName: thread.assignedAdmin.lastName } : null,
     lastMessageAt: thread.lastMessageAt,
     createdAt: thread.createdAt,
     unreadFromUser,
+    awaitingReply,
+    waitingSince: awaitingReply ? lastMessage.createdAt : null,
     account: { id: thread.account.id, owner: ownerOf(thread.account) },
   };
 }
 
 const attachmentSelect = { select: { id: true, filename: true, contentType: true, size: true } };
+const CLOSE_REASON_LABELS = { completed: 'Completed', not_completed: 'Not Completed', other: 'Other' };
 
 router.get('/support/threads', asyncHandler(async (req, res) => {
   const threads = await prisma.supportThread.findMany({
@@ -390,7 +400,28 @@ router.patch('/support/threads/:id', asyncHandler(async (req, res) => {
   if (Object.keys(data).length === 0) {
     return res.status(400).json({ error: 'Nothing to update.' });
   }
-  const thread = await prisma.supportThread.update({ where: { id: req.params.id }, data, include: { assignedAdmin: true } });
+  const thread = await prisma.supportThread.update({
+    where: { id: req.params.id },
+    data,
+    include: { assignedAdmin: true, account: { include: { memberships: { include: { user: true } } } } },
+  });
+
+  if (data.status === 'closed') {
+    const owner = thread.account.memberships.find((m) => m.role === 'owner');
+    if (owner) {
+      try {
+        await sendMail({
+          from: buildFromHeader(),
+          to: owner.user.email,
+          subject: `Ticket #${thread.ticketNumber} closed: ${thread.subject}`,
+          html: `<p>Your support ticket #${thread.ticketNumber} — "${escapeHtml(thread.subject)}" — has been closed as <strong>${escapeHtml(CLOSE_REASON_LABELS[thread.closedReason] || thread.closedReason)}</strong>.</p><p>${escapeHtml(thread.closedReasonDetail)}</p><p>If this isn't resolved, just reply to this email or sign in to GigWorks and reply to reopen it.</p>`,
+        });
+      } catch {
+        // best effort
+      }
+    }
+  }
+
   res.json({
     ok: true,
     status: thread.status,
