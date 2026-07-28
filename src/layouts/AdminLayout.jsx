@@ -1,13 +1,19 @@
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import Logo from '../components/ui/Logo';
+import { useAuth } from '../context/AuthContext';
 
 const NAV_ITEMS = [
-  { to: '/admin/accounts', label: 'Accounts', icon: '🏢' },
-  { to: '/admin/support', label: 'Support', icon: '💬' },
-  { to: '/admin/admins', label: 'Admins', icon: '🔑' },
+  { to: '/admin/accounts', label: 'Accounts', icon: '🏢', permission: 'manageAccounts' },
+  { to: '/admin/support', label: 'Support', icon: '💬', permission: 'manageSupport' },
+  { to: '/admin/admins', label: 'Admins', icon: '🔑', permission: 'manageAdmins' },
 ];
 
 export default function AdminLayout() {
+  const { currentUser } = useAuth();
+  const visibleNavItems = NAV_ITEMS.filter(
+    (item) => currentUser?.isPlatformOwner || currentUser?.adminPermissions?.[item.permission]
+  );
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <header className="h-20 border-b border-slate-200 bg-white flex items-center justify-between px-4 sm:px-6 shrink-0">
@@ -23,7 +29,7 @@ export default function AdminLayout() {
       <div className="flex flex-1 min-h-0">
         <nav className="w-full sm:w-56 shrink-0 border-r border-slate-200 bg-white">
           <div className="p-3 space-y-1">
-            {NAV_ITEMS.map((item) => (
+            {visibleNavItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}

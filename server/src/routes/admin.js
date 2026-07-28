@@ -3,7 +3,7 @@ import multer from 'multer';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { attachUser, requirePlatformAdmin, allPermissions } from '../lib/membership.js';
+import { attachUser, requirePlatformAdmin, requireAdminPermission, allPermissions } from '../lib/membership.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
 
@@ -36,6 +36,9 @@ function attachmentsData(files) {
 }
 
 router.use(requireAuth, asyncHandler(attachUser), requirePlatformAdmin);
+router.use('/accounts', requireAdminPermission('manageAccounts'));
+router.use('/support', requireAdminPermission('manageSupport'));
+router.use('/platform-admins', requireAdminPermission('manageAdmins'));
 
 function ownerOf(account) {
   const owner = account.memberships.find((m) => m.role === 'owner');
@@ -75,7 +78,17 @@ router.get('/accounts', asyncHandler(async (req, res) => {
 // brand-new User (+ their own Account/Membership, so they're never stuck on
 // NoAccountAccessPage) with no password, then email a set-your-password
 // link reusing the exact forgot-password reset mechanism.
-async function createInvitedUser({ firstName, lastName, email }, { grantAdmin = false } = {}) {
+const ADMIN_PERMISSION_KEYS = ['manageAccounts', 'manageAccountStatus', 'manageSupport', 'manageAdmins'];
+
+// Defensive allowlist — only known keys, coerced to plain booleans, so a
+// malformed/extra request-body field can never end up stored as-is.
+function sanitizeAdminPermissions(input) {
+  const result = {};
+  for (const key of ADMIN_PERMISSION_KEYS) result[key] = !!input?.[key];
+  return result;
+}
+
+async function createInvitedUser({ firstName, lastName, email }, { grantAdmin = false, permissions } = {}) {
   const normalizedEmail = email.trim().toLowerCase();
 
   let user;
@@ -88,6 +101,7 @@ async function createInvitedUser({ firstName, lastName, email }, { grantAdmin = 
           email: normalizedEmail,
           passwordHash: null,
           isPlatformAdmin: grantAdmin,
+          adminPermissions: grantAdmin ? sanitizeAdminPermissions(permissions) : {},
         },
       });
       const account = await tx.account.create({ data: {} });
@@ -136,7 +150,17 @@ router.post('/accounts', asyncHandler(async (req, res) => {
   res.status(201).json({ ok: true });
 }));
 
+// Disabling/enabling is a materially more consequential action than plain
+// account viewing/creation, so it needs its own stricter permission on top
+// of the blanket 'manageAccounts' gate this route already sits behind.
+function requireManageAccountStatus(req, res) {
+  if (req.user?.isPlatformOwner || req.user?.adminPermissions?.manageAccountStatus) return true;
+  res.status(403).json({ error: 'Not authorized.' });
+  return false;
+}
+
 router.patch('/accounts/:id', asyncHandler(async (req, res) => {
+  if (!requireManageAccountStatus(req, res)) return;
   const { disabled } = req.body || {};
   if (typeof disabled !== 'boolean') {
     return res.status(400).json({ error: 'disabled must be a boolean.' });
@@ -149,6 +173,7 @@ router.patch('/accounts/:id', asyncHandler(async (req, res) => {
 }));
 
 router.delete('/accounts/:id', asyncHandler(async (req, res) => {
+  if (!requireManageAccountStatus(req, res)) return;
   // Deleting just the Account would cascade-remove its Memberships but leave
   // the member Users behind — since User.email is unique, that silently
   // blocks re-inviting the same email later. Delete the users first so their
@@ -318,6 +343,7 @@ function serializeAdmin(user) {
     lastName: user.lastName,
     email: user.email,
     isPlatformOwner: user.isPlatformOwner,
+    adminPermissions: user.adminPermissions,
     createdAt: user.createdAt,
   };
 }
@@ -333,31 +359,50 @@ router.get('/platform-admins', asyncHandler(async (req, res) => {
 // Grants access to an email that already has an account — the account
 // itself still isn't self-serve creatable through this route.
 router.post('/platform-admins', asyncHandler(async (req, res) => {
-  const { email } = req.body || {};
+  const { email, permissions } = req.body || {};
   if (!email?.trim()) return res.status(400).json({ error: 'Email is required.' });
 
   const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
   if (!user) return res.status(404).json({ error: 'No account exists with that email yet. Use "Invite New Admin" instead.' });
 
-  const updated = await prisma.user.update({ where: { id: user.id }, data: { isPlatformAdmin: true } });
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: { isPlatformAdmin: true, adminPermissions: sanitizeAdminPermissions(permissions) },
+  });
   res.status(201).json({ admin: serializeAdmin(updated) });
 }));
 
 // Combines account creation + admin grant in one step, for someone who
 // doesn't have an account yet.
 router.post('/platform-admins/invite', asyncHandler(async (req, res) => {
-  const { firstName, lastName, email } = req.body || {};
+  const { firstName, lastName, email, permissions } = req.body || {};
   if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) {
     return res.status(400).json({ error: 'First name, last name, and email are required.' });
   }
   let user;
   try {
-    user = await createInvitedUser({ firstName, lastName, email }, { grantAdmin: true });
+    user = await createInvitedUser({ firstName, lastName, email }, { grantAdmin: true, permissions });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     throw err;
   }
   res.status(201).json({ admin: serializeAdmin(user) });
+}));
+
+// Adjust an existing admin's permissions without a revoke-then-regrant
+// round trip. The owner's access is implicit/always-full and isn't stored
+// as permissions, so there's nothing meaningful to edit for them.
+router.patch('/platform-admins/:id', asyncHandler(async (req, res) => {
+  const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!target) return res.status(404).json({ error: 'User not found.' });
+  if (target.isPlatformOwner) {
+    return res.status(400).json({ error: "The owner's access is always full and can't be edited." });
+  }
+  const updated = await prisma.user.update({
+    where: { id: target.id },
+    data: { adminPermissions: sanitizeAdminPermissions(req.body?.permissions) },
+  });
+  res.json({ admin: serializeAdmin(updated) });
 }));
 
 router.delete('/platform-admins/:id', asyncHandler(async (req, res) => {
@@ -369,7 +414,7 @@ router.delete('/platform-admins/:id', asyncHandler(async (req, res) => {
     return res.status(403).json({ error: "The owner's access can't be removed." });
   }
 
-  await prisma.user.update({ where: { id: target.id }, data: { isPlatformAdmin: false } });
+  await prisma.user.update({ where: { id: target.id }, data: { isPlatformAdmin: false, adminPermissions: {} } });
   res.json({ ok: true });
 }));
 

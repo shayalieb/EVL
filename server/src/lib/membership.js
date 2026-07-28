@@ -106,3 +106,15 @@ export function requirePlatformAdmin(req, res, next) {
   }
   next();
 }
+
+// Scoped platform-admin capability check — 'manageAccounts' |
+// 'manageAccountStatus' | 'manageSupport' | 'manageAdmins'. Only meaningful
+// once requirePlatformAdmin has already run (req.user is set). The owner
+// always bypasses this, same as it bypasses everything else.
+export function requireAdminPermission(permission) {
+  return (req, res, next) => {
+    if (req.user?.isPlatformOwner) return next();
+    if (req.user?.adminPermissions?.[permission]) return next();
+    return res.status(403).json({ error: 'Not authorized.' });
+  };
+}

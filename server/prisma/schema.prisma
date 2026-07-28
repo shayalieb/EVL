@@ -21,6 +21,11 @@ model User {
   // never through any API.
   isPlatformAdmin Boolean    @default(false)
   isPlatformOwner Boolean    @default(false)
+  // Scoped platform-admin capabilities — { manageAccounts, manageAccountStatus,
+  // manageSupport, manageAdmins }, all booleans. Only meaningful when
+  // isPlatformAdmin is true. isPlatformOwner always bypasses this (see
+  // requireAdminPermission in server/src/lib/membership.js).
+  adminPermissions Json      @default("{}")
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
   membership     Membership?

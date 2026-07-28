@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { apiFetch } from '../../context/AuthContext';
+import { apiFetch, useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
 import Modal from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
@@ -17,6 +17,8 @@ const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm 
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 
 export default function AdminAccountsPage() {
+  const { currentUser } = useAuth();
+  const canManageStatus = currentUser?.isPlatformOwner || currentUser?.adminPermissions?.manageAccountStatus;
   const { showToast } = useToast();
   const [accounts, setAccounts] = useState(null);
   const [loadError, setLoadError] = useState('');
@@ -171,23 +173,27 @@ export default function AdminAccountsPage() {
                   )}
                 </td>
                 <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
-                  <button
-                    type="button"
-                    onClick={() => setDisableTarget(a)}
-                    data-testid="admin-account-row-toggle-disabled-button"
-                    className="text-xs font-semibold text-slate-500 hover:text-slate-700"
-                  >
-                    {a.disabledAt ? 'Enable' : 'Disable'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteTarget(a)}
-                    data-testid="admin-account-row-delete-button"
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
-                    aria-label="Delete account"
-                  >
-                    🗑
-                  </button>
+                  {canManageStatus && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setDisableTarget(a)}
+                        data-testid="admin-account-row-toggle-disabled-button"
+                        className="text-xs font-semibold text-slate-500 hover:text-slate-700"
+                      >
+                        {a.disabledAt ? 'Enable' : 'Disable'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(a)}
+                        data-testid="admin-account-row-delete-button"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
+                        aria-label="Delete account"
+                      >
+                        🗑
+                      </button>
+                    </>
+                  )}
                 </td>
               </tr>
             ))}

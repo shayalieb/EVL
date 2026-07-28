@@ -9,12 +9,62 @@ import { matchesSearch } from '../../lib/search';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
+// Scoped platform-admin capabilities — keep in sync with ADMIN_PERMISSION_KEYS
+// in server/src/routes/admin.js.
+const PERMISSION_OPTIONS = [
+  { key: 'manageAccounts', label: 'Manage Accounts', hint: 'View, search, and invite/create accounts' },
+  { key: 'manageAccountStatus', label: 'Enable/Disable Accounts', hint: 'Disable, re-enable, or delete an account' },
+  { key: 'manageSupport', label: 'Helpdesk', hint: 'View and reply to support threads' },
+  { key: 'manageAdmins', label: 'Manage Admins', hint: 'Grant, edit, or revoke other admins’ access' },
+];
+
+function PermissionCheckboxes({ value, onChange }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-slate-500 mb-1.5">Permissions</label>
+      <div className="space-y-2 border border-slate-200 rounded-lg p-3">
+        {PERMISSION_OPTIONS.map((opt) => (
+          <label key={opt.key} className="flex items-start gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!value[opt.key]}
+              onChange={(e) => onChange({ ...value, [opt.key]: e.target.checked })}
+              data-testid={`admin-admins-permission-${opt.key}-checkbox`}
+              className="mt-0.5 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            <span>
+              <span className="block text-sm font-semibold text-slate-700">{opt.label}</span>
+              <span className="block text-xs text-slate-400">{opt.hint}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PermissionBadges({ admin }) {
+  if (admin.isPlatformOwner) return <span className="text-xs font-semibold text-indigo-600">Owner (full access)</span>;
+  const granted = PERMISSION_OPTIONS.filter((opt) => admin.adminPermissions?.[opt.key]);
+  if (granted.length === 0) return <span className="text-xs text-slate-400">No permissions granted</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {granted.map((opt) => (
+        <span key={opt.key} className="text-xs font-medium text-slate-600 bg-slate-100 rounded-full px-2 py-0.5">
+          {opt.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export default function AdminAdminsPage() {
   const { showToast } = useToast();
   const [admins, setAdmins] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [grantOpen, setGrantOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState(null);
   const [revokeTarget, setRevokeTarget] = useState(null);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
@@ -107,7 +157,7 @@ export default function AdminAdminsPage() {
             <tr className="border-b border-slate-100 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3">Role</th>
+              <th className="px-4 py-3">Permissions</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
@@ -124,23 +174,29 @@ export default function AdminAdminsPage() {
                 <td className="px-4 py-3 font-medium text-slate-800">{a.firstName} {a.lastName}</td>
                 <td className="px-4 py-3 text-slate-500">{a.email}</td>
                 <td className="px-4 py-3">
-                  {a.isPlatformOwner ? (
-                    <span className="text-xs font-semibold text-indigo-600">Owner</span>
-                  ) : (
-                    <span className="text-xs text-slate-500">Admin</span>
-                  )}
+                  <PermissionBadges admin={a} />
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3 text-right whitespace-nowrap space-x-1">
                   {!a.isPlatformOwner && (
-                    <button
-                      type="button"
-                      onClick={() => setRevokeTarget(a)}
-                      data-testid="admin-admin-row-revoke-button"
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
-                      aria-label={`Remove admin access for ${a.firstName}`}
-                    >
-                      🗑
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setEditTarget(a)}
+                        data-testid="admin-admin-row-edit-button"
+                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 px-1.5 py-1"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRevokeTarget(a)}
+                        data-testid="admin-admin-row-revoke-button"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
+                        aria-label={`Remove admin access for ${a.firstName}`}
+                      >
+                        🗑
+                      </button>
+                    </>
                   )}
                 </td>
               </tr>
@@ -167,6 +223,15 @@ export default function AdminAdminsPage() {
         }}
       />
 
+      <EditPermissionsModal
+        admin={editTarget}
+        onClose={() => setEditTarget(null)}
+        onUpdated={(admin) => {
+          setAdmins((prev) => prev.map((a) => (a.id === admin.id ? admin : a)));
+          setEditTarget(null);
+        }}
+      />
+
       <ConfirmDialog
         open={!!revokeTarget}
         onClose={() => setRevokeTarget(null)}
@@ -181,12 +246,14 @@ export default function AdminAdminsPage() {
 
 function GrantAccessModal({ open, onClose, onGranted }) {
   const [email, setEmail] = useState('');
+  const [permissions, setPermissions] = useState({});
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
       setEmail('');
+      setPermissions({});
       setError('');
     }
   }, [open]);
@@ -198,7 +265,7 @@ function GrantAccessModal({ open, onClose, onGranted }) {
     try {
       const data = await apiFetch('/admin/platform-admins', {
         method: 'POST',
-        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), permissions }),
       });
       onGranted(data.admin);
     } catch (err) {
@@ -217,6 +284,7 @@ function GrantAccessModal({ open, onClose, onGranted }) {
           <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="admin-admins-grant-email-input" className={inputClass} />
           <p className="mt-1 text-xs text-slate-400">Must already have an account — use "Invite New Admin" instead if they don't.</p>
         </div>
+        <PermissionCheckboxes value={permissions} onChange={setPermissions} />
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} data-testid="admin-admins-grant-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
           <button type="submit" disabled={saving} data-testid="admin-admins-grant-submit-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
@@ -230,12 +298,14 @@ function GrantAccessModal({ open, onClose, onGranted }) {
 
 function InviteAdminModal({ open, onClose, onInvited }) {
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '' });
+  const [permissions, setPermissions] = useState({});
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
       setForm({ firstName: '', lastName: '', email: '' });
+      setPermissions({});
       setError('');
     }
   }, [open]);
@@ -251,7 +321,7 @@ function InviteAdminModal({ open, onClose, onInvited }) {
     try {
       const data = await apiFetch('/admin/platform-admins/invite', {
         method: 'POST',
-        body: JSON.stringify({ ...form, email: form.email.trim().toLowerCase() }),
+        body: JSON.stringify({ ...form, email: form.email.trim().toLowerCase(), permissions }),
       });
       onInvited(data.admin);
     } catch (err) {
@@ -283,10 +353,57 @@ function InviteAdminModal({ open, onClose, onInvited }) {
           <p className="mt-1 text-xs text-slate-400">Creates a new account with admin access already on, and emails them a link to set their password.</p>
         </div>
 
+        <PermissionCheckboxes value={permissions} onChange={setPermissions} />
+
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} data-testid="admin-admins-invite-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
           <button type="submit" disabled={saving} data-testid="admin-admins-invite-submit-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
             {saving ? 'Sending…' : 'Send Invite'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function EditPermissionsModal({ admin, onClose, onUpdated }) {
+  const [permissions, setPermissions] = useState({});
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (admin) {
+      setPermissions(admin.adminPermissions || {});
+      setError('');
+    }
+  }, [admin]);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError('');
+    setSaving(true);
+    try {
+      const data = await apiFetch(`/admin/platform-admins/${admin.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ permissions }),
+      });
+      onUpdated(data.admin);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal open={!!admin} onClose={onClose} title={`Edit Permissions${admin ? ` — ${admin.firstName} ${admin.lastName}` : ''}`}>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        {error && <div data-testid="admin-admins-edit-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
+        <PermissionCheckboxes value={permissions} onChange={setPermissions} />
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} data-testid="admin-admins-edit-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button type="submit" disabled={saving} data-testid="admin-admins-edit-submit-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+            {saving ? 'Saving…' : 'Save Permissions'}
           </button>
         </div>
       </form>
