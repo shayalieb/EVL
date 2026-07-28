@@ -28,12 +28,19 @@ const extraOrigins = (process.env.EXTRA_CLIENT_ORIGINS || '')
   .map((s) => s.trim())
   .filter(Boolean);
 
+class CorsOriginError extends Error {
+  constructor() {
+    super('Not allowed by CORS');
+    this.status = 403;
+  }
+}
+
 app.use(cors({
   origin(origin, callback) {
     if (!origin) return callback(null, true);
     const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
     if (isLocalhost || extraOrigins.includes(origin)) return callback(null, true);
-    callback(new Error('Not allowed by CORS'));
+    callback(new CorsOriginError());
   },
   credentials: true,
 }));
@@ -86,6 +93,9 @@ app.use('/api/calendar', calendarRouter);
 
 app.use((err, req, res, next) => {
   if (res.headersSent) return next(err);
+  if (err instanceof CorsOriginError) {
+    return res.status(err.status).json({ error: 'Not allowed by CORS.' });
+  }
   console.error(err);
   res.status(500).json({ error: 'Something went wrong. Please try again.' });
 });
