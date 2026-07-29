@@ -870,7 +870,7 @@ export default function BookingFormPage() {
   // updateBooking() call wouldn't be reflected here without a reload. The
   // existing 800ms autosave effect persists it normally from here.
   async function handleApplyInquiryOverride(response) {
-    const patch = buildBookingMergePatch(response, form);
+    const patch = buildBookingMergePatch(response, form, venues);
     const resolved = resolveClientForMerge(response, { clients, addClient, currentClientId: form.clientId });
     setForm((f) => ({ ...f, ...patch, clientId: resolved.clientId }));
     return { bookingId: form.id, clientId: resolved.clientId };

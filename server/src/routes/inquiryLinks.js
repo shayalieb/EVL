@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
-import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
+import { sendMail, buildFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 
 const router = Router();
@@ -41,12 +41,19 @@ function serializeForOwner(link) {
 // inquiry link is often handed out mid-phone-call with no email on hand yet.
 async function emailInquiryLink({ accountId, recipientEmail, recipientName, inquiryUrl }) {
   const accountData = await prisma.accountData.findUnique({ where: { accountId } });
-  const fromName = accountData?.data?.businessInfo?.name || 'GigWorks';
+  const businessInfo = accountData?.data?.businessInfo || {};
+  const fromName = businessInfo.name || 'GigWorks';
   await sendMail({
     from: buildFromHeader(fromName),
     to: recipientEmail,
     subject: `Tell us about your event — ${fromName}`,
-    html: `<p>Hi ${escapeHtml(recipientName) || 'there'},</p><p>Please share your event details using the secure link below so we can get your booking started.</p><p><a href="${inquiryUrl}">${inquiryUrl}</a></p><p>${escapeHtml(fromName)}</p>`,
+    html: buildActionEmailHtml({
+      businessInfo,
+      heading: 'Tell us about your event',
+      bodyHtml: `<p>Hi ${escapeHtml(recipientName) || 'there'},</p><p>Please share your event details using the secure link below so we can get your booking started. This link is unique to you — please don't forward it.</p>`,
+      buttonText: 'Click here to submit your inquiry',
+      buttonUrl: inquiryUrl,
+    }),
   });
 }
 
@@ -250,13 +257,20 @@ publicInquiryLinksRouter.post('/:token/submit', asyncHandler(async (req, res) =>
   // indicator on the Bookings page is the real notification, this is just
   // a heads-up if they're not looking at the app right now.
   const accountData = await prisma.accountData.findUnique({ where: { accountId: link.accountId } });
-  const fromName = accountData?.data?.businessInfo?.name || 'GigWorks';
+  const businessInfo = accountData?.data?.businessInfo || {};
+  const fromName = businessInfo.name || 'GigWorks';
   try {
     await sendMail({
       from: buildFromHeader(fromName),
       to: updated.ownerEmail,
       subject: `New inquiry response — ${firstName.trim()} ${lastName.trim()}`,
-      html: `<p>${escapeHtml(firstName.trim())} ${escapeHtml(lastName.trim())} just filled out an inquiry form. Review it and apply it in GigWorks to create the booking.</p>`,
+      html: buildActionEmailHtml({
+        businessInfo,
+        heading: 'New inquiry response',
+        bodyHtml: `<p>${escapeHtml(firstName.trim())} ${escapeHtml(lastName.trim())} just filled out an inquiry form. Review it and apply it to create the booking.</p>`,
+        buttonText: 'Click here to review it in GigWorks',
+        buttonUrl: `${frontendUrl()}/bookings`,
+      }),
     });
   } catch {
     // best effort — the in-app indicator is the real notification

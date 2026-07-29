@@ -35,7 +35,7 @@ function Row({ label, value }) {
 // autosave) instead of going through DataContext.updateBooking, which the
 // currently-open form's one-time hydration effect wouldn't pick up live.
 export default function ReviewInquiryModal({ open, link, onClose, onApplied, onApplyOverride, navigateAfterApply = true }) {
-  const { clients, bookings, addClient, addBooking, updateBooking } = useData();
+  const { clients, bookings, venues, addClient, addBooking, updateBooking } = useData();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [applying, setApplying] = useState(false);
@@ -59,12 +59,12 @@ export default function ReviewInquiryModal({ open, link, onClose, onApplied, onA
       } else if (link.bookingId) {
         if (!targetBooking) throw new Error('The booking this was sent from no longer exists.');
         const resolved = resolveClientForMerge(r, { clients, addClient, currentClientId: targetBooking.clientId });
-        const patch = buildBookingMergePatch(r, targetBooking);
+        const patch = buildBookingMergePatch(r, targetBooking, venues);
         updateBooking(targetBooking.id, { ...patch, clientId: resolved.clientId });
         bookingId = targetBooking.id;
         clientId = resolved.clientId;
       } else {
-        const created = applyInquiryResponse(r, { clients, addClient, addBooking });
+        const created = applyInquiryResponse(r, { clients, venues, addClient, addBooking });
         bookingId = created.booking.id;
         clientId = created.client.id;
       }

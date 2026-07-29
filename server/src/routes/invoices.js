@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
-import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
+import { sendMail, buildFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { getStripeClient } from '../lib/stripe.js';
 
@@ -230,7 +230,13 @@ router.post('/:id/send', asyncHandler(async (req, res) => {
       from: buildFromHeader(fromName),
       to: invoice.recipientEmail,
       subject: `Invoice for ${totalLabel} from ${fromName}`,
-      html: `<p>Hi ${escapeHtml(invoice.recipientName) || 'there'},</p><p>You have a new invoice for ${totalLabel}${invoice.dueDate ? ` due ${new Date(invoice.dueDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}` : ''}.</p><p><a href="${payUrl}">${payUrl}</a></p><p>${escapeHtml(fromName)}</p>`,
+      html: buildActionEmailHtml({
+        businessInfo: invoice.snapshot?.businessInfo,
+        heading: 'You have a new invoice',
+        bodyHtml: `<p>Hi ${escapeHtml(invoice.recipientName) || 'there'},</p><p>You have a new invoice for ${totalLabel}${invoice.dueDate ? ` due ${new Date(invoice.dueDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}` : ''}.</p>`,
+        buttonText: 'Click here to view and pay your invoice',
+        buttonUrl: payUrl,
+      }),
     });
   } catch {
     emailError = 'Invoice was sent, but the email could not be delivered — copy the link below to share it manually.';

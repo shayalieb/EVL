@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
-import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
+import { sendMail, buildFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 
 const router = Router();
@@ -137,7 +137,13 @@ router.post('/', asyncHandler(async (req, res) => {
         from: buildFromHeader(fromName),
         to: recipientEmail,
         subject: `Contract for your event — ${fromName}`,
-        html: `<p>Hi ${escapeHtml(recipientName) || 'there'},</p><p>Your contract is ready to review and sign. This link is unique to you — please don't forward it.</p><p><a href="${signUrl}">${signUrl}</a></p><p>${escapeHtml(fromName)}</p>`,
+        html: buildActionEmailHtml({
+          businessInfo: snapshot.businessInfo,
+          heading: 'Your contract is ready',
+          bodyHtml: `<p>Hi ${escapeHtml(recipientName) || 'there'},</p><p>Your contract is ready to review and sign. This link is unique to you — please don't forward it.</p>`,
+          buttonText: 'Click here to view and sign your contract',
+          buttonUrl: signUrl,
+        }),
       });
     } catch {
       emailError = 'Contract was created, but the email could not be sent — copy the link below to share it manually.';
@@ -316,7 +322,13 @@ publicContractsRouter.post('/:token/submit', asyncHandler(async (req, res) => {
           from: buildFromHeader(fromName),
           to: contract.ownerEmail,
           subject: `${contract.recipientName || contract.recipientEmail} signed your contract — your signature is next`,
-          html: `<p>Good news — ${escapeHtml(contract.recipientName || contract.recipientEmail)} just signed the contract.</p><p>Countersign it in the app, or from this link:</p><p><a href="${ownerSignUrl}">${ownerSignUrl}</a></p>`,
+          html: buildActionEmailHtml({
+            businessInfo: contract.snapshot?.businessInfo,
+            heading: 'Your signature is next',
+            bodyHtml: `<p>Good news — ${escapeHtml(contract.recipientName || contract.recipientEmail)} just signed the contract. You can also countersign it from within the app.</p>`,
+            buttonText: 'Click here to view and sign the contract',
+            buttonUrl: ownerSignUrl,
+          }),
         });
       } catch {
         // best effort — the owner can still countersign in-app even if this notification fails to send
