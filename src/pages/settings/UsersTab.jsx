@@ -13,6 +13,7 @@ const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 const PERMISSION_FIELDS = [
   { key: 'manageContractors', label: 'Manage Contractors' },
   { key: 'manageClients', label: 'Manage Clients' },
+  { key: 'manageVenues', label: 'Manage Venues' },
   { key: 'manageBookings', label: 'Manage Bookings' },
   { key: 'manageEvents', label: 'Manage Events' },
   { key: 'manageEmailTemplates', label: 'Manage Email Templates' },

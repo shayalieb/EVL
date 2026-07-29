@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ClientModal from '../components/ClientModal';
+import VenueCombobox from '../components/VenueCombobox';
 import SendInquiryLinkModal from '../components/SendInquiryLinkModal';
 import ReviewInquiryModal from '../components/ReviewInquiryModal';
 import InvoiceDocument from '../components/InvoiceDocument';
@@ -439,7 +440,7 @@ export default function BookingFormPage() {
   const { bookingId } = useParams();
   const navigate = useNavigate();
   const {
-    bookings, clients, eventTypes, addEventType, bookingStatuses,
+    bookings, clients, venues, eventTypes, addEventType, bookingStatuses,
     addClient, addBooking, updateBooking, convertBookingToEvent, addEvent,
     proposalTemplates, addProposalTemplate, contractTemplates, addContractTemplate,
   } = useData();
@@ -821,6 +822,30 @@ export default function BookingFormPage() {
 
   function updateVenue(field, val) {
     setForm((f) => ({ ...f, venue: { ...f.venue, [field]: val } }));
+  }
+
+  // Picking a saved venue from VenueCombobox autofills every field it has —
+  // typing a name that doesn't match one just behaves like a plain text
+  // field (updateVenue('name', ...) above), and gets auto-saved as a new
+  // venue once this booking itself is saved (see DataContext's
+  // ensureVenueSaved).
+  function selectSavedVenue(venue) {
+    setForm((f) => ({
+      ...f,
+      venue: {
+        ...f.venue,
+        name: venue.name || '',
+        address1: venue.address1 || '',
+        address2: venue.address2 || '',
+        city: venue.city || '',
+        state: venue.state || '',
+        zip: venue.zip || '',
+        contactName: venue.contactName || '',
+        contactEmail: venue.contactEmail || '',
+        locationNote: venue.locationNote || '',
+        loadInInfo: venue.loadInInfo || '',
+      },
+    }));
   }
 
   function handleAddActivity() {
@@ -1784,7 +1809,13 @@ export default function BookingFormPage() {
             <div className="space-y-5">
               <div>
                 <label className={labelClass}>Venue Name</label>
-                <input value={form.venue.name} onChange={(e) => updateVenue('name', e.target.value)} data-testid="booking-form-venue-name-input" className={inputClass} />
+                <VenueCombobox
+                  venues={venues}
+                  value={form.venue.name}
+                  onChangeName={(name) => updateVenue('name', name)}
+                  onSelectVenue={selectSavedVenue}
+                  testId="booking-form-venue-name-input"
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

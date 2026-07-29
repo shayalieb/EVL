@@ -9,6 +9,7 @@ const DataContext = createContext(null);
 const LIST_FIELDS = {
   contractors: 'contractors',
   clients: 'clients',
+  venues: 'venues',
   events: 'events',
   bookings: 'bookings',
   contractorTypes: 'contractorTypes',
@@ -89,20 +90,62 @@ export function DataProvider({ children }) {
     )));
   }, [currentUser, patchList]);
 
+  // ---- Venues ----
+  // Deliberately denormalized — Booking/Event each keep their own copied
+  // venue object (see BookingFormPage's emptyVenue), not a live venueId
+  // reference. This list is just a reusable "address book" the venue
+  // picker (VenueCombobox) reads from and ensureVenueSaved below writes
+  // to; editing or deleting a saved venue here never touches past
+  // bookings/events, since they hold their own frozen copy.
+  const addVenue = useCallback((venue) => {
+    if (!currentUser) return;
+    const record = { id: uid('ven'), createdAt: new Date().toISOString(), ...venue };
+    patchList(LIST_FIELDS.venues, [...(currentUser.venues || []), record]);
+    return record;
+  }, [currentUser, patchList]);
+
+  const updateVenue = useCallback((id, patch) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.venues, (currentUser.venues || []).map((v) => (v.id === id ? { ...v, ...patch } : v)));
+  }, [currentUser, patchList]);
+
+  const deleteVenue = useCallback((id) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.venues, (currentUser.venues || []).filter((v) => v.id !== id));
+  }, [currentUser, patchList]);
+
+  // Auto-save-on-input for venues: called from addBooking/updateBooking/
+  // addEvent/updateEvent below with whatever venue object was just saved.
+  // If its name doesn't case-insensitively match an already-saved venue,
+  // it's appended to the venues list so it shows up in the picker next
+  // time — matching venues are left untouched (never silently overwritten
+  // by a booking's possibly-edited copy; the Venues page is the deliberate
+  // place to edit a saved venue's own details).
+  const ensureVenueSaved = useCallback((venue) => {
+    if (!currentUser || !venue?.name?.trim()) return;
+    const name = venue.name.trim();
+    const exists = (currentUser.venues || []).some((v) => v.name?.trim().toLowerCase() === name.toLowerCase());
+    if (exists) return;
+    const record = { id: uid('ven'), createdAt: new Date().toISOString(), ...venue, name };
+    patchList(LIST_FIELDS.venues, [...(currentUser.venues || []), record]);
+  }, [currentUser, patchList]);
+
   // ---- Bookings ----
   const addBooking = useCallback((booking) => {
     if (!currentUser) return;
     const record = { id: uid('bkg'), createdAt: new Date().toISOString(), convertedEventId: null, activityLog: [], deletedAt: null, ...booking, history: [historyEntry('created')] };
     patchList(LIST_FIELDS.bookings, [...(currentUser.bookings || []), record]);
+    if (record.venue) ensureVenueSaved(record.venue);
     return record;
-  }, [currentUser, patchList, historyEntry]);
+  }, [currentUser, patchList, historyEntry, ensureVenueSaved]);
 
   const updateBooking = useCallback((id, patch) => {
     if (!currentUser) return;
     patchList(LIST_FIELDS.bookings, (currentUser.bookings || []).map((b) => (
       b.id === id ? { ...b, ...patch, history: [...(b.history || []), historyEntry('edited')] } : b
     )));
-  }, [currentUser, patchList, historyEntry]);
+    if (patch.venue) ensureVenueSaved(patch.venue);
+  }, [currentUser, patchList, historyEntry, ensureVenueSaved]);
 
   // Soft delete — hides the booking from normal views (see `bookings` below)
   // but keeps the record, and its history, around so "who deleted this and
@@ -272,15 +315,17 @@ export function DataProvider({ children }) {
     if (!currentUser) return;
     const record = { id: uid('evt'), createdAt: new Date().toISOString(), contractorBookings: [], deletedAt: null, ...event, history: [historyEntry('created')] };
     patchList(LIST_FIELDS.events, [...currentUser.events, record]);
+    if (record.venue) ensureVenueSaved(record.venue);
     return record;
-  }, [currentUser, patchList, historyEntry]);
+  }, [currentUser, patchList, historyEntry, ensureVenueSaved]);
 
   const updateEvent = useCallback((id, patch) => {
     if (!currentUser) return;
     patchList(LIST_FIELDS.events, currentUser.events.map((e) => (
       e.id === id ? { ...e, ...patch, history: [...(e.history || []), historyEntry('edited')] } : e
     )));
-  }, [currentUser, patchList, historyEntry]);
+    if (patch.venue) ensureVenueSaved(patch.venue);
+  }, [currentUser, patchList, historyEntry, ensureVenueSaved]);
 
   // Soft delete — same reasoning as deleteBooking above.
   const deleteEvent = useCallback((id) => {
@@ -377,6 +422,7 @@ export function DataProvider({ children }) {
   const value = useMemo(() => ({
     contractors: currentUser?.contractors || [],
     clients: currentUser?.clients || [],
+    venues: currentUser?.venues || [],
     events: (currentUser?.events || []).filter((e) => !e.deletedAt),
     bookings: (currentUser?.bookings || []).filter((b) => !b.deletedAt),
     contractorTypes: currentUser?.contractorTypes || [],
@@ -395,6 +441,9 @@ export function DataProvider({ children }) {
     updateClient,
     deleteClient,
     computeClientEventCounts,
+    addVenue,
+    updateVenue,
+    deleteVenue,
     addBooking,
     updateBooking,
     deleteBooking,
@@ -435,6 +484,7 @@ export function DataProvider({ children }) {
     currentUser,
     addContractor, updateContractor, deleteContractor,
     addClient, updateClient, deleteClient, computeClientEventCounts,
+    addVenue, updateVenue, deleteVenue,
     addBooking, updateBooking, deleteBooking, convertBookingToEvent,
     addBookingStatus, updateBookingStatus, removeBookingStatus,
     addContractorType, removeContractorType,

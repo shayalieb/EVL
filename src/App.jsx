@@ -13,6 +13,7 @@ import HomePage from './pages/HomePage';
 import NoAccountAccessPage from './pages/NoAccountAccessPage';
 import ContractorsPage from './pages/ContractorsPage';
 import ClientsPage from './pages/ClientsPage';
+import VenuesPage from './pages/VenuesPage';
 import OfferingsPage from './pages/OfferingsPage';
 import BookingsPage from './pages/BookingsPage';
 import BookingFormPage from './pages/BookingFormPage';
@@ -66,6 +67,7 @@ function AppRoutes() {
         <Route path="home" element={<HomePage />} />
         <Route path="contractors" element={<ContractorsPage />} />
         <Route path="clients" element={<ClientsPage />} />
+        <Route path="venues" element={<VenuesPage />} />
         <Route path="offerings" element={<OfferingsPage />} />
         <Route path="bookings" element={<BookingsPage />} />
         <Route path="bookings/new" element={<BookingFormPage />} />

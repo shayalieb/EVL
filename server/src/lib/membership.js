@@ -3,6 +3,7 @@ import { prisma } from './prisma.js';
 export const PERMISSION_KEYS = [
   'manageContractors',
   'manageClients',
+  'manageVenues',
   'manageBookings',
   'manageEvents',
   'manageEmailTemplates',

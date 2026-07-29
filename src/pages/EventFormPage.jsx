@@ -10,6 +10,7 @@ import GroupChipSelector from '../components/GroupChipSelector';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Modal from '../components/ui/Modal';
 import HistoryModal from '../components/HistoryModal';
+import VenueCombobox from '../components/VenueCombobox';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/Toast';
@@ -150,7 +151,7 @@ export default function EventFormPage() {
   const navigate = useNavigate();
   const {
     events, eventTypes, addEventType, eventStatuses, inquiryStatuses, addInquiryStatus, emailTemplates,
-    contractors, contractorTypes, clients, addEvent, updateEvent, computeDurationHours,
+    contractors, contractorTypes, clients, venues, addEvent, updateEvent, computeDurationHours,
     bookings, computeEventTotalCost,
   } = useData();
   const { can, currentUser, role } = useAuth();
@@ -324,6 +325,28 @@ export default function EventFormPage() {
   }
   function updateVenue(field, val) {
     setForm((f) => ({ ...f, venue: { ...f.venue, [field]: val } }));
+  }
+
+  // Same reasoning as BookingFormPage's selectSavedVenue — picking a saved
+  // venue autofills every field it has; typing a non-matching name is just
+  // plain text, auto-saved as a new venue once this event itself is saved.
+  function selectSavedVenue(venue) {
+    setForm((f) => ({
+      ...f,
+      venue: {
+        ...f.venue,
+        name: venue.name || '',
+        address1: venue.address1 || '',
+        address2: venue.address2 || '',
+        city: venue.city || '',
+        state: venue.state || '',
+        zip: venue.zip || '',
+        contactName: venue.contactName || '',
+        contactEmail: venue.contactEmail || '',
+        locationNote: venue.locationNote || '',
+        loadInInfo: venue.loadInInfo || '',
+      },
+    }));
   }
 
   function handleAddType() {
@@ -1050,7 +1073,13 @@ export default function EventFormPage() {
             <div className="space-y-5">
               <div>
                 <label className={labelClass}>Venue Name</label>
-                <input value={form.venue.name} onChange={(e) => updateVenue('name', e.target.value)} data-testid="event-form-venue-name-input" className={inputClass} />
+                <VenueCombobox
+                  venues={venues}
+                  value={form.venue.name}
+                  onChangeName={(name) => updateVenue('name', name)}
+                  onSelectVenue={selectSavedVenue}
+                  testId="event-form-venue-name-input"
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

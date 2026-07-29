@@ -16,6 +16,7 @@ const NAV_GROUPS = [
     label: 'Resources',
     items: [
       { to: '/clients', label: 'Clients', icon: '👤' },
+      { to: '/venues', label: 'Venues', icon: '📍' },
       { to: '/contractors', label: 'Contractors', icon: '🎧' },
       { to: '/offerings', label: 'Offerings', icon: '🎁' },
       { to: '/email-templates', label: 'Email Templates', icon: '✉️' },
