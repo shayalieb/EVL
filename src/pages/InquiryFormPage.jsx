@@ -91,8 +91,8 @@ export default function InquiryFormPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 sm:p-8">
-      <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-8">
+    <div className="min-h-screen bg-slate-50 p-3 sm:p-8">
+      <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-5 sm:p-8">
         <Logo className="h-10 w-auto mb-2" />
         <p className="text-sm text-slate-500 mb-6">Tell {meta?.businessInfo?.name || 'us'} about your event</p>
 
@@ -101,7 +101,7 @@ export default function InquiryFormPage() {
 
           <div>
             <h3 className="text-sm font-bold text-slate-800 mb-3">Your Info</h3>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>First Name *</label>
                 <input required value={form.firstName} onChange={(e) => update('firstName', e.target.value)} data-testid="inquiry-form-firstname-input" className={inputClass} />
@@ -136,7 +136,7 @@ export default function InquiryFormPage() {
 
           <div>
             <h3 className="text-sm font-bold text-slate-800 mb-3">Event Info</h3>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>Date of Event *</label>
                 <input required type="date" value={form.eventDate} onChange={(e) => update('eventDate', e.target.value)} data-testid="inquiry-form-eventdate-input" className={inputClass} />
@@ -166,7 +166,7 @@ export default function InquiryFormPage() {
                 <label className={labelClass}>Name of Venue</label>
                 <input value={form.venueName} onChange={(e) => update('venueName', e.target.value)} data-testid="inquiry-form-venuename-input" className={inputClass} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Address 1</label>
                   <input value={form.address1} onChange={(e) => update('address1', e.target.value)} data-testid="inquiry-form-address1-input" className={inputClass} />
@@ -176,7 +176,7 @@ export default function InquiryFormPage() {
                   <input value={form.address2} onChange={(e) => update('address2', e.target.value)} data-testid="inquiry-form-address2-input" className={inputClass} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Venue Contact</label>
                   <input value={form.venueContactName} onChange={(e) => update('venueContactName', e.target.value)} data-testid="inquiry-form-venuecontactname-input" className={inputClass} />

@@ -89,7 +89,8 @@ router.post('/', asyncHandler(async (req, res) => {
       await emailInquiryLink({ accountId: req.membership.accountId, recipientEmail: recipientEmail.trim(), recipientName, inquiryUrl });
       await prisma.inquiryLink.update({ where: { id: link.id }, data: { sentAt: new Date() } });
       emailSent = true;
-    } catch {
+    } catch (err) {
+      console.error('Failed to email inquiry link:', err);
       emailError = 'Link was created, but the email could not be sent — copy the link below to share it manually.';
     }
   }
@@ -124,7 +125,8 @@ router.post('/:id/regenerate', asyncHandler(async (req, res) => {
       await emailInquiryLink({ accountId: req.membership.accountId, recipientEmail: link.recipientEmail, recipientName: link.recipientName, inquiryUrl });
       await prisma.inquiryLink.update({ where: { id: link.id }, data: { sentAt: new Date() } });
       emailSent = true;
-    } catch {
+    } catch (err) {
+      console.error('Failed to email regenerated inquiry link:', err);
       emailError = 'Link was regenerated, but the email could not be sent — copy the link below to share it manually.';
     }
   }
