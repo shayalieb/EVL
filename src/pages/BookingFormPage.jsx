@@ -5,6 +5,7 @@ import InvoiceDocument from '../components/InvoiceDocument';
 import AcceptPaymentModal from '../components/AcceptPaymentModal';
 import SectionsEditor from '../components/SectionsEditor';
 import EventLogPanel from '../components/EventLogPanel';
+import HistoryModal from '../components/HistoryModal';
 import OverflowMenu from '../components/ui/OverflowMenu';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Badge from '../components/ui/Badge';
@@ -20,7 +21,7 @@ import { listInvoices, createInvoice, updateInvoice, sendInvoice, markInvoicePay
 import { generateContractPdf, getContractPdfDataUrl } from '../lib/contractPdf';
 import { generateInvoicePdf } from '../lib/invoicePdf';
 import { sendEmail } from '../lib/email/send';
-import { formatCurrency as currency, formatEventDate, formatVenueLine, formatEventTime } from '../lib/format';
+import { formatCurrency as currency, formatEventDate, formatVenueLine, formatEventTime, formatEmailInput } from '../lib/format';
 import { FileIcon } from '../components/ui/icons';
 import SignatureCanvas from '../components/SignatureCanvas';
 import MoneyInput from '../components/ui/MoneyInput';
@@ -55,8 +56,15 @@ const PAYMENT_METHOD_LABELS = { ach: 'ACH', check: 'Check', card: 'Card', other:
 // Mirrors EventFormPage's venue shape exactly — a booking's location carries
 // straight into the event created from it, so a partial object here would
 // leave that event's venue fields undefined (React controlled-input warnings).
-function emptyVenue() {
-  return { name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '' };
+// Exported for reuse by applyInquiry.js (src/lib/applyInquiry.js), which
+// builds a full booking shape from a submitted inquiry response — addBooking
+// does a flat spread with no deep-defaulting, so a partial venue object
+// there would leave fields like city/state undefined instead of ''.
+export function emptyVenue() {
+  return {
+    name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '',
+    contactName: '', contactEmail: '',
+  };
 }
 
 // Mirrors EventFormPage's schedule item shape exactly — carries straight
@@ -65,12 +73,14 @@ function emptyScheduleItem() {
   return { id: uid('sched'), time: '', name: '', details: '' };
 }
 
-function emptyForm() {
+// Exported for the same reason as emptyVenue above.
+export function emptyForm() {
   return {
     // Generated up front so document uploads on a not-yet-saved booking still
     // have a stable bookingId to attach to — mirrors EventFormPage.
     id: uid('bkg'),
     eventName: '', clientId: '', eventDate: '', eventType: '',
+    brideName: '', groomName: '',
     venue: emptyVenue(),
     schedule: [emptyScheduleItem()],
     depositAmount: '', depositDueDate: '', depositPaid: false, depositType: 'fixed', depositPercent: '',
@@ -445,6 +455,7 @@ export default function BookingFormPage() {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('info');
   const [newClientModalOpen, setNewClientModalOpen] = useState(false);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [addingType, setAddingType] = useState(false);
   const [newTypeLabel, setNewTypeLabel] = useState('');
   const [newActivityText, setNewActivityText] = useState('');
@@ -549,6 +560,8 @@ export default function BookingFormPage() {
         clientId: booking.clientId || '',
         eventDate: booking.eventDate || '',
         eventType: booking.eventType || '',
+        brideName: booking.brideName || '',
+        groomName: booking.groomName || '',
         venue: { ...emptyVenue(), ...booking.venue },
         schedule: booking.schedule && booking.schedule.length ? booking.schedule : [emptyScheduleItem()],
         depositAmount: booking.depositAmount ?? '',
@@ -1518,6 +1531,16 @@ export default function BookingFormPage() {
               Create Event →
             </button>
           )}
+          {booking && (
+            <button
+              type="button"
+              onClick={() => setHistoryModalOpen(true)}
+              data-testid="booking-form-history-button"
+              className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
+            >
+              History
+            </button>
+          )}
           <button type="button" onClick={handleLeaveWithoutSaving} data-testid="booking-form-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">
             Cancel
           </button>
@@ -1597,6 +1620,17 @@ export default function BookingFormPage() {
               <div>
                 <label className={labelClass}>Event Name</label>
                 <input value={form.eventName} onChange={(e) => update('eventName', e.target.value)} data-testid="booking-form-event-name-input" className={inputClass} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass}>Bride's Name</label>
+                  <input value={form.brideName} onChange={(e) => update('brideName', e.target.value)} data-testid="booking-form-bridename-input" className={inputClass} />
+                </div>
+                <div>
+                  <label className={labelClass}>Groom's Name</label>
+                  <input value={form.groomName} onChange={(e) => update('groomName', e.target.value)} data-testid="booking-form-groomname-input" className={inputClass} />
+                </div>
               </div>
 
               <div>
@@ -1686,6 +1720,22 @@ export default function BookingFormPage() {
                 <div>
                   <label className={labelClass}>Address 2</label>
                   <input value={form.venue.address2} onChange={(e) => updateVenue('address2', e.target.value)} data-testid="booking-form-venue-address2-input" className={inputClass} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass}>Venue Contact</label>
+                  <input value={form.venue.contactName} onChange={(e) => updateVenue('contactName', e.target.value)} data-testid="booking-form-venue-contactname-input" className={inputClass} />
+                </div>
+                <div>
+                  <label className={labelClass}>Venue Contact Email</label>
+                  <input
+                    type="email"
+                    value={form.venue.contactEmail}
+                    onChange={(e) => updateVenue('contactEmail', formatEmailInput(e.target.value))}
+                    data-testid="booking-form-venue-contactemail-input"
+                    className={inputClass}
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -3141,6 +3191,13 @@ export default function BookingFormPage() {
         open={newClientModalOpen}
         onClose={() => setNewClientModalOpen(false)}
         onSaved={(record) => update('clientId', record.id)}
+      />
+
+      <HistoryModal
+        open={historyModalOpen}
+        onClose={() => setHistoryModalOpen(false)}
+        title="Booking History"
+        entries={booking?.history}
       />
 
       <AcceptPaymentModal

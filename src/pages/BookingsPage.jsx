@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
@@ -11,6 +11,9 @@ import FilterSelect from '../components/ui/FilterSelect';
 import { useToast } from '../components/ui/Toast';
 import { formatCurrency as currency, formatEventDate } from '../lib/format';
 import { matchesSearch } from '../lib/search';
+import { listInquiryLinks } from '../lib/inquiryLinks';
+import SendInquiryLinkModal from '../components/SendInquiryLinkModal';
+import ReviewInquiryModal from '../components/ReviewInquiryModal';
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -35,6 +38,19 @@ export default function BookingsPage() {
   const [priorityFilter, setPriorityFilter] = useState('');
   const [eventTypeFilter, setEventTypeFilter] = useState('');
   const [depositFilter, setDepositFilter] = useState('');
+  const [sendInquiryModalOpen, setSendInquiryModalOpen] = useState(false);
+  const [pendingInquiries, setPendingInquiries] = useState([]);
+  const [reviewingInquiry, setReviewingInquiry] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listInquiryLinks('submitted').then((links) => { if (!cancelled) setPendingInquiries(links); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  function handleInquiryApplied(linkId) {
+    setPendingInquiries((prev) => prev.filter((l) => l.id !== linkId));
+  }
 
   function depositStatus(b) {
     if (b.depositPaid) return 'paid';
@@ -77,16 +93,54 @@ export default function BookingsPage() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-2xl font-bold text-slate-800">Bookings</h2>
-        <button
-          type="button"
-          onClick={openAdd}
-          disabled={!canEdit}
-          data-testid="bookings-add-button"
-          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          + Add Booking
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSendInquiryModalOpen(true)}
+            disabled={!canEdit}
+            data-testid="bookings-send-inquiry-link-button"
+            className="px-4 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            + Send Inquiry Link
+          </button>
+          <button
+            type="button"
+            onClick={openAdd}
+            disabled={!canEdit}
+            data-testid="bookings-add-button"
+            className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            + Add Booking
+          </button>
+        </div>
       </div>
+
+      {pendingInquiries.length > 0 && (
+        <div data-testid="bookings-pending-inquiries-banner" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="text-sm font-semibold text-amber-800 mb-2">
+            {pendingInquiries.length} new inquiry response{pendingInquiries.length > 1 ? 's' : ''} to review
+          </div>
+          <div className="space-y-1">
+            {pendingInquiries.map((link) => (
+              <div key={link.id} data-testid="bookings-pending-inquiry-row" className="flex items-center justify-between text-sm">
+                <span>
+                  {link.response?.firstName} {link.response?.lastName}
+                  {link.response?.eventType ? ` — ${link.response.eventType}` : ''}
+                  {link.response?.eventDate ? ` on ${formatEventDate(link.response.eventDate)}` : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setReviewingInquiry(link)}
+                  data-testid="bookings-review-inquiry-button"
+                  className="text-indigo-600 font-semibold hover:underline"
+                >
+                  Review
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center gap-2 flex-wrap mb-4">
         <SearchInput value={search} onChange={setSearch} placeholder="Search bookings…" className="w-64" testId="bookings-search-input" />
@@ -279,6 +333,15 @@ export default function BookingsPage() {
         onConfirm={handleDelete}
         title="Delete booking?"
         description="This will permanently delete this booking record."
+      />
+
+      <SendInquiryLinkModal open={sendInquiryModalOpen} onClose={() => setSendInquiryModalOpen(false)} />
+
+      <ReviewInquiryModal
+        open={!!reviewingInquiry}
+        link={reviewingInquiry}
+        onClose={() => setReviewingInquiry(null)}
+        onApplied={handleInquiryApplied}
       />
     </div>
   );

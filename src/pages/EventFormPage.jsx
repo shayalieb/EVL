@@ -9,6 +9,7 @@ import PrepEmailModal from '../components/PrepEmailModal';
 import GroupChipSelector from '../components/GroupChipSelector';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Modal from '../components/ui/Modal';
+import HistoryModal from '../components/HistoryModal';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/Toast';
@@ -103,7 +104,11 @@ function emptyForm() {
     id: uid('evt'),
     name: '', eventType: '', eventDate: '', eventDayOfTheWeek: '',
     clientId: '',
-    venue: { name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '' },
+    brideName: '', groomName: '',
+    venue: {
+      name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '',
+      contactName: '', contactEmail: '',
+    },
     contactPhone: '', contactPhoneExt: '', contactEmail: '',
     startTime: '', endTime: '',
     eventNote: '',
@@ -163,6 +168,7 @@ export default function EventFormPage() {
 
   const [form, setForm] = useState(emptyForm());
   const [addingType, setAddingType] = useState(false);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [newTypeLabel, setNewTypeLabel] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [tierPickerContractor, setTierPickerContractor] = useState(null);
@@ -222,7 +228,12 @@ export default function EventFormPage() {
         name: event.name, eventType: event.eventType, eventDate: event.eventDate,
         eventDayOfTheWeek: event.eventDayOfTheWeek || dayOfWeekFromDate(event.eventDate),
         clientId: event.clientId || '',
-        venue: { ...event.venue },
+        brideName: event.brideName || '',
+        groomName: event.groomName || '',
+        // Defaults spread first so events saved before contactName/
+        // contactEmail existed still get controlled ('') instead of
+        // undefined values for them.
+        venue: { name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '', contactName: '', contactEmail: '', ...event.venue },
         contactPhone: event.contactPhone, contactPhoneExt: event.contactPhoneExt || '', contactEmail: event.contactEmail,
         startTime: event.startTime, endTime: event.endTime,
         eventNote: event.eventNote || '',
@@ -819,6 +830,16 @@ export default function EventFormPage() {
           <h2 className="text-2xl font-bold text-slate-800 truncate">{isEditing ? event.name : 'Add Event'}</h2>
         </div>
         <div className="flex gap-2 shrink-0">
+          {isEditing && (
+            <button
+              type="button"
+              onClick={() => setHistoryModalOpen(true)}
+              data-testid="event-form-history-button"
+              className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
+            >
+              History
+            </button>
+          )}
           <button type="button" onClick={handleLeaveWithoutSaving} data-testid="event-form-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">
             Cancel
           </button>
@@ -906,6 +927,17 @@ export default function EventFormPage() {
                   <option value="">No client linked</option>
                   {clients.map((c) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
                 </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass}>Bride's Name</label>
+                  <input value={form.brideName} onChange={(e) => update('brideName', e.target.value)} data-testid="event-form-bridename-input" className={inputClass} />
+                </div>
+                <div>
+                  <label className={labelClass}>Groom's Name</label>
+                  <input value={form.groomName} onChange={(e) => update('groomName', e.target.value)} data-testid="event-form-groomname-input" className={inputClass} />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1028,6 +1060,16 @@ export default function EventFormPage() {
                 <div>
                   <label className={labelClass}>Address 2</label>
                   <input value={form.venue.address2} onChange={(e) => updateVenue('address2', e.target.value)} data-testid="event-form-venue-address2-input" className={inputClass} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass}>Venue Contact</label>
+                  <input value={form.venue.contactName} onChange={(e) => updateVenue('contactName', e.target.value)} data-testid="event-form-venue-contactname-input" className={inputClass} />
+                </div>
+                <div>
+                  <label className={labelClass}>Venue Contact Email</label>
+                  <input type="email" value={form.venue.contactEmail} onChange={(e) => updateVenue('contactEmail', e.target.value)} data-testid="event-form-venue-contactemail-input" className={inputClass} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -1589,6 +1631,13 @@ export default function EventFormPage() {
         open={!!editingContractor}
         onClose={() => setEditingContractor(null)}
         contractor={editingContractor}
+      />
+
+      <HistoryModal
+        open={historyModalOpen}
+        onClose={() => setHistoryModalOpen(false)}
+        title="Event History"
+        entries={event?.history}
       />
 
       <AcceptPaymentModal

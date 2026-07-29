@@ -15,6 +15,7 @@ import bookingDocumentsRouter from './routes/bookingDocuments.js';
 import contractsRouter, { publicContractsRouter } from './routes/contracts.js';
 import billingRouter from './routes/billing.js';
 import invoicesRouter, { publicInvoicesRouter } from './routes/invoices.js';
+import inquiryLinksRouter, { publicInquiryLinksRouter } from './routes/inquiryLinks.js';
 import stripeWebhooksRouter from './routes/stripeWebhooks.js';
 import calendarRouter from './routes/calendar.js';
 import supportRouter from './routes/support.js';
@@ -85,6 +86,9 @@ app.use('/api/billing', billingRouter);
 app.use('/api/invoices', invoicesRouter);
 // Public/unauthenticated — same reasoning as /api/contract-sign above.
 app.use('/api/invoice-pay', publicInvoicesRouter);
+app.use('/api/inquiry-links', inquiryLinksRouter);
+// Public/unauthenticated — same reasoning as /api/contract-sign above.
+app.use('/api/inquiry', publicInquiryLinksRouter);
 app.use('/api/support', supportRouter);
 app.use('/api/admin', adminRouter);
 // Public/unauthenticated — recipients click this link from an email, not

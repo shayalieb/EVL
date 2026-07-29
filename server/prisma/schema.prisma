@@ -51,6 +51,7 @@ model Account {
   bookingDocuments BookingDocument[]
   contracts      Contract[]
   invoices       Invoice[]
+  inquiryLinks   InquiryLink[]
   accountData    AccountData?
   supportThreads SupportThread[]
 
@@ -354,6 +355,56 @@ model Contract {
   log             Json     @default("[]")
 
   @@index([accountId, bookingId])
+}
+
+// A link the agent sends a prospective client so they can self-report their
+// own event details (name/contact, date, bride/groom names, venue) without
+// writing directly into the account's Client/Booking data — that data is a
+// single whole-blob-replace JSON column (see AccountData), so an
+// unauthenticated public endpoint must never touch it directly. The agent
+// reviews `response` and explicitly "applies" it through the normal
+// authenticated addClient/addBooking flow client-side; this row just tracks
+// the link's lifecycle. Standalone — created before any booking exists,
+// unlike Contract/BookingDocument which always reference one.
+model InquiryLink {
+  id               String    @id @default(cuid())
+  accountId        String
+  account          Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  // Raw token only ever exists in the URL/email — same reasoning as
+  // Invoice.payTokenHash. Unlike Contract's sign tokens, the public view has
+  // no email-confirmation gate (the prospect's email may not be known yet),
+  // so possession of the token alone is the credential.
+  tokenHash        String    @unique
+  // 'open' -> 'submitted' -> 'applied' — each transition is one-way and
+  // enforced by the routes (a used token can't be viewed/submitted again).
+  status           String    @default("open")
+
+  // Set only if the agent typed a known email at link-creation time, to
+  // drive the optional "email this link now" send. Purely informational —
+  // the public routes never gate on it.
+  recipientEmail   String?
+  recipientName    String?
+  ownerEmail       String
+
+  // The client's submission — a single opaque blob (like Contract.snapshot)
+  // since it's write-once, read-by-owner-then-turned-into-real-records, not
+  // queried by individual field. Null until status is 'submitted'/'applied'.
+  response         Json?
+  submittedAt      DateTime?
+
+  // Set once the agent applies it — opaque ids, same non-FK pattern as
+  // Contract.bookingId, purely for reference (not used to prevent re-apply;
+  // status already guards that).
+  appliedAt        DateTime?
+  appliedBookingId String?
+  appliedClientId  String?
+
+  sentAt           DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([accountId])
 }
 
 // A billable invoice for a booking, paid online via Stripe Connect directly

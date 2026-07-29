@@ -29,6 +29,17 @@ export function DataProvider({ children }) {
     updateCurrentUser({ [field]: nextList });
   }, [updateCurrentUser]);
 
+  // System-generated create/edit/delete trail for Bookings and Events
+  // (record.history) — who did what, when. Separate from Booking's own
+  // free-text "Activity Log" notes field, an older, unrelated feature.
+  const historyEntry = useCallback((type) => ({
+    id: uid('hist'),
+    at: new Date().toISOString(),
+    type,
+    actorEmail: currentUser?.email || null,
+    actorName: currentUser ? ([currentUser.firstName, currentUser.lastName].filter(Boolean).join(' ') || currentUser.email) : null,
+  }), [currentUser]);
+
   // ---- Contractors ----
   const addContractor = useCallback((contractor) => {
     if (!currentUser) return;
@@ -81,20 +92,27 @@ export function DataProvider({ children }) {
   // ---- Bookings ----
   const addBooking = useCallback((booking) => {
     if (!currentUser) return;
-    const record = { id: uid('bkg'), createdAt: new Date().toISOString(), convertedEventId: null, activityLog: [], ...booking };
+    const record = { id: uid('bkg'), createdAt: new Date().toISOString(), convertedEventId: null, activityLog: [], deletedAt: null, ...booking, history: [historyEntry('created')] };
     patchList(LIST_FIELDS.bookings, [...(currentUser.bookings || []), record]);
     return record;
-  }, [currentUser, patchList]);
+  }, [currentUser, patchList, historyEntry]);
 
   const updateBooking = useCallback((id, patch) => {
     if (!currentUser) return;
-    patchList(LIST_FIELDS.bookings, (currentUser.bookings || []).map((b) => (b.id === id ? { ...b, ...patch } : b)));
-  }, [currentUser, patchList]);
+    patchList(LIST_FIELDS.bookings, (currentUser.bookings || []).map((b) => (
+      b.id === id ? { ...b, ...patch, history: [...(b.history || []), historyEntry('edited')] } : b
+    )));
+  }, [currentUser, patchList, historyEntry]);
 
+  // Soft delete — hides the booking from normal views (see `bookings` below)
+  // but keeps the record, and its history, around so "who deleted this and
+  // when" stays answerable.
   const deleteBooking = useCallback((id) => {
     if (!currentUser) return;
-    patchList(LIST_FIELDS.bookings, (currentUser.bookings || []).filter((b) => b.id !== id));
-  }, [currentUser, patchList]);
+    patchList(LIST_FIELDS.bookings, (currentUser.bookings || []).map((b) => (
+      b.id === id ? { ...b, deletedAt: new Date().toISOString(), history: [...(b.history || []), historyEntry('deleted')] } : b
+    )));
+  }, [currentUser, patchList, historyEntry]);
 
   // ---- Booking statuses (color-coded + isBooked flag) ----
   const addBookingStatus = useCallback((status) => {
@@ -252,20 +270,25 @@ export function DataProvider({ children }) {
   // ---- Events ----
   const addEvent = useCallback((event) => {
     if (!currentUser) return;
-    const record = { id: uid('evt'), createdAt: new Date().toISOString(), contractorBookings: [], ...event };
+    const record = { id: uid('evt'), createdAt: new Date().toISOString(), contractorBookings: [], deletedAt: null, ...event, history: [historyEntry('created')] };
     patchList(LIST_FIELDS.events, [...currentUser.events, record]);
     return record;
-  }, [currentUser, patchList]);
+  }, [currentUser, patchList, historyEntry]);
 
   const updateEvent = useCallback((id, patch) => {
     if (!currentUser) return;
-    patchList(LIST_FIELDS.events, currentUser.events.map((e) => (e.id === id ? { ...e, ...patch } : e)));
-  }, [currentUser, patchList]);
+    patchList(LIST_FIELDS.events, currentUser.events.map((e) => (
+      e.id === id ? { ...e, ...patch, history: [...(e.history || []), historyEntry('edited')] } : e
+    )));
+  }, [currentUser, patchList, historyEntry]);
 
+  // Soft delete — same reasoning as deleteBooking above.
   const deleteEvent = useCallback((id) => {
     if (!currentUser) return;
-    patchList(LIST_FIELDS.events, currentUser.events.filter((e) => e.id !== id));
-  }, [currentUser, patchList]);
+    patchList(LIST_FIELDS.events, currentUser.events.map((e) => (
+      e.id === id ? { ...e, deletedAt: new Date().toISOString(), history: [...(e.history || []), historyEntry('deleted')] } : e
+    )));
+  }, [currentUser, patchList, historyEntry]);
 
   // Spins up the linked Event once a booking is ready to move into staffing —
   // carries over client/date/type and records the link back on the booking.
@@ -281,11 +304,14 @@ export function DataProvider({ children }) {
       eventType: booking.eventType || '',
       eventDate: booking.eventDate || '',
       clientId: booking.clientId || '',
+      brideName: booking.brideName || '',
+      groomName: booking.groomName || '',
       // Full shape (not just whatever keys the booking happens to have) —
       // EventFormPage reads form.venue.<field> directly, so a partial object
       // here would leave some fields undefined instead of controlled empty strings.
       venue: {
         name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '',
+        contactName: '', contactEmail: '',
         ...booking.venue,
       },
       schedule: booking.schedule || [],
@@ -351,8 +377,8 @@ export function DataProvider({ children }) {
   const value = useMemo(() => ({
     contractors: currentUser?.contractors || [],
     clients: currentUser?.clients || [],
-    events: currentUser?.events || [],
-    bookings: currentUser?.bookings || [],
+    events: (currentUser?.events || []).filter((e) => !e.deletedAt),
+    bookings: (currentUser?.bookings || []).filter((b) => !b.deletedAt),
     contractorTypes: currentUser?.contractorTypes || [],
     eventTypes: currentUser?.eventTypes || [],
     eventStatuses: currentUser?.eventStatuses || [],
