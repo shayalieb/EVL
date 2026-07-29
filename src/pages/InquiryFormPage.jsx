@@ -13,11 +13,19 @@ function emptyInquiryForm() {
   return {
     firstName: '', lastName: '', phone: '', email: '',
     eventDate: '', eventType: '',
-    brideName: '', groomName: '',
+    brideName: '', groomName: '', eventName: '',
     venueName: '', address1: '', address2: '', city: '', state: '', zip: '',
     venueContactName: '', venueContactEmail: '',
     details: '',
   };
+}
+
+// Bride's/Groom's Name only make sense for a wedding — every other event
+// type gets a plain Event Name field instead, which becomes the booking's
+// name directly on Apply (see applyInquiry.js's resolveEventName), rather
+// than being derived from names that don't apply.
+function isWedding(eventType) {
+  return eventType.trim().toLowerCase() === 'wedding';
 }
 
 // Shows the business's own logo (same field ContractDocument/InvoiceDocument
@@ -179,19 +187,49 @@ export default function InquiryFormPage() {
               </div>
               <div>
                 <label className={labelClass}>Event Type</label>
-                <select value={form.eventType} onChange={(e) => update('eventType', e.target.value)} data-testid="inquiry-form-eventtype-select" className={inputClass}>
+                <select
+                  value={form.eventType}
+                  onChange={(e) => {
+                    const nextType = e.target.value;
+                    // Clears whichever field(s) no longer apply on switch —
+                    // otherwise a stale bride/groom name (or event name)
+                    // from before the switch would still get submitted.
+                    setForm((f) => ({
+                      ...f,
+                      eventType: nextType,
+                      ...(isWedding(nextType) ? { eventName: '' } : { brideName: '', groomName: '' }),
+                    }));
+                  }}
+                  data-testid="inquiry-form-eventtype-select"
+                  className={inputClass}
+                >
                   <option value="">Select a type…</option>
                   {(meta?.eventTypes || []).map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
-              <div>
-                <label className={labelClass}>Bride's Name</label>
-                <input value={form.brideName} onChange={(e) => update('brideName', e.target.value)} data-testid="inquiry-form-bridename-input" className={inputClass} />
-              </div>
-              <div>
-                <label className={labelClass}>Groom's Name</label>
-                <input value={form.groomName} onChange={(e) => update('groomName', e.target.value)} data-testid="inquiry-form-groomname-input" className={inputClass} />
-              </div>
+              {isWedding(form.eventType) ? (
+                <>
+                  <div>
+                    <label className={labelClass}>Bride's Name</label>
+                    <input value={form.brideName} onChange={(e) => update('brideName', e.target.value)} data-testid="inquiry-form-bridename-input" className={inputClass} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Groom's Name</label>
+                    <input value={form.groomName} onChange={(e) => update('groomName', e.target.value)} data-testid="inquiry-form-groomname-input" className={inputClass} />
+                  </div>
+                </>
+              ) : (
+                <div className="sm:col-span-2">
+                  <label className={labelClass}>Event Name</label>
+                  <input
+                    value={form.eventName}
+                    onChange={(e) => update('eventName', e.target.value)}
+                    placeholder="e.g. Smith Family Reunion"
+                    data-testid="inquiry-form-eventname-input"
+                    className={inputClass}
+                  />
+                </div>
+              )}
             </div>
           </div>
 

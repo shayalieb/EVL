@@ -206,7 +206,7 @@ publicInquiryLinksRouter.post('/:token/submit', asyncHandler(async (req, res) =>
   const {
     firstName, lastName, phone, email,
     eventDate, eventType,
-    brideName, groomName,
+    brideName, groomName, eventName,
     venueName, address1, address2, city, state, zip, venueContactName, venueContactEmail,
     details,
   } = req.body || {};
@@ -232,6 +232,7 @@ publicInquiryLinksRouter.post('/:token/submit', asyncHandler(async (req, res) =>
         eventType: eventType || '',
         brideName: brideName?.trim() || '',
         groomName: groomName?.trim() || '',
+        eventName: eventName?.trim() || '',
         venueName: venueName?.trim() || '',
         address1: address1?.trim() || '',
         address2: address2?.trim() || '',

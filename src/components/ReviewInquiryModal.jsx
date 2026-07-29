@@ -100,6 +100,7 @@ export default function ReviewInquiryModal({ open, link, onClose, onApplied, onA
           <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Event Info</h4>
           <Row label="Date" value={r.eventDate ? formatEventDate(r.eventDate) : ''} />
           <Row label="Type" value={r.eventType} />
+          <Row label="Event Name" value={r.eventName} />
           <Row label="Bride's Name" value={r.brideName} />
           <Row label="Groom's Name" value={r.groomName} />
         </div>

@@ -64,6 +64,18 @@ export function generateEventName({ groomName, brideName, eventType }) {
   return [names, eventType].filter(Boolean).join(' — ');
 }
 
+// The inquiry form only collects Bride's/Groom's Name for a wedding — every
+// other event type collects a plain Event Name field instead (see
+// InquiryFormPage's isWedding), which is used directly here. Falls back to
+// the bride/groom mash-up when eventName wasn't collected (the wedding
+// path), and gracefully handles older responses submitted before this field
+// existed (neither present — generateEventName degrades to just eventType,
+// or '' if that's blank too).
+export function resolveEventName(response) {
+  if (response.eventName?.trim()) return response.eventName.trim();
+  return generateEventName(response);
+}
+
 // Turns a submitted InquiryLink.response into a real Client + Booking via
 // the normal authenticated addClient/addBooking flow (never writes directly
 // server-side — see InquiryLink's model comment in schema.prisma for why).
@@ -76,7 +88,7 @@ export function applyInquiryResponse(response, { clients, addClient, addBooking 
 
   const booking = addBooking({
     ...emptyForm(),
-    eventName: generateEventName(r),
+    eventName: resolveEventName(r),
     clientId,
     eventDate: r.eventDate,
     eventType: r.eventType,
@@ -116,7 +128,7 @@ export function buildBookingMergePatch(response, currentBooking) {
     eventType: pick(r.eventType, currentBooking.eventType),
     brideName: pick(r.brideName, currentBooking.brideName),
     groomName: pick(r.groomName, currentBooking.groomName),
-    eventName: currentBooking.eventName || generateEventName(r),
+    eventName: currentBooking.eventName || resolveEventName(r),
     notes: mergeNotesWithDetails(currentBooking.notes, r.details),
     venue: {
       ...venue,
