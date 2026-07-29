@@ -207,11 +207,15 @@ publicInquiryLinksRouter.post('/:token/submit', asyncHandler(async (req, res) =>
     firstName, lastName, phone, email,
     eventDate, eventType,
     brideName, groomName,
-    venueName, address1, address2, venueContactName, venueContactEmail,
+    venueName, address1, address2, city, state, zip, venueContactName, venueContactEmail,
+    details,
   } = req.body || {};
 
   if (!firstName?.trim() || !lastName?.trim() || !eventDate) {
     return res.status(400).json({ error: 'First name, last name, and event date are required.' });
+  }
+  if (zip?.trim() && !/^\d{5}$/.test(zip.trim())) {
+    return res.status(400).json({ error: 'Zip code must be 5 digits.' });
   }
 
   const updated = await prisma.inquiryLink.update({
@@ -231,8 +235,12 @@ publicInquiryLinksRouter.post('/:token/submit', asyncHandler(async (req, res) =>
         venueName: venueName?.trim() || '',
         address1: address1?.trim() || '',
         address2: address2?.trim() || '',
+        city: city?.trim() || '',
+        state: state?.trim() || '',
+        zip: zip?.trim() || '',
         venueContactName: venueContactName?.trim() || '',
         venueContactEmail: venueContactEmail?.trim() || '',
+        details: details?.trim() || '',
       },
     },
   });

@@ -11,6 +11,10 @@ export function formatEmailInput(value) {
   return value.trim().toLowerCase();
 }
 
+export function formatZip(value) {
+  return value.replace(/\D/g, '').slice(0, 5);
+}
+
 export function formatCurrency(n, { maximumFractionDigits } = {}) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',

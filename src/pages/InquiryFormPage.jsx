@@ -3,7 +3,8 @@ import { useParams } from 'react-router-dom';
 import Logo from '../components/ui/Logo';
 import SubmitButton from '../components/ui/SubmitButton';
 import { getInquiryByToken, submitInquiry } from '../lib/inquiryLinks';
-import { formatPhoneNumber, formatEmailInput } from '../lib/format';
+import { formatPhoneNumber, formatEmailInput, formatZip } from '../lib/format';
+import { US_STATES } from '../lib/usStates';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -13,8 +14,34 @@ function emptyInquiryForm() {
     firstName: '', lastName: '', phone: '', email: '',
     eventDate: '', eventType: '',
     brideName: '', groomName: '',
-    venueName: '', address1: '', address2: '', venueContactName: '', venueContactEmail: '',
+    venueName: '', address1: '', address2: '', city: '', state: '', zip: '',
+    venueContactName: '', venueContactEmail: '',
+    details: '',
   };
+}
+
+// Shows the business's own logo (same field ContractDocument/InvoiceDocument
+// use) instead of the generic GigWorks mark — this page is the client's
+// first impression of the business itself, not of GigWorks. Falls back to
+// the business name as plain text if no logo is set, or the image 404s.
+function BusinessLogo({ businessInfo, className = 'h-12 w-auto' }) {
+  const [failed, setFailed] = useState(false);
+  if (businessInfo?.logo && !failed) {
+    return <img src={businessInfo.logo} alt={businessInfo.name || ''} className={className} onError={() => setFailed(true)} />;
+  }
+  if (businessInfo?.name) {
+    return <div className="text-lg font-bold text-slate-800">{businessInfo.name}</div>;
+  }
+  return null;
+}
+
+function PoweredByFooter() {
+  return (
+    <div className="flex items-center justify-center gap-1.5 mt-6 text-xs text-slate-400">
+      <span>Powered by</span>
+      <Logo className="h-4 w-auto" />
+    </div>
+  );
 }
 
 export default function InquiryFormPage() {
@@ -45,6 +72,10 @@ export default function InquiryFormPage() {
     setSubmitError('');
     if (!form.firstName.trim() || !form.lastName.trim() || !form.eventDate) {
       setSubmitError('First name, last name, and date of event are required.');
+      return;
+    }
+    if (form.zip && form.zip.length !== 5) {
+      setSubmitError('Zip code must be 5 digits.');
       return;
     }
     setSubmitting(true);
@@ -81,10 +112,13 @@ export default function InquiryFormPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
         <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8 text-center">
-          <Logo className="h-10 w-auto mx-auto mb-4" />
+          <div className="flex justify-center mb-4">
+            <BusinessLogo businessInfo={meta?.businessInfo} />
+          </div>
           <p data-testid="inquiry-form-thankyou-banner" className="text-sm text-slate-600">
             Thanks{form.firstName ? `, ${form.firstName}` : ''}! {meta?.businessInfo?.name || 'We'} will be in touch shortly.
           </p>
+          <PoweredByFooter />
         </div>
       </div>
     );
@@ -93,7 +127,9 @@ export default function InquiryFormPage() {
   return (
     <div className="min-h-screen bg-slate-50 p-3 sm:p-8">
       <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-5 sm:p-8">
-        <Logo className="h-10 w-auto mb-2" />
+        <div className="mb-2">
+          <BusinessLogo businessInfo={meta?.businessInfo} />
+        </div>
         <p className="text-sm text-slate-500 mb-6">Tell {meta?.businessInfo?.name || 'us'} about your event</p>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -176,6 +212,30 @@ export default function InquiryFormPage() {
                   <input value={form.address2} onChange={(e) => update('address2', e.target.value)} data-testid="inquiry-form-address2-input" className={inputClass} />
                 </div>
               </div>
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-3">
+                <div>
+                  <label className={labelClass}>City</label>
+                  <input value={form.city} onChange={(e) => update('city', e.target.value)} data-testid="inquiry-form-city-input" className={inputClass} />
+                </div>
+                <div className="sm:w-24">
+                  <label className={labelClass}>State</label>
+                  <select value={form.state} onChange={(e) => update('state', e.target.value)} data-testid="inquiry-form-state-select" className={inputClass}>
+                    <option value="">—</option>
+                    {US_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div className="sm:w-28">
+                  <label className={labelClass}>Zip</label>
+                  <input
+                    value={form.zip}
+                    onChange={(e) => update('zip', formatZip(e.target.value))}
+                    inputMode="numeric"
+                    maxLength={5}
+                    data-testid="inquiry-form-zip-input"
+                    className={inputClass}
+                  />
+                </div>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Venue Contact</label>
@@ -195,8 +255,22 @@ export default function InquiryFormPage() {
             </div>
           </div>
 
+          <div>
+            <label className={labelClass}>Details (optional)</label>
+            <textarea
+              rows={3}
+              placeholder="Anything else we should know about your event?"
+              value={form.details}
+              onChange={(e) => update('details', e.target.value)}
+              data-testid="inquiry-form-details-textarea"
+              className={inputClass}
+            />
+          </div>
+
           <SubmitButton loading={submitting} testId="inquiry-form-submit-button">Submit</SubmitButton>
         </form>
+
+        <PoweredByFooter />
       </div>
     </div>
   );

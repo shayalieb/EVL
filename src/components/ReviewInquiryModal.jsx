@@ -108,9 +108,19 @@ export default function ReviewInquiryModal({ open, link, onClose, onApplied, onA
           <Row label="Venue" value={r.venueName} />
           <Row label="Address 1" value={r.address1} />
           <Row label="Address 2" value={r.address2} />
+          <Row label="City" value={r.city} />
+          <Row label="State" value={r.state} />
+          <Row label="Zip" value={r.zip} />
           <Row label="Venue Contact" value={r.venueContactName} />
           <Row label="Venue Email" value={r.venueContactEmail} />
         </div>
+
+        {r.details && (
+          <div>
+            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Details</h4>
+            <p className="text-sm text-slate-700 whitespace-pre-wrap">{r.details}</p>
+          </div>
+        )}
 
         {!onApplyOverride && (
           <div data-testid="review-inquiry-modal-client-note" className="text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">

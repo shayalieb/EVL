@@ -38,6 +38,16 @@ export function resolveClientForMerge(response, { clients, addClient, currentCli
   return { clientId: client.id, client, created };
 }
 
+// The client's free-text "Details" field lands in the booking's own Notes
+// field (there's no dedicated slot for it) — clearly labeled and appended
+// rather than overwriting whatever the agent already has there, since Notes
+// is a general-purpose field that may already be in active use.
+function mergeNotesWithDetails(existingNotes, details) {
+  if (!details) return existingNotes || '';
+  const labeled = `From inquiry form: ${details}`;
+  return existingNotes ? `${existingNotes}\n\n${labeled}` : labeled;
+}
+
 function lastWord(name) {
   const parts = (name || '').trim().split(/\s+/).filter(Boolean);
   return parts.length ? parts[parts.length - 1] : '';
@@ -72,11 +82,15 @@ export function applyInquiryResponse(response, { clients, addClient, addBooking 
     eventType: r.eventType,
     brideName: r.brideName,
     groomName: r.groomName,
+    notes: mergeNotesWithDetails('', r.details),
     venue: {
       ...emptyVenue(),
       name: r.venueName,
       address1: r.address1,
       address2: r.address2,
+      city: r.city,
+      state: r.state,
+      zip: r.zip,
       contactName: r.venueContactName,
       contactEmail: r.venueContactEmail,
     },
@@ -103,11 +117,15 @@ export function buildBookingMergePatch(response, currentBooking) {
     brideName: pick(r.brideName, currentBooking.brideName),
     groomName: pick(r.groomName, currentBooking.groomName),
     eventName: currentBooking.eventName || generateEventName(r),
+    notes: mergeNotesWithDetails(currentBooking.notes, r.details),
     venue: {
       ...venue,
       name: pick(r.venueName, venue.name),
       address1: pick(r.address1, venue.address1),
       address2: pick(r.address2, venue.address2),
+      city: pick(r.city, venue.city),
+      state: pick(r.state, venue.state),
+      zip: pick(r.zip, venue.zip),
       contactName: pick(r.venueContactName, venue.contactName),
       contactEmail: pick(r.venueContactEmail, venue.contactEmail),
     },
