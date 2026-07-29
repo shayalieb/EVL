@@ -4,7 +4,7 @@ import Modal from './ui/Modal';
 import { useData } from '../context/DataContext';
 import { useToast } from './ui/Toast';
 import { applyInquiryLink } from '../lib/inquiryLinks';
-import { applyInquiryResponse } from '../lib/applyInquiry';
+import { applyInquiryResponse, buildBookingMergePatch, findMatchingClient, resolveClientForMerge } from '../lib/applyInquiry';
 import { formatEventDate } from '../lib/format';
 
 const rowClass = 'flex justify-between gap-4 py-1.5 text-sm';
@@ -22,10 +22,20 @@ function Row({ label, value }) {
 }
 
 // Read-only view of a submitted InquiryLink, with an explicit Apply step
-// that runs the normal authenticated addClient/addBooking flow (never
-// writes directly server-side — see InquiryLink's model comment).
-export default function ReviewInquiryModal({ open, link, onClose, onApplied }) {
-  const { clients, addClient, addBooking } = useData();
+// that runs the normal authenticated addClient/addBooking(orUpdateBooking)
+// flow — never writes directly server-side (see InquiryLink's model comment
+// in schema.prisma). Two apply paths:
+//  - link.bookingId unset: creates a brand-new Client + Booking.
+//  - link.bookingId set: merges into that existing Booking instead (see
+//    src/lib/applyInquiry.js's buildBookingMergePatch) — used when the link
+//    was sent from an in-progress booking to fill in the remaining gaps.
+// `onApplyOverride`, if given, replaces both built-in paths entirely — used
+// by BookingFormPage's own inline widget so the merge writes into that
+// page's already-open form state (and gets picked up by its normal
+// autosave) instead of going through DataContext.updateBooking, which the
+// currently-open form's one-time hydration effect wouldn't pick up live.
+export default function ReviewInquiryModal({ open, link, onClose, onApplied, onApplyOverride, navigateAfterApply = true }) {
+  const { clients, bookings, addClient, addBooking, updateBooking } = useData();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [applying, setApplying] = useState(false);
@@ -33,21 +43,43 @@ export default function ReviewInquiryModal({ open, link, onClose, onApplied }) {
   if (!link) return null;
   const r = link.response || {};
 
+  // Preview-only — never creates/mutates anything itself, just informs the
+  // "what will Apply do" note below so a duplicate client isn't a surprise.
+  const targetBooking = link.bookingId ? bookings.find((b) => b.id === link.bookingId) : null;
+  const alreadyLinkedClient = targetBooking?.clientId ? clients.find((c) => c.id === targetBooking.clientId) : null;
+  const matchedClient = !alreadyLinkedClient ? findMatchingClient(clients, r) : null;
+
   async function handleApply() {
     setApplying(true);
     try {
-      const { client, booking } = applyInquiryResponse(r, { clients, addClient, addBooking });
-      try {
-        await applyInquiryLink(link.id, { bookingId: booking.id, clientId: client.id });
-      } catch {
-        // Local Client/Booking already exist regardless — same tolerance as
-        // other best-effort calls in this codebase. Re-clicking Apply on the
-        // same link would create a duplicate, but that's a rare failure path.
+      let bookingId;
+      let clientId;
+      if (onApplyOverride) {
+        ({ bookingId, clientId } = await onApplyOverride(r));
+      } else if (link.bookingId) {
+        if (!targetBooking) throw new Error('The booking this was sent from no longer exists.');
+        const resolved = resolveClientForMerge(r, { clients, addClient, currentClientId: targetBooking.clientId });
+        const patch = buildBookingMergePatch(r, targetBooking);
+        updateBooking(targetBooking.id, { ...patch, clientId: resolved.clientId });
+        bookingId = targetBooking.id;
+        clientId = resolved.clientId;
+      } else {
+        const created = applyInquiryResponse(r, { clients, addClient, addBooking });
+        bookingId = created.booking.id;
+        clientId = created.client.id;
       }
-      showToast('Booking created from inquiry');
+      try {
+        await applyInquiryLink(link.id, { bookingId, clientId });
+      } catch {
+        // Local Client/Booking are already created/updated regardless — same
+        // tolerance as other best-effort calls in this codebase. Re-clicking
+        // Apply on the same link would create/merge a second time, but
+        // that's a rare failure path.
+      }
+      showToast(link.bookingId ? 'Booking updated from inquiry' : 'Booking created from inquiry');
       onApplied?.(link.id);
       onClose();
-      navigate(`/bookings/${booking.id}`);
+      if (navigateAfterApply) navigate(`/bookings/${bookingId}`);
     } catch (err) {
       showToast(err.message || 'Failed to apply inquiry', 'error');
     } finally {
@@ -80,6 +112,16 @@ export default function ReviewInquiryModal({ open, link, onClose, onApplied }) {
           <Row label="Venue Email" value={r.venueContactEmail} />
         </div>
 
+        {!onApplyOverride && (
+          <div data-testid="review-inquiry-modal-client-note" className="text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+            {alreadyLinkedClient
+              ? `Already linked to client ${alreadyLinkedClient.firstName} ${alreadyLinkedClient.lastName} — won't be changed.`
+              : matchedClient
+                ? `Matches existing client ${matchedClient.firstName} ${matchedClient.lastName} (${matchedClient.email || matchedClient.phone}) — will link to it instead of creating a new one.`
+                : 'No matching client found — a new one will be created.'}
+          </div>
+        )}
+
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} data-testid="review-inquiry-modal-dismiss-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Dismiss</button>
           <button
@@ -89,7 +131,7 @@ export default function ReviewInquiryModal({ open, link, onClose, onApplied }) {
             data-testid="review-inquiry-modal-apply-button"
             className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60"
           >
-            {applying ? 'Applying…' : 'Apply — Create Booking'}
+            {applying ? 'Applying…' : link.bookingId ? 'Apply — Update Booking' : 'Apply — Create Booking'}
           </button>
         </div>
       </div>

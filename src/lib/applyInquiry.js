@@ -22,6 +22,22 @@ export function findMatchingClient(clients, response) {
   return null;
 }
 
+// If the booking a response is being applied to/into already has a linked
+// client, that link is left alone (it was presumably set deliberately —
+// e.g. from a phone call before the inquiry link was even sent). Only when
+// there's no existing link does this fall back to find-or-create.
+export function resolveClientForMerge(response, { clients, addClient, currentClientId }) {
+  if (currentClientId) {
+    return { clientId: currentClientId, client: clients.find((c) => c.id === currentClientId) || null, created: false };
+  }
+  let client = findMatchingClient(clients, response);
+  const created = !client;
+  if (!client) {
+    client = addClient({ firstName: response.firstName, lastName: response.lastName, phone: response.phone, email: response.email });
+  }
+  return { clientId: client.id, client, created };
+}
+
 function lastWord(name) {
   const parts = (name || '').trim().split(/\s+/).filter(Boolean);
   return parts.length ? parts[parts.length - 1] : '';
@@ -46,15 +62,12 @@ export function generateEventName({ groomName, brideName, eventType }) {
 // object here would leave fields like city/state undefined instead of ''.
 export function applyInquiryResponse(response, { clients, addClient, addBooking }) {
   const r = response;
-  let client = findMatchingClient(clients, r);
-  if (!client) {
-    client = addClient({ firstName: r.firstName, lastName: r.lastName, phone: r.phone, email: r.email });
-  }
+  const { clientId, client } = resolveClientForMerge(r, { clients, addClient, currentClientId: null });
 
   const booking = addBooking({
     ...emptyForm(),
     eventName: generateEventName(r),
-    clientId: client.id,
+    clientId,
     eventDate: r.eventDate,
     eventType: r.eventType,
     brideName: r.brideName,
@@ -70,4 +83,33 @@ export function applyInquiryResponse(response, { clients, addClient, addBooking 
   });
 
   return { client, booking };
+}
+
+// For a link sent FROM an existing, in-progress booking (InquiryLink.
+// bookingId set) — the response fills in gaps rather than replacing the
+// booking wholesale. Only overwrites a field when the response actually has
+// a value for it, so blanks left on the public form (e.g. the client skipped
+// venue contact info) never clobber something the agent already entered.
+// eventName is the one exception: it's only ever set here if the booking's
+// eventName is still blank, since a booking already underway may well have
+// one the agent typed on purpose.
+export function buildBookingMergePatch(response, currentBooking) {
+  const r = response;
+  const venue = currentBooking.venue || {};
+  const pick = (next, prev) => (next ? next : prev);
+  return {
+    eventDate: pick(r.eventDate, currentBooking.eventDate),
+    eventType: pick(r.eventType, currentBooking.eventType),
+    brideName: pick(r.brideName, currentBooking.brideName),
+    groomName: pick(r.groomName, currentBooking.groomName),
+    eventName: currentBooking.eventName || generateEventName(r),
+    venue: {
+      ...venue,
+      name: pick(r.venueName, venue.name),
+      address1: pick(r.address1, venue.address1),
+      address2: pick(r.address2, venue.address2),
+      contactName: pick(r.venueContactName, venue.contactName),
+      contactEmail: pick(r.venueContactEmail, venue.contactEmail),
+    },
+  };
 }

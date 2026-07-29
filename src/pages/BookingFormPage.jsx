@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ClientModal from '../components/ClientModal';
+import SendInquiryLinkModal from '../components/SendInquiryLinkModal';
+import ReviewInquiryModal from '../components/ReviewInquiryModal';
 import InvoiceDocument from '../components/InvoiceDocument';
 import AcceptPaymentModal from '../components/AcceptPaymentModal';
 import SectionsEditor from '../components/SectionsEditor';
@@ -17,6 +19,8 @@ import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
 import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, bookingDocumentDownloadUrl } from '../lib/bookingDocuments';
 import { generateProposalPdf, generateProposalPdfAttachment, getProposalPdfDataUrl } from '../lib/proposalPdf';
 import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms, addContractLogNote, regenerateClientSignLink } from '../lib/contracts';
+import { listInquiryLinks } from '../lib/inquiryLinks';
+import { buildBookingMergePatch, resolveClientForMerge } from '../lib/applyInquiry';
 import { listInvoices, createInvoice, updateInvoice, sendInvoice, markInvoicePayment, sendReceipt, voidInvoice, getNextInvoiceInfo } from '../lib/invoices';
 import { generateContractPdf, getContractPdfDataUrl } from '../lib/contractPdf';
 import { generateInvoicePdf } from '../lib/invoicePdf';
@@ -436,7 +440,7 @@ export default function BookingFormPage() {
   const navigate = useNavigate();
   const {
     bookings, clients, eventTypes, addEventType, bookingStatuses,
-    addBooking, updateBooking, convertBookingToEvent, addEvent,
+    addClient, addBooking, updateBooking, convertBookingToEvent, addEvent,
     proposalTemplates, addProposalTemplate, contractTemplates, addContractTemplate,
   } = useData();
   const { can, currentUser } = useAuth();
@@ -456,6 +460,9 @@ export default function BookingFormPage() {
   const [activeTab, setActiveTab] = useState('info');
   const [newClientModalOpen, setNewClientModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [sendInquiryModalOpen, setSendInquiryModalOpen] = useState(false);
+  const [submittedInquiryLink, setSubmittedInquiryLink] = useState(null);
+  const [reviewingInquiry, setReviewingInquiry] = useState(false);
   const [addingType, setAddingType] = useState(false);
   const [newTypeLabel, setNewTypeLabel] = useState('');
   const [newActivityText, setNewActivityText] = useState('');
@@ -631,6 +638,23 @@ export default function BookingFormPage() {
   useEffect(() => {
     if (form.id) refreshDocs(form.id);
   }, [form.id, refreshDocs]);
+
+  // Checks whether a client has already responded to an inquiry link sent
+  // from this specific booking (see the "Inquiry Link" widget below) — only
+  // relevant once saved, since a brand-new unsaved booking can't have had a
+  // link sent from it yet.
+  const refreshSubmittedInquiry = useCallback(async (id) => {
+    try {
+      const links = await listInquiryLinks({ status: 'submitted', bookingId: id });
+      setSubmittedInquiryLink(links[0] || null);
+    } catch {
+      // best-effort — the widget just shows no pending response if this fails
+    }
+  }, []);
+
+  useEffect(() => {
+    if (booking) refreshSubmittedInquiry(booking.id);
+  }, [booking?.id, refreshSubmittedInquiry]);
 
   useEffect(() => {
     if (!booking) { setContract(null); return; }
@@ -812,6 +836,19 @@ export default function BookingFormPage() {
     update('eventType', newTypeLabel.trim());
     setNewTypeLabel('');
     setAddingType(false);
+  }
+
+  // Merges a submitted inquiry response into this page's own `form` state
+  // (same as if the agent had typed the values in) rather than going through
+  // DataContext.updateBooking — this form is already open, and its
+  // hydration effect only ever runs once per booking id, so a live
+  // updateBooking() call wouldn't be reflected here without a reload. The
+  // existing 800ms autosave effect persists it normally from here.
+  async function handleApplyInquiryOverride(response) {
+    const patch = buildBookingMergePatch(response, form);
+    const resolved = resolveClientForMerge(response, { clients, addClient, currentClientId: form.clientId });
+    setForm((f) => ({ ...f, ...patch, clientId: resolved.clientId }));
+    return { bookingId: form.id, clientId: resolved.clientId };
   }
 
   function validate() {
@@ -1613,6 +1650,43 @@ export default function BookingFormPage() {
         className="space-y-6"
       >
         <div className={activeTab === 'info' ? 'space-y-6' : 'hidden'}>
+        {booking && (
+          <div className={cardClass}>
+            {submittedInquiryLink ? (
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className={`${cardTitleClass} mb-1`}>Inquiry Link</h3>
+                  <p className="text-sm text-slate-500">
+                    {submittedInquiryLink.response?.firstName} {submittedInquiryLink.response?.lastName} responded to your inquiry link.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReviewingInquiry(true)}
+                  data-testid="booking-form-review-inquiry-button"
+                  className="shrink-0 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
+                >
+                  Review Response
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className={`${cardTitleClass} mb-1`}>Inquiry Link</h3>
+                  <p className="text-sm text-slate-500">Send the client a secure link to fill in the event details themselves.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSendInquiryModalOpen(true)}
+                  data-testid="booking-form-send-inquiry-link-button"
+                  className="shrink-0 px-4 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
+                >
+                  Send Inquiry Link
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className={cardClass}>
             <h3 className={cardTitleClass}>Booking Details</h3>
@@ -3198,6 +3272,25 @@ export default function BookingFormPage() {
         onClose={() => setHistoryModalOpen(false)}
         title="Booking History"
         entries={booking?.history}
+      />
+
+      {booking && (
+        <SendInquiryLinkModal
+          open={sendInquiryModalOpen}
+          onClose={() => setSendInquiryModalOpen(false)}
+          bookingId={booking.id}
+          defaultRecipientEmail={client?.email || ''}
+          defaultRecipientName={client ? `${client.firstName} ${client.lastName}`.trim() : ''}
+        />
+      )}
+
+      <ReviewInquiryModal
+        open={reviewingInquiry}
+        link={submittedInquiryLink}
+        onClose={() => setReviewingInquiry(false)}
+        onApplied={() => setSubmittedInquiryLink(null)}
+        onApplyOverride={handleApplyInquiryOverride}
+        navigateAfterApply={false}
       />
 
       <AcceptPaymentModal

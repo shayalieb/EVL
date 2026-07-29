@@ -44,7 +44,7 @@ export default function BookingsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    listInquiryLinks('submitted').then((links) => { if (!cancelled) setPendingInquiries(links); }).catch(() => {});
+    listInquiryLinks({ status: 'submitted' }).then((links) => { if (!cancelled) setPendingInquiries(links); }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
 

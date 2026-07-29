@@ -363,9 +363,10 @@ model Contract {
 // single whole-blob-replace JSON column (see AccountData), so an
 // unauthenticated public endpoint must never touch it directly. The agent
 // reviews `response` and explicitly "applies" it through the normal
-// authenticated addClient/addBooking flow client-side; this row just tracks
-// the link's lifecycle. Standalone — created before any booking exists,
-// unlike Contract/BookingDocument which always reference one.
+// authenticated addClient/addBooking(orUpdateBooking) flow client-side; this
+// row just tracks the link's lifecycle. Usually standalone (sent before any
+// booking exists), but optionally tied to one via `bookingId` when sent from
+// an in-progress Booking to fill in the remaining gaps — see `bookingId`.
 model InquiryLink {
   id               String    @id @default(cuid())
   accountId        String
@@ -378,7 +379,17 @@ model InquiryLink {
   tokenHash        String    @unique
   // 'open' -> 'submitted' -> 'applied' — each transition is one-way and
   // enforced by the routes (a used token can't be viewed/submitted again).
+  // Regenerating a still-'open' link (lost/expired) reuses the same row —
+  // it just swaps tokenHash/expiresAt, no new status.
   status           String    @default("open")
+  expiresAt        DateTime
+
+  // Opaque id (same non-FK pattern as Contract.bookingId) of the Booking
+  // this link was sent from, if any — set when the agent already started a
+  // booking manually and just wants the client to fill in the rest. Applying
+  // a response with this set merges into that existing Booking instead of
+  // creating a new one (see src/lib/applyInquiry.js).
+  bookingId        String?
 
   // Set only if the agent typed a known email at link-creation time, to
   // drive the optional "email this link now" send. Purely informational —
@@ -405,6 +416,7 @@ model InquiryLink {
   updatedAt        DateTime  @updatedAt
 
   @@index([accountId])
+  @@index([accountId, bookingId])
 }
 
 // A billable invoice for a booking, paid online via Stripe Connect directly
