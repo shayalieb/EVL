@@ -105,6 +105,48 @@ router.post('/', asyncHandler(async (req, res) => {
   res.status(201).json({ link: serializeForOwner(link), inquiryLink: inquiryUrl, emailSent, emailError });
 }));
 
+async function createReusableLink(accountId, userId) {
+  const owner = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+  const token = generateToken();
+  return prisma.inquiryLink.create({
+    data: {
+      accountId,
+      tokenHash: hashToken(token),
+      publicToken: token,
+      status: 'open',
+      isReusable: true,
+      expiresAt: null,
+      ownerEmail: owner.email,
+    },
+  });
+}
+
+// The one account-wide "general" link a business can paste on their own
+// website — get-or-create so callers never have to check existence first.
+// Registered above /:id/regenerate below (both are POST, and Express
+// matches in registration order) so "reusable-link" is never swallowed by
+// the /:id pattern as if it were an id.
+router.get('/reusable-link', asyncHandler(async (req, res) => {
+  let link = await prisma.inquiryLink.findFirst({ where: { accountId: req.membership.accountId, isReusable: true } });
+  if (!link) link = await createReusableLink(req.membership.accountId, req.session.userId);
+  res.json({ link: serializeForOwner(link), inquiryLink: `${frontendUrl()}/inquiry/${link.publicToken}` });
+}));
+
+// Rotates the general link's token — old embedded URLs stop working, a
+// fresh one is returned. Reuses the same row (unlike per-recipient
+// regenerate, there's no 'open' guard needed since a reusable link never
+// leaves that status).
+router.post('/reusable-link/regenerate', asyncHandler(async (req, res) => {
+  let link = await prisma.inquiryLink.findFirst({ where: { accountId: req.membership.accountId, isReusable: true } });
+  if (!link) {
+    link = await createReusableLink(req.membership.accountId, req.session.userId);
+  } else {
+    const token = generateToken();
+    link = await prisma.inquiryLink.update({ where: { id: link.id }, data: { tokenHash: hashToken(token), publicToken: token } });
+  }
+  res.json({ link: serializeForOwner(link), inquiryLink: `${frontendUrl()}/inquiry/${link.publicToken}` });
+}));
+
 // Issues a fresh token (and a fresh 30-day expiry) for a link that was lost
 // before the client used it, or that expired unused — same idea as
 // Contract's regenerate-client-link. Only valid while still 'open': once a
@@ -181,10 +223,13 @@ async function findByToken(token) {
 
 // Distinguishes "already used" from "expired" — a stale-but-unused link
 // should send the client back to ask the agent for a fresh one (regenerate),
-// which reads differently than "someone already submitted this."
+// which reads differently than "someone already submitted this." Reusable
+// links skip both checks — they never change status and never expire (see
+// the InquiryLink.isReusable model comment).
 function publicAccessError(link) {
+  if (link.isReusable) return null;
   if (link.status !== 'open') return { status: 410, error: 'This inquiry link has already been used.' };
-  if (link.expiresAt < new Date()) return { status: 410, error: 'This inquiry link has expired. Please ask for a new one.' };
+  if (link.expiresAt && link.expiresAt < new Date()) return { status: 410, error: 'This inquiry link has expired. Please ask for a new one.' };
   return null;
 }
 
@@ -225,33 +270,52 @@ publicInquiryLinksRouter.post('/:token/submit', asyncHandler(async (req, res) =>
     return res.status(400).json({ error: 'Zip code must be 5 digits.' });
   }
 
-  const updated = await prisma.inquiryLink.update({
-    where: { id: link.id },
-    data: {
-      status: 'submitted',
-      submittedAt: new Date(),
-      response: {
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        phone: phone?.trim() || '',
-        email: email?.trim() || '',
-        eventDate,
-        eventType: eventType || '',
-        brideName: brideName?.trim() || '',
-        groomName: groomName?.trim() || '',
-        eventName: eventName?.trim() || '',
-        venueName: venueName?.trim() || '',
-        address1: address1?.trim() || '',
-        address2: address2?.trim() || '',
-        city: city?.trim() || '',
-        state: state?.trim() || '',
-        zip: zip?.trim() || '',
-        venueContactName: venueContactName?.trim() || '',
-        venueContactEmail: venueContactEmail?.trim() || '',
-        details: details?.trim() || '',
-      },
-    },
-  });
+  const response = {
+    firstName: firstName.trim(),
+    lastName: lastName.trim(),
+    phone: phone?.trim() || '',
+    email: email?.trim() || '',
+    eventDate,
+    eventType: eventType || '',
+    brideName: brideName?.trim() || '',
+    groomName: groomName?.trim() || '',
+    eventName: eventName?.trim() || '',
+    venueName: venueName?.trim() || '',
+    address1: address1?.trim() || '',
+    address2: address2?.trim() || '',
+    city: city?.trim() || '',
+    state: state?.trim() || '',
+    zip: zip?.trim() || '',
+    venueContactName: venueContactName?.trim() || '',
+    venueContactEmail: venueContactEmail?.trim() || '',
+    details: details?.trim() || '',
+  };
+
+  // A reusable (general/website) link must keep working for the next
+  // visitor, so its own row never becomes 'submitted' — instead each
+  // submission spawns an ordinary one-off InquiryLink row that flows
+  // through the normal owner review/apply path (see the isReusable model
+  // comment). A regular per-recipient link just updates itself in place, as
+  // before.
+  const updated = link.isReusable
+    ? await prisma.inquiryLink.create({
+        data: {
+          accountId: link.accountId,
+          tokenHash: hashToken(generateToken()),
+          status: 'submitted',
+          isReusable: false,
+          expiresAt: null,
+          ownerEmail: link.ownerEmail,
+          recipientEmail: response.email || null,
+          recipientName: `${response.firstName} ${response.lastName}`.trim(),
+          submittedAt: new Date(),
+          response,
+        },
+      })
+    : await prisma.inquiryLink.update({
+        where: { id: link.id },
+        data: { status: 'submitted', submittedAt: new Date(), response },
+      });
 
   // Best-effort nudge to the owner — the in-app "new inquiry response"
   // indicator on the Bookings page is the real notification, this is just

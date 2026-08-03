@@ -379,12 +379,32 @@ model InquiryLink {
   // no email-confirmation gate (the prospect's email may not be known yet),
   // so possession of the token alone is the credential.
   tokenHash        String    @unique
+  // Plaintext copy of the same token, set only on isReusable rows. Every
+  // other link type is a one-time secret that's already been delivered by
+  // the time anyone needs it again (only the hash matters), but a reusable
+  // link is meant to be looked up and redisplayed indefinitely (e.g. every
+  // time the owner opens Settings) — hashing alone can't support that. Not
+  // a meaningful security regression: this URL is *designed* to be public
+  // (pasted on the business's own website), so storing it in the clear here
+  // is no different from any other public link a business owns.
+  publicToken      String?   @unique
   // 'open' -> 'submitted' -> 'applied' — each transition is one-way and
   // enforced by the routes (a used token can't be viewed/submitted again).
   // Regenerating a still-'open' link (lost/expired) reuses the same row —
-  // it just swaps tokenHash/expiresAt, no new status.
+  // it just swaps tokenHash/expiresAt, no new status. Doesn't apply to
+  // isReusable rows below, which stay 'open' forever.
   status           String    @default("open")
-  expiresAt        DateTime
+  // Null means "never expires" — only true for isReusable rows.
+  expiresAt        DateTime?
+
+  // Marks the one account-wide "general" link a business can paste on their
+  // own website (see server/src/routes/inquiryLinks.js's /reusable-link
+  // routes) rather than a normal per-recipient link. Never transitions to
+  // 'submitted'/'applied' itself — each public submission against it instead
+  // creates a brand-new ordinary (isReusable: false) InquiryLink row, so the
+  // shared link keeps working for the next visitor and every submission
+  // still flows through the same review/apply path as any other inquiry.
+  isReusable       Boolean   @default(false)
 
   // Opaque id (same non-FK pattern as Contract.bookingId) of the Booking
   // this link was sent from, if any — set when the agent already started a

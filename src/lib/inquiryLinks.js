@@ -32,6 +32,20 @@ export async function applyInquiryLink(id, { bookingId, clientId }) {
   return data.link;
 }
 
+// The one account-wide "general" link a business can paste on their own
+// website — get-or-create, so this always returns a usable URL.
+export async function getGeneralInquiryLink() {
+  const data = await apiFetch('/inquiry-links/reusable-link');
+  return data.inquiryLink;
+}
+
+// Rotates the general link's token — the previously-embedded URL stops
+// working, this returns the new one to swap in.
+export async function regenerateGeneralInquiryLink() {
+  const data = await apiFetch('/inquiry-links/reusable-link/regenerate', { method: 'POST' });
+  return data.inquiryLink;
+}
+
 // ---- Public (unauthenticated, token-based — used by InquiryFormPage) ----
 
 export async function getInquiryByToken(token) {

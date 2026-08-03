@@ -7,6 +7,7 @@ import Badge from '../components/ui/Badge';
 import UsersTab from './settings/UsersTab';
 import BillingTab from './settings/BillingTab';
 import TemplatesTab from './settings/TemplatesTab';
+import BookingLinkTab from './settings/BookingLinkTab';
 import { resizeImageToDataUrl } from '../lib/resizeImage';
 import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
 import { DOCUMENT_LAYOUTS, TEXT_SCALE_STEPS, DEFAULT_LAYOUT_ID, DEFAULT_TEXT_SCALE } from '../lib/documentLayouts';
@@ -24,6 +25,7 @@ export default function SettingsPage() {
     { id: 'templates', label: 'Templates' },
     ...(isAdminOrOwner ? [{ id: 'users', label: 'Users' }] : []),
     ...(isAdminOrOwner ? [{ id: 'billing', label: 'Billing' }] : []),
+    ...(isAdminOrOwner ? [{ id: 'bookingLink', label: 'Booking Link' }] : []),
   ];
   const [tab, setTab] = useState('user');
 
@@ -52,6 +54,7 @@ export default function SettingsPage() {
       {tab === 'templates' && <TemplatesTab />}
       {tab === 'users' && isAdminOrOwner && <UsersTab />}
       {tab === 'billing' && isAdminOrOwner && <BillingTab />}
+      {tab === 'bookingLink' && isAdminOrOwner && <BookingLinkTab />}
     </div>
   );
 }
