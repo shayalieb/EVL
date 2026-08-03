@@ -20,6 +20,8 @@ import stripeWebhooksRouter from './routes/stripeWebhooks.js';
 import calendarRouter from './routes/calendar.js';
 import supportRouter from './routes/support.js';
 import adminRouter from './routes/admin.js';
+import remindersRouter from './routes/reminders.js';
+import { startReminderScheduler } from './lib/reminderScheduler.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -91,6 +93,7 @@ app.use('/api/inquiry-links', inquiryLinksRouter);
 app.use('/api/inquiry', publicInquiryLinksRouter);
 app.use('/api/support', supportRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/reminders', remindersRouter);
 // Public/unauthenticated — recipients click this link from an email, not
 // while logged into the app, and it's fully stateless (see calendar.js).
 app.use('/api/calendar', calendarRouter);
@@ -106,3 +109,4 @@ app.use((err, req, res, next) => {
 
 const port = process.env.PORT || 4000;
 app.listen(port, () => console.log(`Server listening on ${port}`));
+startReminderScheduler();

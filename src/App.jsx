@@ -20,6 +20,7 @@ import BookingFormPage from './pages/BookingFormPage';
 import EventsPage from './pages/EventsPage';
 import EventFormPage from './pages/EventFormPage';
 import EmailTemplatesPage from './pages/EmailTemplatesPage';
+import RemindersPage from './pages/RemindersPage';
 import SettingsPage from './pages/SettingsPage';
 import SupportPage from './pages/SupportPage';
 import AdminLayout from './layouts/AdminLayout';
@@ -75,6 +76,7 @@ function AppRoutes() {
         <Route path="events" element={<EventsPage />} />
         <Route path="events/new" element={<EventFormPage />} />
         <Route path="events/:eventId" element={<EventFormPage />} />
+        <Route path="reminders" element={<RemindersPage />} />
         <Route path="email-templates" element={<EmailTemplatesPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="help" element={<SupportPage />} />

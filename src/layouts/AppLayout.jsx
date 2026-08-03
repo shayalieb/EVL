@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Logo from '../components/ui/Logo';
+import { BellIcon } from '../components/ui/icons';
+import { fetchReminders, completeReminder } from '../lib/reminders';
 
 const NAV_GROUPS = [
   {
@@ -10,6 +12,7 @@ const NAV_GROUPS = [
       { to: '/home', label: 'Home', icon: '🏠' },
       { to: '/bookings', label: 'Bookings', icon: '🤝' },
       { to: '/events', label: 'Events', icon: '📅' },
+      { to: '/reminders', label: 'Reminders', icon: '🔔' },
     ],
   },
   {
@@ -35,7 +38,40 @@ export default function AppLayout() {
   const { currentUser, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [reminders, setReminders] = useState([]);
+  const [bellOpen, setBellOpen] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      fetchReminders()
+        .then((list) => { if (!cancelled) setReminders(list); })
+        .catch(() => {});
+    };
+    load();
+    const interval = setInterval(load, 60 * 1000);
+    window.addEventListener('focus', load);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      window.removeEventListener('focus', load);
+    };
+  }, []);
+
+  const pendingReminders = reminders
+    .filter((r) => !r.completedAt)
+    .sort((a, b) => new Date(a.remindAt) - new Date(b.remindAt));
+  const dueReminders = pendingReminders.filter((r) => new Date(r.remindAt) <= new Date());
+
+  async function handleMarkDone(id) {
+    setReminders((prev) => prev.map((r) => (r.id === id ? { ...r, completedAt: new Date().toISOString() } : r)));
+    try {
+      await completeReminder(id, true);
+    } catch {
+      // best effort — next poll will reconcile if this failed
+    }
+  }
   const navGroups = currentUser?.isPlatformAdmin
     ? NAV_GROUPS.map((group, i) =>
         i === NAV_GROUPS.length - 1 ? { ...group, items: [...group.items, { to: '/admin', label: 'Admin', icon: '🛡️' }] } : group
@@ -80,6 +116,71 @@ export default function AppLayout() {
           Event and Gig Management
         </div>
 
+        <div className="flex items-center gap-2">
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setBellOpen((v) => !v)}
+            data-testid="reminders-bell-button"
+            className="relative p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            aria-label="Reminders"
+          >
+            <BellIcon className="w-5 h-5" />
+            {dueReminders.length > 0 && (
+              <span
+                data-testid="reminders-bell-badge"
+                className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white"
+              >
+                {dueReminders.length}
+              </span>
+            )}
+          </button>
+          {bellOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setBellOpen(false)} />
+              <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-slate-100 z-20 overflow-hidden">
+                <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold text-slate-700">Reminders</div>
+                {pendingReminders.length === 0 ? (
+                  <div className="px-4 py-6 text-sm text-slate-400 text-center">No reminders</div>
+                ) : (
+                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
+                    {pendingReminders.slice(0, 8).map((r) => {
+                      const overdue = new Date(r.remindAt) <= new Date();
+                      return (
+                        <div key={r.id} className="px-4 py-2.5 flex items-start gap-2">
+                          <div className="min-w-0 flex-1">
+                            {r.relatedName && (
+                              <div className="text-xs font-semibold text-slate-500 truncate">{r.relatedName}</div>
+                            )}
+                            <div className="text-sm text-slate-700 truncate">{r.note}</div>
+                            <div className={`text-xs mt-0.5 ${overdue ? 'text-red-600 font-medium' : 'text-slate-400'}`}>
+                              {new Date(r.remindAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleMarkDone(r.id)}
+                            data-testid={`reminders-bell-markdone-${r.id}`}
+                            className="shrink-0 text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                          >
+                            Done
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <NavLink
+                  to="/reminders"
+                  onClick={() => setBellOpen(false)}
+                  className="block px-4 py-2.5 text-sm text-center text-indigo-600 font-semibold hover:bg-slate-50 border-t border-slate-100"
+                >
+                  View all reminders
+                </NavLink>
+              </div>
+            </>
+          )}
+        </div>
         <div className="relative">
           <button
             type="button"
@@ -114,6 +215,7 @@ export default function AppLayout() {
               </div>
             </>
           )}
+        </div>
         </div>
       </header>
 

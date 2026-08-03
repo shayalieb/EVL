@@ -19,3 +19,4 @@ export function NoteIcon(props) { return <IconWrap {...props}><path d="M4 20h4L1
 export function FileIcon(props) { return <IconWrap {...props}><path d="M7 3h7l4 4v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" /><path d="M14 3v4h4" /></IconWrap>; }
 export function ChevronDownIcon(props) { return <IconWrap {...props}><path d="M6 9l6 6 6-6" /></IconWrap>; }
 export function SearchIcon(props) { return <IconWrap {...props}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></IconWrap>; }
+export function BellIcon(props) { return <IconWrap {...props}><path d="M6 9a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6Z" /><path d="M10 19a2 2 0 0 0 4 0" /></IconWrap>; }
