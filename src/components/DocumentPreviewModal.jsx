@@ -19,12 +19,14 @@ export default function DocumentPreviewModal({ document, onClose }) {
         </div>
       ) : (
         <div className="p-6 text-center text-sm text-slate-500">
-          <p className="mb-3">This file type can't be previewed here.</p>
-          <a href={documentDownloadUrl(document.id)} target="_blank" rel="noreferrer" data-testid="document-preview-fallback-download-link" className="text-indigo-600 font-semibold hover:underline">
-            Download {document.filename}
-          </a>
+          <p>This file type can't be previewed here.</p>
         </div>
       )}
+      <div className="px-4 py-2.5 border-t border-slate-100 text-right">
+        <a href={documentDownloadUrl(document.id)} target="_blank" rel="noreferrer" data-testid="document-preview-download-link" className="text-xs text-indigo-600 font-semibold hover:underline">
+          Download {document.filename}
+        </a>
+      </div>
     </Modal>
   );
 }

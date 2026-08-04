@@ -4,9 +4,12 @@ import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { useToast } from '../components/ui/Toast';
 import { uid } from '../lib/storage';
-import { uploadDocument, deleteDocument, documentDownloadUrl } from '../lib/documents';
-import { generateSetListPdf } from '../lib/setListPdf';
+import { uploadDocument, deleteDocument } from '../lib/documents';
+import { generateSetListPdf, generateSetListPdfAttachment } from '../lib/setListPdf';
+import { renderSetListEmail } from '../lib/setList';
+import { sendThreadedEmail } from '../lib/email/threads';
 import DocumentPreviewModal from '../components/DocumentPreviewModal';
+import SetListEmailModal from '../components/SetListEmailModal';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -29,7 +32,7 @@ function emptySetListItem() {
 export default function SetListsEditorPage() {
   const { eventId } = useParams();
   const { currentUser } = useAuth();
-  const { events, updateEvent } = useData();
+  const { events, updateEvent, contractors } = useData();
   const { showToast } = useToast();
   const event = events.find((e) => e.id === eventId);
 
@@ -38,6 +41,8 @@ export default function SetListsEditorPage() {
   const [saving, setSaving] = useState(false);
   const [uploadingItemId, setUploadingItemId] = useState(null);
   const [previewDocument, setPreviewDocument] = useState(null);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
   const dragIndex = useRef(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const hydratedRef = useRef(null);
@@ -52,6 +57,13 @@ export default function SetListsEditorPage() {
 
   const dirty = JSON.stringify(setLists) !== JSON.stringify(event?.setLists || []);
   const activeSetList = setLists.find((s) => s.id === activeSetListId);
+
+  // Whoever's booked on this event, not just prep-group members (unlike
+  // PrepEmailModal's recipient pool) — a set list is relevant to whoever's
+  // playing, regardless of which prep groups they were added under.
+  const bandMembers = (event?.contractorBookings || [])
+    .map((b) => contractors.find((c) => c.id === b.contractorId))
+    .filter((c) => c?.email);
 
   function addSetList() {
     const list = emptySetList(`Set List ${setLists.length + 1}`);
@@ -140,7 +152,49 @@ export default function SetListsEditorPage() {
     await generateSetListPdf({ eventName: event?.name, setLists, businessInfo: currentUser?.businessInfo });
   }
 
+  async function handleSendEmail({ subject, body, recipientIds }) {
+    setSendingEmail(true);
+    try {
+      const fromName = currentUser.businessInfo?.name || `${currentUser.firstName} ${currentUser.lastName}`;
+      // Sheet music attached to this set list's songs rides along
+      // automatically — same "no extra checkbox" pattern Requests already
+      // uses for its per-item attachments.
+      const documentIds = activeSetList.items.map((it) => it.documentId).filter(Boolean);
+      // Scoped to just the active set list, not the whole book — same
+      // reasoning as why Email is a per-set-list action while Download PDF
+      // exports every set list at once.
+      const pdfAttachment = await generateSetListPdfAttachment({ eventName: event?.name, setLists: [activeSetList], businessInfo: currentUser?.businessInfo });
+      let successCount = 0;
+      for (const contractorId of recipientIds) {
+        const contractor = contractors.find((c) => c.id === contractorId);
+        if (!contractor?.email) continue;
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          await sendThreadedEmail({
+            eventId, contractorId, contractorEmail: contractor.email,
+            subject, body, fromName, documentIds, pdfAttachment,
+          });
+          successCount++;
+        } catch {
+          // keep going — failures reflected in the summary toast below
+        }
+      }
+      if (successCount === recipientIds.length) {
+        showToast(`Sent to ${successCount} band member${successCount === 1 ? '' : 's'}`);
+      } else {
+        showToast(`Sent ${successCount} of ${recipientIds.length} emails — some failed`, 'error');
+      }
+      setEmailModalOpen(false);
+    } catch (err) {
+      showToast(err.message || 'Failed to send set list email', 'error');
+    } finally {
+      setSendingEmail(false);
+    }
+  }
+
   if (!event) return <div className="p-6 text-sm text-slate-500">Loading…</div>;
+
+  const emailDraft = activeSetList ? renderSetListEmail(event.name, activeSetList, currentUser?.businessInfo) : null;
 
   return (
     <div className="p-6 max-w-[1100px] mx-auto">
@@ -153,6 +207,15 @@ export default function SetListsEditorPage() {
           <span data-testid="setlist-save-status" className="text-xs text-slate-400">{dirty ? 'Unsaved changes' : 'Saved'}</span>
           <button type="button" onClick={handleExportPdf} data-testid="setlist-export-pdf-button" className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold">
             Download PDF
+          </button>
+          <button
+            type="button"
+            onClick={() => setEmailModalOpen(true)}
+            disabled={!activeSetList}
+            data-testid="setlist-email-button"
+            className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold disabled:opacity-50"
+          >
+            Email Set List
           </button>
           <button
             type="button"
@@ -210,7 +273,7 @@ export default function SetListsEditorPage() {
               No songs added yet.
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {activeSetList.items.map((item, i) => (
                 <div
                   key={item.id}
@@ -219,79 +282,77 @@ export default function SetListsEditorPage() {
                   onDragOver={(e) => { e.preventDefault(); setDragOverIndex(i); }}
                   onDrop={() => handleDrop(i)}
                   data-testid="setlist-item-row"
-                  className={`border border-slate-200 rounded-lg p-3 space-y-2 ${dragOverIndex === i && dragIndex.current !== i ? 'border-indigo-400 bg-indigo-50/40' : ''}`}
+                  className={`flex items-center gap-2 border border-slate-200 rounded-lg px-2 py-1.5 ${dragOverIndex === i && dragIndex.current !== i ? 'border-indigo-400 bg-indigo-50/40' : ''}`}
                 >
-                  <div className="flex items-start gap-2">
-                    <span className="cursor-grab text-slate-300 select-none mt-2" aria-hidden="true">⠿</span>
-                    <span className="text-slate-400 text-sm mt-2 w-5 shrink-0">{i + 1}.</span>
-                    <div className="flex-1 space-y-2">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <input
-                          placeholder="Song title"
-                          value={item.songTitle}
-                          onChange={(e) => updateItem(item.id, { songTitle: e.target.value })}
-                          data-testid="setlist-item-title-input"
-                          className={inputClass}
-                        />
-                        <input
-                          placeholder="Link (Spotify, YouTube, etc.)"
-                          value={item.link}
-                          onChange={(e) => updateItem(item.id, { link: e.target.value })}
-                          data-testid="setlist-item-link-input"
-                          className={inputClass}
-                        />
-                      </div>
-                      <textarea
-                        rows={2}
-                        placeholder="Description / notes (key, tempo, arrangement notes…)"
-                        value={item.description}
-                        onChange={(e) => updateItem(item.id, { description: e.target.value })}
-                        data-testid="setlist-item-description-textarea"
-                        className={inputClass}
-                      />
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        {item.documentId ? (
-                          <div className="flex items-center gap-3 text-xs">
-                            <button
-                              type="button"
-                              onClick={() => setPreviewDocument({ id: item.documentId, filename: item.documentName, contentType: item.documentContentType })}
-                              data-testid="setlist-item-preview-button"
-                              className="text-indigo-600 font-semibold hover:underline"
-                            >
-                              Preview {item.documentName}
-                            </button>
-                            <a href={documentDownloadUrl(item.documentId)} target="_blank" rel="noreferrer" className="text-slate-400 hover:text-slate-600">
-                              Download
-                            </a>
-                            <button type="button" onClick={() => handleRemoveSheetMusic(item.id)} data-testid="setlist-item-remove-sheet-button" className="text-slate-400 hover:text-red-600">
-                              Remove
-                            </button>
-                          </div>
-                        ) : (
-                          <label className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 cursor-pointer">
-                            {uploadingItemId === item.id ? 'Uploading…' : '+ Upload sheet music'}
-                            <input
-                              type="file"
-                              accept="application/pdf,image/*"
-                              onChange={(e) => handleUploadSheetMusic(item.id, e.target.files?.[0])}
-                              disabled={uploadingItemId === item.id}
-                              data-testid="setlist-item-upload-input"
-                              className="hidden"
-                            />
-                          </label>
-                        )}
+                  <span className="cursor-grab text-slate-300 select-none shrink-0" aria-hidden="true">⠿</span>
+                  <span className="text-slate-400 text-sm w-5 shrink-0 text-right">{i + 1}.</span>
+                  <input
+                    placeholder="Song title"
+                    value={item.songTitle}
+                    onChange={(e) => updateItem(item.id, { songTitle: e.target.value })}
+                    data-testid="setlist-item-title-input"
+                    className={`${inputClass} flex-[2] min-w-0`}
+                  />
+                  <input
+                    placeholder="Description / notes"
+                    value={item.description}
+                    onChange={(e) => updateItem(item.id, { description: e.target.value })}
+                    data-testid="setlist-item-description-input"
+                    className={`${inputClass} flex-[2] min-w-0`}
+                  />
+                  <input
+                    placeholder="Link"
+                    value={item.link}
+                    onChange={(e) => updateItem(item.id, { link: e.target.value })}
+                    data-testid="setlist-item-link-input"
+                    className={`${inputClass} flex-1 min-w-0`}
+                  />
+                  <div className="flex items-center gap-1 shrink-0">
+                    {item.documentId ? (
+                      <>
                         <button
                           type="button"
-                          onClick={() => removeItem(item.id)}
-                          data-testid="setlist-item-remove-button"
-                          className="w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
-                          aria-label="Remove song"
+                          onClick={() => setPreviewDocument({ id: item.documentId, filename: item.documentName, contentType: item.documentContentType })}
+                          title={`Preview ${item.documentName}`}
+                          data-testid="setlist-item-preview-button"
+                          className="w-7 h-7 flex items-center justify-center rounded text-indigo-600 hover:bg-indigo-50"
+                        >
+                          📄
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSheetMusic(item.id)}
+                          title="Remove sheet music"
+                          data-testid="setlist-item-remove-sheet-button"
+                          className="w-5 h-5 flex items-center justify-center rounded text-slate-300 hover:text-red-600 text-xs"
+                          aria-label="Remove sheet music"
                         >
                           ✕
                         </button>
-                      </div>
-                    </div>
+                      </>
+                    ) : (
+                      <label title="Upload sheet music" className="w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 cursor-pointer">
+                        {uploadingItemId === item.id ? '…' : '📎'}
+                        <input
+                          type="file"
+                          accept="application/pdf,image/*"
+                          onChange={(e) => handleUploadSheetMusic(item.id, e.target.files?.[0])}
+                          disabled={uploadingItemId === item.id}
+                          data-testid="setlist-item-upload-input"
+                          className="hidden"
+                        />
+                      </label>
+                    )}
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => removeItem(item.id)}
+                    data-testid="setlist-item-remove-button"
+                    className="w-6 h-6 shrink-0 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
+                    aria-label="Remove song"
+                  >
+                    ✕
+                  </button>
                 </div>
               ))}
             </div>
@@ -304,6 +365,16 @@ export default function SetListsEditorPage() {
       )}
 
       <DocumentPreviewModal document={previewDocument} onClose={() => setPreviewDocument(null)} />
+
+      <SetListEmailModal
+        open={emailModalOpen}
+        onClose={() => setEmailModalOpen(false)}
+        bandMembers={bandMembers}
+        initialSubject={emailDraft?.subject}
+        initialBody={emailDraft?.body}
+        sending={sendingEmail}
+        onConfirm={handleSendEmail}
+      />
     </div>
   );
 }

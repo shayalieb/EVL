@@ -33,9 +33,12 @@ async function buildSetListDoc({ eventName, setLists, businessInfo }) {
     doc.text(setList.name, marginX, y);
     y += 4;
 
+    // Link intentionally omitted — a clickable "Open Link" only makes sense
+    // in the emailed version (see setList.js's renderSetListEmail); a raw
+    // URL printed on paper isn't useful.
     const rows = setList.items
       .filter((item) => item.songTitle)
-      .map((item, i) => [String(i + 1), item.songTitle, item.description || '', item.link || '', item.documentName || '']);
+      .map((item, i) => [String(i + 1), item.songTitle, item.description || '', item.documentName || '']);
 
     if (rows.length === 0) {
       doc.setFontSize(10);
@@ -48,7 +51,7 @@ async function buildSetListDoc({ eventName, setLists, businessInfo }) {
     autoTable(doc, {
       startY: y,
       margin: { left: marginX },
-      head: [['#', 'Song', 'Description', 'Link', 'Sheet Music']],
+      head: [['#', 'Song', 'Description', 'Sheet Music']],
       body: rows,
       columnStyles: { 0: { cellWidth: 8 } },
       ...tableStyle,
