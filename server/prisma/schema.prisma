@@ -58,6 +58,7 @@ model Account {
   reminders      Reminder[]
   emailDomain    EmailDomain?
   stagePlots     StagePlot[]
+  floorPlans     FloorPlan[]
 
   // Stripe Connect (Express) — set once onboarding starts. The three
   // booleans are a local cache of the connected Account object, synced by
@@ -676,4 +677,42 @@ model StagePlotChannel {
 
   @@unique([stagePlotId, channelNumber])
   @@index([stagePlotId])
+}
+
+// A party-planning event's floor plan — deliberately separate models from
+// StagePlot/StagePlotPage above rather than shared rows, the direct
+// technical expression of "two independently-built tools" (confirmed with
+// the user) rather than one reskinned engine. No channel-list equivalent:
+// floor plans don't have an industry-standard tabular counterpart the way
+// stage plots have an I/O list.
+model FloorPlan {
+  id        String          @id @default(cuid())
+  accountId String
+  account   Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  eventId   String
+
+  name      String          @default("Floor Plan")
+  pages     FloorPlanPage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([accountId, eventId])
+  @@index([accountId])
+}
+
+model FloorPlanPage {
+  id                  String    @id @default(cuid())
+  floorPlanId         String
+  floorPlan           FloorPlan @relation(fields: [floorPlanId], references: [id], onDelete: Cascade)
+
+  order               Int
+  name                String    @default("Page 1")
+  scene               Json      @default("{}")
+  thumbnailStorageKey String?
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@unique([floorPlanId, order])
 }

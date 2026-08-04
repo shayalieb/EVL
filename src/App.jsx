@@ -29,6 +29,7 @@ import AdminSupportPage from './pages/admin/AdminSupportPage';
 import AdminAdminsPage from './pages/admin/AdminAdminsPage';
 import CanvasEngineDemoPage from './pages/dev/CanvasEngineDemoPage';
 import StagePlotEditorPage from './pages/StagePlotEditorPage';
+import FloorPlanEditorPage from './pages/FloorPlanEditorPage';
 
 function ProtectedArea() {
   const { currentUser, authLoading } = useAuth();
@@ -108,6 +109,7 @@ function AppRoutes() {
         <Route path="help" element={<SupportPage />} />
         <Route path="dev/canvas-demo" element={<DevOnlyRoute><CanvasEngineDemoPage /></DevOnlyRoute>} />
         <Route path="events/:eventId/stage-plot" element={<VerticalGate vertical="band_orchestra"><StagePlotEditorPage /></VerticalGate>} />
+        <Route path="events/:eventId/floor-plan" element={<VerticalGate vertical="party_planning"><FloorPlanEditorPage /></VerticalGate>} />
       </Route>
       <Route path="/admin" element={<PlatformAdminArea />}>
         <Route index element={<Navigate to="accounts" replace />} />

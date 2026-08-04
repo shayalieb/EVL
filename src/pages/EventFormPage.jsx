@@ -862,6 +862,15 @@ export default function EventFormPage() {
               Stage Plot
             </Link>
           )}
+          {isEditing && currentUser.activeVerticals?.includes('party_planning') && (
+            <Link
+              to={`/events/${eventId}/floor-plan`}
+              data-testid="event-form-floor-plan-link"
+              className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
+            >
+              Floor Plan
+            </Link>
+          )}
           {isEditing && (
             <button
               type="button"
