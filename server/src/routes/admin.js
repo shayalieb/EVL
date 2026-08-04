@@ -358,8 +358,9 @@ router.post('/support/threads/:id/messages', uploadFiles, asyncHandler(async (re
       if (sent?.data?.id) {
         await prisma.supportMessage.update({ where: { id: message.id }, data: { resendMessageId: sent.data.id } });
       }
-    } catch {
-      // best effort
+    } catch (err) {
+      // best effort — the reply is already saved regardless of whether this notification sends
+      console.error(`Failed to email support reply notification for thread ${thread.id}:`, err);
     }
   }
 
@@ -417,8 +418,9 @@ router.patch('/support/threads/:id', asyncHandler(async (req, res) => {
           subject: `Ticket #${thread.ticketNumber} closed: ${thread.subject}`,
           html: `<p>Your support ticket #${thread.ticketNumber} — "${escapeHtml(thread.subject)}" — has been closed as <strong>${escapeHtml(CLOSE_REASON_LABELS[thread.closedReason] || thread.closedReason)}</strong>.</p><p>${escapeHtml(thread.closedReasonDetail)}</p><p>If this isn't resolved, just reply to this email or sign in to GigWorks and reply to reopen it.</p>`,
         });
-      } catch {
-        // best effort
+      } catch (err) {
+        // best effort — the ticket is already closed regardless of whether this notification sends
+        console.error(`Failed to email ticket-closed notification for thread ${thread.id}:`, err);
       }
     }
   }

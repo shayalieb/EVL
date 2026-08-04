@@ -238,7 +238,8 @@ router.post('/:id/send', asyncHandler(async (req, res) => {
         buttonUrl: payUrl,
       }),
     });
-  } catch {
+  } catch (err) {
+    console.error(`Failed to email invoice ${invoice.id}:`, err);
     emailError = 'Invoice was sent, but the email could not be delivered — copy the link below to share it manually.';
   }
 
@@ -337,7 +338,8 @@ router.post('/:id/send-receipt', asyncHandler(async (req, res) => {
       subject: `Receipt for ${totalLabel} from ${fromName}`,
       html: `<p>Hi ${escapeHtml(invoice.recipientName) || 'there'},</p><p>This confirms your payment of ${totalLabel}${paidDateLabel ? ` received ${paidDateLabel}` : ''}.</p>${methodLine}<table>${lineItemsHtml}</table><p>Thank you for your business!</p><p>${escapeHtml(fromName)}</p>`,
     });
-  } catch {
+  } catch (err) {
+    console.error(`Failed to email receipt for invoice ${invoice.id}:`, err);
     emailError = 'Could not send the receipt email — check the recipient address and try again.';
   }
 

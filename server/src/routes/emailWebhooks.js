@@ -98,8 +98,9 @@ async function handleSupportReply(res, rawId, event) {
       subject: `[Support] ${thread.subject}`,
       html: `<p>New reply by email:</p><p>${safeReplyHtml(full)}</p>`,
     });
-  } catch {
+  } catch (err) {
     // best effort — the message is already saved regardless of whether this send succeeds
+    console.error(`Failed to email support-reply forward for thread ${thread.id}:`, err);
   }
 
   res.json({ ok: true });

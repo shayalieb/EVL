@@ -336,8 +336,9 @@ publicInquiryLinksRouter.post('/:token/submit', asyncHandler(async (req, res) =>
         buttonUrl: `${frontendUrl()}/bookings`,
       }),
     });
-  } catch {
+  } catch (err) {
     // best effort — the in-app indicator is the real notification
+    console.error(`Failed to email inquiry-response notification for link ${link.id}:`, err);
   }
 
   res.json({ ok: true });

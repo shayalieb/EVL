@@ -145,7 +145,8 @@ router.post('/', asyncHandler(async (req, res) => {
           buttonUrl: signUrl,
         }),
       });
-    } catch {
+    } catch (err) {
+      console.error(`Failed to email contract ${contract.id}:`, err);
       emailError = 'Contract was created, but the email could not be sent — copy the link below to share it manually.';
     }
   }
@@ -330,8 +331,9 @@ publicContractsRouter.post('/:token/submit', asyncHandler(async (req, res) => {
             buttonUrl: ownerSignUrl,
           }),
         });
-      } catch {
+      } catch (err) {
         // best effort — the owner can still countersign in-app even if this notification fails to send
+        console.error(`Failed to email owner-sign notification for contract ${contract.id}:`, err);
       }
     }
 

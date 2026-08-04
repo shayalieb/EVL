@@ -153,9 +153,10 @@ router.post('/forgot-password', passwordResetLimiter, asyncHandler(async (req, r
         subject: 'Reset your GigWorks password',
         html: `<p>Click below to reset your password. This link expires in 1 hour.</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>If you didn't request this, you can ignore this email.</p>`,
       });
-    } catch {
+    } catch (err) {
       // best effort — don't let a mail-provider hiccup change the response
       // below, which must stay identical whether or not the email matched.
+      console.error(`Failed to email password reset link to user ${user.id}:`, err);
     }
   }
 
