@@ -6,20 +6,49 @@ export function buildFromHeader(fromName) {
   return `${(fromName || 'GigWorks').trim()} <${fromEmail}>`;
 }
 
+function platformDomain() {
+  const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+  return fromEmail.split('@')[1];
+}
+
+// Best-effort per-account local-part on the shared platform domain, so two
+// businesses without their own EmailDomain (see server/src/lib/emailDomains.js)
+// don't all send from the exact same address. Cosmetic only — nothing is
+// keyed on this being unique, so two businesses landing on the same slug is
+// harmless, not an error. Returns null (triggering the plain buildFromHeader
+// fallback) if the name doesn't yield anything usable.
+function slugifyLocalPart(name) {
+  const slug = (name || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 30)
+    .replace(/-+$/, '');
+  return slug || null;
+}
+
 // Account-aware version of buildFromHeader, for the genuinely
 // business-branded sends (contracts, invoices, inquiries, reminders,
-// contractor threads) — falls back to buildFromHeader's global default
-// whenever the account has no verified EmailDomain (see
-// server/src/lib/emailDomains.js), so nothing changes for any account that
-// hasn't set one up. Platform-level sends (auth, support notifications to
-// the platform admin, admin-to-business support replies) intentionally keep
-// calling buildFromHeader directly instead — those are GigWorks-the-platform
-// talking, not the business's own brand.
+// contractor threads). Three tiers: an account's own verified EmailDomain if
+// it has one; otherwise a slug of its display name under the shared platform
+// domain (e.g. "acme-events@gigworks.io" instead of the same address for
+// everyone); otherwise buildFromHeader's plain global default. Platform-level
+// sends (auth, support notifications to the platform admin, admin-to-business
+// support replies) intentionally keep calling buildFromHeader directly
+// instead — those are GigWorks-the-platform talking, not the business's own
+// brand, so they always get the plain default regardless of account.
 export async function resolveFromHeader({ accountId, fromName, localPart }) {
   const domain = accountId ? await getVerifiedEmailDomain(accountId) : null;
-  if (!domain) return buildFromHeader(fromName);
-  const fromEmail = `${localPart || 'hello'}@${domain.domain}`;
-  return `${(fromName || 'GigWorks').trim()} <${fromEmail}>`;
+  if (domain) {
+    const fromEmail = `${localPart || 'hello'}@${domain.domain}`;
+    return `${(fromName || 'GigWorks').trim()} <${fromEmail}>`;
+  }
+  // Only when RESEND_FROM_EMAIL is actually configured — the resend.dev
+  // sandbox fallback doesn't accept arbitrary local-parts, so leave that
+  // path exactly as buildFromHeader already handles it.
+  const slug = accountId && process.env.RESEND_FROM_EMAIL ? slugifyLocalPart(fromName) : null;
+  if (slug) return `${fromName.trim()} <${slug}@${platformDomain()}>`;
+  return buildFromHeader(fromName);
 }
 
 // Same account-aware/fallback shape as resolveFromHeader, for the
