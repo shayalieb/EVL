@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, requireRole } from '../lib/membership.js';
-import { provisionEmailDomain, refreshEmailDomainStatus, getEmailDomain } from '../lib/emailDomains.js';
+import { provisionEmailDomain, provisionCustomEmailDomain, refreshEmailDomainStatus, getEmailDomain } from '../lib/emailDomains.js';
 import { ROOT_DOMAIN } from '../lib/godaddyDns.js';
 
 const router = Router();
@@ -22,6 +22,21 @@ router.post('/', requireRole('owner', 'admin'), asyncHandler(async (req, res) =>
   try {
     const domain = await provisionEmailDomain(req.membership.accountId, subdomain);
     res.status(201).json({ domain });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+}));
+
+// Same idea as POST / above but for a business's own domain — no DNS gets
+// written anywhere (this app doesn't control it), so there's nothing
+// destructive about re-running it, but the same owner/admin gate applies
+// since it's still account-wide config.
+router.post('/custom-domain', requireRole('owner', 'admin'), asyncHandler(async (req, res) => {
+  const { domain } = req.body || {};
+  try {
+    const created = await provisionCustomEmailDomain(req.membership.accountId, domain);
+    res.status(201).json({ domain: created });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     throw err;

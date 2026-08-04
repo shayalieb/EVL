@@ -128,7 +128,7 @@ function MergeFieldReference() {
   );
 }
 
-function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, canEdit, emailDomain, rootDomain, defaultFromDisplayName }) {
+function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, canEdit, emailDomain, defaultFromDisplayName }) {
   const { showToast } = useToast();
   const [name, setName] = useState(template.name);
   const [subject, setSubject] = useState(template.subject);
@@ -235,7 +235,7 @@ function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, can
                       data-testid="email-template-row-fromlocalpart-input"
                       className={`${inputClass} max-w-[12rem]`}
                     />
-                    <span className="text-sm text-slate-400">@{emailDomain.subdomain}.{rootDomain}</span>
+                    <span className="text-sm text-slate-400">@{emailDomain.domain}</span>
                   </div>
                 </div>
               ) : (
@@ -244,7 +244,7 @@ function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, can
                 </p>
               )}
               <p className="text-xs text-slate-500 pt-1 border-t border-slate-50" data-testid="email-template-row-from-preview">
-                Sends as: {fromDisplayName.trim() || defaultFromDisplayName || 'GigWorks'} &lt;{(fromLocalPart.trim() || 'hello').toLowerCase()}@{emailDomain?.status === 'verified' ? `${emailDomain.subdomain}.${rootDomain}` : 'platform default address'}&gt;
+                Sends as: {fromDisplayName.trim() || defaultFromDisplayName || 'GigWorks'} &lt;{(fromLocalPart.trim() || 'hello').toLowerCase()}@{emailDomain?.status === 'verified' ? emailDomain.domain : 'platform default address'}&gt;
               </p>
             </div>
           </div>
@@ -335,10 +335,9 @@ export default function EmailTemplatesPage() {
   const [expandedId, setExpandedId] = useState(null);
   const [templatePendingDelete, setTemplatePendingDelete] = useState(null);
   const [emailDomain, setEmailDomain] = useState(null);
-  const [rootDomain, setRootDomain] = useState('gigworks.io');
 
   useEffect(() => {
-    getEmailDomain().then(({ domain, rootDomain: rd }) => { setEmailDomain(domain); setRootDomain(rd); }).catch(() => {});
+    getEmailDomain().then(({ domain }) => setEmailDomain(domain)).catch(() => {});
   }, []);
 
   function handleAdd() {
@@ -393,7 +392,6 @@ export default function EmailTemplatesPage() {
                 onDelete={() => setTemplatePendingDelete(t)}
                 canEdit={canEdit}
                 emailDomain={emailDomain}
-                rootDomain={rootDomain}
                 defaultFromDisplayName={currentUser?.businessInfo?.name}
               />
             ))}

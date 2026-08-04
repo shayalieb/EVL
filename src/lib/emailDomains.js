@@ -10,6 +10,11 @@ export async function createEmailDomain(subdomain) {
   return data.domain;
 }
 
+export async function createCustomEmailDomain(domain) {
+  const data = await apiFetch('/email-domains/custom-domain', { method: 'POST', body: JSON.stringify({ domain }) });
+  return data.domain;
+}
+
 export async function verifyEmailDomain() {
   const data = await apiFetch('/email-domains/verify', { method: 'POST' });
   return data.domain;

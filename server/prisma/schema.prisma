@@ -559,23 +559,31 @@ model Reminder {
   @@index([accountId, remindAt])
 }
 
-// A business's own sending subdomain (e.g. "acme" -> acme.gigworks.io),
-// self-service configured in Settings — see server/src/lib/emailDomains.js.
-// One per account. resendDomainId/dnsRecords mirror what Resend's Domains
-// API returned at creation time so status can be re-checked without
-// re-deriving the records; dnsRecords also drives the per-record status
-// display in Settings. Accounts without a row here (or with one that isn't
-// 'verified') keep sending from the platform's own default domain — see
-// resolveFromHeader/resolveReplyDomain in server/src/lib/mailer.js.
+// A business's own sending domain, self-service configured in Settings —
+// see server/src/lib/emailDomains.js. One per account. Two provisioning
+// paths, distinguished by isCustomDomain:
+//  - false: a gigworks.io subdomain (e.g. "acme.gigworks.io") — this
+//    account controls gigworks.io's DNS, so the required records are
+//    written automatically via GoDaddy's API.
+//  - true: a business's own domain (e.g. "mail.acmeevents.com") — DNS is
+//    out of this app's control, so `dnsRecords` are shown as copy-paste
+//    instructions instead of being written anywhere.
+// `domain` is always the full domain either way. resendDomainId/dnsRecords
+// mirror what Resend's Domains API returned at creation time so status can
+// be re-checked without re-deriving the records. Accounts without a row
+// here (or with one that isn't 'verified') keep sending from the
+// platform's own default domain — see resolveFromHeader/resolveReplyDomain
+// in server/src/lib/mailer.js.
 model EmailDomain {
   id             String    @id @default(cuid())
   accountId      String    @unique
   account        Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
-  subdomain      String    @unique // just the label, e.g. "acme" — full domain is `${subdomain}.gigworks.io`
+  domain         String    @unique
+  isCustomDomain Boolean   @default(false)
   resendDomainId String    @unique
   status         String    @default("pending") // 'pending' | 'verified' | 'failed'
-  dnsRecords     Json      // Resend's returned record list, for per-record status display
+  dnsRecords     Json      // Resend's returned record list — auto-applied (GoDaddy) or shown as instructions, per isCustomDomain
   verifiedAt     DateTime?
 
   createdAt      DateTime  @default(now())

@@ -1,6 +1,5 @@
 import { getResendClient } from './resend.js';
 import { getVerifiedEmailDomain } from './emailDomains.js';
-import { ROOT_DOMAIN } from './godaddyDns.js';
 
 export function buildFromHeader(fromName) {
   const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
@@ -19,7 +18,7 @@ export function buildFromHeader(fromName) {
 export async function resolveFromHeader({ accountId, fromName, localPart }) {
   const domain = accountId ? await getVerifiedEmailDomain(accountId) : null;
   if (!domain) return buildFromHeader(fromName);
-  const fromEmail = `${localPart || 'hello'}@${domain.subdomain}.${ROOT_DOMAIN}`;
+  const fromEmail = `${localPart || 'hello'}@${domain.domain}`;
   return `${(fromName || 'GigWorks').trim()} <${fromEmail}>`;
 }
 
@@ -32,7 +31,7 @@ export async function resolveFromHeader({ accountId, fromName, localPart }) {
 // already treat a missing alias as "skip it" (no inbound configured yet).
 export async function resolveReplyDomain(accountId) {
   const domain = accountId ? await getVerifiedEmailDomain(accountId) : null;
-  if (domain) return `${domain.subdomain}.${ROOT_DOMAIN}`;
+  if (domain) return domain.domain;
   return process.env.RESEND_INBOUND_DOMAIN || null;
 }
 
