@@ -28,7 +28,8 @@ function seedBlob(profile) {
     phone: profile.phone || '',
     businessInfo: { name: '', address: '', phone: '', email: '', logo: '', accentColor: '#6366f1', documentLayout: 'classic', documentTextScale: 1 },
     contractTemplate: { title: 'Event Contract', sections: [] },
-    proposalTemplate: { sections: [] },
+    // proposalTemplate comes from buildSeedUserData below (vertical-specific
+    // section defaults for party_planning; empty for the others).
     ...buildSeedUserData(profile.vertical),
   };
 }

@@ -20,7 +20,8 @@ export function getPrepContractors(form, contractors) {
     .sort((a, b) => (a.startTime || '99:99').localeCompare(b.startTime || '99:99'));
 }
 
-export function renderPrepSheetEmail(form, prepContractors, requests = [], attachedDocs = [], businessInfo) {
+export function renderPrepSheetEmail(form, prepContractors, requests = [], attachedDocs = [], businessInfo, vertical, contractors = []) {
+  const isPhotography = vertical === 'photography';
   const accentColor = businessInfo?.accentColor || DEFAULT_ACCENT_COLOR;
   const eventDate = formatDate(form.eventDate);
   const venue = form.venue || {};
@@ -46,6 +47,20 @@ export function renderPrepSheetEmail(form, prepContractors, requests = [], attac
     })
     .join('');
 
+  const shotRows = (form.shotList || [])
+    .filter((s) => s.label)
+    .map((s) => `<tr><td style="padding:4px 12px 4px 0;font-weight:600;">${s.label}${s.mustHave ? ' ★' : ''}</td><td style="padding:4px 12px 4px 0;color:#475569;">${s.category || ''}</td><td style="padding:4px 0;color:#475569;">${s.notes || ''}</td></tr>`)
+    .join('');
+
+  const secondShooterRows = (form.secondShooters || [])
+    .filter((s) => s.contractorId)
+    .map((s) => {
+      const contractor = contractors.find((c) => c.id === s.contractorId);
+      const name = contractor ? `${contractor.firstName} ${contractor.lastName}` : 'Unassigned';
+      return `<tr><td style="padding:4px 12px 4px 0;font-weight:600;">${name}</td><td style="padding:4px 12px 4px 0;color:#475569;">${s.role || ''}</td><td style="padding:4px 0;color:#475569;">${s.notes || ''}</td></tr>`;
+    })
+    .join('');
+
   const body = `
     <div style="font-family:sans-serif;color:#1e293b;max-width:600px;">
       <h2 style="margin:0 0 4px;">${form.name || 'Event'}</h2>
@@ -59,7 +74,7 @@ export function renderPrepSheetEmail(form, prepContractors, requests = [], attac
       ` : ''}
 
       ${scheduleRows ? `
-      <h3 style="margin:16px 0 4px;font-size:14px;text-transform:uppercase;letter-spacing:0.03em;color:#64748b;">Schedule</h3>
+      <h3 style="margin:16px 0 4px;font-size:14px;text-transform:uppercase;letter-spacing:0.03em;color:#64748b;">${isPhotography ? 'Timeline' : 'Schedule'}</h3>
       <table style="border-collapse:collapse;font-size:14px;">${scheduleRows}</table>
       ` : ''}
 
@@ -68,8 +83,18 @@ export function renderPrepSheetEmail(form, prepContractors, requests = [], attac
       <table style="border-collapse:collapse;font-size:14px;">${contractorRows}</table>
       ` : ''}
 
+      ${shotRows ? `
+      <h3 style="margin:16px 0 4px;font-size:14px;text-transform:uppercase;letter-spacing:0.03em;color:#64748b;">Shot List</h3>
+      <table style="border-collapse:collapse;font-size:14px;">${shotRows}</table>
+      ` : ''}
+
+      ${secondShooterRows ? `
+      <h3 style="margin:16px 0 4px;font-size:14px;text-transform:uppercase;letter-spacing:0.03em;color:#64748b;">Second Shooters</h3>
+      <table style="border-collapse:collapse;font-size:14px;">${secondShooterRows}</table>
+      ` : ''}
+
       ${requestRows ? `
-      <h3 style="margin:16px 0 4px;font-size:14px;text-transform:uppercase;letter-spacing:0.03em;color:#64748b;">Requests</h3>
+      <h3 style="margin:16px 0 4px;font-size:14px;text-transform:uppercase;letter-spacing:0.03em;color:#64748b;">${isPhotography ? 'Equipment Checklist' : 'Requests'}</h3>
       <table style="border-collapse:collapse;font-size:14px;">${requestRows}</table>
       ` : ''}
 

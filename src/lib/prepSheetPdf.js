@@ -3,7 +3,8 @@ import { DEFAULT_ACCENT_COLOR, hexToRgb } from './colorTheme';
 
 // jsPDF pulls in html2canvas/DOMPurify (~450KB) even though we only use its
 // plain drawing API — lazy-load it so that weight isn't in the main bundle.
-async function buildPrepSheetDoc(form, prepContractors, requests, businessInfo) {
+async function buildPrepSheetDoc(form, prepContractors, requests, businessInfo, vertical, contractors = []) {
+  const isPhotography = vertical === 'photography';
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable'),
@@ -52,7 +53,7 @@ async function buildPrepSheetDoc(form, prepContractors, requests, businessInfo) 
   if (scheduleRows.length) {
     doc.setFontSize(13);
     doc.setTextColor(30);
-    doc.text('Schedule', marginX, y);
+    doc.text(isPhotography ? 'Timeline' : 'Schedule', marginX, y);
     y += 4;
     autoTable(doc, {
       startY: y,
@@ -83,6 +84,50 @@ async function buildPrepSheetDoc(form, prepContractors, requests, businessInfo) 
     y = doc.lastAutoTable.finalY + 10;
   }
 
+  const shotRows = (form.shotList || [])
+    .filter((s) => s.label)
+    .map((s) => [s.mustHave ? `${s.label} ★` : s.label, s.category || '', s.notes || '']);
+  if (shotRows.length) {
+    doc.setFontSize(13);
+    doc.setTextColor(30);
+    doc.text('Shot List', marginX, y);
+    y += 4;
+    autoTable(doc, {
+      startY: y,
+      margin: { left: marginX },
+      head: [['Shot', 'Category', 'Notes']],
+      body: shotRows,
+      theme: 'striped',
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: accentRgb },
+    });
+    y = doc.lastAutoTable.finalY + 10;
+  }
+
+  const secondShooterRows = (form.secondShooters || [])
+    .filter((s) => s.contractorId)
+    .map((s) => {
+      const contractor = contractors.find((c) => c.id === s.contractorId);
+      const name = contractor ? `${contractor.firstName} ${contractor.lastName}` : 'Unassigned';
+      return [name, s.role || '', s.notes || ''];
+    });
+  if (secondShooterRows.length) {
+    doc.setFontSize(13);
+    doc.setTextColor(30);
+    doc.text('Second Shooters', marginX, y);
+    y += 4;
+    autoTable(doc, {
+      startY: y,
+      margin: { left: marginX },
+      head: [['Name', 'Role', 'Notes']],
+      body: secondShooterRows,
+      theme: 'striped',
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: accentRgb },
+    });
+    y = doc.lastAutoTable.finalY + 10;
+  }
+
   // Link and attachment are email-only (the recipient gets the actual file
   // and a clickable link there) — the PDF just lists name and details.
   const requestRows = (requests || [])
@@ -91,7 +136,7 @@ async function buildPrepSheetDoc(form, prepContractors, requests, businessInfo) 
   if (requestRows.length) {
     doc.setFontSize(13);
     doc.setTextColor(30);
-    doc.text('Requests', marginX, y);
+    doc.text(isPhotography ? 'Equipment Checklist' : 'Requests', marginX, y);
     y += 4;
     autoTable(doc, {
       startY: y,
@@ -120,15 +165,15 @@ async function buildPrepSheetDoc(form, prepContractors, requests, businessInfo) 
   return { doc, filename };
 }
 
-export async function generatePrepSheetPdf(form, prepContractors, requests, businessInfo) {
-  const { doc, filename } = await buildPrepSheetDoc(form, prepContractors, requests, businessInfo);
+export async function generatePrepSheetPdf(form, prepContractors, requests, businessInfo, vertical, contractors) {
+  const { doc, filename } = await buildPrepSheetDoc(form, prepContractors, requests, businessInfo, vertical, contractors);
   doc.save(filename);
 }
 
 // Returns the same PDF as a base64 string so it can be sent as an email
 // attachment without a round-trip through document storage.
-export async function generatePrepSheetPdfAttachment(form, prepContractors, requests, businessInfo) {
-  const { doc, filename } = await buildPrepSheetDoc(form, prepContractors, requests, businessInfo);
+export async function generatePrepSheetPdfAttachment(form, prepContractors, requests, businessInfo, vertical, contractors) {
+  const { doc, filename } = await buildPrepSheetDoc(form, prepContractors, requests, businessInfo, vertical, contractors);
   // jsPDF has no plain "base64" output type (only 'datauristring' and
   // friends) — passing 'base64' silently returns null with no error.
   const dataUri = doc.output('datauristring', filename);

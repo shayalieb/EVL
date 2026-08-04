@@ -58,6 +58,17 @@ const VERTICAL_DEFAULTS = {
         body: 'Hi {{ContractorFirstName}} {{ContractorLastName}}, <br> Here are the details for the upcoming event on {{EventDayOfTheWeek}}, {{EventDate}}. <br> Please reach out if you have any questions. <br> Thank you <br> Suri.',
       },
     ],
+    // Pre-populates a new account's proposal template (BookingFormPage.jsx's
+    // composer reads currentUser.proposalTemplate.sections) via the existing
+    // SectionsEditor "arbitrary extra content" mechanism — no new component,
+    // just a head start with section titles a party-planning proposal
+    // actually needs, still fully editable like any other section.
+    proposalSections: [
+      { title: 'Menu Selections', value: '', text: 'Choose from our curated menu options — appetizers, entrées, and desserts tailored to your event.' },
+      { title: 'Rental Items', value: '', text: 'Tables, chairs, linens, and other rental equipment included in this proposal.' },
+      { title: 'Bar Service', value: '', text: 'Beverage packages and bar staffing details.' },
+      { title: 'Day-of Logistics', value: '', text: 'Setup, breakdown, and timeline coordination for your event day.' },
+    ],
   },
   photography: {
     contractorTypes: ['Lead Photographer', 'Second Shooter', 'Videographer', 'Photo Editor'],
@@ -88,7 +99,7 @@ const VERTICAL_DEFAULTS = {
 // falls back to the original band/orchestra defaults for anything
 // unrecognized so this never throws on a stale/missing value.
 export function buildSeedUserData(vertical) {
-  const { contractorTypes, eventTypes, emailTemplates: emailTemplateDefs } =
+  const { contractorTypes, eventTypes, emailTemplates: emailTemplateDefs, proposalSections = [] } =
     VERTICAL_DEFAULTS[vertical] || VERTICAL_DEFAULTS.band_orchestra;
 
   const eventStatuses = [
@@ -228,5 +239,6 @@ export function buildSeedUserData(vertical) {
   return {
     contractorTypes, eventTypes, eventStatuses, inquiryStatuses, bookingStatuses,
     emailTemplates, contractors, clients, events, bookings: [], offerings: [],
+    proposalTemplate: { sections: proposalSections.map((s) => ({ id: uid('section'), ...s })) },
   };
 }

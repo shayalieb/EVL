@@ -123,6 +123,11 @@ function emptyForm() {
     prepGroups: [],
     prepNotes: '',
     requests: [emptyRequestItem()],
+    // Photography-vertical-only prep tools (see currentUser.vertical gates
+    // in the Prep tab below) — plain arrays on the Event object, same
+    // convention as requests[]/schedule[] above, no schema change needed.
+    shotList: [],
+    secondShooters: [],
     // Manual overhead lines for costs nothing else tracks (venue rental,
     // permits, equipment) — feeds the Financials tab's P&L alongside the
     // computed contractor cost total.
@@ -137,6 +142,16 @@ function emptyScheduleItem() {
 function emptyRequestItem() {
   return { id: uid('req'), name: '', details: '', link: '', documentId: null, documentName: null };
 }
+
+function emptyShotListItem() {
+  return { id: uid('shot'), label: '', category: 'Family Formals', mustHave: false, notes: '' };
+}
+
+function emptySecondShooter() {
+  return { id: uid('shooter'), contractorId: '', role: '', notes: '' };
+}
+
+const SHOT_CATEGORIES = ['Family Formals', 'Candid', 'Detail', 'Portrait', 'Other'];
 
 // A brand-new event only lives in memory until it's saved — nothing to
 // auto-save to the server yet. But the tab itself can still be discarded by
@@ -244,6 +259,8 @@ export default function EventFormPage() {
         prepGroups: event.prepGroups || [],
         prepNotes: event.prepNotes || '',
         requests: event.requests || [emptyRequestItem()],
+        shotList: event.shotList || [],
+        secondShooters: event.secondShooters || [],
         otherExpenses: event.otherExpenses || [],
       });
     } else {
@@ -360,7 +377,7 @@ export default function EventFormPage() {
   const duration = computeDurationHours(form.startTime, form.endTime);
   const availableContractors = contractors.filter((c) => !form.contractorBookings.some((b) => b.contractorId === c.id));
   const prepContractors = getPrepContractors(form, contractors);
-  const prepEmailDraft = renderPrepSheetEmail(form, prepContractors, form.requests, undefined, currentUser.businessInfo);
+  const prepEmailDraft = renderPrepSheetEmail(form, prepContractors, form.requests, undefined, currentUser.businessInfo, currentUser.vertical, contractors);
   // Documents attached directly to a request are shown inline on that
   // request's row, not duplicated in the general Documents widget/picker.
   const requestDocumentIds = new Set(form.requests.map((r) => r.documentId).filter(Boolean));
@@ -546,6 +563,26 @@ export default function EventFormPage() {
     setForm((f) => ({ ...f, requests: f.requests.map((r) => (r.id === id ? { ...r, ...patch } : r)) }));
   }
 
+  function addShotListItem() {
+    setForm((f) => ({ ...f, shotList: [...f.shotList, emptyShotListItem()] }));
+  }
+  function updateShotListItem(id, patch) {
+    setForm((f) => ({ ...f, shotList: f.shotList.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
+  }
+  function removeShotListItem(id) {
+    setForm((f) => ({ ...f, shotList: f.shotList.filter((s) => s.id !== id) }));
+  }
+
+  function addSecondShooter() {
+    setForm((f) => ({ ...f, secondShooters: [...f.secondShooters, emptySecondShooter()] }));
+  }
+  function updateSecondShooter(id, patch) {
+    setForm((f) => ({ ...f, secondShooters: f.secondShooters.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
+  }
+  function removeSecondShooter(id) {
+    setForm((f) => ({ ...f, secondShooters: f.secondShooters.filter((s) => s.id !== id) }));
+  }
+
   function removeRequestItem(id) {
     const item = form.requests.find((r) => r.id === id);
     setForm((f) => ({ ...f, requests: f.requests.filter((r) => r.id !== id) }));
@@ -616,7 +653,7 @@ export default function EventFormPage() {
 
   async function handleDownloadPdf() {
     try {
-      await generatePrepSheetPdf(form, prepContractors, form.requests, currentUser.businessInfo);
+      await generatePrepSheetPdf(form, prepContractors, form.requests, currentUser.businessInfo, currentUser.vertical, contractors);
     } catch (err) {
       showToast(err.message || 'Failed to generate PDF', 'error');
     }
@@ -629,7 +666,7 @@ export default function EventFormPage() {
       // they were never offered as a separate checkbox in the modal.
       const requestDocIds = form.requests.map((r) => r.documentId).filter(Boolean);
       const mergedDocumentIds = Array.from(new Set([...documentIds, ...requestDocIds]));
-      const pdfAttachment = await generatePrepSheetPdfAttachment(form, prepContractors, form.requests, currentUser.businessInfo);
+      const pdfAttachment = await generatePrepSheetPdfAttachment(form, prepContractors, form.requests, currentUser.businessInfo, currentUser.vertical, contractors);
       let successCount = 0;
       for (const contractorId of recipientIds) {
         const contractor = contractors.find((c) => c.id === contractorId);
@@ -1406,7 +1443,7 @@ export default function EventFormPage() {
 
           {form.schedule.some((s) => s.time || s.name || s.details) && (
             <div className="mb-4">
-              <PrepSection title="Schedule" color="#0d9488" icon={<ClockIcon className="w-3.5 h-3.5" />}>
+              <PrepSection title={currentUser.vertical === 'photography' ? 'Timeline' : 'Schedule'} color="#0d9488" icon={<ClockIcon className="w-3.5 h-3.5" />}>
                 <div className="space-y-1 text-sm">
                   {form.schedule.filter((s) => s.time || s.name || s.details).map((s) => (
                     <div key={s.id} className="flex gap-3">
@@ -1449,12 +1486,12 @@ export default function EventFormPage() {
 
           <div className="mb-4">
             <PrepSection
-              title="Requests"
+              title={currentUser.vertical === 'photography' ? 'Equipment Checklist' : 'Requests'}
               color="#d97706"
               icon={<ClipboardIcon className="w-3.5 h-3.5" />}
               action={(
                 <button type="button" onClick={addRequestItem} data-testid="event-form-add-request-button" className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">
-                  + Add Request
+                  {currentUser.vertical === 'photography' ? '+ Add Item' : '+ Add Request'}
                 </button>
               )}
             >
@@ -1532,6 +1569,140 @@ export default function EventFormPage() {
               )}
             </PrepSection>
           </div>
+
+          {currentUser.vertical === 'photography' && (
+            <div className="mb-4">
+              <PrepSection
+                title="Shot List"
+                color="#0891b2"
+                icon={<ClipboardIcon className="w-3.5 h-3.5" />}
+                action={(
+                  <button type="button" onClick={addShotListItem} data-testid="event-form-add-shot-button" className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">
+                    + Add Shot
+                  </button>
+                )}
+              >
+                {form.shotList.length === 0 ? (
+                  <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
+                    No shots added yet.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {form.shotList.map((s) => (
+                      <div key={s.id} data-testid="event-form-shot-item-row" className="border border-slate-200 rounded-lg p-3 space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <input
+                            placeholder="Shot (e.g. Bride with parents)"
+                            value={s.label}
+                            onChange={(e) => updateShotListItem(s.id, { label: e.target.value })}
+                            data-testid="event-form-shot-item-label-input"
+                            className={inputClass}
+                          />
+                          <select
+                            value={s.category}
+                            onChange={(e) => updateShotListItem(s.id, { category: e.target.value })}
+                            data-testid="event-form-shot-item-category-select"
+                            className={inputClass}
+                          >
+                            {SHOT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                            <input
+                              type="checkbox"
+                              checked={s.mustHave}
+                              onChange={(e) => updateShotListItem(s.id, { mustHave: e.target.checked })}
+                              data-testid="event-form-shot-item-musthave-checkbox"
+                            />
+                            Must-have
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => removeShotListItem(s.id)}
+                            data-testid="event-form-shot-item-remove-button"
+                            className="w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
+                            aria-label="Remove shot"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        <input
+                          placeholder="Notes (optional)"
+                          value={s.notes}
+                          onChange={(e) => updateShotListItem(s.id, { notes: e.target.value })}
+                          data-testid="event-form-shot-item-notes-input"
+                          className={inputClass}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </PrepSection>
+            </div>
+          )}
+
+          {currentUser.vertical === 'photography' && (
+            <div className="mb-4">
+              <PrepSection
+                title="Second Shooters"
+                color="#be185d"
+                icon={<UsersIcon className="w-3.5 h-3.5" />}
+                action={(
+                  <button type="button" onClick={addSecondShooter} data-testid="event-form-add-second-shooter-button" className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">
+                    + Add
+                  </button>
+                )}
+              >
+                {form.secondShooters.length === 0 ? (
+                  <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
+                    No second shooters or additional roles assigned yet.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {form.secondShooters.map((s) => (
+                      <div key={s.id} data-testid="event-form-second-shooter-row" className="border border-slate-200 rounded-lg p-3 grid grid-cols-1 sm:grid-cols-3 gap-2 items-start">
+                        <select
+                          value={s.contractorId}
+                          onChange={(e) => updateSecondShooter(s.id, { contractorId: e.target.value })}
+                          data-testid="event-form-second-shooter-contractor-select"
+                          className={inputClass}
+                        >
+                          <option value="">Select contractor…</option>
+                          {contractors.map((c) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
+                        </select>
+                        <input
+                          placeholder="Role (e.g. Second Shooter)"
+                          value={s.role}
+                          onChange={(e) => updateSecondShooter(s.id, { role: e.target.value })}
+                          data-testid="event-form-second-shooter-role-input"
+                          className={inputClass}
+                        />
+                        <div className="flex items-center gap-2">
+                          <input
+                            placeholder="Notes (optional)"
+                            value={s.notes}
+                            onChange={(e) => updateSecondShooter(s.id, { notes: e.target.value })}
+                            data-testid="event-form-second-shooter-notes-input"
+                            className={`${inputClass} flex-1`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeSecondShooter(s.id)}
+                            data-testid="event-form-second-shooter-remove-button"
+                            className="w-6 h-6 shrink-0 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
+                            aria-label="Remove"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </PrepSection>
+            </div>
+          )}
 
           <div className="mb-4">
             <PrepSection title="Notes" color="#e11d48" icon={<NoteIcon className="w-3.5 h-3.5" />}>
