@@ -29,7 +29,7 @@ function seedBlob(profile) {
     businessInfo: { name: '', address: '', phone: '', email: '', logo: '', accentColor: '#6366f1', documentLayout: 'classic', documentTextScale: 1 },
     contractTemplate: { title: 'Event Contract', sections: [] },
     proposalTemplate: { sections: [] },
-    ...buildSeedUserData(),
+    ...buildSeedUserData(profile.vertical),
   };
 }
 
@@ -99,15 +99,18 @@ export function AuthProvider({ children }) {
         isPlatformAdmin: serverUser.isPlatformAdmin,
         isPlatformOwner: serverUser.isPlatformOwner,
         adminPermissions: serverUser.adminPermissions,
+        vertical: serverUser.vertical,
+        allVerticalsEnabled: serverUser.allVerticalsEnabled,
+        activeVerticals: serverUser.activeVerticals,
       }
     : null;
 
-  const signUp = useCallback(async ({ firstName, lastName, email, phone, password }) => {
+  const signUp = useCallback(async ({ firstName, lastName, email, phone, password, vertical }) => {
     setAuthError('');
     try {
       const data = await apiFetch('/auth/signup', {
         method: 'POST',
-        body: JSON.stringify({ firstName, lastName, email: email.trim().toLowerCase(), phone, password }),
+        body: JSON.stringify({ firstName, lastName, email: email.trim().toLowerCase(), phone, password, vertical }),
       });
       await hydrate(data.user);
       return true;

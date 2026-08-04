@@ -12,11 +12,84 @@ export function buildDefaultBookingStatuses() {
   ];
 }
 
+// Per-vertical defaults for the fields that actually read as vertical-
+// specific (contractor/event type labels, email template copy) — everything
+// else below (statuses, sample contractors/clients/events) stays the same
+// shape across verticals, just seeded with these labels.
+const VERTICAL_DEFAULTS = {
+  band_orchestra: {
+    contractorTypes: ['Musician', 'Supporting Photographer', 'Videographer', 'Sound Engineer', 'DJ'],
+    eventTypes: ['Wedding', 'Corporate', 'Private Party', 'Birthday'],
+    emailTemplates: [
+      {
+        name: 'Gig Inquiry',
+        subject: 'Gig Inquiry {{GigDate}}',
+        body: 'Hi {{ContractorFirstName}} {{ContractorLastName}} Are you available on {{EventDate}}? Please respond with your availability in timely manner. <br> Thank you <br> Suri.',
+      },
+      {
+        name: 'Gig Update',
+        subject: 'Gig Update {{GigDate}}',
+        body: 'Hi {{ContractorFirstName}} {{ContractorLastName}}, <br> There\'s an update regarding your upcoming gig on {{EventDayOfTheWeek}}, {{EventDate}}. Please review the details below and let us know if you have any questions. <br> Thank you <br> Suri.',
+      },
+      {
+        name: 'Gig Info',
+        subject: 'Gig Info {{GigDate}}',
+        body: 'Hi {{ContractorFirstName}} {{ContractorLastName}}, <br> Here are the details for your upcoming gig on {{EventDayOfTheWeek}}, {{EventDate}}. <br> Please reach out if you have any questions. <br> Thank you <br> Suri.',
+      },
+    ],
+  },
+  party_planning: {
+    contractorTypes: ['Caterer', 'Event Planner', 'Florist', 'Rental Coordinator', 'Bartender'],
+    eventTypes: ['Wedding', 'Corporate Event', 'Private Party', 'Gala'],
+    emailTemplates: [
+      {
+        name: 'Vendor Inquiry',
+        subject: 'Vendor Inquiry {{GigDate}}',
+        body: 'Hi {{ContractorFirstName}} {{ContractorLastName}}, are you available on {{EventDate}}? Please respond with your availability in a timely manner. <br> Thank you <br> Suri.',
+      },
+      {
+        name: 'Event Update',
+        subject: 'Event Update {{GigDate}}',
+        body: 'Hi {{ContractorFirstName}} {{ContractorLastName}}, <br> There\'s an update regarding the upcoming event on {{EventDayOfTheWeek}}, {{EventDate}}. Please review the details below and let us know if you have any questions. <br> Thank you <br> Suri.',
+      },
+      {
+        name: 'Event Info',
+        subject: 'Event Info {{GigDate}}',
+        body: 'Hi {{ContractorFirstName}} {{ContractorLastName}}, <br> Here are the details for the upcoming event on {{EventDayOfTheWeek}}, {{EventDate}}. <br> Please reach out if you have any questions. <br> Thank you <br> Suri.',
+      },
+    ],
+  },
+  photography: {
+    contractorTypes: ['Lead Photographer', 'Second Shooter', 'Videographer', 'Photo Editor'],
+    eventTypes: ['Wedding', 'Portrait Session', 'Corporate Event'],
+    emailTemplates: [
+      {
+        name: 'Shoot Inquiry',
+        subject: 'Shoot Inquiry {{GigDate}}',
+        body: 'Hi {{ContractorFirstName}} {{ContractorLastName}}, are you available to shoot on {{EventDate}}? Please respond with your availability in a timely manner. <br> Thank you <br> Suri.',
+      },
+      {
+        name: 'Shoot Update',
+        subject: 'Shoot Update {{GigDate}}',
+        body: 'Hi {{ContractorFirstName}} {{ContractorLastName}}, <br> There\'s an update regarding the upcoming shoot on {{EventDayOfTheWeek}}, {{EventDate}}. Please review the details below and let us know if you have any questions. <br> Thank you <br> Suri.',
+      },
+      {
+        name: 'Shoot Info',
+        subject: 'Shoot Info {{GigDate}}',
+        body: 'Hi {{ContractorFirstName}} {{ContractorLastName}}, <br> Here are the details for the upcoming shoot on {{EventDayOfTheWeek}}, {{EventDate}}. <br> Please reach out if you have any questions. <br> Thank you <br> Suri.',
+      },
+    ],
+  },
+};
+
 // Sensible default custom-field lists + a couple of sample records so a
-// freshly-created account isn't a completely blank slate.
-export function buildSeedUserData() {
-  const contractorTypes = ['Musician', 'Supporting Photographer', 'Videographer', 'Sound Engineer', 'DJ'];
-  const eventTypes = ['Wedding', 'Corporate', 'Private Party', 'Birthday'];
+// freshly-created account isn't a completely blank slate. `vertical` should
+// be the account's Account.vertical value (server/src/lib/verticals.js);
+// falls back to the original band/orchestra defaults for anything
+// unrecognized so this never throws on a stale/missing value.
+export function buildSeedUserData(vertical) {
+  const { contractorTypes, eventTypes, emailTemplates: emailTemplateDefs } =
+    VERTICAL_DEFAULTS[vertical] || VERTICAL_DEFAULTS.band_orchestra;
 
   const eventStatuses = [
     { id: uid('estatus'), label: 'Draft', color: '#94a3b8' },
@@ -37,26 +110,7 @@ export function buildSeedUserData() {
 
   const bookingStatuses = buildDefaultBookingStatuses();
 
-  const emailTemplates = [
-    {
-      id: uid('tmpl'),
-      name: 'Gig Inquiry',
-      subject: 'Gig Inquiry {{GigDate}}',
-      body: 'Hi {{ContractorFirstName}} {{ContractorLastName}} Are you available on {{EventDate}}? Please respond with your availability in timely manner. <br> Thank you <br> Suri.',
-    },
-    {
-      id: uid('tmpl'),
-      name: 'Gig Update',
-      subject: 'Gig Update {{GigDate}}',
-      body: 'Hi {{ContractorFirstName}} {{ContractorLastName}}, <br> There\'s an update regarding your upcoming gig on {{EventDayOfTheWeek}}, {{EventDate}}. Please review the details below and let us know if you have any questions. <br> Thank you <br> Suri.',
-    },
-    {
-      id: uid('tmpl'),
-      name: 'Gig Info',
-      subject: 'Gig Info {{GigDate}}',
-      body: 'Hi {{ContractorFirstName}} {{ContractorLastName}}, <br> Here are the details for your upcoming gig on {{EventDayOfTheWeek}}, {{EventDate}}. <br> Please reach out if you have any questions. <br> Thank you <br> Suri.',
-    },
-  ];
+  const emailTemplates = emailTemplateDefs.map((t) => ({ id: uid('tmpl'), ...t }));
 
   const c1 = uid('con');
   const c2 = uid('con');
@@ -64,6 +118,11 @@ export function buildSeedUserData() {
   const c1Tier = uid('tier');
   const c2Tier = uid('tier');
   const c3Tier = uid('tier');
+
+  // 'Guitar' as a secondary type only reads sensibly for a musician sample
+  // — leave it blank for the other verticals rather than force a generic
+  // placeholder that wouldn't mean anything.
+  const c1Type2 = vertical === 'band_orchestra' ? 'Guitar' : '';
 
   const contractors = [
     {
@@ -73,8 +132,8 @@ export function buildSeedUserData() {
       lastName: 'Rivera',
       email: 'alex.rivera@example.com',
       phone: '512-555-0110',
-      contractorType1: 'Musician',
-      contractorType2: 'Guitar',
+      contractorType1: contractorTypes[0],
+      contractorType2: c1Type2,
       pricingTiers: [{ id: c1Tier, name: 'Standard', price: 450 }],
       priceNotes: 'Requires load-in access 1hr before start.',
       createdAt: new Date().toISOString(),
@@ -86,7 +145,7 @@ export function buildSeedUserData() {
       lastName: 'Lee',
       email: 'jordan.lee@example.com',
       phone: '512-555-0133',
-      contractorType1: 'Supporting Photographer',
+      contractorType1: contractorTypes[1],
       contractorType2: '',
       pricingTiers: [{ id: c2Tier, name: 'Standard', price: 350 }],
       priceNotes: '',
@@ -99,7 +158,7 @@ export function buildSeedUserData() {
       lastName: 'Nguyen',
       email: 'sam.nguyen@example.com',
       phone: '512-555-0177',
-      contractorType1: 'DJ',
+      contractorType1: contractorTypes[contractorTypes.length - 1],
       contractorType2: '',
       pricingTiers: [{ id: c3Tier, name: 'Standard', price: 600 }],
       priceNotes: 'Owns full PA system, no rental needed.',

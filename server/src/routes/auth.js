@@ -8,6 +8,7 @@ import { allPermissions, getMembershipWithAccount, serializeMembership } from '.
 import { sendMail, buildFromHeader } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { MIN_PASSWORD_LENGTH, passwordTooWeak } from '../lib/password.js';
+import { VERTICALS } from '../lib/verticals.js';
 
 const router = Router();
 const SALT_ROUNDS = 12;
@@ -41,7 +42,7 @@ function sanitize(user, membership) {
 }
 
 router.post('/signup', credentialsLimiter, asyncHandler(async (req, res) => {
-  const { firstName, lastName, email, phone, password } = req.body || {};
+  const { firstName, lastName, email, phone, password, vertical } = req.body || {};
   if (!firstName?.trim() || !lastName?.trim() || !email?.trim() || !password) {
     return res.status(400).json({ error: 'First name, last name, email, and password are required.' });
   }
@@ -51,20 +52,23 @@ router.post('/signup', credentialsLimiter, asyncHandler(async (req, res) => {
 
   const normalizedEmail = email.trim().toLowerCase();
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+  // Falls back to the schema default rather than 400ing on a missing/invalid
+  // value, so an old or cached signup form never hard-fails signup itself.
+  const accountVertical = VERTICALS.includes(vertical) ? vertical : undefined;
 
   try {
-    const { user, membership } = await prisma.$transaction(async (tx) => {
+    const { user, membership, account } = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: { firstName: firstName.trim(), lastName: lastName.trim(), email: normalizedEmail, phone: phone || null, passwordHash },
       });
-      const account = await tx.account.create({ data: {} });
+      const account = await tx.account.create({ data: accountVertical ? { vertical: accountVertical } : {} });
       const membership = await tx.membership.create({
         data: { userId: user.id, accountId: account.id, role: 'owner', permissions: allPermissions() },
       });
-      return { user, membership };
+      return { user, membership, account };
     });
     req.session.userId = user.id;
-    res.status(201).json({ user: sanitize(user, membership) });
+    res.status(201).json({ user: sanitize(user, { ...membership, account }) });
   } catch (err) {
     if (err.code === 'P2002') {
       return res.status(409).json({ error: 'An account with that email already exists.' });

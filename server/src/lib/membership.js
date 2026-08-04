@@ -1,4 +1,5 @@
 import { prisma } from './prisma.js';
+import { activeVerticals } from './verticals.js';
 
 export const PERMISSION_KEYS = [
   'manageContractors',
@@ -61,11 +62,19 @@ export async function getMembershipWithAccount(userId) {
 }
 
 export function serializeMembership(membership) {
-  if (!membership) return { accountId: null, role: null, permissions: emptyPermissions() };
+  if (!membership) {
+    return {
+      accountId: null, role: null, permissions: emptyPermissions(),
+      vertical: null, allVerticalsEnabled: false, activeVerticals: [],
+    };
+  }
   return {
     accountId: membership.accountId,
     role: membership.role,
     permissions: effectivePermissions(membership),
+    vertical: membership.account.vertical,
+    allVerticalsEnabled: membership.account.allVerticalsEnabled,
+    activeVerticals: activeVerticals(membership.account),
   };
 }
 

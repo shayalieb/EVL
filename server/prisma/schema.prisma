@@ -77,6 +77,16 @@ model Account {
   // See server/src/routes/invoices.js's GET /next-number.
   nextInvoiceNumber  Int     @default(1)
   defaultInvoiceMemo String? @db.Text
+
+  // Chosen once at signup (server/src/routes/auth.js's POST /signup) and
+  // never blank — drives default seed data (src/lib/seed.js's
+  // buildSeedUserData) and default nav/route/settings gating everywhere
+  // else. See server/src/lib/verticals.js for the canonical list + helpers.
+  vertical            String  @default("band_orchestra")
+  // Account-wide unlock of every vertical's tools, independent of the
+  // `vertical` default above — flipped manually by a platform admin only
+  // (same manual-only shape as disabledAt above; no billing gate yet).
+  allVerticalsEnabled Boolean @default(false)
 }
 
 model Membership {

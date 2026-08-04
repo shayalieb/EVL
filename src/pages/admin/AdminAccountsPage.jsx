@@ -13,6 +13,9 @@ function accountStatus(a) {
   return 'active';
 }
 
+// Keep in sync with server/src/lib/verticals.js's VERTICALS list.
+const VERTICAL_LABELS = { band_orchestra: 'Band & Orchestra', party_planning: 'Party Planning', photography: 'Photography' };
+
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 
@@ -50,6 +53,19 @@ export default function AdminAccountsPage() {
       showToast(err.message, 'error');
     } finally {
       setDisableTarget(null);
+    }
+  }
+
+  async function handleToggleAllVerticals(account) {
+    try {
+      const data = await apiFetch(`/admin/accounts/${account.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ allVerticalsEnabled: !account.allVerticalsEnabled }),
+      });
+      setAccounts((prev) => prev.map((a) => (a.id === account.id ? { ...a, allVerticalsEnabled: data.allVerticalsEnabled } : a)));
+      showToast(data.allVerticalsEnabled ? 'All verticals enabled' : 'All verticals disabled');
+    } catch (err) {
+      showToast(err.message, 'error');
     }
   }
 
@@ -138,6 +154,7 @@ export default function AdminAccountsPage() {
               <th className="px-4 py-3">Owner</th>
               <th className="px-4 py-3">Members</th>
               <th className="px-4 py-3">Data</th>
+              <th className="px-4 py-3">Vertical</th>
               <th className="px-4 py-3">Created</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3 text-right">Actions</th>
@@ -160,6 +177,10 @@ export default function AdminAccountsPage() {
                 <td className="px-4 py-3 text-slate-600">{a.memberCount}</td>
                 <td className="px-4 py-3 text-slate-500 text-xs">
                   {a.dataSummary.contractors} contractors · {a.dataSummary.clients} clients · {a.dataSummary.events} events
+                </td>
+                <td className="px-4 py-3 text-slate-500 text-xs">
+                  <div>{VERTICAL_LABELS[a.vertical] || a.vertical}</div>
+                  {a.allVerticalsEnabled && <div className="text-indigo-600 font-semibold">+ all verticals</div>}
                 </td>
                 <td className="px-4 py-3 text-slate-500 text-xs">{new Date(a.createdAt).toLocaleDateString()}</td>
                 <td className="px-4 py-3">
@@ -189,6 +210,14 @@ export default function AdminAccountsPage() {
                         className="text-xs font-semibold text-slate-500 hover:text-slate-700"
                       >
                         {a.disabledAt ? 'Enable' : 'Disable'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleAllVerticals(a)}
+                        data-testid="admin-account-row-toggle-all-verticals-button"
+                        className="text-xs font-semibold text-slate-500 hover:text-slate-700"
+                      >
+                        {a.allVerticalsEnabled ? 'Restrict to 1 Vertical' : 'Enable All Verticals'}
                       </button>
                       <button
                         type="button"

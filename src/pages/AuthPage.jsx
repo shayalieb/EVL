@@ -5,6 +5,13 @@ import SubmitButton from '../components/ui/SubmitButton';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
+// Keep in sync with server/src/lib/verticals.js's VERTICALS list.
+const VERTICAL_OPTIONS = [
+  { id: 'band_orchestra', label: 'Band & Orchestra', description: 'Book musicians and crew for gigs' },
+  { id: 'party_planning', label: 'Party Planning & Catering', description: 'Coordinate vendors for events' },
+  { id: 'photography', label: 'Photography', description: 'Manage shoots and shot lists' },
+];
+
 export default function AuthPage() {
   const [tab, setTab] = useState('signin');
   const [firstName, setFirstName] = useState('');
@@ -13,6 +20,7 @@ export default function AuthPage() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [vertical, setVertical] = useState(VERTICAL_OPTIONS[0].id);
   const [resetEmail, setResetEmail] = useState('');
   const [resetSent, setResetSent] = useState(false);
   const [localError, setLocalError] = useState('');
@@ -73,7 +81,7 @@ export default function AuthPage() {
       return;
     }
     setSubmitting(true);
-    await signUp({ firstName, lastName, email, phone, password });
+    await signUp({ firstName, lastName, email, phone, password, vertical });
     setSubmitting(false);
   }
 
@@ -151,6 +159,27 @@ export default function AuthPage() {
             <input type="tel" placeholder="Contact phone number" value={phone} onChange={(e) => setPhone(e.target.value)} data-testid="auth-signup-phone-input" className={inputClass} />
             <input type="password" required minLength={8} placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} data-testid="auth-signup-password-input" className={inputClass} />
             <input type="password" required placeholder="Confirm password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} data-testid="auth-signup-confirm-password-input" className={inputClass} />
+            <div>
+              <div className="text-xs font-semibold text-slate-500 mb-1.5">What kind of business is this?</div>
+              <div className="space-y-1.5">
+                {VERTICAL_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setVertical(opt.id)}
+                    data-testid={`auth-signup-vertical-${opt.id}-button`}
+                    className={`w-full text-left px-3 py-2 rounded-lg border text-sm transition-colors ${
+                      vertical === opt.id
+                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="font-semibold">{opt.label}</div>
+                    <div className="text-xs text-slate-400">{opt.description}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
             <SubmitButton loading={submitting} testId="auth-signup-submit-button">Create Account</SubmitButton>
           </form>
         )}

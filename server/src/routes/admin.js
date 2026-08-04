@@ -69,6 +69,8 @@ router.get('/accounts', asyncHandler(async (req, res) => {
       disabledAt: a.disabledAt,
       disabledReason: a.disabledReason,
       disabledBy: a.disabledBy ? { firstName: a.disabledBy.firstName, lastName: a.disabledBy.lastName } : null,
+      vertical: a.vertical,
+      allVerticalsEnabled: a.allVerticalsEnabled,
       owner: ownerOf(a),
       memberCount: a.memberships.length,
       dataSummary: dataSummary(a.accountData),
@@ -163,25 +165,36 @@ function requireManageAccountStatus(req, res) {
 
 router.patch('/accounts/:id', asyncHandler(async (req, res) => {
   if (!requireManageAccountStatus(req, res)) return;
-  const { disabled, reason } = req.body || {};
-  if (typeof disabled !== 'boolean') {
-    return res.status(400).json({ error: 'disabled must be a boolean.' });
-  }
-  if (disabled && !reason?.trim()) {
-    return res.status(400).json({ error: 'A reason is required to disable an account.' });
-  }
-  const account = await prisma.account.update({
-    where: { id: req.params.id },
-    data: disabled
+  const { disabled, reason, allVerticalsEnabled } = req.body || {};
+  const data = {};
+  if (disabled !== undefined) {
+    if (typeof disabled !== 'boolean') {
+      return res.status(400).json({ error: 'disabled must be a boolean.' });
+    }
+    if (disabled && !reason?.trim()) {
+      return res.status(400).json({ error: 'A reason is required to disable an account.' });
+    }
+    Object.assign(data, disabled
       ? { disabledAt: new Date(), disabledReason: reason.trim(), disabledById: req.user.id }
-      : { disabledAt: null, disabledReason: null, disabledById: null },
-    include: { disabledBy: true },
-  });
+      : { disabledAt: null, disabledReason: null, disabledById: null });
+  }
+  // Manual multi-vertical unlock — no billing gate yet, see verticals.js.
+  if (allVerticalsEnabled !== undefined) {
+    if (typeof allVerticalsEnabled !== 'boolean') {
+      return res.status(400).json({ error: 'allVerticalsEnabled must be a boolean.' });
+    }
+    data.allVerticalsEnabled = allVerticalsEnabled;
+  }
+  if (Object.keys(data).length === 0) {
+    return res.status(400).json({ error: 'Nothing to update.' });
+  }
+  const account = await prisma.account.update({ where: { id: req.params.id }, data, include: { disabledBy: true } });
   res.json({
     ok: true,
     disabledAt: account.disabledAt,
     disabledReason: account.disabledReason,
     disabledBy: account.disabledBy ? { firstName: account.disabledBy.firstName, lastName: account.disabledBy.lastName } : null,
+    allVerticalsEnabled: account.allVerticalsEnabled,
   });
 }));
 
