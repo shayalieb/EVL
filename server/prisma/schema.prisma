@@ -243,7 +243,9 @@ model SupportAttachment {
   filename    String
   contentType String
   size        Int
-  data        Bytes
+  // See EventDocument.data/storageKey (server/prisma/schema.prisma) for the storage-migration reasoning.
+  data        Bytes?
+  storageKey  String?
 
   createdAt   DateTime       @default(now())
 
@@ -280,7 +282,13 @@ model EventDocument {
   filename    String
   contentType String
   size        Int
-  data        Bytes
+  // Bytes live in Supabase Storage (see server/src/lib/fileStorage.js),
+  // referenced by storageKey — data/storageKey are mutually exclusive in
+  // practice: rows written before this migration only have `data`; every
+  // row written after only has `storageKey`. Both stay nullable so each can
+  // stand in for the other depending on which a given row has.
+  data        Bytes?
+  storageKey  String?
 
   createdAt   DateTime @default(now())
 
@@ -300,7 +308,9 @@ model BookingDocument {
   filename    String
   contentType String
   size        Int
-  data        Bytes
+  // See EventDocument.data/storageKey above for the storage-migration reasoning.
+  data        Bytes?
+  storageKey  String?
 
   createdAt   DateTime @default(now())
 
@@ -533,6 +543,13 @@ model Reminder {
   // new time.
   emailEnabled    Boolean   @default(false)
   emailSentAt     DateTime?
+  // Atomic per-row claim so multiple concurrently-running backend instances
+  // (see server/src/lib/reminderScheduler.js) never both send the same
+  // reminder's email — claimed via a conditional updateMany, not a DB-level
+  // lock (advisory locks don't compose safely with connection pooling).
+  // Treated as stale after 5 minutes so a claim from a crashed instance
+  // doesn't permanently block the reminder from ever being retried.
+  emailClaimedAt  DateTime?
   completedAt     DateTime?
 
   createdAt       DateTime  @default(now())

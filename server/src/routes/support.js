@@ -5,6 +5,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
 import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
+import { uploadFile, getSignedDownloadUrl } from '../lib/fileStorage.js';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_FILES = 3;
@@ -47,12 +48,11 @@ function uploadFiles(req, res, next) {
   });
 }
 
-function attachmentsData(files) {
-  return (files || []).map((f) => ({
-    filename: f.originalname,
-    contentType: f.mimetype || 'application/octet-stream',
-    size: f.size,
-    data: f.buffer,
+async function attachmentsData(accountId, files) {
+  return Promise.all((files || []).map(async (f) => {
+    const contentType = f.mimetype || 'application/octet-stream';
+    const storageKey = await uploadFile({ accountId, buffer: f.buffer, contentType });
+    return { filename: f.originalname, contentType, size: f.size, storageKey };
   }));
 }
 
@@ -71,6 +71,7 @@ router.post('/threads', uploadFiles, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Subject and message are required.' });
   }
 
+  const attachments = await attachmentsData(req.membership.accountId, req.files);
   let thread = await prisma.supportThread.create({
     data: {
       accountId: req.membership.accountId,
@@ -80,7 +81,7 @@ router.post('/threads', uploadFiles, asyncHandler(async (req, res) => {
           direction: 'user',
           senderUserId: req.session.userId,
           body: body.trim(),
-          attachments: { create: attachmentsData(req.files) },
+          attachments: { create: attachments },
         },
       },
     },
@@ -108,13 +109,14 @@ router.post('/threads/:id/messages', uploadFiles, asyncHandler(async (req, res) 
     return res.status(404).json({ error: 'Thread not found.' });
   }
 
+  const attachments = await attachmentsData(req.membership.accountId, req.files);
   const message = await prisma.supportMessage.create({
     data: {
       threadId: thread.id,
       direction: 'user',
       senderUserId: req.session.userId,
       body: body.trim(),
-      attachments: { create: attachmentsData(req.files) },
+      attachments: { create: attachments },
     },
     include: { attachments: { select: { id: true, filename: true, contentType: true, size: true } } },
   });
@@ -164,6 +166,9 @@ router.get('/attachments/:id/download', asyncHandler(async (req, res) => {
   });
   if (!attachment || attachment.message.thread.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Attachment not found.' });
+  }
+  if (attachment.storageKey) {
+    return res.redirect(302, await getSignedDownloadUrl(attachment.storageKey, attachment.filename));
   }
   res.setHeader('Content-Type', attachment.contentType);
   res.setHeader('Content-Disposition', `attachment; filename="${attachment.filename.replace(/"/g, '')}"`);

@@ -6,6 +6,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachUser, requirePlatformAdmin, requireAdminPermission, allPermissions } from '../lib/membership.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
+import { uploadFile, getSignedDownloadUrl } from '../lib/fileStorage.js';
 
 const router = Router();
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
@@ -26,12 +27,11 @@ function uploadFiles(req, res, next) {
   });
 }
 
-function attachmentsData(files) {
-  return (files || []).map((f) => ({
-    filename: f.originalname,
-    contentType: f.mimetype || 'application/octet-stream',
-    size: f.size,
-    data: f.buffer,
+async function attachmentsData(accountId, files) {
+  return Promise.all((files || []).map(async (f) => {
+    const contentType = f.mimetype || 'application/octet-stream';
+    const storageKey = await uploadFile({ accountId, buffer: f.buffer, contentType });
+    return { filename: f.originalname, contentType, size: f.size, storageKey };
   }));
 }
 
@@ -317,13 +317,14 @@ router.post('/support/threads/:id/messages', uploadFiles, asyncHandler(async (re
     });
   }
 
+  const dbAttachments = await attachmentsData(thread.accountId, req.files);
   const message = await prisma.supportMessage.create({
     data: {
       threadId: thread.id,
       direction: 'admin',
       senderUserId: req.session.userId,
       body: body.trim(),
-      attachments: { create: attachmentsData(req.files) },
+      attachments: { create: dbAttachments },
     },
     include: { attachments: attachmentSelect },
   });
@@ -436,6 +437,9 @@ router.patch('/support/threads/:id', asyncHandler(async (req, res) => {
 router.get('/support/attachments/:id/download', asyncHandler(async (req, res) => {
   const attachment = await prisma.supportAttachment.findUnique({ where: { id: req.params.id } });
   if (!attachment) return res.status(404).json({ error: 'Attachment not found.' });
+  if (attachment.storageKey) {
+    return res.redirect(302, await getSignedDownloadUrl(attachment.storageKey, attachment.filename));
+  }
   res.setHeader('Content-Type', attachment.contentType);
   res.setHeader('Content-Disposition', `attachment; filename="${attachment.filename.replace(/"/g, '')}"`);
   res.send(attachment.data);

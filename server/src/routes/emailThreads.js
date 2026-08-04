@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
 import { buildFromHeader, sendMail } from '../lib/mailer.js';
+import { downloadFileBuffer } from '../lib/fileStorage.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -34,11 +35,11 @@ router.post('/send', asyncHandler(async (req, res) => {
   let attachments;
   if (documentIds?.length) {
     const documents = await prisma.eventDocument.findMany({ where: { id: { in: documentIds }, accountId } });
-    attachments = documents.map((d) => ({
-      content: d.data.toString('base64'),
+    attachments = await Promise.all(documents.map(async (d) => ({
+      content: (d.storageKey ? await downloadFileBuffer(d.storageKey) : d.data).toString('base64'),
       filename: d.filename,
       contentType: d.contentType,
-    }));
+    })));
   }
   // Ad hoc attachment (e.g. a freshly generated prep-sheet PDF) that isn't
   // stored as an EventDocument — sent as base64 straight from the client.
