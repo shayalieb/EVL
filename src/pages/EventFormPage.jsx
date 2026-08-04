@@ -899,6 +899,15 @@ export default function EventFormPage() {
               Stage Plot
             </Link>
           )}
+          {isEditing && currentUser.activeVerticals?.includes('band_orchestra') && (
+            <Link
+              to={`/events/${eventId}/set-lists`}
+              data-testid="event-form-set-lists-link"
+              className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
+            >
+              Set Lists
+            </Link>
+          )}
           {isEditing && currentUser.activeVerticals?.includes('party_planning') && (
             <Link
               to={`/events/${eventId}/floor-plan`}

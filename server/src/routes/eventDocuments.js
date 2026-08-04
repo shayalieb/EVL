@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
-import { uploadFile, getSignedDownloadUrl, deleteFile } from '../lib/fileStorage.js';
+import { uploadFile, getSignedDownloadUrl, getSignedPreviewUrl, deleteFile } from '../lib/fileStorage.js';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FILE_SIZE } });
@@ -68,6 +68,20 @@ router.get('/:id/download', asyncHandler(async (req, res) => {
   res.setHeader('Content-Type', document.contentType);
   res.setHeader('Content-Disposition', `attachment; filename="${document.filename.replace(/"/g, '')}"`);
   res.send(document.data);
+}));
+
+// Same lookup/ownership check as /download, but redirects to a signed URL
+// without the download-forcing disposition — for rendering a file inline
+// (e.g. in an <iframe>/<img> preview) rather than saving it. Pre-migration
+// rows with no storageKey have no non-attachment path available, so those
+// 404 here (they can still be fetched via /download).
+router.get('/:id/preview', asyncHandler(async (req, res) => {
+  const document = await prisma.eventDocument.findUnique({ where: { id: req.params.id } });
+  if (!document || document.accountId !== req.membership.accountId) {
+    return res.status(404).json({ error: 'Document not found.' });
+  }
+  if (!document.storageKey) return res.status(404).json({ error: 'Preview not available for this document.' });
+  res.redirect(302, await getSignedPreviewUrl(document.storageKey));
 }));
 
 router.delete('/:id', asyncHandler(async (req, res) => {

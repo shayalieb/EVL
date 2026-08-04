@@ -58,6 +58,20 @@ export async function getSignedDownloadUrl(storageKey, filename) {
   return data.signedUrl;
 }
 
+// Same as getSignedDownloadUrl but WITHOUT Supabase's `download` option —
+// that option forces Content-Disposition: attachment, which makes a browser
+// download the file instead of rendering it, so it's wrong for anything
+// meant to display inline (an <iframe>/<img> preview). Still short-lived
+// and safe to redirect a browser to directly (see eventDocuments.js's
+// /:id/preview route) — unlike a credentialed fetch() of a download URL,
+// simple resource loads like iframe/img navigation aren't affected by
+// Supabase's signed-URL CORS headers.
+export async function getSignedPreviewUrl(storageKey) {
+  const { data, error } = await getClient().storage.from(BUCKET).createSignedUrl(storageKey, 60);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
 export async function downloadFileBuffer(storageKey) {
   const { data, error } = await getClient().storage.from(BUCKET).download(storageKey);
   if (error) throw error;

@@ -28,3 +28,10 @@ export async function deleteDocument(id) {
 export function documentDownloadUrl(id) {
   return `${API_BASE}/documents/${id}/download`;
 }
+
+// Renders inline (no forced download) — for an <iframe>/<img> preview, not
+// a save-to-disk link. See server/src/routes/eventDocuments.js's /preview
+// route for why this needs its own endpoint rather than reusing download.
+export function documentPreviewUrl(id) {
+  return `${API_BASE}/documents/${id}/preview`;
+}
