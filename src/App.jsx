@@ -27,6 +27,7 @@ import AdminLayout from './layouts/AdminLayout';
 import AdminAccountsPage from './pages/admin/AdminAccountsPage';
 import AdminSupportPage from './pages/admin/AdminSupportPage';
 import AdminAdminsPage from './pages/admin/AdminAdminsPage';
+import CanvasEngineDemoPage from './pages/dev/CanvasEngineDemoPage';
 
 function ProtectedArea() {
   const { currentUser, authLoading } = useAuth();
@@ -44,6 +45,15 @@ function AuthGate({ children }) {
   const { currentUser, authLoading } = useAuth();
   if (authLoading) return null;
   if (currentUser) return <Navigate to="/home" replace />;
+  return children;
+}
+
+// Gates a single route to platform admins without needing a whole nested
+// area like PlatformAdminArea below — for one-off internal/dev pages that
+// live inside the regular app chrome rather than the admin layout.
+function DevOnlyRoute({ children }) {
+  const { currentUser } = useAuth();
+  if (!currentUser?.isPlatformAdmin) return <Navigate to="/home" replace />;
   return children;
 }
 
@@ -80,6 +90,7 @@ function AppRoutes() {
         <Route path="email-templates" element={<EmailTemplatesPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="help" element={<SupportPage />} />
+        <Route path="dev/canvas-demo" element={<DevOnlyRoute><CanvasEngineDemoPage /></DevOnlyRoute>} />
       </Route>
       <Route path="/admin" element={<PlatformAdminArea />}>
         <Route index element={<Navigate to="accounts" replace />} />
