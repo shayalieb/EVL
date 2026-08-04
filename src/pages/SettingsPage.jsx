@@ -8,6 +8,7 @@ import UsersTab from './settings/UsersTab';
 import BillingTab from './settings/BillingTab';
 import TemplatesTab from './settings/TemplatesTab';
 import BookingLinkTab from './settings/BookingLinkTab';
+import EmailDomainTab from './settings/EmailDomainTab';
 import { resizeImageToDataUrl } from '../lib/resizeImage';
 import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
 import { DOCUMENT_LAYOUTS, TEXT_SCALE_STEPS, DEFAULT_LAYOUT_ID, DEFAULT_TEXT_SCALE } from '../lib/documentLayouts';
@@ -26,6 +27,7 @@ export default function SettingsPage() {
     ...(isAdminOrOwner ? [{ id: 'users', label: 'Users' }] : []),
     ...(isAdminOrOwner ? [{ id: 'billing', label: 'Billing' }] : []),
     ...(isAdminOrOwner ? [{ id: 'bookingLink', label: 'Booking Link' }] : []),
+    ...(isAdminOrOwner ? [{ id: 'emailDomain', label: 'Email Domain' }] : []),
   ];
   const [tab, setTab] = useState('user');
 
@@ -55,6 +57,7 @@ export default function SettingsPage() {
       {tab === 'users' && isAdminOrOwner && <UsersTab />}
       {tab === 'billing' && isAdminOrOwner && <BillingTab />}
       {tab === 'bookingLink' && isAdminOrOwner && <BookingLinkTab />}
+      {tab === 'emailDomain' && isAdminOrOwner && <EmailDomainTab />}
     </div>
   );
 }

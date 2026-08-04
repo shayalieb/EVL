@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
-import { buildFromHeader, sendMail } from '../lib/mailer.js';
+import { resolveFromHeader, resolveReplyDomain, sendMail } from '../lib/mailer.js';
 import { downloadFileBuffer } from '../lib/fileStorage.js';
 
 const router = Router();
@@ -56,11 +56,14 @@ router.post('/send', asyncHandler(async (req, res) => {
     create: { accountId, eventId, contractorId, contractorEmail },
   });
 
-  if (!thread.replyToAlias && process.env.RESEND_INBOUND_DOMAIN) {
-    thread = await prisma.emailThread.update({
-      where: { id: thread.id },
-      data: { replyToAlias: `reply+${thread.id}@${process.env.RESEND_INBOUND_DOMAIN}` },
-    });
+  if (!thread.replyToAlias) {
+    const replyDomain = await resolveReplyDomain(accountId);
+    if (replyDomain) {
+      thread = await prisma.emailThread.update({
+        where: { id: thread.id },
+        data: { replyToAlias: `reply+${thread.id}@${replyDomain}` },
+      });
+    }
   }
 
   const lastMessage = await prisma.emailMessage.findFirst({
@@ -68,7 +71,22 @@ router.post('/send', asyncHandler(async (req, res) => {
     orderBy: { createdAt: 'desc' },
   });
 
-  const fromAddress = buildFromHeader(fromName);
+  // Both the From display name and local-part follow the sending template's
+  // own configuration (see EmailTemplatesPage.jsx's "Sends As" fields) when
+  // one was used — display name works regardless of whether the account has
+  // a verified domain, local-part only takes effect once one's verified
+  // (resolveFromHeader falls back to the platform default address
+  // otherwise). Falls back to the request's own fromName/'hello' for ad hoc
+  // (no template) sends.
+  let localPart = 'hello';
+  let effectiveFromName = fromName;
+  if (templateId) {
+    const accountData = await prisma.accountData.findUnique({ where: { accountId } });
+    const template = accountData?.data?.emailTemplates?.find((t) => t.id === templateId);
+    if (template?.fromLocalPart) localPart = template.fromLocalPart;
+    if (template?.fromDisplayName) effectiveFromName = template.fromDisplayName;
+  }
+  const fromAddress = await resolveFromHeader({ accountId, fromName: effectiveFromName, localPart });
   const headers = lastMessage?.resendMessageId
     ? { 'In-Reply-To': lastMessage.resendMessageId, References: lastMessage.resendMessageId }
     : undefined;

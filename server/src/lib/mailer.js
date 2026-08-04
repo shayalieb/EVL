@@ -1,8 +1,39 @@
 import { getResendClient } from './resend.js';
+import { getVerifiedEmailDomain } from './emailDomains.js';
+import { ROOT_DOMAIN } from './godaddyDns.js';
 
 export function buildFromHeader(fromName) {
   const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
   return `${(fromName || 'GigWorks').trim()} <${fromEmail}>`;
+}
+
+// Account-aware version of buildFromHeader, for the genuinely
+// business-branded sends (contracts, invoices, inquiries, reminders,
+// contractor threads) — falls back to buildFromHeader's global default
+// whenever the account has no verified EmailDomain (see
+// server/src/lib/emailDomains.js), so nothing changes for any account that
+// hasn't set one up. Platform-level sends (auth, support notifications to
+// the platform admin, admin-to-business support replies) intentionally keep
+// calling buildFromHeader directly instead — those are GigWorks-the-platform
+// talking, not the business's own brand.
+export async function resolveFromHeader({ accountId, fromName, localPart }) {
+  const domain = accountId ? await getVerifiedEmailDomain(accountId) : null;
+  if (!domain) return buildFromHeader(fromName);
+  const fromEmail = `${localPart || 'hello'}@${domain.subdomain}.${ROOT_DOMAIN}`;
+  return `${(fromName || 'GigWorks').trim()} <${fromEmail}>`;
+}
+
+// Same account-aware/fallback shape as resolveFromHeader, for the
+// reply+<id>@<domain> aliases built in support.js/admin.js/emailThreads.js —
+// inbound replies need to land on whichever domain the original message was
+// actually sent from, so this has to agree with resolveFromHeader's choice
+// for the same account. Returns null (not a placeholder) when neither an
+// account domain nor RESEND_INBOUND_DOMAIN is configured, since callers
+// already treat a missing alias as "skip it" (no inbound configured yet).
+export async function resolveReplyDomain(accountId) {
+  const domain = accountId ? await getVerifiedEmailDomain(accountId) : null;
+  if (domain) return `${domain.subdomain}.${ROOT_DOMAIN}`;
+  return process.env.RESEND_INBOUND_DOMAIN || null;
 }
 
 const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };

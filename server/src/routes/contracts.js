@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
-import { sendMail, buildFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
+import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 
 const router = Router();
@@ -134,7 +134,7 @@ router.post('/', asyncHandler(async (req, res) => {
     // resend route.
     try {
       await sendMail({
-        from: buildFromHeader(fromName),
+        from: await resolveFromHeader({ accountId: req.membership.accountId, fromName, localPart: 'contracts' }),
         to: recipientEmail,
         subject: `Contract for your event — ${fromName}`,
         html: buildActionEmailHtml({
@@ -319,7 +319,7 @@ publicContractsRouter.post('/:token/submit', asyncHandler(async (req, res) => {
       const ownerSignUrl = `${frontendUrl()}/sign/${ownerToken}`;
       try {
         await sendMail({
-          from: buildFromHeader(fromName),
+          from: await resolveFromHeader({ accountId: contract.accountId, fromName, localPart: 'contracts' }),
           to: contract.ownerEmail,
           subject: `${contract.recipientName || contract.recipientEmail} signed your contract — your signature is next`,
           html: buildActionEmailHtml({

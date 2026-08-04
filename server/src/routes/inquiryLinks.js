@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
-import { sendMail, buildFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
+import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 
 const router = Router();
@@ -44,7 +44,7 @@ async function emailInquiryLink({ accountId, recipientEmail, recipientName, inqu
   const businessInfo = accountData?.data?.businessInfo || {};
   const fromName = businessInfo.name || 'GigWorks';
   await sendMail({
-    from: buildFromHeader(fromName),
+    from: await resolveFromHeader({ accountId, fromName, localPart: 'inquiries' }),
     to: recipientEmail,
     subject: `Tell us about your event — ${fromName}`,
     html: buildActionEmailHtml({
@@ -325,7 +325,7 @@ publicInquiryLinksRouter.post('/:token/submit', asyncHandler(async (req, res) =>
   const fromName = businessInfo.name || 'GigWorks';
   try {
     await sendMail({
-      from: buildFromHeader(fromName),
+      from: await resolveFromHeader({ accountId: link.accountId, fromName, localPart: 'inquiries' }),
       to: updated.ownerEmail,
       subject: `New inquiry response — ${firstName.trim()} ${lastName.trim()}`,
       html: buildActionEmailHtml({

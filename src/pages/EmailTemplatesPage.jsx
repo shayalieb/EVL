@@ -5,6 +5,7 @@ import { useToast } from '../components/ui/Toast';
 import { ChevronDownIcon, SearchIcon } from '../components/ui/icons';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import RichTextToolbar from '../components/ui/RichTextToolbar';
+import { getEmailDomain } from '../lib/emailDomains';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -127,11 +128,13 @@ function MergeFieldReference() {
   );
 }
 
-function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, canEdit }) {
+function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, canEdit, emailDomain, rootDomain, defaultFromDisplayName }) {
   const { showToast } = useToast();
   const [name, setName] = useState(template.name);
   const [subject, setSubject] = useState(template.subject);
   const [body, setBody] = useState(template.body);
+  const [fromDisplayName, setFromDisplayName] = useState(template.fromDisplayName || '');
+  const [fromLocalPart, setFromLocalPart] = useState(template.fromLocalPart || '');
   // 'visual' lets non-technical users format text without seeing HTML; 'html'
   // is the raw source for anyone who wants to hand-edit markup directly.
   const [mode, setMode] = useState('visual');
@@ -142,6 +145,8 @@ function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, can
     setName(template.name);
     setSubject(template.subject);
     setBody(template.body);
+    setFromDisplayName(template.fromDisplayName || '');
+    setFromLocalPart(template.fromLocalPart || '');
   }, [template]);
 
   // Keep the contentEditable in sync with `body` for external changes (Reset,
@@ -158,11 +163,12 @@ function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, can
     if (bodyRef.current) bodyRef.current.innerHTML = body;
   }, [body, mode, expanded]);
 
-  const dirty = name !== template.name || subject !== template.subject || body !== template.body;
+  const dirty = name !== template.name || subject !== template.subject || body !== template.body
+    || fromDisplayName !== (template.fromDisplayName || '') || fromLocalPart !== (template.fromLocalPart || '');
 
   function handleSave(e) {
     e.stopPropagation();
-    onSave({ name, subject, body });
+    onSave({ name, subject, body, fromDisplayName: fromDisplayName.trim(), fromLocalPart: fromLocalPart.trim().toLowerCase() });
     showToast('Template saved');
   }
 
@@ -171,6 +177,8 @@ function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, can
     setName(template.name);
     setSubject(template.subject);
     setBody(template.body);
+    setFromDisplayName(template.fromDisplayName || '');
+    setFromLocalPart(template.fromLocalPart || '');
   }
 
   function handleBodyInput() {
@@ -202,6 +210,43 @@ function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, can
           <div>
             <label className={labelClass}>Subject</label>
             <input value={subject} onChange={(e) => setSubject(e.target.value)} data-testid="email-template-row-subject-input" className={inputClass} />
+          </div>
+          <div>
+            <label className={labelClass}>Sends As</label>
+            <div className="space-y-2">
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">Display Name</label>
+                <input
+                  value={fromDisplayName}
+                  onChange={(e) => setFromDisplayName(e.target.value)}
+                  placeholder={defaultFromDisplayName || 'GigWorks'}
+                  data-testid="email-template-row-fromdisplayname-input"
+                  className={`${inputClass} max-w-[16rem]`}
+                />
+              </div>
+              {emailDomain?.status === 'verified' ? (
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">Address</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={fromLocalPart}
+                      onChange={(e) => setFromLocalPart(e.target.value)}
+                      placeholder="hello"
+                      data-testid="email-template-row-fromlocalpart-input"
+                      className={`${inputClass} max-w-[12rem]`}
+                    />
+                    <span className="text-sm text-slate-400">@{emailDomain.subdomain}.{rootDomain}</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400">
+                  No custom email domain configured yet, so the address itself stays the platform default — set one up in Settings → Email Domain to also customize the address, not just the name below.
+                </p>
+              )}
+              <p className="text-xs text-slate-500 pt-1 border-t border-slate-50" data-testid="email-template-row-from-preview">
+                Sends as: {fromDisplayName.trim() || defaultFromDisplayName || 'GigWorks'} &lt;{(fromLocalPart.trim() || 'hello').toLowerCase()}@{emailDomain?.status === 'verified' ? `${emailDomain.subdomain}.${rootDomain}` : 'platform default address'}&gt;
+              </p>
+            </div>
           </div>
           <div>
             <div className="flex items-center justify-between mb-1">
@@ -284,14 +329,20 @@ function TemplateRow({ template, expanded, onToggleExpand, onSave, onDelete, can
 
 export default function EmailTemplatesPage() {
   const { emailTemplates, addEmailTemplate, updateEmailTemplate, removeEmailTemplate } = useData();
-  const { can } = useAuth();
+  const { can, currentUser } = useAuth();
   const canEdit = can('manageEmailTemplates');
   const { showToast } = useToast();
   const [expandedId, setExpandedId] = useState(null);
   const [templatePendingDelete, setTemplatePendingDelete] = useState(null);
+  const [emailDomain, setEmailDomain] = useState(null);
+  const [rootDomain, setRootDomain] = useState('gigworks.io');
+
+  useEffect(() => {
+    getEmailDomain().then(({ domain, rootDomain: rd }) => { setEmailDomain(domain); setRootDomain(rd); }).catch(() => {});
+  }, []);
 
   function handleAdd() {
-    const record = addEmailTemplate({ name: 'New Template', subject: '', body: '' });
+    const record = addEmailTemplate({ name: 'New Template', subject: '', body: '', fromDisplayName: '', fromLocalPart: '' });
     if (record) setExpandedId(record.id);
   }
 
@@ -341,6 +392,9 @@ export default function EmailTemplatesPage() {
                 onSave={(patch) => updateEmailTemplate(t.id, patch)}
                 onDelete={() => setTemplatePendingDelete(t)}
                 canEdit={canEdit}
+                emailDomain={emailDomain}
+                rootDomain={rootDomain}
+                defaultFromDisplayName={currentUser?.businessInfo?.name}
               />
             ))}
           </div>

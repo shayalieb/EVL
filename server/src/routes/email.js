@@ -3,7 +3,7 @@ import { rateLimit } from 'express-rate-limit';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
-import { buildFromHeader, sendMail } from '../lib/mailer.js';
+import { resolveFromHeader, sendMail } from '../lib/mailer.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -39,7 +39,8 @@ router.post('/send', sendLimiter, asyncHandler(async (req, res) => {
 
   let data, error;
   try {
-    ({ data, error } = await sendMail({ from: buildFromHeader(fromName), to, subject, html: body, replyTo, attachments }));
+    const from = await resolveFromHeader({ accountId: req.membership.accountId, fromName, localPart: 'hello' });
+    ({ data, error } = await sendMail({ from, to, subject, html: body, replyTo, attachments }));
   } catch {
     return res.status(503).json({ error: 'Email sending is not configured yet.' });
   }

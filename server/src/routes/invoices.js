@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
-import { sendMail, buildFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
+import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { getStripeClient } from '../lib/stripe.js';
 
@@ -227,7 +227,7 @@ router.post('/:id/send', asyncHandler(async (req, res) => {
   let emailError = null;
   try {
     await sendMail({
-      from: buildFromHeader(fromName),
+      from: await resolveFromHeader({ accountId: req.membership.accountId, fromName, localPart: 'invoices' }),
       to: invoice.recipientEmail,
       subject: `Invoice for ${totalLabel} from ${fromName}`,
       html: buildActionEmailHtml({
@@ -332,7 +332,7 @@ router.post('/:id/send-receipt', asyncHandler(async (req, res) => {
   let emailError = null;
   try {
     await sendMail({
-      from: buildFromHeader(fromName),
+      from: await resolveFromHeader({ accountId: req.membership.accountId, fromName, localPart: 'invoices' }),
       to: invoice.recipientEmail,
       subject: `Receipt for ${totalLabel} from ${fromName}`,
       html: `<p>Hi ${escapeHtml(invoice.recipientName) || 'there'},</p><p>This confirms your payment of ${totalLabel}${paidDateLabel ? ` received ${paidDateLabel}` : ''}.</p>${methodLine}<table>${lineItemsHtml}</table><p>Thank you for your business!</p><p>${escapeHtml(fromName)}</p>`,

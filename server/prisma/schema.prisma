@@ -56,6 +56,7 @@ model Account {
   accountData    AccountData?
   supportThreads SupportThread[]
   reminders      Reminder[]
+  emailDomain    EmailDomain?
 
   // Stripe Connect (Express) — set once onboarding starts. The three
   // booleans are a local cache of the connected Account object, synced by
@@ -556,4 +557,27 @@ model Reminder {
   updatedAt       DateTime  @updatedAt
 
   @@index([accountId, remindAt])
+}
+
+// A business's own sending subdomain (e.g. "acme" -> acme.gigworks.io),
+// self-service configured in Settings — see server/src/lib/emailDomains.js.
+// One per account. resendDomainId/dnsRecords mirror what Resend's Domains
+// API returned at creation time so status can be re-checked without
+// re-deriving the records; dnsRecords also drives the per-record status
+// display in Settings. Accounts without a row here (or with one that isn't
+// 'verified') keep sending from the platform's own default domain — see
+// resolveFromHeader/resolveReplyDomain in server/src/lib/mailer.js.
+model EmailDomain {
+  id             String    @id @default(cuid())
+  accountId      String    @unique
+  account        Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  subdomain      String    @unique // just the label, e.g. "acme" — full domain is `${subdomain}.gigworks.io`
+  resendDomainId String    @unique
+  status         String    @default("pending") // 'pending' | 'verified' | 'failed'
+  dnsRecords     Json      // Resend's returned record list, for per-record status display
+  verifiedAt     DateTime?
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }

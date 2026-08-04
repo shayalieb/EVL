@@ -1,5 +1,5 @@
 import { prisma } from './prisma.js';
-import { sendMail, buildFromHeader, escapeHtml, buildActionEmailHtml } from './mailer.js';
+import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from './mailer.js';
 
 const POLL_INTERVAL_MS = 60 * 1000;
 // A claim older than this is treated as abandoned (the instance that made
@@ -25,7 +25,7 @@ async function sendReminderEmail(reminder) {
     : '';
 
   await sendMail({
-    from: buildFromHeader(fromName),
+    from: await resolveFromHeader({ accountId: reminder.accountId, fromName, localPart: 'reminders' }),
     to,
     subject: `Reminder: ${reminder.note.slice(0, 80)}`,
     html: buildActionEmailHtml({
