@@ -2,12 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import CanvasStage from '../lib/canvasEngine/CanvasStage';
 import { useUndoRedo } from '../lib/canvasEngine/history';
 import { createEmptyScene, deleteElement, addLayer, updateLayer } from '../lib/canvasEngine/sceneModel';
+import { STAGE_PLOT_ICON_LIST, STAGE_PLOT_ICONS } from '../lib/canvasEngine/stagePlotIcons';
 import { saveStagePlotPage } from '../lib/stagePlots';
-
-// Placeholder gear list — real icon assets are a separate content-sourcing
-// decision (see canvas engine planning notes), not a coding task. Labels
-// alone are enough to prove drag-placement/channel-linking end to end.
-const STAGE_ICONS = ['Vocal Mic', 'Guitar Amp', 'Bass Amp', 'DI Box', 'Monitor Wedge', 'Drum Kit', 'Keyboard', 'Music Stand', 'Riser'];
 
 const AUTOSAVE_DELAY_MS = 2000;
 const toolbarButtonClass = 'px-3 py-1.5 rounded-lg border border-slate-300 text-sm disabled:opacity-40';
@@ -76,15 +72,17 @@ export default function StagePlotPageEditor({ eventId, page, onSaved }) {
           <div>
             <div className="text-xs font-semibold text-slate-500 mb-2">Gear</div>
             <div className="grid grid-cols-2 gap-1.5">
-              {STAGE_ICONS.map((iconId) => (
+              {STAGE_PLOT_ICON_LIST.map((iconDef) => (
                 <div
-                  key={iconId}
+                  key={iconDef.id}
                   draggable
-                  onDragStart={(e) => e.dataTransfer.setData('application/x-canvas-icon', iconId)}
-                  data-testid={`stageplot-icon-${iconId.toLowerCase().replace(/\s+/g, '-')}`}
-                  className="px-2 py-2 rounded-lg border border-slate-200 bg-slate-50 text-[11px] text-center cursor-grab select-none"
+                  onDragStart={(e) => e.dataTransfer.setData('application/x-canvas-icon', iconDef.id)}
+                  data-testid={`stageplot-icon-${iconDef.id}`}
+                  title={iconDef.label}
+                  className="flex flex-col items-center gap-1 px-1.5 py-2 rounded-lg border border-slate-200 bg-slate-50 cursor-grab select-none hover:border-indigo-300 hover:bg-indigo-50"
                 >
-                  {iconId}
+                  <span className="w-7 h-7" dangerouslySetInnerHTML={{ __html: iconDef.svg }} />
+                  <span className="text-[10px] text-center leading-tight text-slate-600">{iconDef.label}</span>
                 </div>
               ))}
             </div>
@@ -125,6 +123,7 @@ export default function StagePlotPageEditor({ eventId, page, onSaved }) {
           stageRef={stageRef}
           width={820}
           height={580}
+          iconRegistry={STAGE_PLOT_ICONS}
         />
       </div>
     </div>

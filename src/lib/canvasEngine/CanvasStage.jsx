@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import { Stage, Layer, Rect, Text, Line, Transformer } from 'react-konva';
+import { Stage, Layer, Rect, Text, Line, Image as KonvaImage, Transformer } from 'react-konva';
 import { gridLinePositions, snapPointToGrid } from './measurement';
+import { useSvgImage } from './useSvgImage';
 
-// Placeholder rendering for an element until real icon assets are sourced
-// (see canvas engine planning notes — a real content-creation task, not
-// code). Renders a labeled shape so the engine's mechanics (drag, select,
-// transform, export) can be fully proven without them.
-function ElementShape({ element, isSelected, onSelect, onDragEnd, shapeRef }) {
+const ICON_SIZE = 44;
+
+// Renders a placed element as its real hand-authored icon (see
+// iconRegistry.js/stagePlotIcons.js/floorPlanIcons.js) when the scene's
+// `iconRegistry` prop has an entry for it — falling back to a plain
+// labeled box for anything unregistered (e.g. the internal canvas-engine
+// demo page's placeholder icon set), so this component works whether or
+// not a real icon set is wired up.
+function ElementShape({ element, icon, isSelected, onSelect, onDragEnd, shapeRef }) {
+  const image = useSvgImage(icon?.svg);
   const common = {
     x: element.x,
     y: element.y,
@@ -18,29 +24,46 @@ function ElementShape({ element, isSelected, onSelect, onDragEnd, shapeRef }) {
     onTap: onSelect,
     onDragEnd: (e) => onDragEnd(element.id, { x: e.target.x(), y: e.target.y() }),
   };
+  const labelText = element.label || icon?.label || element.iconId || '';
+
   return (
     <>
-      <Rect
-        ref={shapeRef}
-        {...common}
-        width={40}
-        height={40}
-        offsetX={20}
-        offsetY={20}
-        fill={isSelected ? '#c7d2fe' : '#e2e8f0'}
-        stroke={isSelected ? '#4f46e5' : '#94a3b8'}
-        strokeWidth={2}
-        cornerRadius={4}
-      />
+      {icon && image ? (
+        <KonvaImage
+          ref={shapeRef}
+          {...common}
+          image={image}
+          width={ICON_SIZE}
+          height={ICON_SIZE}
+          offsetX={ICON_SIZE / 2}
+          offsetY={ICON_SIZE / 2}
+          shadowColor={isSelected ? '#4f46e5' : undefined}
+          shadowBlur={isSelected ? 8 : 0}
+          shadowOpacity={isSelected ? 0.6 : 0}
+        />
+      ) : (
+        <Rect
+          ref={shapeRef}
+          {...common}
+          width={40}
+          height={40}
+          offsetX={20}
+          offsetY={20}
+          fill={isSelected ? '#c7d2fe' : '#e2e8f0'}
+          stroke={isSelected ? '#4f46e5' : '#94a3b8'}
+          strokeWidth={2}
+          cornerRadius={4}
+        />
+      )}
       <Text
         x={element.x}
         y={element.y}
-        text={element.label || element.iconId || ''}
-        fontSize={11}
+        text={labelText}
+        fontSize={10}
         fill="#334155"
-        offsetX={20}
-        offsetY={-24}
-        width={40}
+        offsetX={34}
+        offsetY={icon ? -(ICON_SIZE / 2 + 12) : -24}
+        width={68}
         align="center"
         listening={false}
       />
@@ -70,6 +93,7 @@ export default function CanvasStage({
   selectedElementId,
   onSelectElement,
   stageRef,
+  iconRegistry,
 }) {
   const internalStageRef = useRef(null);
   const trRef = useRef(null);
@@ -124,12 +148,13 @@ export default function CanvasStage({
     const iconId = e.dataTransfer.getData('application/x-canvas-icon');
     if (!iconId) return;
     const { x, y } = toSceneCoords(e.clientX, e.clientY);
+    const label = iconRegistry?.[iconId]?.label || iconId;
     onMutate((s) => ({
       ...s,
       elements: [...s.elements, {
         id: `el_${Date.now().toString(36)}_${Math.round(Math.random() * 1e6)}`,
         layerId: s.layers.find((l) => !l.locked)?.id || s.layers[0]?.id,
-        iconId, x, y, rotation: 0, scaleX: 1, scaleY: 1, label: iconId,
+        iconId, x, y, rotation: 0, scaleX: 1, scaleY: 1, label,
       }],
     }));
   }
@@ -213,6 +238,7 @@ export default function CanvasStage({
             <ElementShape
               key={el.id}
               element={el}
+              icon={iconRegistry?.[el.iconId]}
               isSelected={el.id === selectedElementId}
               onSelect={() => onSelectElement?.(el.id)}
               onDragEnd={(id, pos) => onMutate((s) => ({
