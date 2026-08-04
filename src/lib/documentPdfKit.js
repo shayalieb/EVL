@@ -179,6 +179,23 @@ export function drawSectionBlock(doc, { section, layout, accentRgb, marginX, pag
   return y;
 }
 
+// Embeds a raster image (e.g. a canvas-exported PNG from
+// src/lib/canvasEngine/) aspect-fit within maxWidth/maxHeight, same
+// `doc.addImage` primitive drawLetterhead already uses for logos. jsPDF has
+// no meaningful vector/SVG embedding in this codebase — this is raster
+// only, adequate for on-screen/print use but not lossless at poster scale.
+// Returns the y position content should resume at, same convention as the
+// other draw* helpers.
+export async function drawImageBlock(doc, { dataUrl, x, y, maxWidth, maxHeight }) {
+  const dims = await loadImageDimensions(dataUrl);
+  if (!dims) return y;
+  const ratio = Math.min(maxWidth / dims.width, maxHeight / dims.height);
+  const w = dims.width * ratio;
+  const h = dims.height * ratio;
+  doc.addImage(dataUrl, 'PNG', x, y, w, h);
+  return y + h;
+}
+
 // Style object spread into every `autoTable()` call (head/body/columnStyles/
 // startY/margin stay per-call since those depend on the table's content).
 export function getAutoTableStyle(layout, scale, accentRgb) {

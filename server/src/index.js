@@ -22,6 +22,7 @@ import supportRouter from './routes/support.js';
 import adminRouter from './routes/admin.js';
 import remindersRouter from './routes/reminders.js';
 import emailDomainsRouter from './routes/emailDomains.js';
+import stagePlotsRouter from './routes/stagePlots.js';
 import { startReminderScheduler } from './lib/reminderScheduler.js';
 
 const app = express();
@@ -96,6 +97,7 @@ app.use('/api/support', supportRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/reminders', remindersRouter);
 app.use('/api/email-domains', emailDomainsRouter);
+app.use('/api/stage-plots', stagePlotsRouter);
 // Public/unauthenticated — recipients click this link from an email, not
 // while logged into the app, and it's fully stateless (see calendar.js).
 app.use('/api/calendar', calendarRouter);

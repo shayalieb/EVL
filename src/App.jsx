@@ -28,6 +28,7 @@ import AdminAccountsPage from './pages/admin/AdminAccountsPage';
 import AdminSupportPage from './pages/admin/AdminSupportPage';
 import AdminAdminsPage from './pages/admin/AdminAdminsPage';
 import CanvasEngineDemoPage from './pages/dev/CanvasEngineDemoPage';
+import StagePlotEditorPage from './pages/StagePlotEditorPage';
 
 function ProtectedArea() {
   const { currentUser, authLoading } = useAuth();
@@ -45,6 +46,21 @@ function AuthGate({ children }) {
   const { currentUser, authLoading } = useAuth();
   if (authLoading) return null;
   if (currentUser) return <Navigate to="/home" replace />;
+  return children;
+}
+
+// Gates a single route to accounts with access to a given vertical (its own
+// `vertical` default, or any vertical once allVerticalsEnabled — see
+// server/src/lib/verticals.js's activeVerticals, mirrored here via
+// currentUser.activeVerticals). This is UX only — the real authorization
+// boundary is server-side (requireVertical in each vertical-specific
+// route), so a hidden/redirected page here is not itself a security
+// guarantee, just avoids a confusing 403 render.
+function VerticalGate({ vertical, children }) {
+  const { currentUser, authLoading } = useAuth();
+  if (authLoading) return null;
+  if (!currentUser) return <Navigate to="/auth" replace />;
+  if (!currentUser.activeVerticals?.includes(vertical)) return <Navigate to="/home" replace />;
   return children;
 }
 
@@ -91,6 +107,7 @@ function AppRoutes() {
         <Route path="settings" element={<SettingsPage />} />
         <Route path="help" element={<SupportPage />} />
         <Route path="dev/canvas-demo" element={<DevOnlyRoute><CanvasEngineDemoPage /></DevOnlyRoute>} />
+        <Route path="events/:eventId/stage-plot" element={<VerticalGate vertical="band_orchestra"><StagePlotEditorPage /></VerticalGate>} />
       </Route>
       <Route path="/admin" element={<PlatformAdminArea />}>
         <Route index element={<Navigate to="accounts" replace />} />

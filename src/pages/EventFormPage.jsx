@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import ContractorPickerRow from '../components/ContractorPickerRow';
 import ContractorModal from '../components/ContractorModal';
 import AcceptPaymentModal from '../components/AcceptPaymentModal';
@@ -853,6 +853,15 @@ export default function EventFormPage() {
           <h2 className="text-2xl font-bold text-slate-800 truncate">{isEditing ? event.name : 'Add Event'}</h2>
         </div>
         <div className="flex gap-2 shrink-0">
+          {isEditing && currentUser.activeVerticals?.includes('band_orchestra') && (
+            <Link
+              to={`/events/${eventId}/stage-plot`}
+              data-testid="event-form-stage-plot-link"
+              className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
+            >
+              Stage Plot
+            </Link>
+          )}
           {isEditing && (
             <button
               type="button"

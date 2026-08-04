@@ -57,6 +57,7 @@ model Account {
   supportThreads SupportThread[]
   reminders      Reminder[]
   emailDomain    EmailDomain?
+  stagePlots     StagePlot[]
 
   // Stripe Connect (Express) — set once onboarding starts. The three
   // booleans are a local cache of the connected Account object, synced by
@@ -598,4 +599,81 @@ model EmailDomain {
 
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+}
+
+// A band/orchestra event's stage plot — one document per event (opaque
+// eventId, same non-FK pattern as EventDocument.eventId, since Events live
+// in AccountData.data, not a real table), made of one or more pages plus a
+// structured I/O/channel list. Scene data lives here (real tables) rather
+// than in the AccountData JSON blob deliberately: the canvas editor fires
+// many rapid position updates while dragging and needs point-in-time
+// undo/redo, and AuthContext's updateCurrentUser rewrites the *entire*
+// account blob on every save with no debouncing — routing scene edits
+// through that would blow up write volume and risk clobbering unrelated
+// concurrent edits elsewhere in the account. See
+// src/lib/canvasEngine/history.js for why undo/redo itself stays
+// client-side/session-only rather than adding to this problem further.
+model StagePlot {
+  id        String   @id @default(cuid())
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  eventId   String
+
+  name      String             @default("Stage Plot")
+  pages     StagePlotPage[]
+  channels  StagePlotChannel[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([accountId, eventId])
+  @@index([accountId])
+}
+
+// One page's scene graph — src/lib/canvasEngine/sceneModel.js's shape
+// (elements/strokes/annotations/layers/scale). Stored per page (not one
+// blob per document) so autosaving a single page in a multi-page plot never
+// rewrites every other page's data. thumbnailStorageKey is a PNG snapshot
+// (canvas.toDataURL(), uploaded via server/src/lib/fileStorage.js) kept in
+// sync on save — jsPDF has no canvas renderer, so PDF export embeds this
+// browser-rendered image rather than re-drawing the scene server-side.
+model StagePlotPage {
+  id                  String    @id @default(cuid())
+  stagePlotId         String
+  stagePlot           StagePlot @relation(fields: [stagePlotId], references: [id], onDelete: Cascade)
+
+  order               Int
+  name                String    @default("Page 1")
+  scene               Json      @default("{}")
+  thumbnailStorageKey String?
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@unique([stagePlotId, order])
+}
+
+// The standard live-sound input list — kept as real rows (not embedded in
+// scene JSON) since it's tabular data a business sorts/edits/exports
+// independently of the visual plot. elementId optionally links a channel to
+// a specific icon placed on a page without making the canvas element's
+// position depend on this row (or vice versa).
+model StagePlotChannel {
+  id            String    @id @default(cuid())
+  stagePlotId   String
+  stagePlot     StagePlot @relation(fields: [stagePlotId], references: [id], onDelete: Cascade)
+
+  channelNumber Int
+  source        String
+  micOrDi       String?
+  standType     String?
+  phantomPower  Boolean   @default(false)
+  monitorNotes  String?   @db.Text
+  elementId     String?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([stagePlotId, channelNumber])
+  @@index([stagePlotId])
 }
