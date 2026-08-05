@@ -26,6 +26,7 @@ import { listDocuments, uploadDocument, deleteDocument, documentDownloadUrl } fr
 import { listInvoices } from '../lib/invoices';
 import { InfoIcon, MapPinIcon, ClockIcon, UsersIcon, ClipboardIcon, NoteIcon, FileIcon } from '../components/ui/icons';
 import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
+import { isWedding } from '../lib/eventType';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -1064,23 +1065,34 @@ export default function EventFormPage() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelClass}>Bride's Name</label>
-                  <input value={form.brideName} onChange={(e) => update('brideName', e.target.value)} data-testid="event-form-bridename-input" className={inputClass} />
+              {isWedding(form.eventType) && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelClass}>Bride's Name</label>
+                    <input value={form.brideName} onChange={(e) => update('brideName', e.target.value)} data-testid="event-form-bridename-input" className={inputClass} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Groom's Name</label>
+                    <input value={form.groomName} onChange={(e) => update('groomName', e.target.value)} data-testid="event-form-groomname-input" className={inputClass} />
+                  </div>
                 </div>
-                <div>
-                  <label className={labelClass}>Groom's Name</label>
-                  <input value={form.groomName} onChange={(e) => update('groomName', e.target.value)} data-testid="event-form-groomname-input" className={inputClass} />
-                </div>
-              </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Event Type *</label>
                   {!addingType ? (
                     <div className="flex gap-2">
-                      <select required value={form.eventType} onChange={(e) => update('eventType', e.target.value)} data-testid="event-form-event-type-select" className={inputClass}>
+                      <select
+                        required
+                        value={form.eventType}
+                        onChange={(e) => {
+                          const nextType = e.target.value;
+                          setForm((f) => ({ ...f, eventType: nextType, ...(isWedding(nextType) ? {} : { brideName: '', groomName: '' }) }));
+                        }}
+                        data-testid="event-form-event-type-select"
+                        className={inputClass}
+                      >
                         <option value="">Select a type…</option>
                         {eventTypes.map((t) => <option key={t} value={t}>{t}</option>)}
                       </select>

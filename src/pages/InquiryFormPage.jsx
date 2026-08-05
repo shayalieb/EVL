@@ -5,6 +5,7 @@ import SubmitButton from '../components/ui/SubmitButton';
 import { getInquiryByToken, submitInquiry } from '../lib/inquiryLinks';
 import { formatPhoneNumber, formatEmailInput, formatZip } from '../lib/format';
 import { US_STATES } from '../lib/usStates';
+import { isWedding } from '../lib/eventType';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -23,10 +24,8 @@ function emptyInquiryForm() {
 // Bride's/Groom's Name only make sense for a wedding — every other event
 // type gets a plain Event Name field instead, which becomes the booking's
 // name directly on Apply (see applyInquiry.js's resolveEventName), rather
-// than being derived from names that don't apply.
-function isWedding(eventType) {
-  return eventType.trim().toLowerCase() === 'wedding';
-}
+// than being derived from names that don't apply. isWedding is shared with
+// EventFormPage.jsx — see src/lib/eventType.js.
 
 // Shows the business's own logo (same field ContractDocument/InvoiceDocument
 // use) instead of the generic GigWorks mark — this page is the client's
