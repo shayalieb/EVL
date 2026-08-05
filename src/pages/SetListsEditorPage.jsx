@@ -292,11 +292,9 @@ export default function SetListsEditorPage() {
         <button type="button" onClick={addSetList} data-testid="setlist-add-button" className="px-3 py-2 text-sm text-indigo-600 font-semibold">
           + Add Set List
         </button>
-        {setListLibrary.length > 0 && (
-          <button type="button" onClick={() => setLibraryPickerOpen(true)} data-testid="setlist-from-library-button" className="px-3 py-2 text-sm text-indigo-600 font-semibold">
-            + From Library
-          </button>
-        )}
+        <button type="button" onClick={() => setLibraryPickerOpen(true)} data-testid="setlist-from-library-button" className="px-3 py-2 text-sm text-indigo-600 font-semibold">
+          + From Library
+        </button>
       </div>
 
       {!activeSetList ? (
@@ -417,7 +415,11 @@ export default function SetListsEditorPage() {
 
       <Modal open={libraryPickerOpen} onClose={() => setLibraryPickerOpen(false)} title="Pull From Library">
         {setListLibrary.length === 0 ? (
-          <div className="text-sm text-slate-400 text-center py-4">No saved set lists yet.</div>
+          <div className="text-sm text-slate-400 text-center py-6">
+            No saved set lists yet.
+            <br />
+            Add one under <Link to="/set-lists" className="text-indigo-600 font-semibold hover:underline">Resources &gt; Set Lists</Link> to reuse it across gigs.
+          </div>
         ) : (
           <div className="space-y-1.5 max-h-96 overflow-y-auto">
             {setListLibrary.map((s) => (
