@@ -37,16 +37,29 @@ export default function FloorPlanPageEditor({ eventId, page, onSaved }) {
     }
   }, [eventId, page.id, onSaved]);
 
+  // persist's identity changes on every save (onSaved is a fresh closure
+  // from the parent each render) — a ref lets the debounce/unmount-flush
+  // effects below always call the latest persist without needing it in
+  // their dep arrays. Depending on [persist] directly here previously
+  // caused a runaway autosave loop: each completed save produced a new
+  // persist identity, which retriggered the debounce effect (and the old
+  // unmount-flush effect's cleanup), which saved again, forever — hammering
+  // the API continuously instead of only after real edits.
+  const persistRef = useRef(persist);
+  persistRef.current = persist;
+
   useEffect(() => {
     setSaveStatus('unsaved');
     clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(persist, AUTOSAVE_DELAY_MS);
+    saveTimer.current = setTimeout(() => persistRef.current(), AUTOSAVE_DELAY_MS);
     return () => clearTimeout(saveTimer.current);
-  }, [scene, persist]);
+  }, [scene]);
 
-  // Flush on unmount (e.g. switching to another page) instead of losing
-  // up to AUTOSAVE_DELAY_MS of edits to a debounce timer that never fires.
-  useEffect(() => () => { clearTimeout(saveTimer.current); persist(); }, [persist]);
+  // Flush on true unmount only (e.g. switching to another page) instead of
+  // losing up to AUTOSAVE_DELAY_MS of edits to a debounce timer that never
+  // fires. Empty deps — this must run its cleanup exactly once, on unmount,
+  // not on every persist() identity change (see persistRef comment above).
+  useEffect(() => () => { clearTimeout(saveTimer.current); persistRef.current(); }, []);
 
   function handleDeleteSelected() {
     if (!selectedElementId) return;

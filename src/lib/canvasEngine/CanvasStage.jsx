@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Stage, Layer, Rect, Text, Line, Image as KonvaImage, Transformer } from 'react-konva';
+import { Stage, Layer, Rect, Text, Line, Group, Image as KonvaImage, Transformer } from 'react-konva';
 import { gridLinePositions, snapPointToGrid } from './measurement';
-import { useSvgImage } from './useSvgImage';
+import { useSvgImage, preloadIconRegistry } from './useSvgImage';
 
 const ICON_SIZE = 44;
+const NOTE_WIDTH = 140;
+const NOTE_HEIGHT = 60;
 
 // Renders a placed element as its real hand-authored icon (see
 // iconRegistry.js/stagePlotIcons.js/floorPlanIcons.js) when the scene's
@@ -71,6 +73,51 @@ function ElementShape({ element, icon, isSelected, onSelect, onDragEnd, shapeRef
   );
 }
 
+// A "sticky note" — background card + wrapped text, editable in place via
+// an HTML textarea overlay (see the parent's editingAnnotationId/renders
+// below Stage). Rendered as a Group positioned at its top-left corner
+// (not centered like ElementShape) so its on-screen box lines up exactly
+// with the textarea overlay used to edit it.
+function AnnotationNote({ annotation, isSelected, isEditing, onSelect, onEdit, onDragEnd }) {
+  if (isEditing) return null; // the HTML textarea overlay stands in while editing
+  return (
+    <Group
+      x={annotation.x}
+      y={annotation.y}
+      draggable
+      onClick={onSelect}
+      onTap={onSelect}
+      onDblClick={onEdit}
+      onDblTap={onEdit}
+      onDragEnd={(e) => onDragEnd(annotation.id, { x: e.target.x(), y: e.target.y() })}
+    >
+      <Rect
+        width={NOTE_WIDTH}
+        height={NOTE_HEIGHT}
+        fill="#fef9c3"
+        stroke={isSelected ? '#4f46e5' : '#eab308'}
+        strokeWidth={isSelected ? 2 : 1}
+        cornerRadius={4}
+        shadowColor="#000"
+        shadowBlur={isSelected ? 5 : 2}
+        shadowOpacity={0.15}
+      />
+      <Text
+        text={annotation.text?.trim() ? annotation.text : 'Double-click to edit…'}
+        fontSize={12}
+        fill={annotation.text?.trim() ? '#78350f' : '#a16207'}
+        fontStyle={annotation.text?.trim() ? 'normal' : 'italic'}
+        x={7}
+        y={7}
+        width={NOTE_WIDTH - 14}
+        height={NOTE_HEIGHT - 14}
+        wrap="word"
+        ellipsis
+      />
+    </Group>
+  );
+}
+
 // The shared Stage/Layer wrapper every canvas tool (Stage Plot, Floor Plan)
 // renders on top of. Owns pan/zoom, grid rendering, drag-from-palette
 // placement, and free-form select/move/transform — never owns the scene
@@ -88,19 +135,45 @@ export default function CanvasStage({
   height = 600,
   showGrid = true,
   snapEnabled = true,
-  mode = 'select', // 'select' | 'draw'
+  mode = 'select', // 'select' | 'draw' | 'note'
   strokeColor = '#1e293b',
   selectedElementId,
   onSelectElement,
+  selectedAnnotationId,
+  onSelectAnnotation,
   stageRef,
   iconRegistry,
 }) {
   const internalStageRef = useRef(null);
   const trRef = useRef(null);
   const shapeRefs = useRef({});
+  const editTextareaRef = useRef(null);
   const [zoom, setZoom] = useState(1);
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
   const [drawingPoints, setDrawingPoints] = useState(null);
+  const [editingAnnotationId, setEditingAnnotationId] = useState(null);
+  const [draftText, setDraftText] = useState('');
+
+  // Decode every registered icon once up front rather than lazily on first
+  // placement — without this, the *first* time any given icon type is
+  // dragged onto the canvas it briefly renders as a plain placeholder box
+  // while its SVG decodes, then pops to the real icon. Cheap (icons are
+  // small inline SVGs) and only ever runs once per icon set per mount.
+  useEffect(() => {
+    preloadIconRegistry(iconRegistry);
+  }, [iconRegistry]);
+
+  // Konva's Stage focuses its own container div on pointerdown (for its
+  // keyboard-shortcut support), which races the just-opened note textarea's
+  // own focus — Konva's steal wins if we focus synchronously, firing our
+  // onBlur before the user ever types and deleting the note we just made.
+  // Deferring to the next animation frame lets Konva's focus land first, so
+  // ours reliably wins and sticks.
+  useEffect(() => {
+    if (!editingAnnotationId) return;
+    const raf = requestAnimationFrame(() => editTextareaRef.current?.focus());
+    return () => cancelAnimationFrame(raf);
+  }, [editingAnnotationId]);
 
   function assignStageRef(node) {
     internalStageRef.current = node;
@@ -132,15 +205,26 @@ export default function CanvasStage({
     setStagePos({ x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale });
   }
 
-  // Coordinates relative to the un-zoomed/un-panned scene, from a raw
-  // pointer/drop position on the container element — every placement path
-  // (native HTML5 drop, freehand draw) goes through this so pan/zoom never
-  // desyncs the visual position from the stored scene position.
+  // Scene coordinates from a point already in Konva's own pointer-position
+  // space (container-relative CSS pixels, pre-pan/zoom) — used for every
+  // interaction driven through Konva's own event system (mouse down/move,
+  // stage clicks). Deliberately NOT routed through the DOM's
+  // getBoundingClientRect() — Konva's getPointerPosition() already strips
+  // that out, so re-adding and re-subtracting the container's page offset
+  // (the previous implementation) was redundant and a needless source of
+  // desync if the container ever moved mid-gesture (e.g. a scroll).
+  function stagePointToScene({ x, y }) {
+    const sx = (x - stagePos.x) / zoom;
+    const sy = (y - stagePos.y) / zoom;
+    return snapEnabled ? snapPointToGrid({ x: sx, y: sy }, scene.scalePxPerUnit, scene.gridSpacing) : { x: sx, y: sy };
+  }
+
+  // Scene coordinates from genuine page/client coordinates (clientX/clientY)
+  // — only the native HTML5 drag-and-drop `drop` event needs this, since
+  // that's a plain DOM event with no Konva pointer-position equivalent.
   function toSceneCoords(clientX, clientY) {
     const rect = internalStageRef.current.container().getBoundingClientRect();
-    const x = (clientX - rect.left - stagePos.x) / zoom;
-    const y = (clientY - rect.top - stagePos.y) / zoom;
-    return snapEnabled ? snapPointToGrid({ x, y }, scene.scalePxPerUnit, scene.gridSpacing) : { x, y };
+    return stagePointToScene({ x: clientX - rect.left, y: clientY - rect.top });
   }
 
   function handleDrop(e) {
@@ -159,23 +243,56 @@ export default function CanvasStage({
     }));
   }
 
+  function startEditingAnnotation(annotation) {
+    setDraftText(annotation.text || '');
+    setEditingAnnotationId(annotation.id);
+  }
+
+  // Commits the textarea overlay's content back into the scene — deletes
+  // the annotation instead of saving empty text, so canceling out of a
+  // just-created note (or clearing an old one) doesn't leave an invisible
+  // blank sticky note behind.
+  function commitEditingAnnotation() {
+    const id = editingAnnotationId;
+    if (!id) return;
+    const text = draftText.trim();
+    setEditingAnnotationId(null);
+    onMutate((s) => (text
+      ? { ...s, annotations: s.annotations.map((a) => (a.id === id ? { ...a, text: draftText } : a)) }
+      : { ...s, annotations: s.annotations.filter((a) => a.id !== id) }));
+  }
+
   function handleStageMouseDown(e) {
-    if (mode !== 'draw') {
-      // Clicked empty canvas — deselect.
-      if (e.target === e.target.getStage()) onSelectElement?.(null);
+    const clickedEmptyCanvas = e.target === e.target.getStage();
+
+    if (mode === 'note') {
+      if (!clickedEmptyCanvas) return; // let the existing shape's own click/dblclick handle it
+      const { x, y } = stagePointToScene(internalStageRef.current.getPointerPosition());
+      const id = `note_${Date.now().toString(36)}_${Math.round(Math.random() * 1e6)}`;
+      onMutate((s) => ({
+        ...s,
+        annotations: [...s.annotations, { id, layerId: s.layers.find((l) => !l.locked)?.id || s.layers[0]?.id, x, y, text: '' }],
+      }));
+      setDraftText('');
+      setEditingAnnotationId(id);
       return;
     }
-    const pos = internalStageRef.current.getPointerPosition();
-    const { x, y } = toSceneCoords(pos.x + internalStageRef.current.container().getBoundingClientRect().left, pos.y + internalStageRef.current.container().getBoundingClientRect().top);
+
+    if (mode !== 'draw') {
+      if (clickedEmptyCanvas) {
+        onSelectElement?.(null);
+        onSelectAnnotation?.(null);
+      }
+      return;
+    }
+
+    const { x, y } = stagePointToScene(internalStageRef.current.getPointerPosition());
     setDrawingPoints([x, y]);
   }
 
   function handleStageMouseMove() {
     if (mode !== 'draw' || !drawingPoints) return;
-    const stage = internalStageRef.current;
-    const pos = stage.getPointerPosition();
-    const rect = stage.container().getBoundingClientRect();
-    const { x, y } = toSceneCoords(pos.x + rect.left, pos.y + rect.top);
+    const { x, y } = stagePointToScene(internalStageRef.current.getPointerPosition());
     setDrawingPoints((prev) => [...prev, x, y]);
   }
 
@@ -198,11 +315,12 @@ export default function CanvasStage({
 
   const grid = showGrid ? gridLinePositions(width * 3, height * 3, scene.scalePxPerUnit, scene.gridSpacing) : { vertical: [], horizontal: [] };
   const visibleLayerIds = new Set(scene.layers.filter((l) => l.visible).map((l) => l.id));
+  const editingAnnotation = editingAnnotationId ? scene.annotations.find((a) => a.id === editingAnnotationId) : null;
 
   return (
     <div
-      className="border border-slate-200 rounded-lg overflow-hidden bg-white"
-      style={{ width, height }}
+      className="relative shrink-0 border border-slate-200 rounded-lg overflow-hidden bg-white"
+      style={{ width, height, cursor: mode === 'note' ? 'copy' : mode === 'draw' ? 'crosshair' : 'default' }}
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
     >
@@ -240,7 +358,7 @@ export default function CanvasStage({
               element={el}
               icon={iconRegistry?.[el.iconId]}
               isSelected={el.id === selectedElementId}
-              onSelect={() => onSelectElement?.(el.id)}
+              onSelect={() => { onSelectElement?.(el.id); onSelectAnnotation?.(null); }}
               onDragEnd={(id, pos) => onMutate((s) => ({
                 ...s,
                 elements: s.elements.map((e) => (e.id === id ? { ...e, ...(snapEnabled ? snapPointToGrid(pos, s.scalePxPerUnit, s.gridSpacing) : pos) } : e)),
@@ -250,17 +368,16 @@ export default function CanvasStage({
           ))}
 
           {scene.annotations.filter((a) => visibleLayerIds.has(a.layerId)).map((a) => (
-            <Text
+            <AnnotationNote
               key={a.id}
-              x={a.x}
-              y={a.y}
-              text={a.text}
-              fontSize={13}
-              fill="#0f172a"
-              draggable
-              onDragEnd={(e) => onAdjust((s) => ({
+              annotation={a}
+              isSelected={a.id === selectedAnnotationId}
+              isEditing={a.id === editingAnnotationId}
+              onSelect={() => { onSelectAnnotation?.(a.id); onSelectElement?.(null); }}
+              onEdit={() => startEditingAnnotation(a)}
+              onDragEnd={(id, pos) => onAdjust((s) => ({
                 ...s,
-                annotations: s.annotations.map((an) => (an.id === a.id ? { ...an, x: e.target.x(), y: e.target.y() } : an)),
+                annotations: s.annotations.map((an) => (an.id === id ? { ...an, ...pos } : an)),
               }))}
             />
           ))}
@@ -281,6 +398,27 @@ export default function CanvasStage({
           />
         </Layer>
       </Stage>
+
+      {editingAnnotation && (
+        <textarea
+          ref={editTextareaRef}
+          value={draftText}
+          onChange={(e) => setDraftText(e.target.value)}
+          onBlur={commitEditingAnnotation}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') { e.currentTarget.blur(); }
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.blur(); }
+          }}
+          data-testid="canvas-annotation-textarea"
+          className="absolute rounded border-2 border-indigo-500 bg-yellow-50 text-amber-900 text-xs p-1.5 resize-none outline-none"
+          style={{
+            left: editingAnnotation.x * zoom + stagePos.x,
+            top: editingAnnotation.y * zoom + stagePos.y,
+            width: NOTE_WIDTH * zoom,
+            height: NOTE_HEIGHT * zoom,
+          }}
+        />
+      )}
     </div>
   );
 }

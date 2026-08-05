@@ -7,6 +7,7 @@ import { attachUser, requirePlatformAdmin, requireAdminPermission, allPermission
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
 import { uploadFile, getSignedDownloadUrl } from '../lib/fileStorage.js';
+import { VERTICALS } from '../lib/verticals.js';
 
 const router = Router();
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
@@ -165,7 +166,7 @@ function requireManageAccountStatus(req, res) {
 
 router.patch('/accounts/:id', asyncHandler(async (req, res) => {
   if (!requireManageAccountStatus(req, res)) return;
-  const { disabled, reason, allVerticalsEnabled } = req.body || {};
+  const { disabled, reason, allVerticalsEnabled, vertical } = req.body || {};
   const data = {};
   if (disabled !== undefined) {
     if (typeof disabled !== 'boolean') {
@@ -185,6 +186,12 @@ router.patch('/accounts/:id', asyncHandler(async (req, res) => {
     }
     data.allVerticalsEnabled = allVerticalsEnabled;
   }
+  if (vertical !== undefined) {
+    if (!VERTICALS.includes(vertical)) {
+      return res.status(400).json({ error: 'Invalid vertical.' });
+    }
+    data.vertical = vertical;
+  }
   if (Object.keys(data).length === 0) {
     return res.status(400).json({ error: 'Nothing to update.' });
   }
@@ -195,6 +202,7 @@ router.patch('/accounts/:id', asyncHandler(async (req, res) => {
     disabledReason: account.disabledReason,
     disabledBy: account.disabledBy ? { firstName: account.disabledBy.firstName, lastName: account.disabledBy.lastName } : null,
     allVerticalsEnabled: account.allVerticalsEnabled,
+    vertical: account.vertical,
   });
 }));
 

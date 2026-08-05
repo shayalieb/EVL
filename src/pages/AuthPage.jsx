@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import Logo from '../components/ui/Logo';
 import SubmitButton from '../components/ui/SubmitButton';
+import { formatPhoneNumber } from '../lib/format';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
 // Keep in sync with server/src/lib/verticals.js's VERTICALS list.
 const VERTICAL_OPTIONS = [
   { id: 'band_orchestra', label: 'Band & Orchestra', description: 'Book musicians and crew for gigs' },
-  { id: 'party_planning', label: 'Party Planning & Catering', description: 'Coordinate vendors for events' },
+  { id: 'party_planning', label: 'Event and Party Planning', description: 'Coordinate vendors for events' },
   { id: 'photography', label: 'Photography', description: 'Manage shoots and shot lists' },
 ];
 
@@ -16,6 +17,7 @@ export default function AuthPage() {
   const [tab, setTab] = useState('signin');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [businessName, setBusinessName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -81,7 +83,7 @@ export default function AuthPage() {
       return;
     }
     setSubmitting(true);
-    await signUp({ firstName, lastName, email, phone, password, vertical });
+    await signUp({ firstName, lastName, businessName, email, phone, password, vertical });
     setSubmitting(false);
   }
 
@@ -155,8 +157,9 @@ export default function AuthPage() {
               <input required placeholder="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} data-testid="auth-signup-firstname-input" className={inputClass} />
               <input required placeholder="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} data-testid="auth-signup-lastname-input" className={inputClass} />
             </div>
+            <input placeholder="Business name" value={businessName} onChange={(e) => setBusinessName(e.target.value)} data-testid="auth-signup-business-name-input" className={inputClass} />
             <input type="email" required placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="auth-signup-email-input" className={inputClass} />
-            <input type="tel" placeholder="Contact phone number" value={phone} onChange={(e) => setPhone(e.target.value)} data-testid="auth-signup-phone-input" className={inputClass} />
+            <input type="tel" placeholder="(555) 555-0100" value={phone} onChange={(e) => setPhone(formatPhoneNumber(e.target.value))} data-testid="auth-signup-phone-input" className={inputClass} />
             <input type="password" required minLength={8} placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} data-testid="auth-signup-password-input" className={inputClass} />
             <input type="password" required placeholder="Confirm password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} data-testid="auth-signup-confirm-password-input" className={inputClass} />
             <div>

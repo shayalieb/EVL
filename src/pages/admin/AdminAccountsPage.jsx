@@ -14,7 +14,8 @@ function accountStatus(a) {
 }
 
 // Keep in sync with server/src/lib/verticals.js's VERTICALS list.
-const VERTICAL_LABELS = { band_orchestra: 'Band & Orchestra', party_planning: 'Party Planning', photography: 'Photography' };
+const VERTICAL_LABELS = { band_orchestra: 'Band & Orchestra', party_planning: 'Event and Party Planning', photography: 'Photography' };
+const VERTICAL_OPTIONS = Object.entries(VERTICAL_LABELS).map(([value, label]) => ({ value, label }));
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -53,6 +54,19 @@ export default function AdminAccountsPage() {
       showToast(err.message, 'error');
     } finally {
       setDisableTarget(null);
+    }
+  }
+
+  async function handleVerticalChange(account, vertical) {
+    try {
+      const data = await apiFetch(`/admin/accounts/${account.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ vertical }),
+      });
+      setAccounts((prev) => prev.map((a) => (a.id === account.id ? { ...a, vertical: data.vertical } : a)));
+      showToast('Business type updated');
+    } catch (err) {
+      showToast(err.message, 'error');
     }
   }
 
@@ -98,7 +112,7 @@ export default function AdminAccountsPage() {
   });
 
   return (
-    <div className="max-w-4xl space-y-4">
+    <div className="max-w-6xl space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-slate-800">Accounts</h2>
         <button
@@ -148,6 +162,7 @@ export default function AdminAccountsPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
@@ -163,7 +178,7 @@ export default function AdminAccountsPage() {
           <tbody>
             {filteredAccounts.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
                   {accounts.length === 0 ? 'No accounts yet.' : 'No accounts match your search or filters.'}
                 </td>
               </tr>
@@ -179,8 +194,21 @@ export default function AdminAccountsPage() {
                   {a.dataSummary.contractors} contractors · {a.dataSummary.clients} clients · {a.dataSummary.events} events
                 </td>
                 <td className="px-4 py-3 text-slate-500 text-xs">
-                  <div>{VERTICAL_LABELS[a.vertical] || a.vertical}</div>
-                  {a.allVerticalsEnabled && <div className="text-indigo-600 font-semibold">+ all verticals</div>}
+                  {canManageStatus ? (
+                    <select
+                      value={a.vertical}
+                      onChange={(e) => handleVerticalChange(a, e.target.value)}
+                      data-testid="admin-account-row-vertical-select"
+                      className="px-1.5 py-1 rounded border border-slate-200 text-xs bg-white"
+                    >
+                      {VERTICAL_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div>{VERTICAL_LABELS[a.vertical] || a.vertical}</div>
+                  )}
+                  {a.allVerticalsEnabled && <div className="text-indigo-600 font-semibold mt-0.5">+ all verticals</div>}
                 </td>
                 <td className="px-4 py-3 text-slate-500 text-xs">{new Date(a.createdAt).toLocaleDateString()}</td>
                 <td className="px-4 py-3">
@@ -235,6 +263,7 @@ export default function AdminAccountsPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <NewAccountModal open={addOpen} onClose={() => setAddOpen(false)} onCreated={() => { setAddOpen(false); load(); }} />

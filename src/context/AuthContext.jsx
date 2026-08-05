@@ -26,7 +26,7 @@ function seedBlob(profile) {
     firstName: profile.firstName,
     lastName: profile.lastName,
     phone: profile.phone || '',
-    businessInfo: { name: '', address: '', phone: '', email: '', logo: '', accentColor: '#6366f1', documentLayout: 'classic', documentTextScale: 1 },
+    businessInfo: { name: profile.businessName || '', address: '', phone: profile.phone || '', email: '', logo: '', accentColor: '#6366f1', documentLayout: 'classic', documentTextScale: 1 },
     contractTemplate: { title: 'Event Contract', sections: [] },
     // proposalTemplate comes from buildSeedUserData below (vertical-specific
     // section defaults for party_planning; empty for the others).
@@ -106,14 +106,14 @@ export function AuthProvider({ children }) {
       }
     : null;
 
-  const signUp = useCallback(async ({ firstName, lastName, email, phone, password, vertical }) => {
+  const signUp = useCallback(async ({ firstName, lastName, businessName, email, phone, password, vertical }) => {
     setAuthError('');
     try {
       const data = await apiFetch('/auth/signup', {
         method: 'POST',
         body: JSON.stringify({ firstName, lastName, email: email.trim().toLowerCase(), phone, password, vertical }),
       });
-      await hydrate(data.user);
+      await hydrate({ ...data.user, businessName });
       return true;
     } catch (err) {
       setAuthError(err.message);
