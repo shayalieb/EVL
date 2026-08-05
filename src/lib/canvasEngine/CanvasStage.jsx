@@ -26,7 +26,11 @@ function ElementShape({ element, icon, isSelected, onSelect, onDragEnd, shapeRef
     onTap: onSelect,
     onDragEnd: (e) => onDragEnd(element.id, { x: e.target.x(), y: e.target.y() }),
   };
-  const labelText = element.label || icon?.label || element.iconId || '';
+  // Seat count only ever gets set on Floor Plan table elements (see
+  // FloorPlanItemList.jsx's SEATABLE_TABLE_IDS) — harmless to check
+  // generically here since Stage Plot elements never have it.
+  const baseLabel = element.label || icon?.label || element.iconId || '';
+  const labelText = element.seats ? `${baseLabel} (${element.seats})` : baseLabel;
 
   return (
     <>

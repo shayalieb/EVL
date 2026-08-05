@@ -4,6 +4,7 @@ import { useUndoRedo } from '../lib/canvasEngine/history';
 import { createEmptyScene, deleteElement, deleteAnnotation, deleteStroke, addLayer, updateLayer } from '../lib/canvasEngine/sceneModel';
 import { FLOOR_PLAN_ICON_LIST, FLOOR_PLAN_ICONS } from '../lib/canvasEngine/floorPlanIcons';
 import { saveFloorPlanPage } from '../lib/floorPlans';
+import FloorPlanItemList, { SEATABLE_TABLE_IDS } from './FloorPlanItemList';
 
 const AUTOSAVE_DELAY_MS = 2000;
 const toolbarButtonClass = 'px-3 py-1.5 rounded-lg border border-slate-300 text-sm disabled:opacity-40';
@@ -84,6 +85,16 @@ export default function FloorPlanPageEditor({ eventId, page, onSaved }) {
     }));
   }
 
+  const selectedElement = selectedElementId ? scene.elements.find((e) => e.id === selectedElementId) : null;
+
+  function updateSelectedSeats(seats) {
+    if (!selectedElementId) return;
+    apply((s) => ({
+      ...s,
+      elements: s.elements.map((e) => (e.id === selectedElementId ? { ...e, seats } : e)),
+    }));
+  }
+
   return (
     <div className="flex-1 min-w-0">
       <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -96,6 +107,22 @@ export default function FloorPlanPageEditor({ eventId, page, onSaved }) {
         <div className="w-px h-6 bg-slate-200 mx-1" />
         <button type="button" onClick={() => rotateSelected(-15)} disabled={!selectedElementId} data-testid="floorplan-rotate-left-button" className={toolbarButtonClass} title="Rotate left 15°">⟲</button>
         <button type="button" onClick={() => rotateSelected(15)} disabled={!selectedElementId} data-testid="floorplan-rotate-right-button" className={toolbarButtonClass} title="Rotate right 15°">⟳</button>
+        {selectedElement && SEATABLE_TABLE_IDS.has(selectedElement.iconId) && (
+          <>
+            <div className="w-px h-6 bg-slate-200 mx-1" />
+            <label className="flex items-center gap-1.5 text-sm text-slate-600">
+              Seats
+              <input
+                type="number"
+                min="0"
+                value={selectedElement.seats ?? ''}
+                onChange={(e) => updateSelectedSeats(e.target.value === '' ? undefined : Number(e.target.value))}
+                data-testid="floorplan-seats-input"
+                className="w-16 px-2 py-1 rounded border border-slate-300 text-sm"
+              />
+            </label>
+          </>
+        )}
         <div className="w-px h-6 bg-slate-200 mx-1" />
         <button type="button" onClick={handleDeleteSelected} disabled={!selectedElementId && !selectedAnnotationId && !selectedStrokeId} data-testid="floorplan-delete-selected-button" className={`${toolbarButtonClass} border-red-300 text-red-600`}>Delete Selected</button>
         <span data-testid="floorplan-save-status" className="text-xs text-slate-400 ml-auto">
@@ -147,6 +174,8 @@ export default function FloorPlanPageEditor({ eventId, page, onSaved }) {
             </div>
             <button type="button" onClick={() => apply((s) => addLayer(s))} className="mt-2 text-xs font-semibold text-indigo-600">+ Add layer</button>
           </div>
+
+          <FloorPlanItemList elements={scene.elements} />
         </div>
 
         <CanvasStage
