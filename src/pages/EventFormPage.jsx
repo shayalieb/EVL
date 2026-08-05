@@ -228,6 +228,10 @@ export default function EventFormPage() {
   // otherwise re-run this effect and clobber whatever the user is mid-typing.
   // Only actually hydrate once per event id.
   const hydratedEventIdRef = useRef(null);
+  // Skips the auto-save effect's very next run after (re)hydrating `form`
+  // from `event` — otherwise loading an event's data would itself look like
+  // an edit and immediately re-persist the just-loaded data.
+  const autoSaveSkipRef = useRef(true);
 
   useEffect(() => {
     if (event) {
@@ -275,6 +279,7 @@ export default function EventFormPage() {
     setError('');
     setAddingType(false);
     setPickerOpen(false);
+    autoSaveSkipRef.current = true;
   }, [eventId, event, contractors]);
 
   // Mirrors the in-progress draft of a brand-new (not-yet-saved) event into
@@ -284,6 +289,20 @@ export default function EventFormPage() {
     if (event) return;
     saveDraft(NEW_EVENT_DRAFT_KEY, form);
   }, [form, event]);
+
+  // Auto-saves an existing event shortly after any field changes — no
+  // explicit "Save Changes" click needed, mirroring BookingFormPage's same
+  // pattern. Only for events that already exist; a brand-new one still
+  // needs its first, deliberate "Add Event". Saves `form` as-is (current
+  // status included) rather than through persistEvent, which is reserved
+  // for the Save Draft/Submit buttons that deliberately force a status.
+  useEffect(() => {
+    if (!event) return;
+    if (autoSaveSkipRef.current) { autoSaveSkipRef.current = false; return; }
+    const timer = setTimeout(() => { updateEvent(event.id, form); }, 800);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form]);
 
   const latestSummariesEventIdRef = useRef(null);
 
