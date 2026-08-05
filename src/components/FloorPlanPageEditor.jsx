@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import CanvasStage from '../lib/canvasEngine/CanvasStage';
 import { useUndoRedo } from '../lib/canvasEngine/history';
-import { createEmptyScene, deleteElement, addLayer, updateLayer } from '../lib/canvasEngine/sceneModel';
+import { createEmptyScene, deleteElement, deleteAnnotation, deleteStroke, addLayer, updateLayer } from '../lib/canvasEngine/sceneModel';
 import { FLOOR_PLAN_ICON_LIST, FLOOR_PLAN_ICONS } from '../lib/canvasEngine/floorPlanIcons';
 import { saveFloorPlanPage } from '../lib/floorPlans';
 
@@ -19,6 +19,8 @@ export default function FloorPlanPageEditor({ eventId, page, onSaved }) {
   const { scene, apply, replaceCurrent, undo, redo, canUndo, canRedo } = useUndoRedo(initialScene);
   const [mode, setMode] = useState('select');
   const [selectedElementId, setSelectedElementId] = useState(null);
+  const [selectedAnnotationId, setSelectedAnnotationId] = useState(null);
+  const [selectedStrokeId, setSelectedStrokeId] = useState(null);
   const [saveStatus, setSaveStatus] = useState('saved');
   const stageRef = useRef(null);
   const saveTimer = useRef(null);
@@ -62,9 +64,24 @@ export default function FloorPlanPageEditor({ eventId, page, onSaved }) {
   useEffect(() => () => { clearTimeout(saveTimer.current); persistRef.current(); }, []);
 
   function handleDeleteSelected() {
+    if (selectedElementId) {
+      apply((s) => deleteElement(s, selectedElementId));
+      setSelectedElementId(null);
+    } else if (selectedAnnotationId) {
+      apply((s) => deleteAnnotation(s, selectedAnnotationId));
+      setSelectedAnnotationId(null);
+    } else if (selectedStrokeId) {
+      apply((s) => deleteStroke(s, selectedStrokeId));
+      setSelectedStrokeId(null);
+    }
+  }
+
+  function rotateSelected(delta) {
     if (!selectedElementId) return;
-    apply((s) => deleteElement(s, selectedElementId));
-    setSelectedElementId(null);
+    apply((s) => ({
+      ...s,
+      elements: s.elements.map((e) => (e.id === selectedElementId ? { ...e, rotation: (e.rotation + delta + 360) % 360 } : e)),
+    }));
   }
 
   return (
@@ -74,9 +91,13 @@ export default function FloorPlanPageEditor({ eventId, page, onSaved }) {
         <button type="button" onClick={redo} disabled={!canRedo} data-testid="floorplan-redo-button" className={toolbarButtonClass}>Redo</button>
         <div className="w-px h-6 bg-slate-200 mx-1" />
         <button type="button" onClick={() => setMode('select')} className={`${toolbarButtonClass} ${mode === 'select' ? 'bg-indigo-600 text-white border-indigo-600' : ''}`}>Select</button>
-        <button type="button" onClick={() => setMode('draw')} className={`${toolbarButtonClass} ${mode === 'draw' ? 'bg-indigo-600 text-white border-indigo-600' : ''}`}>Annotate</button>
+        <button type="button" onClick={() => setMode('draw')} className={`${toolbarButtonClass} ${mode === 'draw' ? 'bg-indigo-600 text-white border-indigo-600' : ''}`}>Draw</button>
+        <button type="button" onClick={() => setMode('note')} data-testid="floorplan-note-button" className={`${toolbarButtonClass} ${mode === 'note' ? 'bg-indigo-600 text-white border-indigo-600' : ''}`}>Add Note</button>
         <div className="w-px h-6 bg-slate-200 mx-1" />
-        <button type="button" onClick={handleDeleteSelected} disabled={!selectedElementId} data-testid="floorplan-delete-selected-button" className={`${toolbarButtonClass} border-red-300 text-red-600`}>Delete Selected</button>
+        <button type="button" onClick={() => rotateSelected(-15)} disabled={!selectedElementId} data-testid="floorplan-rotate-left-button" className={toolbarButtonClass} title="Rotate left 15°">⟲</button>
+        <button type="button" onClick={() => rotateSelected(15)} disabled={!selectedElementId} data-testid="floorplan-rotate-right-button" className={toolbarButtonClass} title="Rotate right 15°">⟳</button>
+        <div className="w-px h-6 bg-slate-200 mx-1" />
+        <button type="button" onClick={handleDeleteSelected} disabled={!selectedElementId && !selectedAnnotationId && !selectedStrokeId} data-testid="floorplan-delete-selected-button" className={`${toolbarButtonClass} border-red-300 text-red-600`}>Delete Selected</button>
         <span data-testid="floorplan-save-status" className="text-xs text-slate-400 ml-auto">
           {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'unsaved' ? 'Unsaved changes' : 'Saved'}
         </span>
@@ -135,6 +156,10 @@ export default function FloorPlanPageEditor({ eventId, page, onSaved }) {
           mode={mode}
           selectedElementId={selectedElementId}
           onSelectElement={setSelectedElementId}
+          selectedAnnotationId={selectedAnnotationId}
+          onSelectAnnotation={setSelectedAnnotationId}
+          selectedStrokeId={selectedStrokeId}
+          onSelectStroke={setSelectedStrokeId}
           stageRef={stageRef}
           width={820}
           height={580}

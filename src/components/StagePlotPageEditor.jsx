@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import CanvasStage from '../lib/canvasEngine/CanvasStage';
 import { useUndoRedo } from '../lib/canvasEngine/history';
-import { createEmptyScene, deleteElement, deleteAnnotation, addLayer, updateLayer } from '../lib/canvasEngine/sceneModel';
+import { createEmptyScene, deleteElement, deleteAnnotation, deleteStroke, addLayer, updateLayer } from '../lib/canvasEngine/sceneModel';
 import { STAGE_PLOT_ICON_LIST, STAGE_PLOT_ICONS } from '../lib/canvasEngine/stagePlotIcons';
 import { saveStagePlotPage } from '../lib/stagePlots';
 import CanvasIconPalette from './CanvasIconPalette';
@@ -19,6 +19,7 @@ export default function StagePlotPageEditor({ eventId, page, onSaved }) {
   const [mode, setMode] = useState('select');
   const [selectedElementId, setSelectedElementId] = useState(null);
   const [selectedAnnotationId, setSelectedAnnotationId] = useState(null);
+  const [selectedStrokeId, setSelectedStrokeId] = useState(null);
   const [saveStatus, setSaveStatus] = useState('saved');
   const stageRef = useRef(null);
   const saveTimer = useRef(null);
@@ -68,6 +69,9 @@ export default function StagePlotPageEditor({ eventId, page, onSaved }) {
     } else if (selectedAnnotationId) {
       apply((s) => deleteAnnotation(s, selectedAnnotationId));
       setSelectedAnnotationId(null);
+    } else if (selectedStrokeId) {
+      apply((s) => deleteStroke(s, selectedStrokeId));
+      setSelectedStrokeId(null);
     }
   }
 
@@ -92,7 +96,7 @@ export default function StagePlotPageEditor({ eventId, page, onSaved }) {
         <button type="button" onClick={() => rotateSelected(-15)} disabled={!selectedElementId} data-testid="stageplot-rotate-left-button" className={toolbarButtonClass} title="Rotate left 15°">⟲</button>
         <button type="button" onClick={() => rotateSelected(15)} disabled={!selectedElementId} data-testid="stageplot-rotate-right-button" className={toolbarButtonClass} title="Rotate right 15°">⟳</button>
         <div className="w-px h-6 bg-slate-200 mx-1" />
-        <button type="button" onClick={handleDeleteSelected} disabled={!selectedElementId && !selectedAnnotationId} data-testid="stageplot-delete-selected-button" className={`${toolbarButtonClass} border-red-300 text-red-600`}>Delete Selected</button>
+        <button type="button" onClick={handleDeleteSelected} disabled={!selectedElementId && !selectedAnnotationId && !selectedStrokeId} data-testid="stageplot-delete-selected-button" className={`${toolbarButtonClass} border-red-300 text-red-600`}>Delete Selected</button>
         <span data-testid="stageplot-save-status" className="text-xs text-slate-400 ml-auto">
           {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'unsaved' ? 'Unsaved changes' : 'Saved'}
         </span>
@@ -136,6 +140,8 @@ export default function StagePlotPageEditor({ eventId, page, onSaved }) {
           onSelectElement={setSelectedElementId}
           selectedAnnotationId={selectedAnnotationId}
           onSelectAnnotation={setSelectedAnnotationId}
+          selectedStrokeId={selectedStrokeId}
+          onSelectStroke={setSelectedStrokeId}
           stageRef={stageRef}
           width={820}
           height={580}

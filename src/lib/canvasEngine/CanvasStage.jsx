@@ -141,6 +141,8 @@ export default function CanvasStage({
   onSelectElement,
   selectedAnnotationId,
   onSelectAnnotation,
+  selectedStrokeId,
+  onSelectStroke,
   stageRef,
   iconRegistry,
 }) {
@@ -282,6 +284,7 @@ export default function CanvasStage({
       if (clickedEmptyCanvas) {
         onSelectElement?.(null);
         onSelectAnnotation?.(null);
+        onSelectStroke?.(null);
       }
       return;
     }
@@ -348,7 +351,21 @@ export default function CanvasStage({
 
         <Layer>
           {scene.strokes.filter((s) => visibleLayerIds.has(s.layerId)).map((s) => (
-            <Line key={s.id} points={s.points} stroke={s.color} strokeWidth={s.strokeWidth} lineCap="round" lineJoin="round" tension={0.4} />
+            <Line
+              key={s.id}
+              points={s.points}
+              stroke={s.id === selectedStrokeId ? '#4f46e5' : s.color}
+              strokeWidth={s.id === selectedStrokeId ? s.strokeWidth + 1 : s.strokeWidth}
+              lineCap="round"
+              lineJoin="round"
+              tension={0.4}
+              // Thin freehand strokes are hard to click precisely — widens
+              // the invisible hit-test area without changing how the line
+              // actually looks, so selecting one to delete it is reliable.
+              hitStrokeWidth={Math.max(s.strokeWidth, 16)}
+              onClick={() => { if (mode === 'select') { onSelectStroke?.(s.id); onSelectElement?.(null); onSelectAnnotation?.(null); } }}
+              onTap={() => { if (mode === 'select') { onSelectStroke?.(s.id); onSelectElement?.(null); onSelectAnnotation?.(null); } }}
+            />
           ))}
           {drawingPoints && <Line points={drawingPoints} stroke={strokeColor} strokeWidth={2} lineCap="round" lineJoin="round" tension={0.4} />}
 
@@ -358,7 +375,7 @@ export default function CanvasStage({
               element={el}
               icon={iconRegistry?.[el.iconId]}
               isSelected={el.id === selectedElementId}
-              onSelect={() => { onSelectElement?.(el.id); onSelectAnnotation?.(null); }}
+              onSelect={() => { onSelectElement?.(el.id); onSelectAnnotation?.(null); onSelectStroke?.(null); }}
               onDragEnd={(id, pos) => onMutate((s) => ({
                 ...s,
                 elements: s.elements.map((e) => (e.id === id ? { ...e, ...(snapEnabled ? snapPointToGrid(pos, s.scalePxPerUnit, s.gridSpacing) : pos) } : e)),
@@ -373,7 +390,7 @@ export default function CanvasStage({
               annotation={a}
               isSelected={a.id === selectedAnnotationId}
               isEditing={a.id === editingAnnotationId}
-              onSelect={() => { onSelectAnnotation?.(a.id); onSelectElement?.(null); }}
+              onSelect={() => { onSelectAnnotation?.(a.id); onSelectElement?.(null); onSelectStroke?.(null); }}
               onEdit={() => startEditingAnnotation(a)}
               onDragEnd={(id, pos) => onAdjust((s) => ({
                 ...s,
