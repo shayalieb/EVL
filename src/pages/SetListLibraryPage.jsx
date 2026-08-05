@@ -5,6 +5,7 @@ import SetListLibraryModal from '../components/SetListLibraryModal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import SearchInput from '../components/ui/SearchInput';
 import { matchesSearch } from '../lib/search';
+import { deleteDocument } from '../lib/documents';
 
 // Resources-section ListView for reusable set lists (band/orchestra only —
 // gated at the nav item in AppLayout.jsx and the route in App.jsx). Editing
@@ -32,6 +33,11 @@ export default function SetListLibraryPage() {
   }
 
   function handleDelete() {
+    // Songs' PDFs don't cascade-delete on their own — clean them up here so
+    // deleting a whole set list doesn't orphan its attachments in storage.
+    deleteTarget.items?.forEach((item) => {
+      if (item.documentId) deleteDocument(item.documentId).catch(() => {});
+    });
     deleteSetListLibraryItem(deleteTarget.id);
     setDeleteTarget(null);
   }

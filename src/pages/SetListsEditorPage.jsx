@@ -115,10 +115,17 @@ export default function SetListsEditorPage() {
   }
 
   function deleteSetList(id) {
+    const removed = setLists.find((s) => s.id === id);
     setSetLists((prev) => {
       const next = prev.filter((s) => s.id !== id);
       if (activeSetListId === id) setActiveSetListId(next[0]?.id || null);
       return next;
+    });
+    // Deleting individual songs already cleans up their attachment (see
+    // removeItem below) — deleting the whole list at once needs the same
+    // cleanup, or every song's PDF/image would silently orphan in storage.
+    removed?.items.forEach((item) => {
+      if (item.documentId) deleteDocument(item.documentId).catch(() => {});
     });
   }
 

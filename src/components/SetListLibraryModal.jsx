@@ -97,7 +97,13 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
       setError('Set list name is required.');
       return;
     }
-    const payload = { name: name.trim(), description: description.trim(), items: items.filter((it) => it.songTitle.trim()) };
+    const keptItems = items.filter((it) => it.songTitle.trim());
+    const droppedItems = items.filter((it) => !it.songTitle.trim());
+    // A title-less row (e.g. a PDF attached before typing a title, then
+    // saved without ever filling it in) gets silently dropped below — clean
+    // up its upload too, or it orphans in storage with nothing referencing it.
+    droppedItems.forEach((it) => { if (it.documentId) deleteDocument(it.documentId).catch(() => {}); });
+    const payload = { name: name.trim(), description: description.trim(), items: keptItems };
     const record = setList ? { ...setList, ...payload } : addSetListLibraryItem(payload);
     if (setList) updateSetListLibraryItem(setList.id, payload);
     onSaved?.(record);
