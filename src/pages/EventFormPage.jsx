@@ -14,7 +14,7 @@ import VenueCombobox from '../components/VenueCombobox';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/Toast';
-import { getThreadSummaries, sendThreadedEmail } from '../lib/email/threads';
+import { getThreadSummaries, getThread, sendThreadedEmail } from '../lib/email/threads';
 import { renderEmailTemplate } from '../lib/mergeFields';
 import { uid } from '../lib/storage';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
@@ -185,6 +185,7 @@ export default function EventFormPage() {
   const [form, setForm] = useState(emptyForm());
   const [addingType, setAddingType] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [emailHistoryEntries, setEmailHistoryEntries] = useState([]);
   const [newTypeLabel, setNewTypeLabel] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [tierPickerContractor, setTierPickerContractor] = useState(null);
@@ -336,6 +337,34 @@ export default function EventFormPage() {
     listInvoices(sourceBooking.id).then((list) => { if (!cancelled) setEventInvoices(list); }).catch(() => {});
     return () => { cancelled = true; };
   }, [sourceBooking?.id]);
+
+  // Vendor email activity folded into the History popup — fetched lazily,
+  // only while the modal is actually open, rather than on every page load,
+  // since it's several network calls (one per contractor with a thread).
+  useEffect(() => {
+    if (!historyModalOpen || !event?.id) return;
+    let cancelled = false;
+    (async () => {
+      const summaries = await getThreadSummaries(event.id).catch(() => ({}));
+      const contractorIds = Object.keys(summaries).filter((id) => summaries[id]?.hasThread);
+      const threads = await Promise.all(contractorIds.map((id) => getThread(event.id, id).catch(() => null)));
+      if (cancelled) return;
+      const entries = threads.flatMap((thread, i) => {
+        if (!thread) return [];
+        const c = contractors.find((c) => c.id === contractorIds[i]);
+        const name = c ? [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email : 'Contractor';
+        return thread.messages.map((m) => ({
+          id: `email_${m.id}`,
+          at: m.createdAt,
+          type: m.direction === 'outbound' ? 'emailed' : 'email-reply',
+          contractorName: name,
+          subject: m.subject,
+        }));
+      });
+      setEmailHistoryEntries(entries);
+    })();
+    return () => { cancelled = true; };
+  }, [historyModalOpen, event?.id, contractors]);
 
   function update(field, val) {
     setForm((f) => ({ ...f, [field]: val }));
@@ -1864,7 +1893,7 @@ export default function EventFormPage() {
         open={historyModalOpen}
         onClose={() => setHistoryModalOpen(false)}
         title="Event History"
-        entries={event?.history}
+        entries={[...(event?.history || []), ...emailHistoryEntries]}
       />
 
       <AcceptPaymentModal

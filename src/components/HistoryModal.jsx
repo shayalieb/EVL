@@ -4,11 +4,23 @@ const TYPE_LABELS = {
   created: 'Created',
   edited: 'Edited',
   deleted: 'Deleted',
+  emailed: 'Emailed vendor',
+  'email-reply': 'Vendor replied',
 };
 
-// Read-only popup for the system-generated create/edit/delete trail kept on
-// Bookings and Events (record.history) — distinct from Booking's own
-// free-text "Activity Log" notes field, which is a separate, older feature.
+function formatWhen(at) {
+  return new Date(at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+// Read-only popup showing two merged sources, newest first:
+//  - the system-generated create/edit/delete trail kept on Bookings and
+//    Events (record.history) — only the curated fields in
+//    DataContext.jsx's diffEventFields/diffBookingFields, not every edit,
+//    so this doesn't turn into a firehose of noise
+//  - vendor email activity for the same record (type 'emailed'/'email-reply',
+//    passed in by the caller — see EventFormPage.jsx/BookingFormPage.jsx)
+// Distinct from Booking's own free-text "Activity Log" notes field, a
+// separate, older feature.
 export default function HistoryModal({ open, onClose, title, entries }) {
   const sorted = [...(entries || [])].sort((a, b) => new Date(b.at) - new Date(a.at));
 
@@ -20,11 +32,28 @@ export default function HistoryModal({ open, onClose, title, entries }) {
             <div key={entry.id} data-testid="history-modal-entry" className="text-sm border-b border-slate-100 last:border-0 pb-2 last:pb-0">
               <div className="flex items-center justify-between gap-2 text-slate-700 font-semibold">
                 <span>{TYPE_LABELS[entry.type] || entry.type}</span>
-                <span className="text-xs font-normal text-slate-400 shrink-0">
-                  {new Date(entry.at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                </span>
+                <span className="text-xs font-normal text-slate-400 shrink-0">{formatWhen(entry.at)}</span>
               </div>
-              {entry.actorName && <div className="text-xs text-slate-400 mt-0.5">by {entry.actorName}</div>}
+              {entry.type === 'emailed' || entry.type === 'email-reply' ? (
+                <div className="text-xs text-slate-500 mt-0.5">
+                  {entry.type === 'emailed' ? `To ${entry.contractorName}` : `From ${entry.contractorName}`}
+                  {entry.subject && <span className="text-slate-400"> — {entry.subject}</span>}
+                </div>
+              ) : (
+                <>
+                  {entry.actorName && <div className="text-xs text-slate-400 mt-0.5">by {entry.actorName}</div>}
+                  {entry.changes?.length > 0 && (
+                    <ul className="mt-1 space-y-0.5">
+                      {entry.changes.map((c, i) => (
+                        <li key={i} className="text-xs text-slate-500">
+                          <span className="font-medium text-slate-600">{c.label}</span>
+                          {c.from !== undefined ? `: ${c.from} → ${c.to}` : `: ${c.to}`}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
             </div>
           ))}
         </div>

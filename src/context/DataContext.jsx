@@ -3,6 +3,70 @@ import { useAuth } from './AuthContext';
 import { uid } from '../lib/storage';
 import { getTierPrice } from '../lib/pricingTiers';
 import { statusBucket } from '../lib/inquiryStatusBucket';
+import { formatEventDate, formatCurrency } from '../lib/format';
+
+function statusLabel(statuses, id) {
+  return statuses?.find((s) => s.id === id)?.label || id || '(none)';
+}
+
+function contractorName(contractors, id) {
+  const c = contractors?.find((c) => c.id === id);
+  if (!c) return id;
+  return [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email || id;
+}
+
+// Curated set of fields worth an explicit "what changed" history entry —
+// deliberately NOT every field on Event/Booking, since logging every
+// keystroke-level edit (notes text, minor toggles, etc.) would bury the
+// changes someone actually wants to audit. See HistoryModal.jsx.
+function diffEventFields(before, after, eventStatuses) {
+  const changes = [];
+  if ((before.name || '') !== (after.name || '')) {
+    changes.push({ label: 'Name', from: before.name || '(none)', to: after.name || '(none)' });
+  }
+  if ((before.eventDate || '') !== (after.eventDate || '')) {
+    changes.push({ label: 'Date', from: before.eventDate ? formatEventDate(before.eventDate) : '(none)', to: after.eventDate ? formatEventDate(after.eventDate) : '(none)' });
+  }
+  const beforeVenue = before.venue?.name || '';
+  const afterVenue = after.venue?.name || '';
+  if (beforeVenue !== afterVenue) {
+    changes.push({ label: 'Venue', from: beforeVenue || '(none)', to: afterVenue || '(none)' });
+  }
+  if ((before.eventStatus || '') !== (after.eventStatus || '')) {
+    changes.push({ label: 'Status', from: statusLabel(eventStatuses, before.eventStatus), to: statusLabel(eventStatuses, after.eventStatus) });
+  }
+  return changes;
+}
+
+// Contractor assignment (event.contractorBookings) is tracked as an
+// add/remove event per contractor rather than a "from/to" pair — unlike the
+// scalar fields above, it's a list, so "changed" means membership changed,
+// not that a single value replaced another.
+function diffContractorAssignments(before, after, contractors) {
+  const beforeIds = new Set((before.contractorBookings || []).map((b) => b.contractorId));
+  const afterIds = new Set((after.contractorBookings || []).map((b) => b.contractorId));
+  const changes = [];
+  for (const id of afterIds) {
+    if (!beforeIds.has(id)) changes.push({ label: 'Contractor added', to: contractorName(contractors, id) });
+  }
+  for (const id of beforeIds) {
+    if (!afterIds.has(id)) changes.push({ label: 'Contractor removed', to: contractorName(contractors, id) });
+  }
+  return changes;
+}
+
+function diffBookingFields(before, after, bookingStatuses) {
+  const changes = [];
+  if ((before.bookingStatus || '') !== (after.bookingStatus || '')) {
+    changes.push({ label: 'Status', from: statusLabel(bookingStatuses, before.bookingStatus), to: statusLabel(bookingStatuses, after.bookingStatus) });
+  }
+  const beforeDeposit = Number(before.depositAmount) || 0;
+  const afterDeposit = Number(after.depositAmount) || 0;
+  if (beforeDeposit !== afterDeposit) {
+    changes.push({ label: 'Deposit', from: formatCurrency(beforeDeposit), to: formatCurrency(afterDeposit) });
+  }
+  return changes;
+}
 
 const DataContext = createContext(null);
 
@@ -33,12 +97,13 @@ export function DataProvider({ children }) {
   // System-generated create/edit/delete trail for Bookings and Events
   // (record.history) — who did what, when. Separate from Booking's own
   // free-text "Activity Log" notes field, an older, unrelated feature.
-  const historyEntry = useCallback((type) => ({
+  const historyEntry = useCallback((type, changes) => ({
     id: uid('hist'),
     at: new Date().toISOString(),
     type,
     actorEmail: currentUser?.email || null,
     actorName: currentUser ? ([currentUser.firstName, currentUser.lastName].filter(Boolean).join(' ') || currentUser.email) : null,
+    ...(changes?.length ? { changes } : {}),
   }), [currentUser]);
 
   // ---- Contractors ----
@@ -133,7 +198,8 @@ export function DataProvider({ children }) {
   // ---- Bookings ----
   const addBooking = useCallback((booking) => {
     if (!currentUser) return;
-    const record = { id: uid('bkg'), createdAt: new Date().toISOString(), convertedEventId: null, activityLog: [], deletedAt: null, ...booking, history: [historyEntry('created')] };
+    const record = { id: uid('bkg'), createdAt: new Date().toISOString(), convertedEventId: null, activityLog: [], deletedAt: null, ...booking };
+    record.history = [historyEntry('created', diffBookingFields({}, record, currentUser.bookingStatuses))];
     patchList(LIST_FIELDS.bookings, [...(currentUser.bookings || []), record]);
     if (record.venue) ensureVenueSaved(record.venue);
     return record;
@@ -141,9 +207,12 @@ export function DataProvider({ children }) {
 
   const updateBooking = useCallback((id, patch) => {
     if (!currentUser) return;
-    patchList(LIST_FIELDS.bookings, (currentUser.bookings || []).map((b) => (
-      b.id === id ? { ...b, ...patch, history: [...(b.history || []), historyEntry('edited')] } : b
-    )));
+    patchList(LIST_FIELDS.bookings, (currentUser.bookings || []).map((b) => {
+      if (b.id !== id) return b;
+      const next = { ...b, ...patch };
+      const changes = diffBookingFields(b, next, currentUser.bookingStatuses);
+      return changes.length ? { ...next, history: [...(b.history || []), historyEntry('edited', changes)] } : next;
+    }));
     if (patch.venue) ensureVenueSaved(patch.venue);
   }, [currentUser, patchList, historyEntry, ensureVenueSaved]);
 
@@ -313,7 +382,8 @@ export function DataProvider({ children }) {
   // ---- Events ----
   const addEvent = useCallback((event) => {
     if (!currentUser) return;
-    const record = { id: uid('evt'), createdAt: new Date().toISOString(), contractorBookings: [], deletedAt: null, ...event, history: [historyEntry('created')] };
+    const record = { id: uid('evt'), createdAt: new Date().toISOString(), contractorBookings: [], deletedAt: null, ...event };
+    record.history = [historyEntry('created', diffEventFields({}, record, currentUser.eventStatuses))];
     patchList(LIST_FIELDS.events, [...currentUser.events, record]);
     if (record.venue) ensureVenueSaved(record.venue);
     return record;
@@ -321,9 +391,15 @@ export function DataProvider({ children }) {
 
   const updateEvent = useCallback((id, patch) => {
     if (!currentUser) return;
-    patchList(LIST_FIELDS.events, currentUser.events.map((e) => (
-      e.id === id ? { ...e, ...patch, history: [...(e.history || []), historyEntry('edited')] } : e
-    )));
+    patchList(LIST_FIELDS.events, currentUser.events.map((e) => {
+      if (e.id !== id) return e;
+      const next = { ...e, ...patch };
+      const changes = [
+        ...diffEventFields(e, next, currentUser.eventStatuses),
+        ...diffContractorAssignments(e, next, currentUser.contractors),
+      ];
+      return changes.length ? { ...next, history: [...(e.history || []), historyEntry('edited', changes)] } : next;
+    }));
     if (patch.venue) ensureVenueSaved(patch.venue);
   }, [currentUser, patchList, historyEntry, ensureVenueSaved]);
 
