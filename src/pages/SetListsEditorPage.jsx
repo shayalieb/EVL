@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { useToast } from '../components/ui/Toast';
 import { uid } from '../lib/storage';
-import { uploadDocument, deleteDocument } from '../lib/documents';
+import { uploadDocument, deleteDocument, copyDocument } from '../lib/documents';
 import { generateSetListPdf, generateSetListPdfAttachment } from '../lib/setListPdf';
 import { renderSetListEmail } from '../lib/setList';
 import { sendThreadedEmail } from '../lib/email/threads';
@@ -48,6 +48,7 @@ export default function SetListsEditorPage() {
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const hydratedRef = useRef(null);
   const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
+  const [pullingLibraryId, setPullingLibraryId] = useState(null);
 
   useEffect(() => {
     if (!event || hydratedRef.current === event.id) return;
@@ -74,27 +75,39 @@ export default function SetListsEditorPage() {
   }
 
   // Deep-clones a saved library set list into this event's own setLists —
-  // fresh ids on the list AND every item, so editing this gig's copy (or
-  // attaching sheet music to it) never touches the reusable original in
-  // Resources > Set Lists. See src/context/DataContext.jsx's
-  // addSetListLibraryItem for where that original lives.
-  function pullFromLibrary(libraryEntry) {
-    const list = {
-      id: uid('setlist'),
-      name: libraryEntry.name,
-      items: libraryEntry.items.map((it) => ({
-        id: uid('song'),
-        songTitle: it.songTitle,
-        description: it.description,
-        link: it.link,
-        documentId: null,
-        documentName: null,
-        documentContentType: null,
-      })),
-    };
-    setSetLists((prev) => [...prev, list]);
-    setActiveSetListId(list.id);
-    setLibraryPickerOpen(false);
+  // fresh ids on the list AND every item, so editing this gig's copy never
+  // touches the reusable original in Resources > Set Lists. See
+  // src/context/DataContext.jsx's addSetListLibraryItem for where that
+  // original lives. A song's PDF (if any) is server-side COPIED, not
+  // referenced — copyDocument duplicates the storage bytes and creates a
+  // brand-new document row, so deleting this gig's attachment (or the
+  // library original) never affects the other.
+  async function pullFromLibrary(libraryEntry) {
+    setPullingLibraryId(libraryEntry.id);
+    try {
+      const items = await Promise.all(libraryEntry.items.map(async (it) => {
+        let doc = { documentId: null, documentName: null, documentContentType: null };
+        if (it.documentId) {
+          try {
+            const copied = await copyDocument(it.documentId, eventId);
+            doc = { documentId: copied.id, documentName: copied.filename, documentContentType: copied.contentType };
+          } catch {
+            // Copy failed (e.g. a pre-storage-migration document with no
+            // storageKey) — pull the song in without its attachment rather
+            // than blocking the whole set list.
+          }
+        }
+        return { id: uid('song'), songTitle: it.songTitle, description: it.description, link: it.link, ...doc };
+      }));
+      const list = { id: uid('setlist'), name: libraryEntry.name, items };
+      setSetLists((prev) => [...prev, list]);
+      setActiveSetListId(list.id);
+      setLibraryPickerOpen(false);
+    } catch (err) {
+      showToast(err.message || 'Failed to pull set list from library', 'error');
+    } finally {
+      setPullingLibraryId(null);
+    }
   }
 
   function renameSetList(id, name) {
@@ -405,11 +418,17 @@ export default function SetListsEditorPage() {
                 key={s.id}
                 type="button"
                 onClick={() => pullFromLibrary(s)}
+                disabled={!!pullingLibraryId}
                 data-testid="setlist-library-picker-item"
-                className="w-full text-left px-3 py-2 rounded-lg border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 flex items-center justify-between"
+                className="w-full text-left px-3 py-2 rounded-lg border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 flex items-center justify-between disabled:opacity-50 disabled:cursor-wait"
               >
-                <span className="font-medium text-slate-700">{s.name}</span>
-                <span className="text-xs text-slate-400">{s.items?.length || 0} song{s.items?.length === 1 ? '' : 's'}</span>
+                <span>
+                  <span className="font-medium text-slate-700 block">{s.name}</span>
+                  {s.description && <span className="text-xs text-slate-400">{s.description}</span>}
+                </span>
+                <span className="text-xs text-slate-400 shrink-0 ml-2">
+                  {pullingLibraryId === s.id ? 'Pulling…' : `${s.items?.length || 0} song${s.items?.length === 1 ? '' : 's'}`}
+                </span>
               </button>
             ))}
           </div>

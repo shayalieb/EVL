@@ -64,7 +64,7 @@ export default function SetListLibraryPage() {
             <thead>
               <tr className="border-b border-slate-100 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                 <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Songs</th>
+                <th className="px-4 py-3">Description</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -89,7 +89,7 @@ export default function SetListLibraryPage() {
                       <span>{s.name}</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-slate-500">{s.items?.length || 0}</td>
+                  <td className="px-4 py-3 text-slate-500 max-w-md truncate">{s.description || '—'}</td>
                   <td className="px-4 py-3">
                     {canEdit && (
                       <div className="flex justify-end gap-1">

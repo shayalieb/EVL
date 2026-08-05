@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
-import { uploadFile, getSignedDownloadUrl, getSignedPreviewUrl, deleteFile } from '../lib/fileStorage.js';
+import { uploadFile, getSignedDownloadUrl, getSignedPreviewUrl, deleteFile, copyFile } from '../lib/fileStorage.js';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FILE_SIZE } });
@@ -33,8 +33,9 @@ router.post('/', (req, res, next) => {
     next();
   });
 }, asyncHandler(async (req, res) => {
-  const { eventId } = req.body || {};
-  if (!eventId?.trim()) return res.status(400).json({ error: 'eventId is required.' });
+  // eventId is omitted for account-level attachments not tied to any event
+  // (e.g. a Set List library song) — see schema.prisma's EventDocument.eventId.
+  const eventId = req.body?.eventId?.trim() || null;
   if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
 
   const contentType = req.file.mimetype || 'application/octet-stream';
@@ -82,6 +83,33 @@ router.get('/:id/preview', asyncHandler(async (req, res) => {
   }
   if (!document.storageKey) return res.status(404).json({ error: 'Preview not available for this document.' });
   res.redirect(302, await getSignedPreviewUrl(document.storageKey));
+}));
+
+// Duplicates a document's underlying storage bytes plus a new DB row, for
+// a target eventId (or account-level again if omitted) — the copy is a
+// fully independent document from the moment it's created, so deleting
+// either the source or the copy never affects the other. See
+// SetListsEditorPage.jsx's pullFromLibrary, the only current caller.
+router.post('/:id/copy', asyncHandler(async (req, res) => {
+  const source = await prisma.eventDocument.findUnique({ where: { id: req.params.id } });
+  if (!source || source.accountId !== req.membership.accountId) {
+    return res.status(404).json({ error: 'Document not found.' });
+  }
+  if (!source.storageKey) return res.status(400).json({ error: 'This document predates copyable storage and cannot be duplicated.' });
+  const eventId = req.body?.eventId?.trim() || null;
+  const storageKey = await copyFile(source.storageKey, req.membership.accountId);
+  const document = await prisma.eventDocument.create({
+    data: {
+      accountId: req.membership.accountId,
+      eventId,
+      filename: source.filename,
+      contentType: source.contentType,
+      size: source.size,
+      storageKey,
+    },
+    select: { id: true, filename: true, contentType: true, size: true, createdAt: true },
+  });
+  res.status(201).json({ document });
 }));
 
 router.delete('/:id', asyncHandler(async (req, res) => {

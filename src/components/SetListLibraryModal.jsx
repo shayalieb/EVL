@@ -1,31 +1,43 @@
 import { useEffect, useRef, useState } from 'react';
 import Modal from './ui/Modal';
+import DocumentPreviewModal from './DocumentPreviewModal';
 import { useData } from '../context/DataContext';
+import { useToast } from './ui/Toast';
 import { uid } from '../lib/storage';
+import { uploadDocument, deleteDocument } from '../lib/documents';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 
 function emptySong() {
-  return { id: uid('song'), songTitle: '', description: '', link: '' };
+  return { id: uid('song'), songTitle: '', description: '', link: '', documentId: null, documentName: null, documentContentType: null };
 }
 
 // Add/edit modal for a reusable Set List Library entry — same song fields
-// as an event's own set list items (SetListsEditorPage.jsx) minus sheet
-// music, since a library entry isn't tied to any event and document
-// uploads require one. Sheet music still gets attached once a set list is
-// pulled into an actual gig.
+// as an event's own set list items (SetListsEditorPage.jsx), including
+// sheet music: uploadDocument/documents.js now accepts an omitted eventId
+// for account-level attachments not tied to any event (see
+// server/prisma/schema.prisma's EventDocument.eventId). When a set list is
+// later pulled into a real gig, its songs' PDFs are server-side COPIED
+// (copyDocument), not referenced — see SetListsEditorPage.jsx's
+// pullFromLibrary — so deleting the gig's copy or the library original
+// never affects the other.
 export default function SetListLibraryModal({ open, onClose, setList, onSaved }) {
   const { addSetListLibraryItem, updateSetListLibraryItem } = useData();
+  const { showToast } = useToast();
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [items, setItems] = useState([]);
   const [error, setError] = useState('');
+  const [uploadingItemId, setUploadingItemId] = useState(null);
+  const [previewDocument, setPreviewDocument] = useState(null);
   const dragIndex = useRef(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
 
   useEffect(() => {
     if (open) {
       setName(setList?.name || '');
+      setDescription(setList?.description || '');
       setItems(setList?.items?.length ? setList.items : [emptySong()]);
       setError('');
     }
@@ -40,7 +52,30 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
   }
 
   function removeItem(id) {
+    const item = items.find((it) => it.id === id);
     setItems((prev) => prev.filter((it) => it.id !== id));
+    if (item?.documentId) deleteDocument(item.documentId).catch(() => {});
+  }
+
+  async function handleUploadPdf(itemId, file) {
+    if (!file) return;
+    setUploadingItemId(itemId);
+    try {
+      const item = items.find((it) => it.id === itemId);
+      if (item?.documentId) await deleteDocument(item.documentId).catch(() => {});
+      const doc = await uploadDocument(null, file);
+      updateItem(itemId, { documentId: doc.id, documentName: doc.filename, documentContentType: doc.contentType });
+    } catch (err) {
+      showToast(err.message || 'Failed to upload PDF', 'error');
+    } finally {
+      setUploadingItemId(null);
+    }
+  }
+
+  function handleRemovePdf(itemId) {
+    const item = items.find((it) => it.id === itemId);
+    updateItem(itemId, { documentId: null, documentName: null, documentContentType: null });
+    if (item?.documentId) deleteDocument(item.documentId).catch(() => {});
   }
 
   function handleDrop(targetIndex) {
@@ -62,7 +97,7 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
       setError('Set list name is required.');
       return;
     }
-    const payload = { name: name.trim(), items: items.filter((it) => it.songTitle.trim()) };
+    const payload = { name: name.trim(), description: description.trim(), items: items.filter((it) => it.songTitle.trim()) };
     const record = setList ? { ...setList, ...payload } : addSetListLibraryItem(payload);
     if (setList) updateSetListLibraryItem(setList.id, payload);
     onSaved?.(record);
@@ -77,6 +112,18 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
         <div>
           <label className={labelClass}>Set List Name *</label>
           <input required autoFocus value={name} onChange={(e) => setName(e.target.value)} data-testid="setlist-library-modal-name-input" className={inputClass} />
+        </div>
+
+        <div>
+          <label className={labelClass}>Description</label>
+          <textarea
+            rows={2}
+            placeholder="e.g. Cocktail hour jazz standards, low volume, ~45 min"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            data-testid="setlist-library-modal-description-textarea"
+            className={inputClass}
+          />
         </div>
 
         <div>
@@ -115,6 +162,43 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
                   data-testid="setlist-library-modal-item-link-input"
                   className={`${inputClass} flex-1 min-w-0`}
                 />
+                <div className="flex items-center gap-1 shrink-0">
+                  {item.documentId ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDocument({ id: item.documentId, filename: item.documentName, contentType: item.documentContentType })}
+                        title={`Preview ${item.documentName}`}
+                        data-testid="setlist-library-modal-item-preview-button"
+                        className="w-7 h-7 flex items-center justify-center rounded text-indigo-600 hover:bg-indigo-50"
+                      >
+                        📄
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePdf(item.id)}
+                        title="Remove PDF"
+                        data-testid="setlist-library-modal-item-remove-pdf-button"
+                        className="w-5 h-5 flex items-center justify-center rounded text-slate-300 hover:text-red-600 text-xs"
+                        aria-label="Remove PDF"
+                      >
+                        ✕
+                      </button>
+                    </>
+                  ) : (
+                    <label title="Attach PDF" className="w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 cursor-pointer">
+                      {uploadingItemId === item.id ? '…' : '📎'}
+                      <input
+                        type="file"
+                        accept="application/pdf,image/*"
+                        onChange={(e) => handleUploadPdf(item.id, e.target.files?.[0])}
+                        disabled={uploadingItemId === item.id}
+                        data-testid="setlist-library-modal-item-upload-input"
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={() => removeItem(item.id)}
@@ -139,6 +223,8 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
           </button>
         </div>
       </form>
+
+      <DocumentPreviewModal document={previewDocument} onClose={() => setPreviewDocument(null)} />
     </Modal>
   );
 }

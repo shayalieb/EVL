@@ -72,6 +72,21 @@ export async function getSignedPreviewUrl(storageKey) {
   return data.signedUrl;
 }
 
+// Server-side copy (bytes never leave Supabase, let alone round-trip
+// through this process) — used when a Set List library song's PDF gets
+// pulled into a specific event: the event's copy needs its own independent
+// storage object so deleting it (or the library original) never affects
+// the other, matching how every other field on a pulled set list is a full
+// deep clone, not a shared reference. See SetListsEditorPage.jsx's
+// pullFromLibrary.
+export async function copyFile(sourceKey, accountId) {
+  await ensureBucket();
+  const destKey = `${accountId}/${randomUUID()}`;
+  const { error } = await getClient().storage.from(BUCKET).copy(sourceKey, destKey);
+  if (error) throw error;
+  return destKey;
+}
+
 export async function downloadFileBuffer(storageKey) {
   const { data, error } = await getClient().storage.from(BUCKET).download(storageKey);
   if (error) throw error;

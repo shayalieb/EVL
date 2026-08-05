@@ -291,7 +291,8 @@ model EventDocument {
   accountId   String
   account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
-  eventId     String   // opaque localStorage id, same non-FK pattern as EmailThread
+  eventId     String?  // opaque localStorage id, same non-FK pattern as EmailThread; null for
+                        // account-level attachments not tied to an event (e.g. Set List library songs)
   filename    String
   contentType String
   size        Int
