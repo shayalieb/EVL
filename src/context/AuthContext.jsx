@@ -2,6 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { loadUserData } from '../lib/storage';
 import { buildSeedUserData, buildDefaultBookingStatuses } from '../lib/seed';
 
+// Relative in production (e.g. `/api`) — vercel.json proxies /api/* to the
+// Railway backend so the browser only ever talks to the frontend's own
+// domain, keeping the session cookie first-party. See .env.example.
 export const API_BASE = import.meta.env.VITE_API_BASE;
 const AuthContext = createContext(null);
 
