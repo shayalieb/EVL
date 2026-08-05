@@ -239,6 +239,7 @@ export function buildSeedUserData(vertical) {
   return {
     contractorTypes, eventTypes, eventStatuses, inquiryStatuses, bookingStatuses,
     emailTemplates, contractors, clients, events, bookings: [], offerings: [],
+    setListLibrary: [],
     proposalTemplate: { sections: proposalSections.map((s) => ({ id: uid('section'), ...s })) },
   };
 }

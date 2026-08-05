@@ -85,6 +85,7 @@ const LIST_FIELDS = {
   offerings: 'offerings',
   proposalTemplates: 'proposalTemplates',
   contractTemplates: 'contractTemplates',
+  setListLibrary: 'setListLibrary',
 };
 
 export function DataProvider({ children }) {
@@ -379,6 +380,27 @@ export function DataProvider({ children }) {
     patchList(LIST_FIELDS.offerings, (currentUser.offerings || []).filter((o) => o.id !== id));
   }, [currentUser, patchList]);
 
+  // ---- Set List Library (reusable set lists, band/orchestra only —
+  // pulled into a specific event's own setLists via a deep clone, see
+  // SetListsEditorPage.jsx, so editing the event's copy never touches
+  // these saved originals) ----
+  const addSetListLibraryItem = useCallback((setList) => {
+    if (!currentUser) return;
+    const record = { id: uid('setlistlib'), createdAt: new Date().toISOString(), ...setList };
+    patchList(LIST_FIELDS.setListLibrary, [...(currentUser.setListLibrary || []), record]);
+    return record;
+  }, [currentUser, patchList]);
+
+  const updateSetListLibraryItem = useCallback((id, patch) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.setListLibrary, (currentUser.setListLibrary || []).map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  }, [currentUser, patchList]);
+
+  const deleteSetListLibraryItem = useCallback((id) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.setListLibrary, (currentUser.setListLibrary || []).filter((s) => s.id !== id));
+  }, [currentUser, patchList]);
+
   // ---- Events ----
   const addEvent = useCallback((event) => {
     if (!currentUser) return;
@@ -510,6 +532,7 @@ export function DataProvider({ children }) {
     offerings: currentUser?.offerings || [],
     proposalTemplates: currentUser?.proposalTemplates || [],
     contractTemplates: currentUser?.contractTemplates || [],
+    setListLibrary: currentUser?.setListLibrary || [],
     addContractor,
     updateContractor,
     deleteContractor,
@@ -549,6 +572,9 @@ export function DataProvider({ children }) {
     addOffering,
     updateOffering,
     deleteOffering,
+    addSetListLibraryItem,
+    updateSetListLibraryItem,
+    deleteSetListLibraryItem,
     addEvent,
     updateEvent,
     deleteEvent,
@@ -571,6 +597,7 @@ export function DataProvider({ children }) {
     addProposalTemplate, updateProposalTemplate, removeProposalTemplate,
     addContractTemplate, updateContractTemplate, removeContractTemplate,
     addOffering, updateOffering, deleteOffering,
+    addSetListLibraryItem, updateSetListLibraryItem, deleteSetListLibraryItem,
     addEvent, updateEvent, deleteEvent,
     getContractorById, computeDurationHours, computeEventTotalCost, computeVendorStatus,
   ]);

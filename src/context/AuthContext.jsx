@@ -58,6 +58,10 @@ export function AuthProvider({ children }) {
       // picker/pipeline isn't empty on first visit.
       blob = { ...blob, bookingStatuses: buildDefaultBookingStatuses(), bookings: blob.bookings || [] };
     }
+    if (!blob.setListLibrary) {
+      // Backfill accounts created before the Set List library existed.
+      blob = { ...blob, setListLibrary: [] };
+    }
     setServerUser(user);
     setLocalBlob(blob);
   }, []);

@@ -22,6 +22,7 @@ const NAV_GROUPS = [
       { to: '/venues', label: 'Venues', icon: '📍' },
       { to: '/contractors', label: 'Contractors', icon: '🎧' },
       { to: '/offerings', label: 'Offerings', icon: '🎁' },
+      { to: '/set-lists', label: 'Set Lists', icon: '🎵', vertical: 'band_orchestra' },
       { to: '/email-templates', label: 'Email Templates', icon: '✉️' },
     ],
   },
@@ -72,11 +73,20 @@ export default function AppLayout() {
       // best effort — next poll will reconcile if this failed
     }
   }
-  const navGroups = currentUser?.isPlatformAdmin
-    ? NAV_GROUPS.map((group, i) =>
-        i === NAV_GROUPS.length - 1 ? { ...group, items: [...group.items, { to: '/admin', label: 'Admin', icon: '🛡️' }] } : group
-      )
-    : NAV_GROUPS;
+  // Nav items with a `vertical` tag (e.g. Set Lists, band/orchestra only)
+  // stay hidden for accounts that don't have it active — this is UX only,
+  // same caveat as VerticalGate in App.jsx: the real authorization is
+  // server-side, hiding a link here just avoids showing a dead end.
+  const navGroups = NAV_GROUPS
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !item.vertical || currentUser?.activeVerticals?.includes(item.vertical)),
+    }))
+    .map((group, i) => (
+      currentUser?.isPlatformAdmin && i === NAV_GROUPS.length - 1
+        ? { ...group, items: [...group.items, { to: '/admin', label: 'Admin', icon: '🛡️' }] }
+        : group
+    ));
 
   async function handleLogout() {
     await logout();

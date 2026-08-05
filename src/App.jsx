@@ -31,6 +31,7 @@ import CanvasEngineDemoPage from './pages/dev/CanvasEngineDemoPage';
 import StagePlotEditorPage from './pages/StagePlotEditorPage';
 import FloorPlanEditorPage from './pages/FloorPlanEditorPage';
 import SetListsEditorPage from './pages/SetListsEditorPage';
+import SetListLibraryPage from './pages/SetListLibraryPage';
 
 function ProtectedArea() {
   const { currentUser, authLoading } = useAuth();
@@ -98,6 +99,7 @@ function AppRoutes() {
         <Route path="clients" element={<ClientsPage />} />
         <Route path="venues" element={<VenuesPage />} />
         <Route path="offerings" element={<OfferingsPage />} />
+        <Route path="set-lists" element={<VerticalGate vertical="band_orchestra"><SetListLibraryPage /></VerticalGate>} />
         <Route path="bookings" element={<BookingsPage />} />
         <Route path="bookings/new" element={<BookingFormPage />} />
         <Route path="bookings/:bookingId" element={<BookingFormPage />} />

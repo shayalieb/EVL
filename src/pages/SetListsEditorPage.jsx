@@ -10,6 +10,7 @@ import { renderSetListEmail } from '../lib/setList';
 import { sendThreadedEmail } from '../lib/email/threads';
 import DocumentPreviewModal from '../components/DocumentPreviewModal';
 import SetListEmailModal from '../components/SetListEmailModal';
+import Modal from '../components/ui/Modal';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -32,7 +33,7 @@ function emptySetListItem() {
 export default function SetListsEditorPage() {
   const { eventId } = useParams();
   const { currentUser } = useAuth();
-  const { events, updateEvent, contractors } = useData();
+  const { events, updateEvent, contractors, setListLibrary } = useData();
   const { showToast } = useToast();
   const event = events.find((e) => e.id === eventId);
 
@@ -46,6 +47,7 @@ export default function SetListsEditorPage() {
   const dragIndex = useRef(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const hydratedRef = useRef(null);
+  const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
 
   useEffect(() => {
     if (!event || hydratedRef.current === event.id) return;
@@ -69,6 +71,30 @@ export default function SetListsEditorPage() {
     const list = emptySetList(`Set List ${setLists.length + 1}`);
     setSetLists((prev) => [...prev, list]);
     setActiveSetListId(list.id);
+  }
+
+  // Deep-clones a saved library set list into this event's own setLists —
+  // fresh ids on the list AND every item, so editing this gig's copy (or
+  // attaching sheet music to it) never touches the reusable original in
+  // Resources > Set Lists. See src/context/DataContext.jsx's
+  // addSetListLibraryItem for where that original lives.
+  function pullFromLibrary(libraryEntry) {
+    const list = {
+      id: uid('setlist'),
+      name: libraryEntry.name,
+      items: libraryEntry.items.map((it) => ({
+        id: uid('song'),
+        songTitle: it.songTitle,
+        description: it.description,
+        link: it.link,
+        documentId: null,
+        documentName: null,
+        documentContentType: null,
+      })),
+    };
+    setSetLists((prev) => [...prev, list]);
+    setActiveSetListId(list.id);
+    setLibraryPickerOpen(false);
   }
 
   function renameSetList(id, name) {
@@ -246,6 +272,11 @@ export default function SetListsEditorPage() {
         <button type="button" onClick={addSetList} data-testid="setlist-add-button" className="px-3 py-2 text-sm text-indigo-600 font-semibold">
           + Add Set List
         </button>
+        {setListLibrary.length > 0 && (
+          <button type="button" onClick={() => setLibraryPickerOpen(true)} data-testid="setlist-from-library-button" className="px-3 py-2 text-sm text-indigo-600 font-semibold">
+            + From Library
+          </button>
+        )}
       </div>
 
       {!activeSetList ? (
@@ -363,6 +394,27 @@ export default function SetListsEditorPage() {
           </button>
         </div>
       )}
+
+      <Modal open={libraryPickerOpen} onClose={() => setLibraryPickerOpen(false)} title="Pull From Library">
+        {setListLibrary.length === 0 ? (
+          <div className="text-sm text-slate-400 text-center py-4">No saved set lists yet.</div>
+        ) : (
+          <div className="space-y-1.5 max-h-96 overflow-y-auto">
+            {setListLibrary.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => pullFromLibrary(s)}
+                data-testid="setlist-library-picker-item"
+                className="w-full text-left px-3 py-2 rounded-lg border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 flex items-center justify-between"
+              >
+                <span className="font-medium text-slate-700">{s.name}</span>
+                <span className="text-xs text-slate-400">{s.items?.length || 0} song{s.items?.length === 1 ? '' : 's'}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </Modal>
 
       <DocumentPreviewModal document={previewDocument} onClose={() => setPreviewDocument(null)} />
 
