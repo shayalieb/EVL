@@ -449,6 +449,7 @@ export function DataProvider({ children }) {
       clientId: booking.clientId || '',
       brideName: booking.brideName || '',
       groomName: booking.groomName || '',
+      guestCount: booking.guestCount ?? '',
       // Full shape (not just whatever keys the booking happens to have) —
       // EventFormPage reads form.venue.<field> directly, so a partial object
       // here would leave some fields undefined instead of controlled empty strings.

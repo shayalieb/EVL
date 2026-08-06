@@ -1,9 +1,24 @@
 import { formatEventDate as formatDate, formatEventTime as formatTime } from './format';
 import { DEFAULT_ACCENT_COLOR } from './colorTheme';
 
-// Deliberately reads only name/role/time off each contractor+booking —
-// never email or pricing/tier info, since the prep sheet is meant to be
-// safely shareable with crew.
+// Shared by EventFormPage.jsx's on-screen Prep tab, the emailed prep sheet
+// (renderPrepSheetEmail below), and the downloaded PDF (prepSheetPdf.js) —
+// all three render this same section, so the label has to come from one
+// place or they'd drift out of sync. "Requests" is the generic label; other
+// verticals get copy that actually matches what they're tracking there.
+const REQUESTS_LABELS = {
+  photography: { title: 'Equipment Checklist', addLabel: '+ Add Item', emptyLabel: 'No equipment requests added yet.' },
+  party_planning: { title: 'Vendor & Rental Checklist', addLabel: '+ Add Item', emptyLabel: 'No vendor or rental items added yet.' },
+};
+export function requestsLabels(vertical) {
+  return REQUESTS_LABELS[vertical] || { title: 'Requests', addLabel: '+ Add Request', emptyLabel: 'No requests added yet.' };
+}
+
+// Reads name/role/time/phone off each contractor+booking — phone is
+// included (unlike email or pricing/tier info) since day-of coordination
+// commonly needs a quick way to reach crew directly; the prep sheet is
+// still meant to be safely shareable, so nothing about pricing or the
+// contractor's email/login-adjacent info goes here.
 export function getPrepContractors(form, contractors) {
   return form.contractorBookings
     .filter((b) => form.prepGroups.includes(contractors.find((c) => c.id === b.contractorId)?.contractorType1))
@@ -13,6 +28,7 @@ export function getPrepContractors(form, contractors) {
         contractorId: b.contractorId,
         name: `${contractor.firstName} ${contractor.lastName}`,
         role: contractor.contractorType2 || contractor.contractorType1,
+        phone: contractor.phone || '',
         startTime: b.startTime || '',
         endTime: b.endTime || '',
       };
@@ -34,7 +50,7 @@ export function renderPrepSheetEmail(form, prepContractors, requests = [], attac
     .join('');
 
   const contractorRows = prepContractors
-    .map((c) => `<tr><td style="padding:4px 12px 4px 0;font-weight:600;">${c.name}</td><td style="padding:4px 12px 4px 0;color:#475569;">${c.role}</td><td style="padding:4px 0;color:#475569;white-space:nowrap;">${formatTime(c.startTime)} – ${formatTime(c.endTime)}</td></tr>`)
+    .map((c) => `<tr><td style="padding:4px 12px 4px 0;font-weight:600;">${c.name}</td><td style="padding:4px 12px 4px 0;color:#475569;">${c.role}</td><td style="padding:4px 12px 4px 0;color:#475569;white-space:nowrap;">${c.phone || ''}</td><td style="padding:4px 0;color:#475569;white-space:nowrap;">${formatTime(c.startTime)} – ${formatTime(c.endTime)}</td></tr>`)
     .join('');
 
   const requestRows = (requests || [])
@@ -94,7 +110,7 @@ export function renderPrepSheetEmail(form, prepContractors, requests = [], attac
       ` : ''}
 
       ${requestRows ? `
-      <h3 style="margin:16px 0 4px;font-size:14px;text-transform:uppercase;letter-spacing:0.03em;color:#64748b;">${isPhotography ? 'Equipment Checklist' : 'Requests'}</h3>
+      <h3 style="margin:16px 0 4px;font-size:14px;text-transform:uppercase;letter-spacing:0.03em;color:#64748b;">${requestsLabels(vertical).title}</h3>
       <table style="border-collapse:collapse;font-size:14px;">${requestRows}</table>
       ` : ''}
 

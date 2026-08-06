@@ -87,6 +87,7 @@ export function emptyForm() {
     id: uid('bkg'),
     eventName: '', clientId: '', eventDate: '', eventType: '',
     brideName: '', groomName: '',
+    guestCount: '',
     venue: emptyVenue(),
     schedule: [emptyScheduleItem()],
     depositAmount: '', depositDueDate: '', depositPaid: false, depositType: 'fixed', depositPercent: '',
@@ -571,6 +572,7 @@ export default function BookingFormPage() {
         eventType: booking.eventType || '',
         brideName: booking.brideName || '',
         groomName: booking.groomName || '',
+        guestCount: booking.guestCount ?? '',
         venue: { ...emptyVenue(), ...booking.venue },
         schedule: booking.schedule && booking.schedule.length ? booking.schedule : [emptyScheduleItem()],
         depositAmount: booking.depositAmount ?? '',
@@ -1783,6 +1785,18 @@ export default function BookingFormPage() {
                     </div>
                   )}
                 </div>
+              </div>
+
+              <div>
+                <label className={labelClass}>Expected Guest Count</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={form.guestCount}
+                  onChange={(e) => update('guestCount', e.target.value)}
+                  data-testid="booking-form-guest-count-input"
+                  className={`${inputClass} max-w-[10rem]`}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">

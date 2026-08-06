@@ -20,7 +20,7 @@ import { uid } from '../lib/storage';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
 import { formatCurrency as currency, formatEventDate, formatEventTime } from '../lib/format';
 import { getPricingTiers, getTierPrice } from '../lib/pricingTiers';
-import { getPrepContractors, renderPrepSheetEmail } from '../lib/prepSheet';
+import { getPrepContractors, renderPrepSheetEmail, requestsLabels } from '../lib/prepSheet';
 import { generatePrepSheetPdf, generatePrepSheetPdfAttachment } from '../lib/prepSheetPdf';
 import { listDocuments, uploadDocument, deleteDocument, documentDownloadUrl } from '../lib/documents';
 import { listInvoices } from '../lib/invoices';
@@ -107,6 +107,7 @@ function emptyForm() {
     name: '', eventType: '', eventDate: '', eventDayOfTheWeek: '',
     clientId: '',
     brideName: '', groomName: '',
+    guestCount: '',
     venue: {
       name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '',
       contactName: '', contactEmail: '',
@@ -129,6 +130,9 @@ function emptyForm() {
     // convention as requests[]/schedule[] above, no schema change needed.
     shotList: [],
     secondShooters: [],
+    // party_planning-only guest list + RSVP tracking (see the Guests tab
+    // below) — same plain-array-on-the-event convention as shotList above.
+    guests: [],
     // Manual overhead lines for costs nothing else tracks (venue rental,
     // permits, equipment) — feeds the Financials tab's P&L alongside the
     // computed contractor cost total.
@@ -151,6 +155,16 @@ function emptyShotListItem() {
 function emptySecondShooter() {
   return { id: uid('shooter'), contractorId: '', role: '', notes: '' };
 }
+
+function emptyGuest() {
+  return { id: uid('guest'), name: '', partySize: 1, rsvpStatus: 'invited', phone: '', email: '', notes: '' };
+}
+
+const RSVP_STATUSES = [
+  { value: 'invited', label: 'Invited', color: '#94a3b8' },
+  { value: 'confirmed', label: 'Confirmed', color: '#22c55e' },
+  { value: 'declined', label: 'Declined', color: '#ef4444' },
+];
 
 const SHOT_CATEGORIES = ['Family Formals', 'Candid', 'Detail', 'Portrait', 'Other'];
 
@@ -252,6 +266,7 @@ export default function EventFormPage() {
         clientId: event.clientId || '',
         brideName: event.brideName || '',
         groomName: event.groomName || '',
+        guestCount: event.guestCount ?? '',
         // Defaults spread first so events saved before contactName/
         // contactEmail existed still get controlled ('') instead of
         // undefined values for them.
@@ -267,6 +282,7 @@ export default function EventFormPage() {
         requests: event.requests || [emptyRequestItem()],
         shotList: event.shotList || [],
         secondShooters: event.secondShooters || [],
+        guests: event.guests || [],
         otherExpenses: event.otherExpenses || [],
       });
     } else {
@@ -482,6 +498,18 @@ export default function EventFormPage() {
 
   const totalCost = computeEventTotalCost(form);
 
+  // Party size defaults to 1 when blank (a guest being added mid-edit) so
+  // the running totals never dip due to a momentarily-empty input.
+  const guestPartySize = (g) => (g.partySize === '' || g.partySize == null ? 1 : Number(g.partySize) || 0);
+  const guestStats = form.guests.reduce((acc, g) => {
+    const size = guestPartySize(g);
+    acc.invited += size;
+    if (g.rsvpStatus === 'confirmed') acc.confirmed += size;
+    else if (g.rsvpStatus === 'declined') acc.declined += size;
+    else acc.awaiting += size;
+    return acc;
+  }, { invited: 0, confirmed: 0, declined: 0, awaiting: 0 });
+
   // Revenue is the full invoiced total (not just what's been collected) so
   // the deal's value shows up as soon as an invoice goes out; "collected"
   // is tracked separately below for cash-in-hand visibility.
@@ -630,6 +658,16 @@ export default function EventFormPage() {
   }
   function removeSecondShooter(id) {
     setForm((f) => ({ ...f, secondShooters: f.secondShooters.filter((s) => s.id !== id) }));
+  }
+
+  function addGuest() {
+    setForm((f) => ({ ...f, guests: [...f.guests, emptyGuest()] }));
+  }
+  function updateGuest(id, patch) {
+    setForm((f) => ({ ...f, guests: f.guests.map((g) => (g.id === id ? { ...g, ...patch } : g)) }));
+  }
+  function removeGuest(id) {
+    setForm((f) => ({ ...f, guests: f.guests.filter((g) => g.id !== id) }));
   }
 
   function removeRequestItem(id) {
@@ -1021,6 +1059,23 @@ export default function EventFormPage() {
             </span>
           )}
         </button>
+        {currentUser.activeVerticals?.includes('party_planning') && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('guests')}
+            data-testid="event-form-tab-guests"
+            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px flex items-center gap-2 ${
+              activeTab === 'guests' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Guests
+            {form.guests.length > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">
+                {form.guests.length}
+              </span>
+            )}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setActiveTab('prep')}
@@ -1129,6 +1184,18 @@ export default function EventFormPage() {
                     />
                   </div>
                 </div>
+              </div>
+
+              <div>
+                <label className={labelClass}>Expected Guest Count</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={form.guestCount}
+                  onChange={(e) => update('guestCount', e.target.value)}
+                  data-testid="event-form-guest-count-input"
+                  className={`${inputClass} max-w-[10rem]`}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1459,6 +1526,123 @@ export default function EventFormPage() {
           )}
         </div>
 
+        <div className={activeTab === 'guests' ? cardClass : 'hidden'}>
+          <div className="flex items-center justify-between mb-5">
+            <h3 className={`${cardTitleClass} mb-0`}>Guest List</h3>
+            <button type="button" onClick={addGuest} data-testid="event-form-add-guest-button" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">+ Add Guest</button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+            <div className="rounded-lg border border-slate-200 px-3 py-2">
+              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Invited</div>
+              <div className="text-lg font-bold text-slate-800" data-testid="event-form-guest-stat-invited">{guestStats.invited}</div>
+            </div>
+            <div className="rounded-lg border border-slate-200 px-3 py-2">
+              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Confirmed</div>
+              <div className="text-lg font-bold text-emerald-600" data-testid="event-form-guest-stat-confirmed">{guestStats.confirmed}</div>
+            </div>
+            <div className="rounded-lg border border-slate-200 px-3 py-2">
+              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Declined</div>
+              <div className="text-lg font-bold text-red-600" data-testid="event-form-guest-stat-declined">{guestStats.declined}</div>
+            </div>
+            <div className="rounded-lg border border-slate-200 px-3 py-2">
+              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Awaiting Response</div>
+              <div className="text-lg font-bold text-amber-600" data-testid="event-form-guest-stat-awaiting">{guestStats.awaiting}</div>
+            </div>
+          </div>
+
+          {form.guestCount !== '' && (
+            <div className="text-xs text-slate-500 mb-4">
+              {guestStats.confirmed} of {form.guestCount} expected guests confirmed so far.
+            </div>
+          )}
+
+          {form.guests.length === 0 ? (
+            <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
+              No guests added yet.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {form.guests.map((g) => (
+                <div key={g.id} data-testid="event-form-guest-row" className="border border-slate-200 rounded-lg p-3 space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_7rem] gap-2">
+                    <input
+                      placeholder="Guest name"
+                      value={g.name}
+                      onChange={(e) => updateGuest(g.id, { name: e.target.value })}
+                      data-testid="event-form-guest-name-input"
+                      className={inputClass}
+                    />
+                    <input
+                      type="number"
+                      min="1"
+                      title="Party size, including this guest"
+                      placeholder="Party size"
+                      value={g.partySize}
+                      onChange={(e) => updateGuest(g.id, { partySize: e.target.value === '' ? '' : Number(e.target.value) })}
+                      data-testid="event-form-guest-partysize-input"
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input
+                      type="email"
+                      placeholder="Email (optional)"
+                      value={g.email}
+                      onChange={(e) => updateGuest(g.id, { email: e.target.value })}
+                      data-testid="event-form-guest-email-input"
+                      className={inputClass}
+                    />
+                    <input
+                      type="tel"
+                      placeholder="Phone (optional)"
+                      value={g.phone}
+                      onChange={(e) => updateGuest(g.id, { phone: e.target.value })}
+                      data-testid="event-form-guest-phone-input"
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex gap-1">
+                      {RSVP_STATUSES.map((s) => {
+                        const active = (g.rsvpStatus || 'invited') === s.value;
+                        return (
+                          <button
+                            key={s.value}
+                            type="button"
+                            onClick={() => updateGuest(g.id, { rsvpStatus: s.value })}
+                            data-testid={`event-form-guest-rsvp-${s.value}-button`}
+                            className="px-2 py-1 rounded-lg border text-xs font-semibold border-slate-300 text-slate-500 hover:bg-slate-50"
+                            style={active ? { color: s.color, borderColor: `${s.color}55`, backgroundColor: `${s.color}11` } : undefined}
+                          >
+                            {s.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeGuest(g.id)}
+                      data-testid="event-form-guest-remove-button"
+                      className="w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
+                      aria-label="Remove guest"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <input
+                    placeholder="Notes (e.g. dietary restrictions, plus-one name)"
+                    value={g.notes}
+                    onChange={(e) => updateGuest(g.id, { notes: e.target.value })}
+                    data-testid="event-form-guest-notes-input"
+                    className={inputClass}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className={activeTab === 'prep' ? cardClass : 'hidden'}>
           <div className="flex items-center justify-between mb-5">
             <h3 className={`${cardTitleClass} mb-0`}>Prep Sheet</h3>
@@ -1545,6 +1729,7 @@ export default function EventFormPage() {
                     <div key={c.contractorId} className="flex gap-3 px-1 py-1">
                       <span className="w-40 shrink-0 font-medium text-slate-700">{c.name}</span>
                       <span className="w-40 shrink-0 text-slate-500">{c.role}</span>
+                      <span className="w-32 shrink-0 text-slate-500">{c.phone || '—'}</span>
                       <span className="text-slate-500">{formatEventTime(c.startTime) || '—'} – {formatEventTime(c.endTime) || '—'}</span>
                     </div>
                   ))}
@@ -1555,18 +1740,18 @@ export default function EventFormPage() {
 
           <div className="mb-4">
             <PrepSection
-              title={currentUser.vertical === 'photography' ? 'Equipment Checklist' : 'Requests'}
+              title={requestsLabels(currentUser.vertical).title}
               color="#d97706"
               icon={<ClipboardIcon className="w-3.5 h-3.5" />}
               action={(
                 <button type="button" onClick={addRequestItem} data-testid="event-form-add-request-button" className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">
-                  {currentUser.vertical === 'photography' ? '+ Add Item' : '+ Add Request'}
+                  {requestsLabels(currentUser.vertical).addLabel}
                 </button>
               )}
             >
               {form.requests.length === 0 ? (
                 <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
-                  No requests added yet.
+                  {requestsLabels(currentUser.vertical).emptyLabel}
                 </div>
               ) : (
                 <div className="space-y-3">

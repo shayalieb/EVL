@@ -1,5 +1,6 @@
 import { formatEventDate as formatDate, formatEventTime as formatTime } from './format';
 import { DEFAULT_ACCENT_COLOR, hexToRgb } from './colorTheme';
+import { requestsLabels } from './prepSheet';
 
 // jsPDF pulls in html2canvas/DOMPurify (~450KB) even though we only use its
 // plain drawing API — lazy-load it so that weight isn't in the main bundle.
@@ -75,8 +76,8 @@ async function buildPrepSheetDoc(form, prepContractors, requests, businessInfo, 
     autoTable(doc, {
       startY: y,
       margin: { left: marginX },
-      head: [['Name', 'Role', 'Start', 'End']],
-      body: prepContractors.map((c) => [c.name, c.role, formatTime(c.startTime), formatTime(c.endTime)]),
+      head: [['Name', 'Role', 'Phone', 'Start', 'End']],
+      body: prepContractors.map((c) => [c.name, c.role, c.phone || '', formatTime(c.startTime), formatTime(c.endTime)]),
       theme: 'striped',
       styles: { fontSize: 9 },
       headStyles: { fillColor: accentRgb },
@@ -136,7 +137,7 @@ async function buildPrepSheetDoc(form, prepContractors, requests, businessInfo, 
   if (requestRows.length) {
     doc.setFontSize(13);
     doc.setTextColor(30);
-    doc.text(isPhotography ? 'Equipment Checklist' : 'Requests', marginX, y);
+    doc.text(requestsLabels(vertical).title, marginX, y);
     y += 4;
     autoTable(doc, {
       startY: y,
