@@ -20,7 +20,7 @@ const NAV_GROUPS = [
     items: [
       { to: '/clients', label: 'Clients', icon: '👤' },
       { to: '/venues', label: 'Venues', icon: '📍' },
-      { to: '/contractors', label: 'Contractors', icon: '🎧' },
+      { to: '/contractors', label: 'Contractors', icon: '🧰' },
       { to: '/offerings', label: 'Offerings', icon: '🎁' },
       { to: '/set-lists', label: 'Set Lists', icon: '🎵', vertical: 'band_orchestra' },
       { to: '/email-templates', label: 'Email Templates', icon: '✉️' },

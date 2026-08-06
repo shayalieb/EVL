@@ -37,6 +37,11 @@ const VERTICAL_DEFAULTS = {
         body: 'Hi {{ContractorFirstName}} {{ContractorLastName}}, <br> Here are the details for your upcoming gig on {{EventDayOfTheWeek}}, {{EventDate}}. <br> Please reach out if you have any questions. <br> Thank you <br> Suri.',
       },
     ],
+    offerings: [
+      { name: '4-Hour Reception Package', details: 'Live band performance for cocktail hour and reception, includes sound system and MC services.', type: 'general', amount: 1200 },
+      { name: 'Ceremony Add-On', details: 'Solo or duo acoustic performance during the ceremony.', type: 'general', amount: 300 },
+      { name: 'Extra Hour', details: 'Additional performance time beyond the standard package.', type: 'perUnit', unitCount: 1, ratePerUnit: 150 },
+    ],
   },
   party_planning: {
     contractorTypes: ['Caterer', 'Event Planner', 'Florist', 'Rental Coordinator', 'Bartender'],
@@ -69,6 +74,11 @@ const VERTICAL_DEFAULTS = {
       { title: 'Bar Service', value: '', text: 'Beverage packages and bar staffing details.' },
       { title: 'Day-of Logistics', value: '', text: 'Setup, breakdown, and timeline coordination for your event day.' },
     ],
+    offerings: [
+      { name: 'Full Event Coordination', details: 'End-to-end planning from initial concept through day-of execution.', type: 'general', amount: 2500 },
+      { name: 'Day-Of Coordination', details: 'On-site coordination to keep an already-planned event running smoothly.', type: 'general', amount: 800 },
+      { name: 'Additional Planning Hour', details: 'Extra consulting/planning time beyond the standard package.', type: 'perUnit', unitCount: 1, ratePerUnit: 75 },
+    ],
   },
   photography: {
     contractorTypes: ['Lead Photographer', 'Second Shooter', 'Videographer', 'Photo Editor'],
@@ -90,6 +100,21 @@ const VERTICAL_DEFAULTS = {
         body: 'Hi {{ContractorFirstName}} {{ContractorLastName}}, <br> Here are the details for the upcoming shoot on {{EventDayOfTheWeek}}, {{EventDate}}. <br> Please reach out if you have any questions. <br> Thank you <br> Suri.',
       },
     ],
+    // Same head-start mechanism as party_planning's proposalSections above —
+    // a fresh photography account otherwise starts its very first proposal
+    // from a blank page.
+    proposalSections: [
+      { title: 'Coverage Details', value: '', text: 'Hours of coverage and number of photographers on-site for your event.' },
+      { title: 'Deliverables', value: '', text: 'Edited image count, gallery format, and delivery turnaround time.' },
+      { title: 'Add-Ons', value: '', text: 'Albums, prints, engagement sessions, and other optional extras.' },
+      { title: 'Timeline & Delivery', value: '', text: 'When to expect your final gallery and how it will be delivered.' },
+    ],
+    offerings: [
+      { name: '6-Hour Wedding Package', details: 'Full-day wedding coverage from getting-ready through reception, includes an edited digital gallery.', type: 'general', amount: 2800 },
+      { name: '2-Hour Portrait Session', details: 'On-location portrait session with edited digital images.', type: 'general', amount: 450 },
+      { name: 'Additional Photographer', details: 'A second shooter added to any package for extra coverage angles.', type: 'general', amount: 350 },
+      { name: 'USB with All Edited Images', details: 'Physical USB drive delivery of the full edited gallery.', type: 'general', amount: 150 },
+    ],
   },
 };
 
@@ -99,7 +124,7 @@ const VERTICAL_DEFAULTS = {
 // falls back to the original band/orchestra defaults for anything
 // unrecognized so this never throws on a stale/missing value.
 export function buildSeedUserData(vertical) {
-  const { contractorTypes, eventTypes, emailTemplates: emailTemplateDefs, proposalSections = [] } =
+  const { contractorTypes, eventTypes, emailTemplates: emailTemplateDefs, proposalSections = [], offerings: offeringDefs = [] } =
     VERTICAL_DEFAULTS[vertical] || VERTICAL_DEFAULTS.band_orchestra;
 
   const eventStatuses = [
@@ -130,10 +155,15 @@ export function buildSeedUserData(vertical) {
   const c2Tier = uid('tier');
   const c3Tier = uid('tier');
 
-  // 'Guitar' as a secondary type only reads sensibly for a musician sample
-  // — leave it blank for the other verticals rather than force a generic
-  // placeholder that wouldn't mean anything.
-  const c1Type2 = vertical === 'band_orchestra' ? 'Guitar' : '';
+  // A secondary type/specialty for the first sample contractor — reads
+  // sensibly per vertical rather than leaving the Role column blank on a
+  // brand-new account's very first look at the Contractors page.
+  const C1_SECONDARY_TYPE = {
+    band_orchestra: 'Guitar',
+    party_planning: 'Full-Service Catering',
+    photography: 'Wedding & Portraits',
+  };
+  const c1Type2 = C1_SECONDARY_TYPE[vertical] || '';
 
   const contractors = [
     {
@@ -236,9 +266,11 @@ export function buildSeedUserData(vertical) {
     },
   ];
 
+  const offerings = offeringDefs.map((o) => ({ id: uid('off'), createdAt: new Date().toISOString(), ...o }));
+
   return {
     contractorTypes, eventTypes, eventStatuses, inquiryStatuses, bookingStatuses,
-    emailTemplates, contractors, clients, events, bookings: [], offerings: [],
+    emailTemplates, contractors, clients, events, bookings: [], offerings,
     setListLibrary: [],
     proposalTemplate: { sections: proposalSections.map((s) => ({ id: uid('section'), ...s })) },
   };

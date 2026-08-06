@@ -35,6 +35,7 @@ import OfferingPickerModal from '../components/OfferingPickerModal';
 import { computeOfferingTotal, computeOfferingsTotal } from '../lib/offerings';
 import { matchesSearch } from '../lib/search';
 import { DEFAULT_ACCENT_COLOR } from '../lib/colorTheme';
+import { isWedding } from '../lib/eventType';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -1721,16 +1722,18 @@ export default function BookingFormPage() {
                 <input value={form.eventName} onChange={(e) => update('eventName', e.target.value)} data-testid="booking-form-event-name-input" className={inputClass} />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelClass}>Bride's Name</label>
-                  <input value={form.brideName} onChange={(e) => update('brideName', e.target.value)} data-testid="booking-form-bridename-input" className={inputClass} />
+              {isWedding(form.eventType) && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelClass}>Bride's Name</label>
+                    <input value={form.brideName} onChange={(e) => update('brideName', e.target.value)} data-testid="booking-form-bridename-input" className={inputClass} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Groom's Name</label>
+                    <input value={form.groomName} onChange={(e) => update('groomName', e.target.value)} data-testid="booking-form-groomname-input" className={inputClass} />
+                  </div>
                 </div>
-                <div>
-                  <label className={labelClass}>Groom's Name</label>
-                  <input value={form.groomName} onChange={(e) => update('groomName', e.target.value)} data-testid="booking-form-groomname-input" className={inputClass} />
-                </div>
-              </div>
+              )}
 
               <div>
                 <label className={labelClass}>Client *</label>
@@ -1758,7 +1761,15 @@ export default function BookingFormPage() {
                   <label className={labelClass}>Event Type</label>
                   {!addingType ? (
                     <div className="flex gap-2">
-                      <select value={form.eventType} onChange={(e) => update('eventType', e.target.value)} data-testid="booking-form-event-type-select" className={inputClass}>
+                      <select
+                        value={form.eventType}
+                        onChange={(e) => {
+                          const nextType = e.target.value;
+                          setForm((f) => ({ ...f, eventType: nextType, ...(isWedding(nextType) ? {} : { brideName: '', groomName: '' }) }));
+                        }}
+                        data-testid="booking-form-event-type-select"
+                        className={inputClass}
+                      >
                         <option value="">Select a type…</option>
                         {eventTypes.map((t) => <option key={t} value={t}>{t}</option>)}
                       </select>
