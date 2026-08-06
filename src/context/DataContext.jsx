@@ -1,9 +1,10 @@
-import { createContext, useCallback, useContext, useMemo } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { uid } from '../lib/storage';
 import { getTierPrice } from '../lib/pricingTiers';
 import { statusBucket } from '../lib/inquiryStatusBucket';
 import { formatEventDate, formatCurrency } from '../lib/format';
+import { listContractors, createContractor as createContractorApi, updateContractorApi, deleteContractorApi } from '../lib/contractors';
 
 function statusLabel(statuses, id) {
   return statuses?.find((s) => s.id === id)?.label || id || '(none)';
@@ -71,7 +72,6 @@ function diffBookingFields(before, after, bookingStatuses) {
 const DataContext = createContext(null);
 
 const LIST_FIELDS = {
-  contractors: 'contractors',
   clients: 'clients',
   venues: 'venues',
   events: 'events',
@@ -95,6 +95,28 @@ export function DataProvider({ children }) {
     updateCurrentUser({ [field]: nextList });
   }, [updateCurrentUser]);
 
+  // Contractors are real DB rows (see server/prisma/schema.prisma's
+  // Contractor model comment for why — blob-size, not a public-route
+  // requirement like Guest), fetched once per account rather than living in
+  // the AccountData blob like everything else here. Blocks rendering
+  // `children` until loaded, same as AuthProvider's own authLoading gate,
+  // so every other page can keep assuming `contractors` is synchronously
+  // populated exactly like before this migration.
+  const [contractors, setContractors] = useState([]);
+  const [contractorsLoaded, setContractorsLoaded] = useState(false);
+  useEffect(() => {
+    if (!currentUser) { setContractors([]); setContractorsLoaded(false); return; }
+    let cancelled = false;
+    listContractors()
+      .then((list) => { if (!cancelled) setContractors(list); })
+      .finally(() => { if (!cancelled) setContractorsLoaded(true); });
+    return () => { cancelled = true; };
+    // Deliberately keyed on accountId, not the whole currentUser object —
+    // currentUser gets a new reference on every single blob autosave
+    // elsewhere in the app, which would otherwise refetch on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.accountId]);
+
   // System-generated create/edit/delete trail for Bookings and Events
   // (record.history) — who did what, when. Separate from Booking's own
   // free-text "Activity Log" notes field, an older, unrelated feature.
@@ -107,28 +129,35 @@ export function DataProvider({ children }) {
     ...(changes?.length ? { changes } : {}),
   }), [currentUser]);
 
-  // ---- Contractors ----
-  const addContractor = useCallback((contractor) => {
-    if (!currentUser) return;
-    const record = { id: uid('con'), createdAt: new Date().toISOString(), ...contractor };
-    patchList(LIST_FIELDS.contractors, [...currentUser.contractors, record]);
+  // ---- Contractors (real API, not the blob — see the fetch effect above) ----
+  // Callers don't await these (matching the fire-and-forget feel of every
+  // other add/update/delete here) — the UI updates once the request
+  // resolves via setContractors, same eventual-consistency shape as the
+  // blob's own optimistic saves.
+  const addContractor = useCallback(async (contractor) => {
+    const record = await createContractorApi(contractor);
+    setContractors((prev) => [...prev, record]);
     return record;
-  }, [currentUser, patchList]);
+  }, []);
 
-  const updateContractor = useCallback((id, patch) => {
-    if (!currentUser) return;
-    patchList(LIST_FIELDS.contractors, currentUser.contractors.map((c) => (c.id === id ? { ...c, ...patch } : c)));
-  }, [currentUser, patchList]);
+  const updateContractor = useCallback(async (id, patch) => {
+    const record = await updateContractorApi(id, patch);
+    setContractors((prev) => prev.map((c) => (c.id === id ? record : c)));
+    return record;
+  }, []);
 
-  const deleteContractor = useCallback((id) => {
-    if (!currentUser) return;
-    patchList(LIST_FIELDS.contractors, currentUser.contractors.filter((c) => c.id !== id));
+  const deleteContractor = useCallback(async (id) => {
+    await deleteContractorApi(id);
+    setContractors((prev) => prev.filter((c) => c.id !== id));
     // Also remove this contractor from any event bookings so events don't
-    // reference a contractor that no longer exists.
-    patchList(LIST_FIELDS.events, currentUser.events.map((e) => ({
-      ...e,
-      contractorBookings: e.contractorBookings.filter((b) => b.contractorId !== id),
-    })));
+    // reference a contractor that no longer exists — events themselves are
+    // still blob-based, so this part still goes through patchList.
+    if (currentUser) {
+      patchList(LIST_FIELDS.events, currentUser.events.map((e) => ({
+        ...e,
+        contractorBookings: e.contractorBookings.filter((b) => b.contractorId !== id),
+      })));
+    }
   }, [currentUser, patchList]);
 
   // ---- Clients ----
@@ -418,12 +447,12 @@ export function DataProvider({ children }) {
       const next = { ...e, ...patch };
       const changes = [
         ...diffEventFields(e, next, currentUser.eventStatuses),
-        ...diffContractorAssignments(e, next, currentUser.contractors),
+        ...diffContractorAssignments(e, next, contractors),
       ];
       return changes.length ? { ...next, history: [...(e.history || []), historyEntry('edited', changes)] } : next;
     }));
     if (patch.venue) ensureVenueSaved(patch.venue);
-  }, [currentUser, patchList, historyEntry, ensureVenueSaved]);
+  }, [currentUser, patchList, historyEntry, ensureVenueSaved, contractors]);
 
   // Soft delete — same reasoning as deleteBooking above.
   const deleteEvent = useCallback((id) => {
@@ -469,7 +498,7 @@ export function DataProvider({ children }) {
   }, [currentUser, addEvent, updateBooking]);
 
   // ---- Derived helpers ----
-  const getContractorById = useCallback((id) => currentUser?.contractors.find((c) => c.id === id), [currentUser]);
+  const getContractorById = useCallback((id) => contractors.find((c) => c.id === id), [contractors]);
 
   const computeDurationHours = useCallback((startTime, endTime) => {
     if (!startTime || !endTime) return null;
@@ -519,7 +548,7 @@ export function DataProvider({ children }) {
   }, [currentUser, getContractorById]);
 
   const value = useMemo(() => ({
-    contractors: currentUser?.contractors || [],
+    contractors,
     clients: currentUser?.clients || [],
     venues: currentUser?.venues || [],
     events: (currentUser?.events || []).filter((e) => !e.deletedAt),
@@ -584,7 +613,7 @@ export function DataProvider({ children }) {
     computeEventTotalCost,
     computeVendorStatus,
   }), [
-    currentUser,
+    currentUser, contractors,
     addContractor, updateContractor, deleteContractor,
     addClient, updateClient, deleteClient, computeClientEventCounts,
     addVenue, updateVenue, deleteVenue,
@@ -602,6 +631,13 @@ export function DataProvider({ children }) {
     addEvent, updateEvent, deleteEvent,
     getContractorById, computeDurationHours, computeEventTotalCost, computeVendorStatus,
   ]);
+
+  // Same blank-while-loading behavior as AuthProvider's own authLoading gate
+  // — every page here already assumes `contractors` is synchronously
+  // populated (contractors.find(...) inline in render bodies, no loading
+  // states of their own), so this keeps that assumption true rather than
+  // pushing a loading state into 16 different files.
+  if (currentUser && !contractorsLoaded) return null;
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

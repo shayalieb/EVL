@@ -25,6 +25,7 @@ import emailDomainsRouter from './routes/emailDomains.js';
 import stagePlotsRouter from './routes/stagePlots.js';
 import floorPlansRouter from './routes/floorPlans.js';
 import guestsRouter, { publicRsvpRouter } from './routes/guests.js';
+import contractorsRouter from './routes/contractors.js';
 import { startReminderScheduler } from './lib/reminderScheduler.js';
 
 const app = express();
@@ -102,6 +103,7 @@ app.use('/api/email-domains', emailDomainsRouter);
 app.use('/api/stage-plots', stagePlotsRouter);
 app.use('/api/floor-plans', floorPlansRouter);
 app.use('/api/guests', guestsRouter);
+app.use('/api/contractors', contractorsRouter);
 // Public/unauthenticated — same reasoning as /api/contract-sign above.
 app.use('/api/rsvp', publicRsvpRouter);
 // Public/unauthenticated — recipients click this link from an email, not

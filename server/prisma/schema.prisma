@@ -61,6 +61,7 @@ model Account {
   floorPlans     FloorPlan[]
   guests         Guest[]
   eventRsvpLinks EventRsvpLink[]
+  contractors    Contractor[]
 
   // Stripe Connect (Express) — set once onboarding starts. The three
   // booleans are a local cache of the connected Account object, synced by
@@ -758,6 +759,41 @@ model Guest {
   updatedAt DateTime @updatedAt
 
   @@index([accountId, eventId])
+}
+
+// A business's vendor/crew roster — the first entity graduated out of
+// AccountData.data purely for blob-size reasons (see today's scalability
+// discussion): unlike Guest/StagePlot/FloorPlan, nothing here needed a
+// public unauthenticated route, but Contractors is one of the few lists on
+// an account that grows unboundedly over its lifetime rather than staying
+// naturally small, so it's one of the first candidates to actually hit the
+// ~100KB save-size ceiling. Events still reference a contractor by plain
+// `contractorId` string in their own blob-stored `contractorBookings[]` —
+// same opaque non-FK pattern already used everywhere else in this schema
+// (see EventDocument.eventId), not a real relation.
+model Contractor {
+  id        String  @id @default(cuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  firstName  String
+  middleName String?
+  lastName   String
+  email      String?
+  phone      String?
+
+  contractorType1 String?
+  contractorType2 String?
+  // [{ id, name, price }] — small and tightly coupled to the contractor
+  // itself, no need for its own table (unlike Guest, which is independently
+  // queried/written by the public RSVP route).
+  pricingTiers Json    @default("[]")
+  priceNotes   String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([accountId])
 }
 
 // The one shareable RSVP link per event — a guest visiting it adds

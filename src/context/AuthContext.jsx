@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { loadUserData } from '../lib/storage';
 import { buildSeedUserData, buildDefaultBookingStatuses } from '../lib/seed';
+import { createContractor } from '../lib/contractors';
 
 // Relative in production (e.g. `/api`) — vercel.json proxies /api/* to the
 // Railway backend so the browser only ever talks to the frontend's own
@@ -42,6 +43,23 @@ function seedBlob(profile) {
   };
 }
 
+// One-time migration for a blob that still has contractors embedded —
+// either a brand-new seed blob (buildSeedUserData still returns them,
+// since it's also the definition of what to seed) or an existing account
+// saved before Contractors moved to a real table (see
+// server/prisma/schema.prisma's Contractor model comment). Self-healing:
+// only ever finds work once per account, since afterward blob.contractors
+// is simply absent. Failures are left in place for the next hydrate to
+// retry rather than silently dropped.
+async function migrateContractorsOutOfBlob(blob) {
+  const results = await Promise.allSettled(blob.contractors.map((c) => createContractor(c)));
+  const stillEmbedded = blob.contractors.filter((_, i) => results[i].status === 'rejected');
+  const next = { ...blob };
+  if (stillEmbedded.length) next.contractors = stillEmbedded;
+  else delete next.contractors;
+  return next;
+}
+
 export function AuthProvider({ children }) {
   const [serverUser, setServerUser] = useState(null);
   const [localBlob, setLocalBlob] = useState(null);
@@ -65,12 +83,20 @@ export function AuthProvider({ children }) {
       blob = remoteBlob;
       versionRef.current = remoteVersion;
       setSizeWarning(remoteSizeWarning || null);
+
+      if (blob.contractors?.length) {
+        blob = await migrateContractorsOutOfBlob(blob);
+        const saved = await apiFetch('/account-data', { method: 'PUT', body: JSON.stringify({ data: blob, version: versionRef.current }) });
+        versionRef.current = saved.version;
+        setSizeWarning(saved.sizeWarning || null);
+      }
     } else {
       // No account-wide record yet — either a brand-new signup, or the
       // first login since business data moved from this browser's
       // localStorage into the shared account backend. In the latter case,
       // reuse whatever was already entered here so it isn't lost.
       blob = loadUserData(user.id) || seedBlob(user);
+      if (blob.contractors?.length) blob = await migrateContractorsOutOfBlob(blob);
       const created = await apiFetch('/account-data', { method: 'PUT', body: JSON.stringify({ data: blob }) });
       versionRef.current = created.version;
       setSizeWarning(created.sizeWarning || null);
