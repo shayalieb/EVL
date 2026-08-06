@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import * as Sentry from '@sentry/node';
 import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
@@ -27,6 +28,17 @@ import floorPlansRouter from './routes/floorPlans.js';
 import guestsRouter, { publicRsvpRouter } from './routes/guests.js';
 import contractorsRouter from './routes/contractors.js';
 import { startReminderScheduler } from './lib/reminderScheduler.js';
+
+// No-ops safely with no DSN set — nothing breaks in dev/test environments
+// or before SENTRY_DSN is added to Railway's env vars, this just silently
+// doesn't report anything until it's configured.
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.NODE_ENV || 'development',
+  // Light performance sampling — this is a small internal-tools API, not a
+  // high-traffic service, so no need to sample down further than this.
+  tracesSampleRate: 0.1,
+});
 
 const app = express();
 app.set('trust proxy', 1);
@@ -109,6 +121,11 @@ app.use('/api/rsvp', publicRsvpRouter);
 // Public/unauthenticated — recipients click this link from an email, not
 // while logged into the app, and it's fully stateless (see calendar.js).
 app.use('/api/calendar', calendarRouter);
+
+// Reports to Sentry (a no-op if SENTRY_DSN isn't set) and forwards to the
+// catch-all below, which is unchanged — it still decides the actual HTTP
+// response, Sentry just gets a copy for reporting first.
+Sentry.setupExpressErrorHandler(app);
 
 app.use((err, req, res, next) => {
   if (res.headersSent) return next(err);
