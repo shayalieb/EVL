@@ -109,6 +109,16 @@ app.use((err, req, res, next) => {
   if (err instanceof CorsOriginError) {
     return res.status(err.status).json({ error: 'Not allowed by CORS.' });
   }
+  // body-parser (oversized body, malformed JSON, unsupported charset, etc.)
+  // throws via the `http-errors` package, which sets `expose: true` on 4xx
+  // errors it considers safe to surface verbatim — forward those as their
+  // real status instead of flattening every error to a 500, so a client
+  // mistake reports as a client error (e.g. 413) rather than looking like a
+  // server bug in logs/monitoring.
+  const status = err.status || err.statusCode;
+  if (err.expose && status && status < 500) {
+    return res.status(status).json({ error: err.message });
+  }
   console.error(err);
   res.status(500).json({ error: 'Something went wrong. Please try again.' });
 });
