@@ -52,13 +52,19 @@ export function AuthProvider({ children }) {
   // the current value mid-flight, not a snapshot from whenever it was
   // scheduled.
   const versionRef = useRef(null);
+  // Set whenever the server flags the account-data blob as approaching its
+  // hard save-size limit — see accountData.js's sizeWarningFor. Shown as a
+  // dismissible banner (AppLayout) rather than a toast, since it'd otherwise
+  // refire on every autosave once an account crosses the threshold.
+  const [sizeWarning, setSizeWarning] = useState(null);
 
   const hydrate = useCallback(async (user) => {
     let blob;
-    const { data: remoteBlob, version: remoteVersion } = await apiFetch('/account-data');
+    const { data: remoteBlob, version: remoteVersion, sizeWarning: remoteSizeWarning } = await apiFetch('/account-data');
     if (remoteBlob) {
       blob = remoteBlob;
       versionRef.current = remoteVersion;
+      setSizeWarning(remoteSizeWarning || null);
     } else {
       // No account-wide record yet — either a brand-new signup, or the
       // first login since business data moved from this browser's
@@ -67,6 +73,7 @@ export function AuthProvider({ children }) {
       blob = loadUserData(user.id) || seedBlob(user);
       const created = await apiFetch('/account-data', { method: 'PUT', body: JSON.stringify({ data: blob }) });
       versionRef.current = created.version;
+      setSizeWarning(created.sizeWarning || null);
     }
     if (!blob.bookingStatuses) {
       // Backfill accounts created before Bookings existed so the status
@@ -101,7 +108,9 @@ export function AuthProvider({ children }) {
     if (!serverUser) return;
     const onFocus = () => {
       apiFetch('/account-data')
-        .then(({ data, version }) => { if (data) { setLocalBlob(data); versionRef.current = version; } })
+        .then(({ data, version, sizeWarning: remoteSizeWarning }) => {
+          if (data) { setLocalBlob(data); versionRef.current = version; setSizeWarning(remoteSizeWarning || null); }
+        })
         .catch(() => {});
     };
     window.addEventListener('focus', onFocus);
@@ -177,6 +186,7 @@ export function AuthProvider({ children }) {
         body: JSON.stringify({ data: blobToSave, version: versionRef.current }),
       });
       versionRef.current = res.version;
+      setSizeWarning(res.sizeWarning || null);
     } catch (err) {
       if (err.status === 409 && attempt < 3) {
         const fresh = { ...(err.body?.data || {}), ...safePatch };
@@ -264,6 +274,7 @@ export function AuthProvider({ children }) {
     changePassword,
     requestPasswordReset,
     resetPassword,
+    sizeWarning,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

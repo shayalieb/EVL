@@ -36,7 +36,8 @@ const NAV_GROUPS = [
 ];
 
 export default function AppLayout() {
-  const { currentUser, logout } = useAuth();
+  const { currentUser, logout, sizeWarning } = useAuth();
+  const [sizeWarningDismissed, setSizeWarningDismissed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [reminders, setReminders] = useState([]);
@@ -258,6 +259,20 @@ export default function AppLayout() {
         </nav>
 
         <main className="flex-1 min-w-0 p-4 sm:p-6 overflow-y-auto">
+          {sizeWarning && !sizeWarningDismissed && (
+            <div data-testid="account-size-warning-banner" className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <span>{sizeWarning.message}</span>
+              <button
+                type="button"
+                onClick={() => setSizeWarningDismissed(true)}
+                data-testid="account-size-warning-dismiss-button"
+                className="shrink-0 text-amber-600 hover:text-amber-800 font-semibold"
+                aria-label="Dismiss"
+              >
+                ✕
+              </button>
+            </div>
+          )}
           <Outlet />
         </main>
       </div>
