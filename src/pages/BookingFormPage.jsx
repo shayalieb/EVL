@@ -906,9 +906,17 @@ export default function BookingFormPage() {
     const wasNew = !booking;
     persistBooking();
     setSaving(false);
-    if (wasNew) clearDraft(NEW_BOOKING_DRAFT_KEY);
-    showToast(booking ? 'Booking updated' : 'Booking added');
-    navigate('/bookings');
+    showToast(wasNew ? 'Booking added' : 'Booking updated');
+    // Stay on the form after saving — only Back/Cancel or navigating
+    // elsewhere in the app should leave it. A brand-new booking's `id` was
+    // already generated up front in emptyForm() (for document uploads on an
+    // unsaved booking), so it's known before this save and doubles as the
+    // real record's id once persistBooking() creates it — swap the route
+    // from /bookings/new to /bookings/:id so the form is now in edit mode.
+    if (wasNew) {
+      clearDraft(NEW_BOOKING_DRAFT_KEY);
+      navigate(`/bookings/${form.id}`, { replace: true });
+    }
   }
 
   function handleLeaveWithoutSaving() {

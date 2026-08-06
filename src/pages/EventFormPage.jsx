@@ -921,14 +921,22 @@ export default function EventFormPage() {
     else addEvent(payload);
   }
 
+  // Stay on the form after saving in both handlers below — only Back/Cancel
+  // or navigating elsewhere in the app should leave it. A brand-new event's
+  // `id` was already generated up front in emptyForm() (for document uploads
+  // on an unsaved event), so it's known before this save and doubles as the
+  // real record's id once persistEvent() creates it — swap the route from
+  // /events/new to /events/:id so the form is now in edit mode.
   function handleSaveDraft() {
     const err = validate();
     if (err) { setError(err); setActiveTab('details'); return; }
     const wasNew = !event;
     persistEvent(draftStatus?.id);
-    if (wasNew) clearDraft(NEW_EVENT_DRAFT_KEY);
     showToast('Saved as draft');
-    navigate('/events');
+    if (wasNew) {
+      clearDraft(NEW_EVENT_DRAFT_KEY);
+      navigate(`/events/${form.id}`, { replace: true });
+    }
   }
 
   function handleSubmit(e) {
@@ -940,10 +948,12 @@ export default function EventFormPage() {
     setTimeout(() => {
       const confirmedStatus = eventStatuses.find((s) => s.label.toLowerCase() === 'confirmed');
       persistEvent(event?.eventStatus || confirmedStatus?.id || draftStatus?.id);
-      if (wasNew) clearDraft(NEW_EVENT_DRAFT_KEY);
       setSaving(false);
-      showToast(event ? 'Event updated' : 'Event added');
-      navigate('/events');
+      showToast(wasNew ? 'Event added' : 'Event updated');
+      if (wasNew) {
+        clearDraft(NEW_EVENT_DRAFT_KEY);
+        navigate(`/events/${form.id}`, { replace: true });
+      }
     }, 600);
   }
 
