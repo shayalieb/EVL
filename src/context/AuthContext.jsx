@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { loadUserData } from '../lib/storage';
 import { buildSeedUserData, buildDefaultBookingStatuses } from '../lib/seed';
 
@@ -20,7 +20,12 @@ export async function apiFetch(path, options = {}) {
   } catch {
     // empty body, fine
   }
-  if (!res.ok) throw new Error(body?.error || 'Something went wrong. Please try again.');
+  if (!res.ok) {
+    const err = new Error(body?.error || 'Something went wrong. Please try again.');
+    err.status = res.status;
+    err.body = body;
+    throw err;
+  }
   return body;
 }
 
@@ -42,19 +47,26 @@ export function AuthProvider({ children }) {
   const [localBlob, setLocalBlob] = useState(null);
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(true);
+  // The version this browser last read from the server — read/written
+  // outside React state since saveAccountData's retry loop (below) needs
+  // the current value mid-flight, not a snapshot from whenever it was
+  // scheduled.
+  const versionRef = useRef(null);
 
   const hydrate = useCallback(async (user) => {
     let blob;
-    const { data: remoteBlob } = await apiFetch('/account-data');
+    const { data: remoteBlob, version: remoteVersion } = await apiFetch('/account-data');
     if (remoteBlob) {
       blob = remoteBlob;
+      versionRef.current = remoteVersion;
     } else {
       // No account-wide record yet — either a brand-new signup, or the
       // first login since business data moved from this browser's
       // localStorage into the shared account backend. In the latter case,
       // reuse whatever was already entered here so it isn't lost.
       blob = loadUserData(user.id) || seedBlob(user);
-      await apiFetch('/account-data', { method: 'PUT', body: JSON.stringify({ data: blob }) });
+      const created = await apiFetch('/account-data', { method: 'PUT', body: JSON.stringify({ data: blob }) });
+      versionRef.current = created.version;
     }
     if (!blob.bookingStatuses) {
       // Backfill accounts created before Bookings existed so the status
@@ -89,7 +101,7 @@ export function AuthProvider({ children }) {
     if (!serverUser) return;
     const onFocus = () => {
       apiFetch('/account-data')
-        .then(({ data }) => { if (data) setLocalBlob(data); })
+        .then(({ data, version }) => { if (data) { setLocalBlob(data); versionRef.current = version; } })
         .catch(() => {});
     };
     window.addEventListener('focus', onFocus);
@@ -153,6 +165,30 @@ export function AuthProvider({ children }) {
     setLocalBlob(null);
   }, []);
 
+  // On a version conflict (another tab, or a teammate elsewhere, saved in
+  // between), reapply this same patch on top of the server's actual latest
+  // data instead of the stale copy we started from, then retry — see
+  // AccountData.version's doc comment in schema.prisma for why this exists.
+  // Bounded so a persistent server-side issue fails loud instead of looping.
+  const saveAccountData = useCallback(async (safePatch, blobToSave, attempt = 0) => {
+    try {
+      const res = await apiFetch('/account-data', {
+        method: 'PUT',
+        body: JSON.stringify({ data: blobToSave, version: versionRef.current }),
+      });
+      versionRef.current = res.version;
+    } catch (err) {
+      if (err.status === 409 && attempt < 3) {
+        const fresh = { ...(err.body?.data || {}), ...safePatch };
+        versionRef.current = err.body?.version ?? null;
+        setLocalBlob(fresh);
+        await saveAccountData(safePatch, fresh, attempt + 1);
+        return;
+      }
+      console.error('Failed to save account data', err);
+    }
+  }, []);
+
   const updateCurrentUser = useCallback((patch) => {
     if (!serverUser) return;
     // id/email/accountId/role/permissions are server-authoritative and not locally patchable.
@@ -164,11 +200,10 @@ export function AuthProvider({ children }) {
     setLocalBlob((prev) => {
       if (!prev) return prev;
       const updated = { ...prev, ...safePatch };
-      apiFetch('/account-data', { method: 'PUT', body: JSON.stringify({ data: updated }) })
-        .catch((err) => console.error('Failed to save account data', err));
+      saveAccountData(safePatch, updated);
       return updated;
     });
-  }, [serverUser]);
+  }, [serverUser, saveAccountData]);
 
   const can = useCallback((key) => {
     if (!serverUser) return false;

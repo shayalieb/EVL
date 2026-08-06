@@ -48,21 +48,39 @@ function ownerOf(account) {
     : null;
 }
 
-function dataSummary(accountData) {
-  const data = accountData?.data || {};
-  return {
-    contractors: (data.contractors || []).length,
-    clients: (data.clients || []).length,
-    events: (data.events || []).length,
-    bookings: (data.bookings || []).length,
-  };
+const DATA_SUMMARY_KEYS = ['contractors', 'clients', 'events', 'bookings'];
+const emptyDataSummary = { contractors: 0, clients: 0, events: 0, bookings: 0 };
+
+// One row's `data` blob can run into the hundreds of KB per account (see
+// AccountData's doc comment in schema.prisma) — pulling all of them into
+// this process just to read four array lengths doesn't scale with the
+// platform's total account count. jsonb_array_length computes each count in
+// Postgres instead, so only four small integers per account ever leave the
+// database.
+async function fetchDataSummaries() {
+  const rows = await prisma.$queryRaw`
+    SELECT "accountId",
+      jsonb_array_length(CASE WHEN jsonb_typeof(data->'contractors') = 'array' THEN data->'contractors' ELSE '[]'::jsonb END) AS contractors,
+      jsonb_array_length(CASE WHEN jsonb_typeof(data->'clients') = 'array' THEN data->'clients' ELSE '[]'::jsonb END) AS clients,
+      jsonb_array_length(CASE WHEN jsonb_typeof(data->'events') = 'array' THEN data->'events' ELSE '[]'::jsonb END) AS events,
+      jsonb_array_length(CASE WHEN jsonb_typeof(data->'bookings') = 'array' THEN data->'bookings' ELSE '[]'::jsonb END) AS bookings
+    FROM "AccountData"
+  `;
+  const byAccountId = new Map();
+  for (const row of rows) {
+    byAccountId.set(row.accountId, Object.fromEntries(DATA_SUMMARY_KEYS.map((k) => [k, Number(row[k])])));
+  }
+  return byAccountId;
 }
 
 router.get('/accounts', asyncHandler(async (req, res) => {
-  const accounts = await prisma.account.findMany({
-    include: { memberships: { include: { user: true } }, accountData: true, disabledBy: true },
-    orderBy: { createdAt: 'desc' },
-  });
+  const [accounts, dataSummaries] = await Promise.all([
+    prisma.account.findMany({
+      include: { memberships: { include: { user: true } }, disabledBy: true },
+      orderBy: { createdAt: 'desc' },
+    }),
+    fetchDataSummaries(),
+  ]);
   res.json({
     accounts: accounts.map((a) => ({
       id: a.id,
@@ -74,7 +92,7 @@ router.get('/accounts', asyncHandler(async (req, res) => {
       allVerticalsEnabled: a.allVerticalsEnabled,
       owner: ownerOf(a),
       memberCount: a.memberships.length,
-      dataSummary: dataSummary(a.accountData),
+      dataSummary: dataSummaries.get(a.id) || emptyDataSummary,
     })),
   });
 }));

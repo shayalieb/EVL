@@ -125,6 +125,10 @@ model Session {
   sid       String   @unique
   data      String
   expiresAt DateTime
+
+  // PrismaSessionStore prunes expired rows on a 2-minute timer (see
+  // server/src/index.js) — without this, that's a seq scan every tick.
+  @@index([expiresAt])
 }
 
 // Contractors/events themselves still live in the frontend's localStorage
@@ -187,6 +191,12 @@ model AccountData {
   accountId String   @unique
   account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   data      Json
+  // Optimistic-concurrency guard for PUT /account-data — every write is
+  // conditioned on the version the client last read, so two team members
+  // saving near-simultaneously (each holding a full, possibly-stale copy of
+  // this blob — see this model's doc comment above) can't silently clobber
+  // one another; the loser gets a 409 and retries against the fresh copy.
+  version   Int      @default(0)
   updatedAt DateTime @updatedAt
 }
 
