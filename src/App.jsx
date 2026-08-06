@@ -8,6 +8,7 @@ import ResetPasswordPage from './pages/ResetPasswordPage';
 import ContractSignPage from './pages/ContractSignPage';
 import InvoicePayPage from './pages/InvoicePayPage';
 import InquiryFormPage from './pages/InquiryFormPage';
+import RsvpPage from './pages/RsvpPage';
 import AppLayout from './layouts/AppLayout';
 import HomePage from './pages/HomePage';
 import NoAccountAccessPage from './pages/NoAccountAccessPage';
@@ -92,6 +93,7 @@ function AppRoutes() {
       <Route path="/sign/:token" element={<ContractSignPage />} />
       <Route path="/invoice/:token" element={<InvoicePayPage />} />
       <Route path="/inquiry/:token" element={<InquiryFormPage />} />
+      <Route path="/rsvp/:token" element={<RsvpPage />} />
       <Route path="/" element={<ProtectedArea />}>
         <Route index element={<Navigate to="/home" replace />} />
         <Route path="home" element={<HomePage />} />

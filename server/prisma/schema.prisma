@@ -59,6 +59,8 @@ model Account {
   emailDomain    EmailDomain?
   stagePlots     StagePlot[]
   floorPlans     FloorPlan[]
+  guests         Guest[]
+  eventRsvpLinks EventRsvpLink[]
 
   // Stripe Connect (Express) — set once onboarding starts. The three
   // booleans are a local cache of the connected Account object, synced by
@@ -726,4 +728,57 @@ model FloorPlanPage {
   updatedAt           DateTime  @updatedAt
 
   @@unique([floorPlanId, order])
+}
+
+// A party-planning event's guest list — real rows (not embedded in
+// AccountData.data like the rest of Events/Bookings/Contractors) for two
+// reasons: the public RSVP flow below needs to resolve a token to "which
+// account/event" without loading (or being able to search across) every
+// account's JSON blob, and once guest data has to live in a real table for
+// that, the authenticated Guests tab reads/writes the same rows rather than
+// maintaining a second, disconnected list.
+model Guest {
+  id        String   @id @default(cuid())
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  eventId   String   // opaque localStorage id, same non-FK pattern as EventDocument.eventId
+
+  name       String
+  email      String?
+  phone      String?
+  partySize  Int      @default(1)
+  rsvpStatus String   @default("invited") // 'invited' | 'confirmed' | 'declined'
+  notes      String?  @db.Text
+
+  // 'rsvp_link' rows were created by a guest through the public link below;
+  // 'manual' rows were entered directly by the planner. Purely informational.
+  source String @default("manual")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([accountId, eventId])
+}
+
+// The one shareable RSVP link per event — a guest visiting it adds
+// themselves to that event's Guest list above. Deliberately always
+// "reusable" (unlike InquiryLink's per-recipient links): every visitor uses
+// the same link and the same token, so there's no single-use status to
+// track. tokenHash is what the public route actually looks up by;
+// publicToken is a plaintext copy of the same value so the owner can
+// re-view/copy the link from the Guests tab anytime without it being
+// consumed — same reasoning as InquiryLink.publicToken.
+model EventRsvpLink {
+  id        String  @id @default(cuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  eventId   String
+
+  tokenHash   String @unique
+  publicToken String @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([accountId, eventId])
 }

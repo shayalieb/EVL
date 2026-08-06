@@ -24,6 +24,7 @@ import { getPrepContractors, renderPrepSheetEmail, requestsLabels } from '../lib
 import { generatePrepSheetPdf, generatePrepSheetPdfAttachment } from '../lib/prepSheetPdf';
 import { listDocuments, uploadDocument, deleteDocument, documentDownloadUrl } from '../lib/documents';
 import { listInvoices } from '../lib/invoices';
+import { listGuests, createGuest, updateGuest, deleteGuest, getRsvpLink } from '../lib/guests';
 import { InfoIcon, MapPinIcon, ClockIcon, UsersIcon, ClipboardIcon, NoteIcon, FileIcon } from '../components/ui/icons';
 import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
 import { isWedding } from '../lib/eventType';
@@ -130,9 +131,6 @@ function emptyForm() {
     // convention as requests[]/schedule[] above, no schema change needed.
     shotList: [],
     secondShooters: [],
-    // party_planning-only guest list + RSVP tracking (see the Guests tab
-    // below) — same plain-array-on-the-event convention as shotList above.
-    guests: [],
     // Manual overhead lines for costs nothing else tracks (venue rental,
     // permits, equipment) — feeds the Financials tab's P&L alongside the
     // computed contractor cost total.
@@ -154,10 +152,6 @@ function emptyShotListItem() {
 
 function emptySecondShooter() {
   return { id: uid('shooter'), contractorId: '', role: '', notes: '' };
-}
-
-function emptyGuest() {
-  return { id: uid('guest'), name: '', partySize: 1, rsvpStatus: 'invited', phone: '', email: '', notes: '' };
 }
 
 const RSVP_STATUSES = [
@@ -282,7 +276,6 @@ export default function EventFormPage() {
         requests: event.requests || [emptyRequestItem()],
         shotList: event.shotList || [],
         secondShooters: event.secondShooters || [],
-        guests: event.guests || [],
         otherExpenses: event.otherExpenses || [],
       });
     } else {
@@ -360,6 +353,35 @@ export default function EventFormPage() {
   useEffect(() => {
     if (form.id) refreshDocuments(form.id);
   }, [form.id, refreshDocuments]);
+
+  // Guests are real DB rows scoped by eventId, not part of the form/blob —
+  // party_planning-only, both client-side (the tab is hidden for other
+  // verticals) and server-side (GET /guests 403s for them), so only fetch
+  // when relevant.
+  const isPartyPlanning = currentUser.activeVerticals?.includes('party_planning');
+  const [guests, setGuests] = useState([]);
+  const [rsvpLink, setRsvpLink] = useState('');
+  const [rsvpLinkCopied, setRsvpLinkCopied] = useState(false);
+  useEffect(() => {
+    if (!isPartyPlanning || !form.id) return;
+    let cancelled = false;
+    listGuests(form.id).then((list) => { if (!cancelled) setGuests(list); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [isPartyPlanning, form.id]);
+
+  // Get-or-create — the link is only actually minted server-side the first
+  // time someone copies it, not eagerly on page load.
+  async function handleCopyRsvpLink() {
+    try {
+      const link = rsvpLink || await getRsvpLink(form.id);
+      if (!rsvpLink) setRsvpLink(link);
+      await navigator.clipboard.writeText(link);
+      setRsvpLinkCopied(true);
+      setTimeout(() => setRsvpLinkCopied(false), 2000);
+    } catch (err) {
+      showToast(err.message || 'Failed to copy RSVP link', 'error');
+    }
+  }
 
   // Event has no bookingId back-reference (only Booking -> convertedEventId
   // -> Event) — reverse-lookup the booking this event came from so the
@@ -501,7 +523,7 @@ export default function EventFormPage() {
   // Party size defaults to 1 when blank (a guest being added mid-edit) so
   // the running totals never dip due to a momentarily-empty input.
   const guestPartySize = (g) => (g.partySize === '' || g.partySize == null ? 1 : Number(g.partySize) || 0);
-  const guestStats = form.guests.reduce((acc, g) => {
+  const guestStats = guests.reduce((acc, g) => {
     const size = guestPartySize(g);
     acc.invited += size;
     if (g.rsvpStatus === 'confirmed') acc.confirmed += size;
@@ -660,14 +682,37 @@ export default function EventFormPage() {
     setForm((f) => ({ ...f, secondShooters: f.secondShooters.filter((s) => s.id !== id) }));
   }
 
-  function addGuest() {
-    setForm((f) => ({ ...f, guests: [...f.guests, emptyGuest()] }));
+  // Guests are real DB rows (see server/prisma/schema.prisma's Guest model
+  // comment for why), not part of the account-data blob like everything
+  // else on this form — so these hit the API directly instead of setForm.
+  async function handleAddGuest() {
+    try {
+      const guest = await createGuest(form.id, { name: '', partySize: 1, rsvpStatus: 'invited' });
+      setGuests((prev) => [...prev, guest]);
+    } catch (err) {
+      showToast(err.message || 'Failed to add guest', 'error');
+    }
   }
-  function updateGuest(id, patch) {
-    setForm((f) => ({ ...f, guests: f.guests.map((g) => (g.id === id ? { ...g, ...patch } : g)) }));
+  // Local-only — for onChange responsiveness while typing; the actual save
+  // happens on blur (handleCommitGuest) so a keystroke isn't a network call.
+  function updateGuestLocal(id, patch) {
+    setGuests((prev) => prev.map((g) => (g.id === id ? { ...g, ...patch } : g)));
   }
-  function removeGuest(id) {
-    setForm((f) => ({ ...f, guests: f.guests.filter((g) => g.id !== id) }));
+  async function handleCommitGuest(id, patch) {
+    try {
+      const guest = await updateGuest(id, patch);
+      setGuests((prev) => prev.map((g) => (g.id === id ? guest : g)));
+    } catch (err) {
+      showToast(err.message || 'Failed to save guest', 'error');
+    }
+  }
+  async function handleRemoveGuest(id) {
+    try {
+      await deleteGuest(id);
+      setGuests((prev) => prev.filter((g) => g.id !== id));
+    } catch (err) {
+      showToast(err.message || 'Failed to remove guest', 'error');
+    }
   }
 
   function removeRequestItem(id) {
@@ -1059,7 +1104,7 @@ export default function EventFormPage() {
             </span>
           )}
         </button>
-        {currentUser.activeVerticals?.includes('party_planning') && (
+        {isPartyPlanning && (
           <button
             type="button"
             onClick={() => setActiveTab('guests')}
@@ -1069,9 +1114,9 @@ export default function EventFormPage() {
             }`}
           >
             Guests
-            {form.guests.length > 0 && (
+            {guests.length > 0 && (
               <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">
-                {form.guests.length}
+                {guests.length}
               </span>
             )}
           </button>
@@ -1527,9 +1572,19 @@ export default function EventFormPage() {
         </div>
 
         <div className={activeTab === 'guests' ? cardClass : 'hidden'}>
-          <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center justify-between mb-5 gap-2 flex-wrap">
             <h3 className={`${cardTitleClass} mb-0`}>Guest List</h3>
-            <button type="button" onClick={addGuest} data-testid="event-form-add-guest-button" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">+ Add Guest</button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCopyRsvpLink}
+                data-testid="event-form-copy-rsvp-link-button"
+                className="text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+              >
+                {rsvpLinkCopied ? 'Link Copied!' : 'Copy RSVP Link'}
+              </button>
+              <button type="button" onClick={handleAddGuest} data-testid="event-form-add-guest-button" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">+ Add Guest</button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
@@ -1557,19 +1612,20 @@ export default function EventFormPage() {
             </div>
           )}
 
-          {form.guests.length === 0 ? (
+          {guests.length === 0 ? (
             <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center">
-              No guests added yet.
+              No guests added yet. Add one below, or share the RSVP link above.
             </div>
           ) : (
             <div className="space-y-2">
-              {form.guests.map((g) => (
+              {guests.map((g) => (
                 <div key={g.id} data-testid="event-form-guest-row" className="border border-slate-200 rounded-lg p-3 space-y-2">
                   <div className="grid grid-cols-1 sm:grid-cols-[1fr_7rem] gap-2">
                     <input
                       placeholder="Guest name"
                       value={g.name}
-                      onChange={(e) => updateGuest(g.id, { name: e.target.value })}
+                      onChange={(e) => updateGuestLocal(g.id, { name: e.target.value })}
+                      onBlur={() => handleCommitGuest(g.id, { name: g.name })}
                       data-testid="event-form-guest-name-input"
                       className={inputClass}
                     />
@@ -1579,7 +1635,8 @@ export default function EventFormPage() {
                       title="Party size, including this guest"
                       placeholder="Party size"
                       value={g.partySize}
-                      onChange={(e) => updateGuest(g.id, { partySize: e.target.value === '' ? '' : Number(e.target.value) })}
+                      onChange={(e) => updateGuestLocal(g.id, { partySize: e.target.value === '' ? '' : Number(e.target.value) })}
+                      onBlur={() => handleCommitGuest(g.id, { partySize: g.partySize })}
                       data-testid="event-form-guest-partysize-input"
                       className={inputClass}
                     />
@@ -1588,29 +1645,31 @@ export default function EventFormPage() {
                     <input
                       type="email"
                       placeholder="Email (optional)"
-                      value={g.email}
-                      onChange={(e) => updateGuest(g.id, { email: e.target.value })}
+                      value={g.email || ''}
+                      onChange={(e) => updateGuestLocal(g.id, { email: e.target.value })}
+                      onBlur={() => handleCommitGuest(g.id, { email: g.email })}
                       data-testid="event-form-guest-email-input"
                       className={inputClass}
                     />
                     <input
                       type="tel"
                       placeholder="Phone (optional)"
-                      value={g.phone}
-                      onChange={(e) => updateGuest(g.id, { phone: e.target.value })}
+                      value={g.phone || ''}
+                      onChange={(e) => updateGuestLocal(g.id, { phone: e.target.value })}
+                      onBlur={() => handleCommitGuest(g.id, { phone: g.phone })}
                       data-testid="event-form-guest-phone-input"
                       className={inputClass}
                     />
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex gap-1">
+                    <div className="flex items-center gap-1 flex-wrap">
                       {RSVP_STATUSES.map((s) => {
                         const active = (g.rsvpStatus || 'invited') === s.value;
                         return (
                           <button
                             key={s.value}
                             type="button"
-                            onClick={() => updateGuest(g.id, { rsvpStatus: s.value })}
+                            onClick={() => { updateGuestLocal(g.id, { rsvpStatus: s.value }); handleCommitGuest(g.id, { rsvpStatus: s.value }); }}
                             data-testid={`event-form-guest-rsvp-${s.value}-button`}
                             className="px-2 py-1 rounded-lg border text-xs font-semibold border-slate-300 text-slate-500 hover:bg-slate-50"
                             style={active ? { color: s.color, borderColor: `${s.color}55`, backgroundColor: `${s.color}11` } : undefined}
@@ -1619,10 +1678,13 @@ export default function EventFormPage() {
                           </button>
                         );
                       })}
+                      {g.source === 'rsvp_link' && (
+                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide ml-1">via RSVP link</span>
+                      )}
                     </div>
                     <button
                       type="button"
-                      onClick={() => removeGuest(g.id)}
+                      onClick={() => handleRemoveGuest(g.id)}
                       data-testid="event-form-guest-remove-button"
                       className="w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
                       aria-label="Remove guest"
@@ -1632,8 +1694,9 @@ export default function EventFormPage() {
                   </div>
                   <input
                     placeholder="Notes (e.g. dietary restrictions, plus-one name)"
-                    value={g.notes}
-                    onChange={(e) => updateGuest(g.id, { notes: e.target.value })}
+                    value={g.notes || ''}
+                    onChange={(e) => updateGuestLocal(g.id, { notes: e.target.value })}
+                    onBlur={() => handleCommitGuest(g.id, { notes: g.notes })}
                     data-testid="event-form-guest-notes-input"
                     className={inputClass}
                   />
