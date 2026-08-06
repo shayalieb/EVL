@@ -4,7 +4,9 @@ import { useToast } from '../../components/ui/Toast';
 import Modal from '../../components/ui/Modal';
 import SearchInput from '../../components/ui/SearchInput';
 import FilterSelect from '../../components/ui/FilterSelect';
+import Pagination from '../../components/ui/Pagination';
 import { matchesSearch } from '../../lib/search';
+import { usePagination } from '../../lib/usePagination';
 import { FileIcon } from '../../components/ui/icons';
 import { sendSupportMessage, supportAttachmentDownloadUrl, formatFileSize } from '../../lib/support';
 
@@ -109,12 +111,8 @@ export default function AdminSupportPage() {
       .catch(() => {});
   }, []);
 
-  if (loadError) return <div data-testid="admin-support-load-error-banner" className="text-sm text-red-600">{loadError}</div>;
-  if (!threads) return <div className="text-sm text-slate-400">Loading…</div>;
-
-  const active = threads.find((t) => t.id === activeId);
   const hasFilters = !!(search || statusFilter || replyFilter || priorityFilter || assignedFilter);
-  const filteredThreads = threads.filter((t) => {
+  const filteredThreads = (threads || []).filter((t) => {
     if (statusFilter && t.status !== statusFilter) return false;
     if (replyFilter === 'needs-reply' && !(t.unreadFromUser > 0)) return false;
     if (replyFilter === 'read' && t.unreadFromUser > 0) return false;
@@ -123,6 +121,14 @@ export default function AdminSupportPage() {
     if (assignedFilter === 'unassigned' && t.assignedAdminId) return false;
     return matchesSearch(search, [t.subject, t.account.owner?.firstName, t.account.owner?.lastName]);
   });
+  // Called unconditionally (before the loading/error early returns below) —
+  // React Hooks can't be called conditionally.
+  const { page, setPage, pageCount, pageItems: pagedThreads, pageSize, totalItems } = usePagination(filteredThreads);
+
+  if (loadError) return <div data-testid="admin-support-load-error-banner" className="text-sm text-red-600">{loadError}</div>;
+  if (!threads) return <div className="text-sm text-slate-400">Loading…</div>;
+
+  const active = threads.find((t) => t.id === activeId);
 
   return (
     <div className="max-w-5xl">
@@ -178,42 +184,45 @@ export default function AdminSupportPage() {
         )}
       </div>
       <div className="flex gap-4 h-[calc(100vh-270px)] min-h-[400px]">
-        <div className="w-72 shrink-0 bg-white rounded-xl border border-slate-200 overflow-y-auto">
-          {filteredThreads.length === 0 && (
-            <div className="p-4 text-sm text-slate-400">
-              {threads.length === 0 ? 'No support threads yet.' : 'No threads match your search or filters.'}
-            </div>
-          )}
-          {filteredThreads.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setActiveId(t.id)}
-              data-testid="admin-support-thread-row"
-              className={`w-full text-left px-4 py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50 ${activeId === t.id ? 'bg-indigo-50' : ''}`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-medium text-slate-800 truncate">
-                  <span className="text-slate-400 font-normal">#{t.ticketNumber}</span> {t.subject}
-                </span>
-                <div className="flex items-center gap-1 shrink-0">
-                  <PriorityBadge priority={t.priority} />
-                  {t.unreadFromUser > 0 && (
-                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center">
-                      {t.unreadFromUser}
-                    </span>
-                  )}
+        <div className="w-72 shrink-0 bg-white rounded-xl border border-slate-200 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto">
+            {filteredThreads.length === 0 && (
+              <div className="p-4 text-sm text-slate-400">
+                {threads.length === 0 ? 'No support threads yet.' : 'No threads match your search or filters.'}
+              </div>
+            )}
+            {pagedThreads.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setActiveId(t.id)}
+                data-testid="admin-support-thread-row"
+                className={`w-full text-left px-4 py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50 ${activeId === t.id ? 'bg-indigo-50' : ''}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-slate-800 truncate">
+                    <span className="text-slate-400 font-normal">#{t.ticketNumber}</span> {t.subject}
+                  </span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <PriorityBadge priority={t.priority} />
+                    {t.unreadFromUser > 0 && (
+                      <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center">
+                        {t.unreadFromUser}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <div className="text-xs text-slate-500 truncate">
-                {t.account.owner ? `${t.account.owner.firstName} ${t.account.owner.lastName}` : 'Unknown account'}
-              </div>
-              <div className="text-xs text-slate-400 mt-0.5">
-                {t.status === 'closed' ? 'Closed' : 'Open'} · {new Date(t.lastMessageAt).toLocaleString()}
-                {t.assignedAdmin && ` · ${t.assignedAdmin.firstName}`}
-              </div>
-            </button>
-          ))}
+                <div className="text-xs text-slate-500 truncate">
+                  {t.account.owner ? `${t.account.owner.firstName} ${t.account.owner.lastName}` : 'Unknown account'}
+                </div>
+                <div className="text-xs text-slate-400 mt-0.5">
+                  {t.status === 'closed' ? 'Closed' : 'Open'} · {new Date(t.lastMessageAt).toLocaleString()}
+                  {t.assignedAdmin && ` · ${t.assignedAdmin.firstName}`}
+                </div>
+              </button>
+            ))}
+          </div>
+          <Pagination page={page} pageCount={pageCount} onChange={setPage} totalItems={totalItems} pageSize={pageSize} testId="admin-support-pagination" />
         </div>
 
         <div className="flex-1 min-w-0 bg-white rounded-xl border border-slate-200">

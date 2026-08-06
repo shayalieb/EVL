@@ -8,9 +8,11 @@ import Badge from '../components/ui/Badge';
 import Tooltip from '../components/ui/Tooltip';
 import SearchInput from '../components/ui/SearchInput';
 import FilterSelect from '../components/ui/FilterSelect';
+import Pagination from '../components/ui/Pagination';
 import { useToast } from '../components/ui/Toast';
 import { formatCurrency as currency, formatEventDate } from '../lib/format';
 import { matchesSearch } from '../lib/search';
+import { usePagination } from '../lib/usePagination';
 import { listInquiryLinks } from '../lib/inquiryLinks';
 import SendInquiryLinkModal from '../components/SendInquiryLinkModal';
 import ReviewInquiryModal from '../components/ReviewInquiryModal';
@@ -67,6 +69,7 @@ export default function BookingsPage() {
     const client = clients.find((c) => c.id === b.clientId);
     return matchesSearch(search, [client?.firstName, client?.lastName, b.eventType, b.notes]);
   });
+  const { page, setPage, pageCount, pageItems: pagedBookings, pageSize, totalItems } = usePagination(filteredBookings);
 
   function openAdd() {
     navigate('/bookings/new');
@@ -213,7 +216,7 @@ export default function BookingsPage() {
                   </td>
                 </tr>
               )}
-              {filteredBookings.map((b) => {
+              {pagedBookings.map((b) => {
                 const status = bookingStatuses.find((s) => s.id === b.bookingStatus);
                 const client = clients.find((c) => c.id === b.clientId);
                 const canConvert = !b.convertedEventId;
@@ -325,6 +328,7 @@ export default function BookingsPage() {
             </tbody>
           </table>
         </div>
+        <Pagination page={page} pageCount={pageCount} onChange={setPage} totalItems={totalItems} pageSize={pageSize} testId="bookings-pagination" />
       </div>
 
       <ConfirmDialog

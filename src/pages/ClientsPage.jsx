@@ -6,8 +6,10 @@ import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Tooltip from '../components/ui/Tooltip';
 import SearchInput from '../components/ui/SearchInput';
 import FilterSelect from '../components/ui/FilterSelect';
+import Pagination from '../components/ui/Pagination';
 import { useToast } from '../components/ui/Toast';
 import { matchesSearch } from '../lib/search';
+import { usePagination } from '../lib/usePagination';
 
 const ENGAGEMENT_OPTIONS = [
   { value: 'has-confirmed', label: 'Has Confirmed Events' },
@@ -36,6 +38,7 @@ export default function ClientsPage() {
     }
     return matchesSearch(search, [c.firstName, c.lastName, c.phone, c.email, c.notes]);
   });
+  const { page, setPage, pageCount, pageItems: pagedClients, pageSize, totalItems } = usePagination(filteredClients);
 
   function openAdd() {
     setEditingClient(null);
@@ -114,7 +117,7 @@ export default function ClientsPage() {
                   </td>
                 </tr>
               )}
-              {filteredClients.map((c) => {
+              {pagedClients.map((c) => {
                 const counts = computeClientEventCounts(c.id);
                 return (
                   <tr key={c.id} data-testid="client-row" className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
@@ -178,6 +181,7 @@ export default function ClientsPage() {
             </tbody>
           </table>
         </div>
+        <Pagination page={page} pageCount={pageCount} onChange={setPage} totalItems={totalItems} pageSize={pageSize} testId="clients-pagination" />
       </div>
 
       <ClientModal open={modalOpen} onClose={() => setModalOpen(false)} client={editingClient} />

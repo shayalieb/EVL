@@ -6,10 +6,12 @@ import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Tooltip from '../components/ui/Tooltip';
 import SearchInput from '../components/ui/SearchInput';
 import FilterSelect from '../components/ui/FilterSelect';
+import Pagination from '../components/ui/Pagination';
 import { useToast } from '../components/ui/Toast';
 import { formatCurrency as currency } from '../lib/format';
 import { getPricingTiers } from '../lib/pricingTiers';
 import { matchesSearch } from '../lib/search';
+import { usePagination } from '../lib/usePagination';
 
 export default function ContractorsPage() {
   const { contractors, deleteContractor } = useData();
@@ -45,6 +47,7 @@ export default function ContractorsPage() {
     if (priceFilter && priceBucket(c) !== priceFilter) return false;
     return matchesSearch(search, [c.firstName, c.middleName, c.lastName, c.email, c.phone, c.contractorType1, c.contractorType2]);
   });
+  const { page, setPage, pageCount, pageItems: pagedContractors, pageSize, totalItems } = usePagination(filteredContractors);
 
   function openAdd() {
     setEditingContractor(null);
@@ -141,7 +144,7 @@ export default function ContractorsPage() {
                   </td>
                 </tr>
               )}
-              {filteredContractors.map((c) => (
+              {pagedContractors.map((c) => (
                 <tr key={c.id} data-testid="contractor-row" className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                   <td className="px-4 py-3 font-medium text-slate-800">
                     {canEdit ? (
@@ -216,6 +219,7 @@ export default function ContractorsPage() {
             </tbody>
           </table>
         </div>
+        <Pagination page={page} pageCount={pageCount} onChange={setPage} totalItems={totalItems} pageSize={pageSize} testId="contractors-pagination" />
       </div>
 
       <ContractorModal open={modalOpen} onClose={() => setModalOpen(false)} contractor={editingContractor} />

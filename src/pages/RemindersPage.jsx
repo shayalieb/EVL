@@ -3,9 +3,11 @@ import ReminderModal from '../components/ReminderModal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Badge from '../components/ui/Badge';
 import SearchInput from '../components/ui/SearchInput';
+import Pagination from '../components/ui/Pagination';
 import { useToast } from '../components/ui/Toast';
 import { matchesSearch } from '../lib/search';
 import { fetchReminders, completeReminder, deleteReminder } from '../lib/reminders';
+import { usePagination } from '../lib/usePagination';
 
 const STATUS_FILTERS = [
   { value: 'pending', label: 'Pending' },
@@ -33,6 +35,7 @@ export default function RemindersPage() {
     .filter((r) => (statusFilter === 'pending' ? !r.completedAt : !!r.completedAt))
     .filter((r) => matchesSearch(search, [r.note, r.relatedName]))
     .sort((a, b) => new Date(a.remindAt) - new Date(b.remindAt));
+  const { page, setPage, pageCount, pageItems: pagedReminders, pageSize, totalItems } = usePagination(filteredReminders);
 
   function openAdd() {
     setEditingReminder(null);
@@ -128,7 +131,7 @@ export default function RemindersPage() {
                   </td>
                 </tr>
               )}
-              {filteredReminders.map((r) => {
+              {pagedReminders.map((r) => {
                 const overdue = !r.completedAt && new Date(r.remindAt) <= new Date();
                 return (
                   <tr key={r.id} data-testid="reminder-row" className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
@@ -191,6 +194,7 @@ export default function RemindersPage() {
             </tbody>
           </table>
         </div>
+        <Pagination page={page} pageCount={pageCount} onChange={setPage} totalItems={totalItems} pageSize={pageSize} testId="reminders-pagination" />
       </div>
 
       <ReminderModal open={modalOpen} onClose={() => setModalOpen(false)} reminder={editingReminder} onSaved={handleSaved} />

@@ -10,8 +10,10 @@ import { useToast } from '../components/ui/Toast';
 import EventsCalendarView from '../components/events/EventsCalendarView';
 import SearchInput from '../components/ui/SearchInput';
 import FilterSelect from '../components/ui/FilterSelect';
+import Pagination from '../components/ui/Pagination';
 import { formatCurrency as currency } from '../lib/format';
 import { matchesSearch } from '../lib/search';
+import { usePagination } from '../lib/usePagination';
 
 const VIEW_TABS = [
   { id: 'list', label: 'List View' },
@@ -54,6 +56,9 @@ export default function EventsPage() {
     if (contractorsFilter === 'none' && evt.contractorBookings.length > 0) return false;
     return matchesSearch(search, [evt.name, evt.eventType]);
   });
+  // Calendar view needs the full filtered set (it lays events out by date,
+  // not in a scrollable list), so only the table view paginates.
+  const { page, setPage, pageCount, pageItems: pagedEvents, pageSize, totalItems } = usePagination(filteredEvents);
 
   return (
     <div>
@@ -153,7 +158,7 @@ export default function EventsPage() {
                   </td>
                 </tr>
               )}
-              {filteredEvents.map((evt) => {
+              {pagedEvents.map((evt) => {
                 const status = eventStatuses.find((s) => s.id === evt.eventStatus);
                 const total = computeEventTotalCost(evt);
                 const vendor = computeVendorStatus(evt);
@@ -263,6 +268,7 @@ export default function EventsPage() {
             </tbody>
           </table>
         </div>
+        <Pagination page={page} pageCount={pageCount} onChange={setPage} totalItems={totalItems} pageSize={pageSize} testId="events-pagination" />
       </div>
       )}
 

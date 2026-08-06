@@ -5,7 +5,9 @@ import Modal from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import SearchInput from '../../components/ui/SearchInput';
 import FilterSelect from '../../components/ui/FilterSelect';
+import Pagination from '../../components/ui/Pagination';
 import { matchesSearch } from '../../lib/search';
+import { usePagination } from '../../lib/usePagination';
 
 function accountStatus(a) {
   if (a.disabledAt) return 'disabled';
@@ -95,9 +97,6 @@ export default function AdminAccountsPage() {
     }
   }
 
-  if (loadError) return <div data-testid="admin-accounts-load-error-banner" className="text-sm text-red-600">{loadError}</div>;
-  if (!accounts) return <div className="text-sm text-slate-400">Loading…</div>;
-
   function teamSizeBucket(a) {
     if (a.memberCount <= 1) return 'solo';
     if (a.memberCount <= 5) return 'small';
@@ -105,11 +104,17 @@ export default function AdminAccountsPage() {
   }
 
   const hasFilters = !!(search || statusFilter || teamSizeFilter);
-  const filteredAccounts = accounts.filter((a) => {
+  const filteredAccounts = (accounts || []).filter((a) => {
     if (statusFilter && accountStatus(a) !== statusFilter) return false;
     if (teamSizeFilter && teamSizeBucket(a) !== teamSizeFilter) return false;
     return matchesSearch(search, [a.owner?.firstName, a.owner?.lastName, a.owner?.email]);
   });
+  // Called unconditionally (before the loading/error early returns below) —
+  // React Hooks can't be called conditionally.
+  const { page, setPage, pageCount, pageItems: pagedAccounts, pageSize, totalItems } = usePagination(filteredAccounts);
+
+  if (loadError) return <div data-testid="admin-accounts-load-error-banner" className="text-sm text-red-600">{loadError}</div>;
+  if (!accounts) return <div className="text-sm text-slate-400">Loading…</div>;
 
   return (
     <div className="max-w-6xl space-y-4">
@@ -183,7 +188,7 @@ export default function AdminAccountsPage() {
                 </td>
               </tr>
             )}
-            {filteredAccounts.map((a) => (
+            {pagedAccounts.map((a) => (
               <tr key={a.id} data-testid="admin-account-row" className="border-b border-slate-50 last:border-0">
                 <td className="px-4 py-3">
                   <div className="font-medium text-slate-800">{a.owner ? `${a.owner.firstName} ${a.owner.lastName}` : '—'}</div>
@@ -264,6 +269,7 @@ export default function AdminAccountsPage() {
           </tbody>
         </table>
         </div>
+        <Pagination page={page} pageCount={pageCount} onChange={setPage} totalItems={totalItems} pageSize={pageSize} testId="admin-accounts-pagination" />
       </div>
 
       <NewAccountModal open={addOpen} onClose={() => setAddOpen(false)} onCreated={() => { setAddOpen(false); load(); }} />
