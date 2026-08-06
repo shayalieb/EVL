@@ -39,16 +39,19 @@ export default function ClientModal({ open, onClose, client, onSaved }) {
     setForm((f) => ({ ...f, [field]: val }));
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     if (!form.firstName.trim() || !form.lastName.trim()) {
       setError('First name and last name are required.');
       return;
     }
-    const record = client ? { ...client, ...form } : addClient(form);
-    if (client) updateClient(client.id, form);
-    onSaved?.(record);
-    onClose();
+    try {
+      const record = client ? await updateClient(client.id, form) : await addClient(form);
+      onSaved?.(record);
+      onClose();
+    } catch (err) {
+      setError(err.message || 'Failed to save client.');
+    }
   }
 
   return (

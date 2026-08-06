@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { loadUserData } from '../lib/storage';
 import { buildSeedUserData, buildDefaultBookingStatuses } from '../lib/seed';
 import { createContractor } from '../lib/contractors';
+import { createClient } from '../lib/clients';
 
 // Relative in production (e.g. `/api`) — vercel.json proxies /api/* to the
 // Railway backend so the browser only ever talks to the frontend's own
@@ -60,6 +61,17 @@ async function migrateContractorsOutOfBlob(blob) {
   return next;
 }
 
+// Same idea as migrateContractorsOutOfBlob above, for Client (see
+// server/prisma/schema.prisma's Client model comment).
+async function migrateClientsOutOfBlob(blob) {
+  const results = await Promise.allSettled(blob.clients.map((c) => createClient(c)));
+  const stillEmbedded = blob.clients.filter((_, i) => results[i].status === 'rejected');
+  const next = { ...blob };
+  if (stillEmbedded.length) next.clients = stillEmbedded;
+  else delete next.clients;
+  return next;
+}
+
 export function AuthProvider({ children }) {
   const [serverUser, setServerUser] = useState(null);
   const [localBlob, setLocalBlob] = useState(null);
@@ -84,8 +96,11 @@ export function AuthProvider({ children }) {
       versionRef.current = remoteVersion;
       setSizeWarning(remoteSizeWarning || null);
 
-      if (blob.contractors?.length) {
-        blob = await migrateContractorsOutOfBlob(blob);
+      const hadContractors = blob.contractors?.length;
+      const hadClients = blob.clients?.length;
+      if (hadContractors) blob = await migrateContractorsOutOfBlob(blob);
+      if (hadClients) blob = await migrateClientsOutOfBlob(blob);
+      if (hadContractors || hadClients) {
         const saved = await apiFetch('/account-data', { method: 'PUT', body: JSON.stringify({ data: blob, version: versionRef.current }) });
         versionRef.current = saved.version;
         setSizeWarning(saved.sizeWarning || null);
@@ -97,6 +112,7 @@ export function AuthProvider({ children }) {
       // reuse whatever was already entered here so it isn't lost.
       blob = loadUserData(user.id) || seedBlob(user);
       if (blob.contractors?.length) blob = await migrateContractorsOutOfBlob(blob);
+      if (blob.clients?.length) blob = await migrateClientsOutOfBlob(blob);
       const created = await apiFetch('/account-data', { method: 'PUT', body: JSON.stringify({ data: blob }) });
       versionRef.current = created.version;
       setSizeWarning(created.sizeWarning || null);

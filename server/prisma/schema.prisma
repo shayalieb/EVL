@@ -62,6 +62,7 @@ model Account {
   guests         Guest[]
   eventRsvpLinks EventRsvpLink[]
   contractors    Contractor[]
+  clients        Client[]
 
   // Stripe Connect (Express) — set once onboarding starts. The three
   // booleans are a local cache of the connected Account object, synced by
@@ -789,6 +790,35 @@ model Contractor {
   // queried/written by the public RSVP route).
   pricingTiers Json    @default("[]")
   priceNotes   String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([accountId])
+}
+
+// A business's client/customer roster — same graduation-out-of-the-blob
+// reasoning as Contractor above (see that model's comment): grows
+// unboundedly over an account's lifetime, one of the pieces most likely to
+// actually hit the account-data blob's ~100KB save-size ceiling. Bookings
+// and Events still reference a client by plain `clientId` string in their
+// own blob-stored data — same opaque non-FK pattern as everywhere else in
+// this schema (see EventDocument.eventId), not a real relation.
+model Client {
+  id        String  @id @default(cuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  firstName String
+  lastName  String
+  email     String?
+  phone     String?
+  address1  String?
+  address2  String?
+  city      String?
+  state     String?
+  zip       String?
+  notes     String? @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

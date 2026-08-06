@@ -5,6 +5,7 @@ import { getTierPrice } from '../lib/pricingTiers';
 import { statusBucket } from '../lib/inquiryStatusBucket';
 import { formatEventDate, formatCurrency } from '../lib/format';
 import { listContractors, createContractor as createContractorApi, updateContractorApi, deleteContractorApi } from '../lib/contractors';
+import { listClients, createClient as createClientApi, updateClientApi, deleteClientApi } from '../lib/clients';
 
 function statusLabel(statuses, id) {
   return statuses?.find((s) => s.id === id)?.label || id || '(none)';
@@ -72,7 +73,6 @@ function diffBookingFields(before, after, bookingStatuses) {
 const DataContext = createContext(null);
 
 const LIST_FIELDS = {
-  clients: 'clients',
   venues: 'venues',
   events: 'events',
   bookings: 'bookings',
@@ -114,6 +114,20 @@ export function DataProvider({ children }) {
     // Deliberately keyed on accountId, not the whole currentUser object —
     // currentUser gets a new reference on every single blob autosave
     // elsewhere in the app, which would otherwise refetch on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.accountId]);
+
+  // Same real-table-not-blob treatment as contractors above — see
+  // server/prisma/schema.prisma's Client model comment.
+  const [clients, setClients] = useState([]);
+  const [clientsLoaded, setClientsLoaded] = useState(false);
+  useEffect(() => {
+    if (!currentUser) { setClients([]); setClientsLoaded(false); return; }
+    let cancelled = false;
+    listClients()
+      .then((list) => { if (!cancelled) setClients(list); })
+      .finally(() => { if (!cancelled) setClientsLoaded(true); });
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.accountId]);
 
@@ -160,29 +174,35 @@ export function DataProvider({ children }) {
     }
   }, [currentUser, patchList]);
 
-  // ---- Clients ----
-  const addClient = useCallback((client) => {
-    if (!currentUser) return;
-    const record = { id: uid('cli'), createdAt: new Date().toISOString(), ...client };
-    patchList(LIST_FIELDS.clients, [...(currentUser.clients || []), record]);
+  // ---- Clients (real API, not the blob — see the fetch effect above) ----
+  // addClient's return value is actually awaited by callers (unlike most
+  // add* here) — BookingFormPage auto-selects a just-created client by its
+  // real id, so this has to resolve to the real record, not fire-and-forget.
+  const addClient = useCallback(async (client) => {
+    const record = await createClientApi(client);
+    setClients((prev) => [...prev, record]);
     return record;
-  }, [currentUser, patchList]);
+  }, []);
 
-  const updateClient = useCallback((id, patch) => {
-    if (!currentUser) return;
-    patchList(LIST_FIELDS.clients, (currentUser.clients || []).map((c) => (c.id === id ? { ...c, ...patch } : c)));
-  }, [currentUser, patchList]);
+  const updateClient = useCallback(async (id, patch) => {
+    const record = await updateClientApi(id, patch);
+    setClients((prev) => prev.map((c) => (c.id === id ? record : c)));
+    return record;
+  }, []);
 
-  const deleteClient = useCallback((id) => {
-    if (!currentUser) return;
-    patchList(LIST_FIELDS.clients, (currentUser.clients || []).filter((c) => c.id !== id));
-    // Unlink this client from any events/bookings that referenced it.
-    patchList(LIST_FIELDS.events, currentUser.events.map((e) => (
-      e.clientId === id ? { ...e, clientId: null } : e
-    )));
-    patchList(LIST_FIELDS.bookings, (currentUser.bookings || []).map((b) => (
-      b.clientId === id ? { ...b, clientId: null } : b
-    )));
+  const deleteClient = useCallback(async (id) => {
+    await deleteClientApi(id);
+    setClients((prev) => prev.filter((c) => c.id !== id));
+    // Unlink this client from any events/bookings that referenced it —
+    // those are still blob-based, so this part still goes through patchList.
+    if (currentUser) {
+      patchList(LIST_FIELDS.events, currentUser.events.map((e) => (
+        e.clientId === id ? { ...e, clientId: null } : e
+      )));
+      patchList(LIST_FIELDS.bookings, (currentUser.bookings || []).map((b) => (
+        b.clientId === id ? { ...b, clientId: null } : b
+      )));
+    }
   }, [currentUser, patchList]);
 
   // ---- Venues ----
@@ -468,7 +488,7 @@ export function DataProvider({ children }) {
     if (!currentUser) return;
     const booking = (currentUser.bookings || []).find((b) => b.id === bookingId);
     if (!booking || booking.convertedEventId) return;
-    const client = (currentUser.clients || []).find((c) => c.id === booking.clientId);
+    const client = clients.find((c) => c.id === booking.clientId);
     const name = booking.eventName || [client ? `${client.firstName} ${client.lastName}` : '', booking.eventType]
       .filter(Boolean).join(' ') || 'New Event';
     const event = addEvent({
@@ -495,7 +515,7 @@ export function DataProvider({ children }) {
       ...(convertedStatus ? { bookingStatus: convertedStatus.id } : {}),
     });
     return event;
-  }, [currentUser, addEvent, updateBooking]);
+  }, [currentUser, addEvent, updateBooking, clients]);
 
   // ---- Derived helpers ----
   const getContractorById = useCallback((id) => contractors.find((c) => c.id === id), [contractors]);
@@ -549,7 +569,7 @@ export function DataProvider({ children }) {
 
   const value = useMemo(() => ({
     contractors,
-    clients: currentUser?.clients || [],
+    clients,
     venues: currentUser?.venues || [],
     events: (currentUser?.events || []).filter((e) => !e.deletedAt),
     bookings: (currentUser?.bookings || []).filter((b) => !b.deletedAt),
@@ -613,7 +633,7 @@ export function DataProvider({ children }) {
     computeEventTotalCost,
     computeVendorStatus,
   }), [
-    currentUser, contractors,
+    currentUser, contractors, clients,
     addContractor, updateContractor, deleteContractor,
     addClient, updateClient, deleteClient, computeClientEventCounts,
     addVenue, updateVenue, deleteVenue,
@@ -633,11 +653,11 @@ export function DataProvider({ children }) {
   ]);
 
   // Same blank-while-loading behavior as AuthProvider's own authLoading gate
-  // — every page here already assumes `contractors` is synchronously
-  // populated (contractors.find(...) inline in render bodies, no loading
+  // — every page here already assumes `contractors`/`clients` are
+  // synchronously populated (.find(...) inline in render bodies, no loading
   // states of their own), so this keeps that assumption true rather than
-  // pushing a loading state into 16 different files.
-  if (currentUser && !contractorsLoaded) return null;
+  // pushing a loading state into every consuming file.
+  if (currentUser && (!contractorsLoaded || !clientsLoaded)) return null;
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }
