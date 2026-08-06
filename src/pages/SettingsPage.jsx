@@ -34,14 +34,14 @@ export default function SettingsPage() {
   return (
     <div>
       <h2 className="text-2xl font-bold text-slate-800 mb-4">Settings</h2>
-      <div className="flex border-b border-slate-200 mb-6">
+      <div className="flex overflow-x-auto border-b border-slate-200 mb-6">
         {TABS.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
             data-testid={`settings-tab-${t.id}`}
-            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px ${
+            className={`shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px ${
               tab === t.id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
@@ -106,7 +106,7 @@ function UserInfoTab() {
     <div className="max-w-lg space-y-8">
       <form onSubmit={handleSaveProfile} className="space-y-3">
         <h3 className="text-sm font-bold text-slate-700">Profile</h3>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>First Name</label>
             <input value={firstName} onChange={(e) => setFirstName(e.target.value)} data-testid="settings-user-firstname-input" className={inputClass} />

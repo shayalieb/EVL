@@ -1078,12 +1078,12 @@ export default function EventFormPage() {
         </div>
       </div>
 
-      <div className="flex border-b border-slate-200 mb-6">
+      <div className="flex overflow-x-auto border-b border-slate-200 mb-6">
         <button
           type="button"
           onClick={() => setActiveTab('details')}
           data-testid="event-form-tab-details"
-          className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px ${
+          className={`shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px ${
             activeTab === 'details' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
           }`}
         >
@@ -1093,7 +1093,7 @@ export default function EventFormPage() {
           type="button"
           onClick={() => setActiveTab('contractors')}
           data-testid="event-form-tab-contractors"
-          className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px flex items-center gap-2 ${
+          className={`shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px flex items-center gap-2 ${
             activeTab === 'contractors' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
           }`}
         >
@@ -1109,7 +1109,7 @@ export default function EventFormPage() {
             type="button"
             onClick={() => setActiveTab('guests')}
             data-testid="event-form-tab-guests"
-            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px flex items-center gap-2 ${
+            className={`shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px flex items-center gap-2 ${
               activeTab === 'guests' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
@@ -1125,7 +1125,7 @@ export default function EventFormPage() {
           type="button"
           onClick={() => setActiveTab('prep')}
           data-testid="event-form-tab-prep"
-          className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px ${
+          className={`shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px ${
             activeTab === 'prep' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
           }`}
         >
@@ -1136,7 +1136,7 @@ export default function EventFormPage() {
             type="button"
             onClick={() => setActiveTab('financials')}
             data-testid="event-form-tab-financials"
-            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px ${
+            className={`shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px ${
               activeTab === 'financials' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
@@ -1166,7 +1166,7 @@ export default function EventFormPage() {
               </div>
 
               {isWedding(form.eventType) && (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className={labelClass}>Bride's Name</label>
                     <input value={form.brideName} onChange={(e) => update('brideName', e.target.value)} data-testid="event-form-bridename-input" className={inputClass} />
@@ -1178,7 +1178,7 @@ export default function EventFormPage() {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Event Type *</label>
                   {!addingType ? (
@@ -1243,7 +1243,7 @@ export default function EventFormPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="flex gap-2">
                   <div className="flex-1">
                     <label className={labelClass}>Contact Phone</label>
@@ -1317,7 +1317,7 @@ export default function EventFormPage() {
                   testId="event-form-venue-name-input"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Address 1</label>
                   <input value={form.venue.address1} onChange={(e) => updateVenue('address1', e.target.value)} data-testid="event-form-venue-address1-input" className={inputClass} />
@@ -1327,7 +1327,7 @@ export default function EventFormPage() {
                   <input value={form.venue.address2} onChange={(e) => updateVenue('address2', e.target.value)} data-testid="event-form-venue-address2-input" className={inputClass} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Venue Contact</label>
                   <input value={form.venue.contactName} onChange={(e) => updateVenue('contactName', e.target.value)} data-testid="event-form-venue-contactname-input" className={inputClass} />
@@ -1337,7 +1337,7 @@ export default function EventFormPage() {
                   <input type="email" value={form.venue.contactEmail} onChange={(e) => updateVenue('contactEmail', e.target.value)} data-testid="event-form-venue-contactemail-input" className={inputClass} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>City</label>
                   <input value={form.venue.city} onChange={(e) => updateVenue('city', e.target.value)} data-testid="event-form-venue-city-input" className={inputClass} />

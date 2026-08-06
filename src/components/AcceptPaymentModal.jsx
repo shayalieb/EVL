@@ -104,7 +104,7 @@ export default function AcceptPaymentModal({ open, title = 'Accept Payment', amo
 
         <div>
           <label className={labelClass}>Payment Method</label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {METHODS.map((m) => (
               <button
                 key={m.value}

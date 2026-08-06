@@ -271,7 +271,7 @@ function AddMemberModal({ open, onClose, onAdded }) {
       <form onSubmit={handleSubmit} className="space-y-3">
         {error && <div data-testid="settings-users-add-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>First Name</label>
             <input required value={form.firstName} onChange={(e) => update('firstName', e.target.value)} data-testid="settings-users-add-firstname-input" className={inputClass} />
@@ -294,7 +294,7 @@ function AddMemberModal({ open, onClose, onAdded }) {
 
         <div>
           <label className={labelClass}>Permissions</label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {PERMISSION_FIELDS.map((p) => (
               <label key={p.key} className="flex items-center gap-2 text-sm text-slate-600">
                 <input

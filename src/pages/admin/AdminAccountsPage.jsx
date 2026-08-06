@@ -172,10 +172,10 @@ export default function AdminAccountsPage() {
           <thead>
             <tr className="border-b border-slate-100 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
               <th className="px-4 py-3">Owner</th>
-              <th className="px-4 py-3">Members</th>
-              <th className="px-4 py-3">Data</th>
-              <th className="px-4 py-3">Vertical</th>
-              <th className="px-4 py-3">Created</th>
+              <th className="hidden sm:table-cell px-4 py-3">Members</th>
+              <th className="hidden md:table-cell px-4 py-3">Data</th>
+              <th className="hidden sm:table-cell px-4 py-3">Vertical</th>
+              <th className="hidden md:table-cell px-4 py-3">Created</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
@@ -194,11 +194,11 @@ export default function AdminAccountsPage() {
                   <div className="font-medium text-slate-800">{a.owner ? `${a.owner.firstName} ${a.owner.lastName}` : '—'}</div>
                   <div className="text-slate-500 text-xs">{a.owner?.email}</div>
                 </td>
-                <td className="px-4 py-3 text-slate-600">{a.memberCount}</td>
-                <td className="px-4 py-3 text-slate-500 text-xs">
+                <td className="hidden sm:table-cell px-4 py-3 text-slate-600">{a.memberCount}</td>
+                <td className="hidden md:table-cell px-4 py-3 text-slate-500 text-xs">
                   {a.dataSummary.contractors} contractors · {a.dataSummary.clients} clients · {a.dataSummary.events} events
                 </td>
-                <td className="px-4 py-3 text-slate-500 text-xs">
+                <td className="hidden sm:table-cell px-4 py-3 text-slate-500 text-xs">
                   {canManageStatus ? (
                     <select
                       value={a.vertical}
@@ -215,7 +215,7 @@ export default function AdminAccountsPage() {
                   )}
                   {a.allVerticalsEnabled && <div className="text-indigo-600 font-semibold mt-0.5">+ all verticals</div>}
                 </td>
-                <td className="px-4 py-3 text-slate-500 text-xs">{new Date(a.createdAt).toLocaleDateString()}</td>
+                <td className="hidden md:table-cell px-4 py-3 text-slate-500 text-xs">{new Date(a.createdAt).toLocaleDateString()}</td>
                 <td className="px-4 py-3">
                   {a.disabledAt ? (
                     <div>
@@ -407,7 +407,7 @@ function NewAccountModal({ open, onClose, onCreated }) {
       <form onSubmit={handleSubmit} className="space-y-3">
         {error && <div data-testid="admin-accounts-new-account-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>First Name</label>
             <input required value={form.firstName} onChange={(e) => update('firstName', e.target.value)} data-testid="admin-accounts-new-account-firstname-input" className={inputClass} />

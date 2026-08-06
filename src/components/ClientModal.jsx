@@ -56,7 +56,7 @@ export default function ClientModal({ open, onClose, client, onSaved }) {
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <div data-testid="client-modal-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>First Name *</label>
             <input required value={form.firstName} onChange={(e) => update('firstName', e.target.value)} data-testid="client-modal-firstname-input" className={inputClass} />
@@ -67,7 +67,7 @@ export default function ClientModal({ open, onClose, client, onSaved }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>Phone Number</label>
             <input
@@ -91,7 +91,7 @@ export default function ClientModal({ open, onClose, client, onSaved }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>Address 1</label>
             <input value={form.address1} onChange={(e) => update('address1', e.target.value)} data-testid="client-modal-address1-input" className={inputClass} />
@@ -102,7 +102,7 @@ export default function ClientModal({ open, onClose, client, onSaved }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>City</label>
             <input value={form.city} onChange={(e) => update('city', e.target.value)} data-testid="client-modal-city-input" className={inputClass} />

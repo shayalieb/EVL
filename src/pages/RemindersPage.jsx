@@ -117,9 +117,9 @@ export default function RemindersPage() {
             <thead>
               <tr className="border-b border-slate-100 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                 <th className="px-4 py-3">Date &amp; Time</th>
-                <th className="px-4 py-3">Related To</th>
+                <th className="hidden sm:table-cell px-4 py-3">Related To</th>
                 <th className="px-4 py-3">Note</th>
-                <th className="px-4 py-3 text-center">Email</th>
+                <th className="hidden sm:table-cell px-4 py-3 text-center">Email</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -138,7 +138,7 @@ export default function RemindersPage() {
                     <td className={`px-4 py-3 font-medium ${overdue ? 'text-red-600' : 'text-slate-800'}`}>
                       {new Date(r.remindAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
                     </td>
-                    <td className="px-4 py-3 text-slate-500">
+                    <td className="hidden sm:table-cell px-4 py-3 text-slate-500">
                       {r.relatedName ? <Badge color={r.relatedType === 'client' ? '#6366f1' : '#0ea5e9'}>{r.relatedName}</Badge> : '—'}
                     </td>
                     <td className="px-4 py-3 text-slate-700 max-w-sm">
@@ -151,7 +151,7 @@ export default function RemindersPage() {
                         {r.note}
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="hidden sm:table-cell px-4 py-3 text-center">
                       {r.emailEnabled ? (
                         <span className="text-emerald-600" title={r.emailSentAt ? `Sent ${new Date(r.emailSentAt).toLocaleString()}` : 'Will be emailed'}>✉️</span>
                       ) : (

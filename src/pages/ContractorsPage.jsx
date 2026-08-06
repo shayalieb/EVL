@@ -125,12 +125,12 @@ export default function ContractorsPage() {
             <thead>
               <tr className="border-b border-slate-100 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                 <th className="px-4 py-3">Full Name</th>
-                <th className="px-4 py-3">Email</th>
-                <th className="px-4 py-3">Phone</th>
+                <th className="hidden sm:table-cell px-4 py-3">Email</th>
+                <th className="hidden sm:table-cell px-4 py-3">Phone</th>
                 <th className="px-4 py-3">Category</th>
-                <th className="px-4 py-3">Role</th>
+                <th className="hidden sm:table-cell px-4 py-3">Role</th>
                 <th className="px-4 py-3">Price</th>
-                <th className="px-4 py-3 text-center">Notes</th>
+                <th className="hidden sm:table-cell px-4 py-3 text-center">Notes</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -160,10 +160,10 @@ export default function ContractorsPage() {
                       <span>{c.firstName} {c.middleName ? `${c.middleName} ` : ''}{c.lastName}</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-slate-500">{c.email || '—'}</td>
-                  <td className="px-4 py-3 text-slate-500">{c.phone || '—'}</td>
+                  <td className="hidden sm:table-cell px-4 py-3 text-slate-500">{c.email || '—'}</td>
+                  <td className="hidden sm:table-cell px-4 py-3 text-slate-500">{c.phone || '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{c.contractorType1}</td>
-                  <td className="px-4 py-3 text-slate-500">{c.contractorType2 || '—'}</td>
+                  <td className="hidden sm:table-cell px-4 py-3 text-slate-500">{c.contractorType2 || '—'}</td>
                   <td className="px-4 py-3 text-slate-700">
                     {(() => {
                       const tiers = getPricingTiers(c);
@@ -179,7 +179,7 @@ export default function ContractorsPage() {
                       );
                     })()}
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="hidden sm:table-cell px-4 py-3 text-center">
                     {c.priceNotes ? (
                       <Tooltip content={c.priceNotes}>
                         <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold cursor-default">

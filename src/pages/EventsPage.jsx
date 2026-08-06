@@ -142,9 +142,9 @@ export default function EventsPage() {
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Event Name</th>
                 <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3"># Contractors</th>
-                <th className="px-4 py-3">Total Cost</th>
-                <th className="px-4 py-3">Vendor Status</th>
+                <th className="hidden sm:table-cell px-4 py-3"># Contractors</th>
+                <th className="hidden sm:table-cell px-4 py-3">Total Cost</th>
+                <th className="hidden sm:table-cell px-4 py-3">Vendor Status</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -184,7 +184,7 @@ export default function EventsPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-slate-600">{formatDateWithWeekday(evt.eventDate)}</td>
-                    <td className="px-4 py-3">
+                    <td className="hidden sm:table-cell px-4 py-3">
                       {count === 0 ? (
                         <span className="text-slate-400">0</span>
                       ) : (
@@ -205,8 +205,8 @@ export default function EventsPage() {
                         </Tooltip>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-slate-700 font-medium">{currency(total)}</td>
-                    <td className="px-4 py-3">
+                    <td className="hidden sm:table-cell px-4 py-3 text-slate-700 font-medium">{currency(total)}</td>
+                    <td className="hidden sm:table-cell px-4 py-3">
                       {vendor.status === 'none' ? (
                         <span className="text-slate-300">—</span>
                       ) : (

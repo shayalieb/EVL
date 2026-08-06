@@ -99,11 +99,11 @@ export default function ClientsPage() {
               <tr className="border-b border-slate-100 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                 <th className="px-4 py-3">Client Name</th>
                 <th className="px-4 py-3">Phone</th>
-                <th className="px-4 py-3">Email</th>
-                <th className="px-4 py-3 text-center">Pending Events</th>
-                <th className="px-4 py-3 text-center">Confirmed Events</th>
-                <th className="px-4 py-3 text-center">Declined Events</th>
-                <th className="px-4 py-3 text-center">Notes</th>
+                <th className="hidden sm:table-cell px-4 py-3">Email</th>
+                <th className="hidden sm:table-cell px-4 py-3 text-center">Pending Events</th>
+                <th className="hidden sm:table-cell px-4 py-3 text-center">Confirmed Events</th>
+                <th className="hidden sm:table-cell px-4 py-3 text-center">Declined Events</th>
+                <th className="hidden sm:table-cell px-4 py-3 text-center">Notes</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -136,11 +136,11 @@ export default function ClientsPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-slate-500">{c.phone || '—'}</td>
-                    <td className="px-4 py-3 text-slate-500">{c.email || '—'}</td>
-                    <td className="px-4 py-3 text-center text-slate-600">{counts.pending}</td>
-                    <td className="px-4 py-3 text-center text-slate-600">{counts.confirmed}</td>
-                    <td className="px-4 py-3 text-center text-slate-600">{counts.declined}</td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="hidden sm:table-cell px-4 py-3 text-slate-500">{c.email || '—'}</td>
+                    <td className="hidden sm:table-cell px-4 py-3 text-center text-slate-600">{counts.pending}</td>
+                    <td className="hidden sm:table-cell px-4 py-3 text-center text-slate-600">{counts.confirmed}</td>
+                    <td className="hidden sm:table-cell px-4 py-3 text-center text-slate-600">{counts.declined}</td>
+                    <td className="hidden sm:table-cell px-4 py-3 text-center">
                       {c.notes ? (
                         <Tooltip content={c.notes}>
                           <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold cursor-default">

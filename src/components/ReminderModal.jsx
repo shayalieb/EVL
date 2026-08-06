@@ -93,7 +93,7 @@ export default function ReminderModal({ open, onClose, reminder, onSaved }) {
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <div data-testid="reminder-modal-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>Related To</label>
             <select
@@ -124,7 +124,7 @@ export default function ReminderModal({ open, onClose, reminder, onSaved }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>Reminder Date *</label>
             <input required type="date" value={form.date} onChange={(e) => update('date', e.target.value)} data-testid="reminder-modal-date-input" className={inputClass} />

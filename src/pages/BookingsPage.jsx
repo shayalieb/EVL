@@ -198,11 +198,11 @@ export default function BookingsPage() {
               <tr className="border-b border-slate-100 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Client</th>
-                <th className="px-4 py-3">Follow-up</th>
+                <th className="hidden sm:table-cell px-4 py-3">Follow-up</th>
                 <th className="px-4 py-3">Event Date</th>
-                <th className="px-4 py-3">Event Type</th>
-                <th className="px-4 py-3">Deposit</th>
-                <th className="px-4 py-3 text-center">Notes</th>
+                <th className="hidden sm:table-cell px-4 py-3">Event Type</th>
+                <th className="hidden sm:table-cell px-4 py-3">Deposit</th>
+                <th className="hidden sm:table-cell px-4 py-3 text-center">Notes</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -244,7 +244,7 @@ export default function BookingsPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="hidden sm:table-cell px-4 py-3">
                       {b.nextFollowUpDate ? (
                         <span className={
                           tone === 'overdue' ? 'text-red-600 font-semibold' :
@@ -258,8 +258,8 @@ export default function BookingsPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-slate-600">{b.eventDate ? formatEventDate(b.eventDate) : '—'}</td>
-                    <td className="px-4 py-3 text-slate-600">{b.eventType || '—'}</td>
-                    <td className="px-4 py-3">
+                    <td className="hidden sm:table-cell px-4 py-3 text-slate-600">{b.eventType || '—'}</td>
+                    <td className="hidden sm:table-cell px-4 py-3">
                       {b.depositPaid ? (
                         <Badge color="#22c55e">Paid{b.depositAmount ? ` ${currency(b.depositAmount)}` : ''}</Badge>
                       ) : b.depositAmount ? (
@@ -268,7 +268,7 @@ export default function BookingsPage() {
                         <span className="text-slate-300">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="hidden sm:table-cell px-4 py-3 text-center">
                       {b.notes ? (
                         <Tooltip content={b.notes}>
                           <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold cursor-default">

@@ -253,7 +253,7 @@ function OfferingsEditor({ offerings, onChange, onAddClick }) {
                 className={`${inputClass} mb-2`}
               />
               {o.type === 'perUnit' ? (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label className="block text-[11px] text-slate-400 mb-1">Unit Count</label>
                     <input
@@ -1643,7 +1643,7 @@ export default function BookingFormPage() {
         <Badge color={contractStatusInfo(contract).color}>Contract: {contractStatusInfo(contract).label}</Badge>
       </div>
 
-      <div className="flex border-b border-slate-200 mb-6">
+      <div className="flex overflow-x-auto border-b border-slate-200 mb-6">
         {TABS.map((t) => {
           const count = t.id === 'proposal' ? proposalDocs.length : t.id === 'contract' ? contractDocs.length : 0;
           return (
@@ -1652,7 +1652,7 @@ export default function BookingFormPage() {
               type="button"
               onClick={() => setActiveTab(t.id)}
               data-testid={`booking-form-tab-${t.id}`}
-              className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px flex items-center gap-2 ${
+              className={`shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px flex items-center gap-2 ${
                 activeTab === t.id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
             >
@@ -1725,7 +1725,7 @@ export default function BookingFormPage() {
               </div>
 
               {isWedding(form.eventType) && (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className={labelClass}>Bride's Name</label>
                     <input value={form.brideName} onChange={(e) => update('brideName', e.target.value)} data-testid="booking-form-bridename-input" className={inputClass} />
@@ -1754,7 +1754,7 @@ export default function BookingFormPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Event Date (tentative is fine)</label>
                   <input type="date" value={form.eventDate} onChange={(e) => update('eventDate', e.target.value)} data-testid="booking-form-event-date-input" className={inputClass} />
@@ -1799,7 +1799,7 @@ export default function BookingFormPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Booking Status</label>
                   <select value={form.bookingStatus} onChange={(e) => update('bookingStatus', e.target.value)} data-testid="booking-form-status-select" className={inputClass}>
@@ -1815,7 +1815,7 @@ export default function BookingFormPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Next Follow-up Date</label>
                   <input type="date" value={form.nextFollowUpDate} onChange={(e) => update('nextFollowUpDate', e.target.value)} data-testid="booking-form-next-followup-date-input" className={inputClass} />
@@ -1842,7 +1842,7 @@ export default function BookingFormPage() {
                   testId="booking-form-venue-name-input"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Address 1</label>
                   <input value={form.venue.address1} onChange={(e) => updateVenue('address1', e.target.value)} data-testid="booking-form-venue-address1-input" className={inputClass} />
@@ -1852,7 +1852,7 @@ export default function BookingFormPage() {
                   <input value={form.venue.address2} onChange={(e) => updateVenue('address2', e.target.value)} data-testid="booking-form-venue-address2-input" className={inputClass} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Venue Contact</label>
                   <input value={form.venue.contactName} onChange={(e) => updateVenue('contactName', e.target.value)} data-testid="booking-form-venue-contactname-input" className={inputClass} />
@@ -1868,7 +1868,7 @@ export default function BookingFormPage() {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>City</label>
                   <input value={form.venue.city} onChange={(e) => updateVenue('city', e.target.value)} data-testid="booking-form-venue-city-input" className={inputClass} />
@@ -2089,7 +2089,7 @@ export default function BookingFormPage() {
                         </button>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className={labelClass}>Deposit Amount</label>
                         {form.depositType === 'percent' ? (
@@ -2853,7 +2853,7 @@ export default function BookingFormPage() {
                     </button>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className={labelClass}>Deposit Amount</label>
                     {form.depositType === 'percent' ? (

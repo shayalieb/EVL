@@ -88,7 +88,7 @@ export default function OfferingModal({ open, onClose, offering, onSaved }) {
         </div>
 
         {form.type === 'perUnit' ? (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={labelClass}>Unit Count</label>
               <input type="number" min="0" value={form.unitCount} onChange={(e) => update('unitCount', e.target.value)} data-testid="offering-modal-unitcount-input" className={inputClass} />

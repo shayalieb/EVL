@@ -56,7 +56,7 @@ export default function SectionsEditor({ sections, onChange }) {
                   ✕
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <textarea
                   rows={2}
                   value={s.text}
@@ -79,7 +79,7 @@ export default function SectionsEditor({ sections, onChange }) {
       )}
       <div className="border border-dashed border-slate-300 rounded-lg p-3">
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="New section title" data-testid="booking-form-section-new-title-input" className={`${inputClass} mb-2`} />
-        <div className="grid grid-cols-2 gap-2 mb-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
           <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)} placeholder="Text (optional)" data-testid="booking-form-section-new-text-textarea" className={inputClass} />
           <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Value (optional)" data-testid="booking-form-section-new-value-input" className={inputClass} />
         </div>

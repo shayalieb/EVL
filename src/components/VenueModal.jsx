@@ -64,7 +64,7 @@ export default function VenueModal({ open, onClose, venue, onSaved }) {
           <input required value={form.name} onChange={(e) => update('name', e.target.value)} data-testid="venue-modal-name-input" className={inputClass} />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>Address 1</label>
             <input value={form.address1} onChange={(e) => update('address1', e.target.value)} data-testid="venue-modal-address1-input" className={inputClass} />
@@ -75,7 +75,7 @@ export default function VenueModal({ open, onClose, venue, onSaved }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>City</label>
             <input value={form.city} onChange={(e) => update('city', e.target.value)} data-testid="venue-modal-city-input" className={inputClass} />
@@ -92,7 +92,7 @@ export default function VenueModal({ open, onClose, venue, onSaved }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>Contact Name</label>
             <input value={form.contactName} onChange={(e) => update('contactName', e.target.value)} data-testid="venue-modal-contactname-input" className={inputClass} />
