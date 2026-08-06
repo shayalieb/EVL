@@ -42,6 +42,20 @@ const VERTICAL_DEFAULTS = {
       { name: 'Ceremony Add-On', details: 'Solo or duo acoustic performance during the ceremony.', type: 'general', amount: 300 },
       { name: 'Extra Hour', details: 'Additional performance time beyond the standard package.', type: 'perUnit', unitCount: 1, ratePerUnit: 150 },
     ],
+    // Same head-start mechanism as party_planning/photography's
+    // proposalSections — a fresh band_orchestra account was the only one
+    // of the three still starting its first proposal from a blank page.
+    // Technical/Hospitality Rider is the two-document standard attached to
+    // a real band contract (confirmed via competitor research — Stage
+    // Portal, Gigwell, and general industry guides all converge on this
+    // split), and the composer's own "Riders, policies, or any other
+    // custom content" placeholder was already inviting exactly this.
+    proposalSections: [
+      { title: 'Technical Rider', value: '', text: 'Backline, sound, and power requirements — see the attached stage plot and input list for exact placement and channel needs.' },
+      { title: 'Hospitality Rider', value: '', text: 'Green room, food/beverage, and parking arrangements for the band.' },
+      { title: 'Sound Check & Load-In', value: '', text: 'Expected arrival time, load-in access, and sound check window ahead of the performance.' },
+      { title: 'Performance Breaks', value: '', text: 'Set length and break structure — e.g. three 45-minute sets with 15-minute breaks.' },
+    ],
   },
   party_planning: {
     contractorTypes: ['Caterer', 'Event Planner', 'Florist', 'Rental Coordinator', 'Bartender'],
