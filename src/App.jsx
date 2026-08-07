@@ -1,9 +1,13 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
+import { PortalAuthProvider, usePortalAuth } from './context/PortalAuthContext';
 import { ToastProvider } from './components/ui/Toast';
 import { SavingIndicatorProvider } from './components/ui/SavingIndicator';
 import AuthPage from './pages/AuthPage';
+import PortalLoginPage from './pages/portal/PortalLoginPage';
+import PortalVerifyPage from './pages/portal/PortalVerifyPage';
+import PortalHomePage from './pages/portal/PortalHomePage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import ContractSignPage from './pages/ContractSignPage';
 import InvoicePayPage from './pages/InvoicePayPage';
@@ -77,6 +81,34 @@ function DevOnlyRoute({ children }) {
   return children;
 }
 
+// The client-facing self-service portal — deliberately its own auth/session
+// (PortalAuthProvider, backed by server/src/routes/portal.js's magic-link
+// login and separate portal.sid cookie), never AuthProvider/DataProvider
+// (those assume a business User principal throughout). Mounted as its own
+// subtree so `/portal/me` is only ever fetched for portal routes, not on
+// every page load elsewhere in the app.
+function PortalArea() {
+  return (
+    <PortalAuthProvider>
+      <Outlet />
+    </PortalAuthProvider>
+  );
+}
+
+function PortalLoginGate() {
+  const { client, portalLoading } = usePortalAuth();
+  if (portalLoading) return null;
+  if (client) return <Navigate to="/portal" replace />;
+  return <PortalLoginPage />;
+}
+
+function PortalProtectedRoute() {
+  const { client, portalLoading } = usePortalAuth();
+  if (portalLoading) return null;
+  if (!client) return <Navigate to="/portal/login" replace />;
+  return <PortalHomePage />;
+}
+
 function PlatformAdminArea() {
   const { currentUser, authLoading } = useAuth();
   if (authLoading) return null;
@@ -94,6 +126,11 @@ function AppRoutes() {
       <Route path="/invoice/:token" element={<InvoicePayPage />} />
       <Route path="/inquiry/:token" element={<InquiryFormPage />} />
       <Route path="/rsvp/:token" element={<RsvpPage />} />
+      <Route path="/portal" element={<PortalArea />}>
+        <Route index element={<PortalProtectedRoute />} />
+        <Route path="login" element={<PortalLoginGate />} />
+        <Route path="verify" element={<PortalVerifyPage />} />
+      </Route>
       <Route path="/" element={<ProtectedArea />}>
         <Route index element={<Navigate to="/home" replace />} />
         <Route path="home" element={<HomePage />} />

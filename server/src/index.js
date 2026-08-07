@@ -30,7 +30,9 @@ import contractorsRouter from './routes/contractors.js';
 import clientsRouter from './routes/clients.js';
 import bookingsRouter from './routes/bookings.js';
 import eventsRouter from './routes/events.js';
+import portalRouter from './routes/portal.js';
 import { startReminderScheduler } from './lib/reminderScheduler.js';
+import { startReminderRuleEngine } from './lib/reminderRuleEngine.js';
 
 // No-ops safely with no DSN set — nothing breaks in dev/test environments
 // or before SENTRY_DSN is added to Railway's env vars, this just silently
@@ -76,21 +78,58 @@ app.use('/api/webhooks', express.raw({ type: '*/*' }), stripeWebhooksRouter);
 
 app.use(express.json());
 
-app.use(session({
-  store: new PrismaSessionStore(prisma, { checkPeriodMs: 2 * 60 * 1000, dbRecordIdIsSessionId: true }),
-  secret: process.env.SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
+// Deliberately a *separate* PrismaSessionStore instance per session()
+// middleware below (see portalSession), not one shared instance — both end
+// up persisting to the same underlying Session table (schema.prisma) either
+// way, but sharing one JS store instance between two differently-configured
+// session() middlewares was observed to leak config between them: the
+// business session's cookie ended up with the portal session's `path`
+// applied to it. Two independent store instances avoids that entirely,
+// whatever the exact mechanism.
+function newSessionStore() {
+  return new PrismaSessionStore(prisma, { checkPeriodMs: 2 * 60 * 1000, dbRecordIdIsSessionId: true });
+}
+
+// Also a fresh cookie-options object per session() call, same reasoning —
+// don't give express-session's Cookie constructor two configs to potentially
+// cross-mutate.
+function baseSessionCookie() {
+  return {
     httpOnly: true,
     // Frontend and backend are always on different origins, so the session
-    // cookie needs SameSite=None to survive cross-site fetch() calls —
-    // which in turn requires Secure, hence gating both on NODE_ENV.
+    // cookie needs SameSite=None to survive cross-site fetch() calls — which
+    // in turn requires Secure, hence gating both on NODE_ENV.
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     secure: process.env.NODE_ENV === 'production',
     maxAge: 7 * 24 * 60 * 60 * 1000,
-  },
+  };
+}
+
+app.use(session({
+  store: newSessionStore(),
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: baseSessionCookie(),
 }));
+
+// Separate cookie (distinct name + path) for the client-portal login (see
+// routes/portal.js) — critical, not cosmetic: without this, a client
+// logging into the portal in one browser tab would silently log the
+// business owner out of their own dashboard in another tab of the same
+// browser, since both would otherwise share one `connect.sid` cookie/
+// session document. Scoping cookie.path to /api/portal means the browser
+// only ever sends this cookie on portal requests, keeping the two
+// completely separate regardless of tab/session ordering. Mounted only on
+// the portal router below, so no other route is affected by it.
+const portalSession = session({
+  name: 'portal.sid',
+  store: newSessionStore(),
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: { ...baseSessionCookie(), path: '/api/portal' },
+});
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRouter);
@@ -122,6 +161,9 @@ app.use('/api/contractors', contractorsRouter);
 app.use('/api/clients', clientsRouter);
 app.use('/api/bookings', bookingsRouter);
 app.use('/api/events', eventsRouter);
+// Client-facing self-service portal — public/token-login, own session
+// scope (portalSession above), see routes/portal.js.
+app.use('/api/portal', portalSession, portalRouter);
 // Public/unauthenticated — same reasoning as /api/contract-sign above.
 app.use('/api/rsvp', publicRsvpRouter);
 // Public/unauthenticated — recipients click this link from an email, not
@@ -155,3 +197,4 @@ app.use((err, req, res, next) => {
 const port = process.env.PORT || 4000;
 app.listen(port, () => console.log(`Server listening on ${port}`));
 startReminderScheduler();
+startReminderRuleEngine();

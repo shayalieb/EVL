@@ -20,8 +20,9 @@ async function sendReminderEmail(reminder) {
 
   const businessInfo = reminder.account?.accountData?.data?.businessInfo;
   const fromName = businessInfo?.name || 'GigWorks';
+  const RELATED_TYPE_LABELS = { client: 'Client', contractor: 'Contractor', event: 'Event', invoice: 'Invoice' };
   const relatedLine = reminder.relatedName
-    ? `<p><strong>${escapeHtml(reminder.relatedType === 'client' ? 'Client' : 'Contractor')}:</strong> ${escapeHtml(reminder.relatedName)}</p>`
+    ? `<p><strong>${escapeHtml(RELATED_TYPE_LABELS[reminder.relatedType] || 'Related')}:</strong> ${escapeHtml(reminder.relatedName)}</p>`
     : '';
 
   await sendMail({
@@ -38,7 +39,8 @@ async function sendReminderEmail(reminder) {
 
 let running = false;
 
-async function tick() {
+// Exported for the same on-demand-testing reason as reminderRuleEngine.js's tick.
+export async function tick() {
   if (running) return;
   running = true;
   try {

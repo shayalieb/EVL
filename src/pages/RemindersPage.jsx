@@ -9,6 +9,11 @@ import { matchesSearch } from '../lib/search';
 import { fetchReminders, completeReminder, deleteReminder } from '../lib/reminders';
 import { usePagination } from '../lib/usePagination';
 
+// event/invoice reminders are rule-generated (see server/src/lib/
+// reminderRuleEngine.js) — distinct colors from client/contractor so an
+// auto-generated row reads differently from a manually-created one at a glance.
+const RELATED_TYPE_COLORS = { client: '#6366f1', contractor: '#0ea5e9', event: '#d97706', invoice: '#e11d48' };
+
 const STATUS_FILTERS = [
   { value: 'pending', label: 'Pending' },
   { value: 'completed', label: 'Completed' },
@@ -139,7 +144,7 @@ export default function RemindersPage() {
                       {new Date(r.remindAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
                     </td>
                     <td className="hidden sm:table-cell px-4 py-3 text-slate-500">
-                      {r.relatedName ? <Badge color={r.relatedType === 'client' ? '#6366f1' : '#0ea5e9'}>{r.relatedName}</Badge> : '—'}
+                      {r.relatedName ? <Badge color={RELATED_TYPE_COLORS[r.relatedType] || '#0ea5e9'}>{r.relatedName}</Badge> : '—'}
                     </td>
                     <td className="px-4 py-3 text-slate-700 max-w-sm">
                       <button
