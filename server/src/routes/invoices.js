@@ -80,12 +80,13 @@ function serializeForPublic(invoice) {
 
 router.use(requireAuth, asyncHandler(attachMembership));
 
+// bookingId is optional — omit it for the account's full invoice list (used
+// by HomePage's Overdue Invoices panel), or pass it to scope to one
+// booking's invoices (the Invoices tab's original, still-primary use).
 router.get('/', asyncHandler(async (req, res) => {
   const { bookingId } = req.query;
-  if (!bookingId) return res.status(400).json({ error: 'bookingId is required.' });
-
   const invoices = await prisma.invoice.findMany({
-    where: { accountId: req.membership.accountId, bookingId },
+    where: { accountId: req.membership.accountId, ...(bookingId ? { bookingId } : {}) },
     orderBy: { createdAt: 'desc' },
   });
   res.json({ invoices: invoices.map(serializeForOwner) });

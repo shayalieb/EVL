@@ -1,7 +1,10 @@
 import { apiFetch } from '../context/AuthContext';
 
+// bookingId omitted returns the account's full invoice list (see
+// HomePage.jsx's Overdue Invoices panel).
 export async function listInvoices(bookingId) {
-  const data = await apiFetch(`/invoices?bookingId=${encodeURIComponent(bookingId)}`);
+  const query = bookingId ? `?bookingId=${encodeURIComponent(bookingId)}` : '';
+  const data = await apiFetch(`/invoices${query}`);
   return data.invoices;
 }
 

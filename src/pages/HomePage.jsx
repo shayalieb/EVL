@@ -1,9 +1,16 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import Badge from '../components/ui/Badge';
 import { formatCurrency } from '../lib/format';
+import { listInvoices } from '../lib/invoices';
 import { CalendarIcon, ClockIcon, DollarIcon, UsersIcon, WrenchIcon, AlertIcon } from '../components/ui/icons';
+
+// At-risk window for the "needs attention soon" panel below — events inside
+// this many days that still have unconfirmed vendors are the ones actually
+// worth surfacing; further out, "pending" is just normal pipeline state, not
+// yet a risk.
+const AT_RISK_WINDOW_DAYS = 14;
 
 function currency(n) {
   return formatCurrency(n, { maximumFractionDigits: 0 });
@@ -51,6 +58,17 @@ export default function HomePage() {
   } = useData();
   const navigate = useNavigate();
 
+  // Not routed through DataContext — invoices aren't read anywhere else in
+  // the app yet (only inside a Booking's own Invoices tab, scoped to that
+  // one booking), so a page-local fetch keeps this contained rather than
+  // adding a new account-wide entity everywhere `useData()` is consumed.
+  const [invoices, setInvoices] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    listInvoices().then((list) => { if (!cancelled) setInvoices(list); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   const stats = useMemo(() => {
     const today = todayISO();
     const isCancelled = (e) => {
@@ -64,6 +82,13 @@ export default function HomePage() {
 
     const pipelineValue = upcoming.reduce((sum, e) => sum + computeEventTotalCost(e), 0);
     const needsConfirmation = upcoming.filter((e) => computeVendorStatus(e).status === 'pending').length;
+
+    const atRiskCutoff = new Date();
+    atRiskCutoff.setDate(atRiskCutoff.getDate() + AT_RISK_WINDOW_DAYS);
+    const atRiskCutoffISO = atRiskCutoff.toISOString().slice(0, 10);
+    const atRiskEvents = upcoming
+      .filter((e) => e.eventDate <= atRiskCutoffISO && computeVendorStatus(e).status === 'pending')
+      .slice(0, 5);
 
     const bookingCounts = new Map();
     for (const e of events) {
@@ -89,10 +114,23 @@ export default function HomePage() {
       pipelineValue,
       needsConfirmation,
       upcomingList: upcoming.slice(0, 5),
+      atRiskEvents,
       topContractors,
       followUpClients,
     };
   }, [events, clients, eventStatuses, computeEventTotalCost, computeVendorStatus, computeClientEventCounts, getContractorById]);
+
+  const overdueInvoices = useMemo(() => {
+    const today = todayISO();
+    return invoices
+      .filter((inv) => (inv.status === 'sent' || inv.status === 'partial') && inv.dueDate && inv.dueDate.slice(0, 10) < today)
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+      .slice(0, 5);
+  }, [invoices]);
+
+  function daysOverdue(dueDate) {
+    return Math.max(1, Math.floor((Date.now() - new Date(dueDate).getTime()) / 86400000));
+  }
 
   return (
     <div>
@@ -111,6 +149,64 @@ export default function HomePage() {
           icon={<AlertIcon />}
           testId="home-stat-needs-confirmation"
         />
+      </div>
+
+      {/* Money/risk at a glance — the two things most likely to actually
+          cost a solo operator, surfaced before the general-purpose panels
+          below rather than buried in per-booking tabs. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <PanelHeading color="#e11d48" icon={<DollarIcon className="w-3.5 h-3.5" />}>Overdue Invoices</PanelHeading>
+          {overdueInvoices.length === 0 ? (
+            <div className="text-sm text-slate-400 text-center py-6">No overdue invoices.</div>
+          ) : (
+            <div className="space-y-1">
+              {overdueInvoices.map((inv) => (
+                <button
+                  key={inv.id}
+                  type="button"
+                  onClick={() => navigate(`/bookings/${inv.bookingId}`)}
+                  data-testid="home-overdue-invoice-row"
+                  className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 text-left"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-slate-800 truncate">{inv.recipientName || `Invoice #${inv.number}`}</div>
+                    <div className="text-xs text-slate-400">Due {formatShortDate(inv.dueDate.slice(0, 10))}</div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-sm font-semibold text-slate-700">{currency(inv.total - inv.paidAmount)}</span>
+                    <Badge color="#e11d48">{daysOverdue(inv.dueDate)}d overdue</Badge>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <PanelHeading color="#d97706" icon={<AlertIcon className="w-3.5 h-3.5" />}>At-Risk Events</PanelHeading>
+          {stats.atRiskEvents.length === 0 ? (
+            <div className="text-sm text-slate-400 text-center py-6">Nothing unconfirmed in the next {AT_RISK_WINDOW_DAYS} days.</div>
+          ) : (
+            <div className="space-y-1">
+              {stats.atRiskEvents.map((e) => (
+                <button
+                  key={e.id}
+                  type="button"
+                  onClick={() => navigate(`/events/${e.id}`)}
+                  data-testid="home-at-risk-event-row"
+                  className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 text-left"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-slate-800 truncate">{e.name}</div>
+                    <div className="text-xs text-slate-400">{formatShortDate(e.eventDate)}</div>
+                  </div>
+                  <Badge color="#eab308">Unconfirmed</Badge>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
