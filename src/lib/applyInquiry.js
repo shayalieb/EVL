@@ -26,14 +26,14 @@ export function findMatchingClient(clients, response) {
 // client, that link is left alone (it was presumably set deliberately —
 // e.g. from a phone call before the inquiry link was even sent). Only when
 // there's no existing link does this fall back to find-or-create.
-export function resolveClientForMerge(response, { clients, addClient, currentClientId }) {
+export async function resolveClientForMerge(response, { clients, addClient, currentClientId }) {
   if (currentClientId) {
     return { clientId: currentClientId, client: clients.find((c) => c.id === currentClientId) || null, created: false };
   }
   let client = findMatchingClient(clients, response);
   const created = !client;
   if (!client) {
-    client = addClient({ firstName: response.firstName, lastName: response.lastName, phone: response.phone, email: response.email });
+    client = await addClient({ firstName: response.firstName, lastName: response.lastName, phone: response.phone, email: response.email });
   }
   return { clientId: client.id, client, created };
 }
@@ -121,11 +121,11 @@ export function resolveEventName(response) {
 // Builds a full booking/venue shape (not just the inquiry-sourced fields) —
 // addBooking does a flat spread with no deep-defaulting, so a partial venue
 // object here would leave fields like city/state undefined instead of ''.
-export function applyInquiryResponse(response, { clients, venues, addClient, addBooking }) {
+export async function applyInquiryResponse(response, { clients, venues, addClient, addBooking }) {
   const r = response;
-  const { clientId, client } = resolveClientForMerge(r, { clients, addClient, currentClientId: null });
+  const { clientId, client } = await resolveClientForMerge(r, { clients, addClient, currentClientId: null });
 
-  const booking = addBooking({
+  const booking = await addBooking({
     ...emptyForm(),
     eventName: resolveEventName(r),
     clientId,

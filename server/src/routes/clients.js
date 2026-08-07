@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
+import { createWithPreservedId } from '../lib/idPreservingCreate.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -34,26 +35,28 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 router.post('/', asyncHandler(async (req, res) => {
-  const { firstName, lastName, email, phone, address1, address2, city, state, zip, notes } = req.body || {};
+  const { id, firstName, lastName, email, phone, address1, address2, city, state, zip, notes } = req.body || {};
+  if (!id?.trim()) {
+    return res.status(400).json({ error: 'id is required.' });
+  }
   if (!firstName?.trim() || !lastName?.trim()) {
     return res.status(400).json({ error: 'First name and last name are required.' });
   }
 
-  const client = await prisma.client.create({
-    data: {
-      accountId: req.membership.accountId,
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      email: email?.trim() || null,
-      phone: phone?.trim() || null,
-      address1: address1?.trim() || null,
-      address2: address2?.trim() || null,
-      city: city?.trim() || null,
-      state: state?.trim() || null,
-      zip: zip?.trim() || null,
-      notes: notes?.trim() || null,
-    },
-  });
+  const client = await createWithPreservedId(prisma.client, {
+    id,
+    accountId: req.membership.accountId,
+    firstName: firstName.trim(),
+    lastName: lastName.trim(),
+    email: email?.trim() || null,
+    phone: phone?.trim() || null,
+    address1: address1?.trim() || null,
+    address2: address2?.trim() || null,
+    city: city?.trim() || null,
+    state: state?.trim() || null,
+    zip: zip?.trim() || null,
+    notes: notes?.trim() || null,
+  }, req.membership.accountId);
   res.status(201).json({ client: serializeClient(client) });
 }));
 

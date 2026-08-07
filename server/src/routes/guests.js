@@ -185,8 +185,8 @@ publicRsvpRouter.get('/:token', asyncHandler(async (req, res) => {
   if (!link) return res.status(404).json({ error: 'This link is invalid.' });
 
   const accountData = await prisma.accountData.findUnique({ where: { accountId: link.accountId } });
-  const event = (accountData?.data?.events || []).find((e) => e.id === link.eventId);
-  if (!event) return res.status(404).json({ error: 'This event could not be found.' });
+  const event = await prisma.event.findUnique({ where: { id: link.eventId } });
+  if (!event || event.accountId !== link.accountId) return res.status(404).json({ error: 'This event could not be found.' });
 
   res.json({
     businessInfo: accountData?.data?.businessInfo || null,
@@ -222,7 +222,7 @@ publicRsvpRouter.post('/:token', rsvpSubmitLimiter, asyncHandler(async (req, res
   try {
     const accountData = await prisma.accountData.findUnique({ where: { accountId: link.accountId } });
     const businessInfo = accountData?.data?.businessInfo || {};
-    const event = (accountData?.data?.events || []).find((e) => e.id === link.eventId);
+    const event = await prisma.event.findUnique({ where: { id: link.eventId } });
     const ownerMembership = await prisma.membership.findFirst({ where: { accountId: link.accountId, role: 'owner' }, include: { user: true } });
     const ownerEmail = ownerMembership?.user?.email;
     if (ownerEmail) {

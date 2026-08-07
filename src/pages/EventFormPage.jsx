@@ -309,7 +309,9 @@ export default function EventFormPage() {
   useEffect(() => {
     if (!event) return;
     if (autoSaveSkipRef.current) { autoSaveSkipRef.current = false; return; }
-    const timer = setTimeout(() => { updateEvent(event.id, form); }, 800);
+    const timer = setTimeout(() => {
+      updateEvent(event.id, form).catch((err) => setError(err.message || 'Failed to save changes.'));
+    }, 800);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form]);
@@ -915,10 +917,13 @@ export default function EventFormPage() {
     return '';
   }
 
+  // Returns { patch, promise } — same reasoning as BookingFormPage's
+  // persistBooking: `patch` is available synchronously, `promise` is the
+  // actual save for callers that need to know whether it succeeded.
   function persistEvent(statusId) {
-    const payload = { ...form, eventStatus: statusId };
-    if (event) updateEvent(event.id, payload);
-    else addEvent(payload);
+    const patch = { ...form, eventStatus: statusId };
+    const promise = event ? updateEvent(event.id, patch) : addEvent(patch);
+    return { patch, promise };
   }
 
   // Stay on the form after saving in both handlers below — only Back/Cancel
@@ -927,15 +932,20 @@ export default function EventFormPage() {
   // on an unsaved event), so it's known before this save and doubles as the
   // real record's id once persistEvent() creates it — swap the route from
   // /events/new to /events/:id so the form is now in edit mode.
-  function handleSaveDraft() {
+  async function handleSaveDraft() {
     const err = validate();
     if (err) { setError(err); setActiveTab('details'); return; }
     const wasNew = !event;
-    persistEvent(draftStatus?.id);
-    showToast('Saved as draft');
-    if (wasNew) {
-      clearDraft(NEW_EVENT_DRAFT_KEY);
-      navigate(`/events/${form.id}`, { replace: true });
+    const { patch, promise } = persistEvent(draftStatus?.id);
+    try {
+      await promise;
+      showToast('Saved as draft');
+      if (wasNew) {
+        clearDraft(NEW_EVENT_DRAFT_KEY);
+        navigate(`/events/${patch.id}`, { replace: true });
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to save draft.');
     }
   }
 
@@ -945,14 +955,20 @@ export default function EventFormPage() {
     if (err) { setError(err); setActiveTab('details'); return; }
     setSaving(true);
     const wasNew = !event;
-    setTimeout(() => {
+    setTimeout(async () => {
       const confirmedStatus = eventStatuses.find((s) => s.label.toLowerCase() === 'confirmed');
-      persistEvent(event?.eventStatus || confirmedStatus?.id || draftStatus?.id);
-      setSaving(false);
-      showToast(wasNew ? 'Event added' : 'Event updated');
-      if (wasNew) {
-        clearDraft(NEW_EVENT_DRAFT_KEY);
-        navigate(`/events/${form.id}`, { replace: true });
+      const { patch, promise } = persistEvent(event?.eventStatus || confirmedStatus?.id || draftStatus?.id);
+      try {
+        await promise;
+        showToast(wasNew ? 'Event added' : 'Event updated');
+        if (wasNew) {
+          clearDraft(NEW_EVENT_DRAFT_KEY);
+          navigate(`/events/${patch.id}`, { replace: true });
+        }
+      } catch (err) {
+        setError(err.message || 'Failed to save event.');
+      } finally {
+        setSaving(false);
       }
     }, 600);
   }

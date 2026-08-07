@@ -58,13 +58,13 @@ export default function ReviewInquiryModal({ open, link, onClose, onApplied, onA
         ({ bookingId, clientId } = await onApplyOverride(r));
       } else if (link.bookingId) {
         if (!targetBooking) throw new Error('The booking this was sent from no longer exists.');
-        const resolved = resolveClientForMerge(r, { clients, addClient, currentClientId: targetBooking.clientId });
+        const resolved = await resolveClientForMerge(r, { clients, addClient, currentClientId: targetBooking.clientId });
         const patch = buildBookingMergePatch(r, targetBooking, venues);
-        updateBooking(targetBooking.id, { ...patch, clientId: resolved.clientId });
+        await updateBooking(targetBooking.id, { ...patch, clientId: resolved.clientId });
         bookingId = targetBooking.id;
         clientId = resolved.clientId;
       } else {
-        const created = applyInquiryResponse(r, { clients, venues, addClient, addBooking });
+        const created = await applyInquiryResponse(r, { clients, venues, addClient, addBooking });
         bookingId = created.booking.id;
         clientId = created.client.id;
       }

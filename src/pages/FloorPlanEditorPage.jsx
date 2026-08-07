@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useData } from '../context/DataContext';
 import { getOrCreateFloorPlan, addFloorPlanPage, deleteFloorPlanPage } from '../lib/floorPlans';
 import { generateFloorPlanPdf } from '../lib/floorPlanPdf';
 import FloorPlanPageEditor from '../components/FloorPlanPageEditor';
@@ -8,7 +9,8 @@ import FloorPlanPageEditor from '../components/FloorPlanPageEditor';
 export default function FloorPlanEditorPage() {
   const { eventId } = useParams();
   const { currentUser } = useAuth();
-  const event = currentUser?.events?.find((e) => e.id === eventId);
+  const { events } = useData();
+  const event = events.find((e) => e.id === eventId);
   const [plan, setPlan] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [activePageId, setActivePageId] = useState(null);

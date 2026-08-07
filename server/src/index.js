@@ -28,6 +28,8 @@ import floorPlansRouter from './routes/floorPlans.js';
 import guestsRouter, { publicRsvpRouter } from './routes/guests.js';
 import contractorsRouter from './routes/contractors.js';
 import clientsRouter from './routes/clients.js';
+import bookingsRouter from './routes/bookings.js';
+import eventsRouter from './routes/events.js';
 import { startReminderScheduler } from './lib/reminderScheduler.js';
 
 // No-ops safely with no DSN set — nothing breaks in dev/test environments
@@ -118,6 +120,8 @@ app.use('/api/floor-plans', floorPlansRouter);
 app.use('/api/guests', guestsRouter);
 app.use('/api/contractors', contractorsRouter);
 app.use('/api/clients', clientsRouter);
+app.use('/api/bookings', bookingsRouter);
+app.use('/api/events', eventsRouter);
 // Public/unauthenticated — same reasoning as /api/contract-sign above.
 app.use('/api/rsvp', publicRsvpRouter);
 // Public/unauthenticated — recipients click this link from an email, not

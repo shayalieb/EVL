@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
+import { createWithPreservedId } from '../lib/idPreservingCreate.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -33,25 +34,27 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 router.post('/', asyncHandler(async (req, res) => {
-  const { firstName, lastName, middleName, email, phone, contractorType1, contractorType2, pricingTiers, priceNotes } = req.body || {};
+  const { id, firstName, lastName, middleName, email, phone, contractorType1, contractorType2, pricingTiers, priceNotes } = req.body || {};
+  if (!id?.trim()) {
+    return res.status(400).json({ error: 'id is required.' });
+  }
   if (!firstName?.trim() || !lastName?.trim()) {
     return res.status(400).json({ error: 'First name and last name are required.' });
   }
 
-  const contractor = await prisma.contractor.create({
-    data: {
-      accountId: req.membership.accountId,
-      firstName: firstName.trim(),
-      middleName: middleName?.trim() || null,
-      lastName: lastName.trim(),
-      email: email?.trim() || null,
-      phone: phone?.trim() || null,
-      contractorType1: contractorType1 || null,
-      contractorType2: contractorType2 || null,
-      pricingTiers: Array.isArray(pricingTiers) ? pricingTiers : [],
-      priceNotes: priceNotes?.trim() || null,
-    },
-  });
+  const contractor = await createWithPreservedId(prisma.contractor, {
+    id,
+    accountId: req.membership.accountId,
+    firstName: firstName.trim(),
+    middleName: middleName?.trim() || null,
+    lastName: lastName.trim(),
+    email: email?.trim() || null,
+    phone: phone?.trim() || null,
+    contractorType1: contractorType1 || null,
+    contractorType2: contractorType2 || null,
+    pricingTiers: Array.isArray(pricingTiers) ? pricingTiers : [],
+    priceNotes: priceNotes?.trim() || null,
+  }, req.membership.accountId);
   res.status(201).json({ contractor: serializeContractor(contractor) });
 }));
 

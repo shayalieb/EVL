@@ -6,6 +6,8 @@ import { statusBucket } from '../lib/inquiryStatusBucket';
 import { formatEventDate, formatCurrency } from '../lib/format';
 import { listContractors, createContractor as createContractorApi, updateContractorApi, deleteContractorApi } from '../lib/contractors';
 import { listClients, createClient as createClientApi, updateClientApi, deleteClientApi } from '../lib/clients';
+import { listBookings, createBooking as createBookingApi, updateBookingApi } from '../lib/bookings';
+import { listEvents, createEvent as createEventApi, updateEventApi } from '../lib/events';
 
 function statusLabel(statuses, id) {
   return statuses?.find((s) => s.id === id)?.label || id || '(none)';
@@ -74,8 +76,6 @@ const DataContext = createContext(null);
 
 const LIST_FIELDS = {
   venues: 'venues',
-  events: 'events',
-  bookings: 'bookings',
   contractorTypes: 'contractorTypes',
   eventTypes: 'eventTypes',
   eventStatuses: 'eventStatuses',
@@ -131,6 +131,36 @@ export function DataProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.accountId]);
 
+  // Same real-table-not-blob treatment as contractors/clients above — see
+  // server/prisma/schema.prisma's Booking/Event model comments. Bookings and
+  // Events are the two most actively-edited record types in the app
+  // (autosave, proposals, contracts, invoices, RSVP, stage plots, floor
+  // plans, set lists all hang off them), so this is the biggest
+  // write-amplification win of the graduation-out-of-the-blob series.
+  const [bookings, setBookings] = useState([]);
+  const [bookingsLoaded, setBookingsLoaded] = useState(false);
+  useEffect(() => {
+    if (!currentUser) { setBookings([]); setBookingsLoaded(false); return; }
+    let cancelled = false;
+    listBookings()
+      .then((list) => { if (!cancelled) setBookings(list); })
+      .finally(() => { if (!cancelled) setBookingsLoaded(true); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.accountId]);
+
+  const [events, setEvents] = useState([]);
+  const [eventsLoaded, setEventsLoaded] = useState(false);
+  useEffect(() => {
+    if (!currentUser) { setEvents([]); setEventsLoaded(false); return; }
+    let cancelled = false;
+    listEvents()
+      .then((list) => { if (!cancelled) setEvents(list); })
+      .finally(() => { if (!cancelled) setEventsLoaded(true); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.accountId]);
+
   // System-generated create/edit/delete trail for Bookings and Events
   // (record.history) — who did what, when. Separate from Booking's own
   // free-text "Activity Log" notes field, an older, unrelated feature.
@@ -143,75 +173,19 @@ export function DataProvider({ children }) {
     ...(changes?.length ? { changes } : {}),
   }), [currentUser]);
 
-  // ---- Contractors (real API, not the blob — see the fetch effect above) ----
-  // Callers don't await these (matching the fire-and-forget feel of every
-  // other add/update/delete here) — the UI updates once the request
-  // resolves via setContractors, same eventual-consistency shape as the
-  // blob's own optimistic saves.
-  const addContractor = useCallback(async (contractor) => {
-    const record = await createContractorApi(contractor);
-    setContractors((prev) => [...prev, record]);
-    return record;
-  }, []);
-
-  const updateContractor = useCallback(async (id, patch) => {
-    const record = await updateContractorApi(id, patch);
-    setContractors((prev) => prev.map((c) => (c.id === id ? record : c)));
-    return record;
-  }, []);
-
-  const deleteContractor = useCallback(async (id) => {
-    await deleteContractorApi(id);
-    setContractors((prev) => prev.filter((c) => c.id !== id));
-    // Also remove this contractor from any event bookings so events don't
-    // reference a contractor that no longer exists — events themselves are
-    // still blob-based, so this part still goes through patchList.
-    if (currentUser) {
-      patchList(LIST_FIELDS.events, currentUser.events.map((e) => ({
-        ...e,
-        contractorBookings: e.contractorBookings.filter((b) => b.contractorId !== id),
-      })));
-    }
-  }, [currentUser, patchList]);
-
-  // ---- Clients (real API, not the blob — see the fetch effect above) ----
-  // addClient's return value is actually awaited by callers (unlike most
-  // add* here) — BookingFormPage auto-selects a just-created client by its
-  // real id, so this has to resolve to the real record, not fire-and-forget.
-  const addClient = useCallback(async (client) => {
-    const record = await createClientApi(client);
-    setClients((prev) => [...prev, record]);
-    return record;
-  }, []);
-
-  const updateClient = useCallback(async (id, patch) => {
-    const record = await updateClientApi(id, patch);
-    setClients((prev) => prev.map((c) => (c.id === id ? record : c)));
-    return record;
-  }, []);
-
-  const deleteClient = useCallback(async (id) => {
-    await deleteClientApi(id);
-    setClients((prev) => prev.filter((c) => c.id !== id));
-    // Unlink this client from any events/bookings that referenced it —
-    // those are still blob-based, so this part still goes through patchList.
-    if (currentUser) {
-      patchList(LIST_FIELDS.events, currentUser.events.map((e) => (
-        e.clientId === id ? { ...e, clientId: null } : e
-      )));
-      patchList(LIST_FIELDS.bookings, (currentUser.bookings || []).map((b) => (
-        b.clientId === id ? { ...b, clientId: null } : b
-      )));
-    }
-  }, [currentUser, patchList]);
-
   // ---- Venues ----
   // Deliberately denormalized — Booking/Event each keep their own copied
   // venue object (see BookingFormPage's emptyVenue), not a live venueId
   // reference. This list is just a reusable "address book" the venue
   // picker (VenueCombobox) reads from and ensureVenueSaved below writes
   // to; editing or deleting a saved venue here never touches past
-  // bookings/events, since they hold their own frozen copy.
+  // bookings/events, since they hold their own frozen copy. Defined ahead
+  // of Contractors/Clients/Bookings/Events below — their delete handlers
+  // reference updateBooking/updateEvent, so those (and everything they in
+  // turn depend on, like ensureVenueSaved) have to exist first: a
+  // useCallback dependency array is a plain array literal evaluated
+  // immediately at render time, so referencing a later `const` before its
+  // declaration throws (temporal dead zone), not just a stale-closure risk.
   const addVenue = useCallback((venue) => {
     if (!currentUser) return;
     const record = { id: uid('ven'), createdAt: new Date().toISOString(), ...venue };
@@ -245,36 +219,188 @@ export function DataProvider({ children }) {
     patchList(LIST_FIELDS.venues, [...(currentUser.venues || []), record]);
   }, [currentUser, patchList]);
 
-  // ---- Bookings ----
-  const addBooking = useCallback((booking) => {
-    if (!currentUser) return;
-    const record = { id: uid('bkg'), createdAt: new Date().toISOString(), convertedEventId: null, activityLog: [], deletedAt: null, ...booking };
-    record.history = [historyEntry('created', diffBookingFields({}, record, currentUser.bookingStatuses))];
-    patchList(LIST_FIELDS.bookings, [...(currentUser.bookings || []), record]);
+  // ---- Bookings (real API, not the blob — see the fetch effect above) ----
+  // The id must already be set on `booking` — every caller generates one
+  // up front (BookingFormPage's emptyForm(), same reasoning as the id-
+  // preservation comment on the Booking model: it also has to be known
+  // before the first save so document uploads on an unsaved booking have
+  // somewhere to attach, and so Save-without-closing can swap the URL into
+  // edit mode in place).
+  const addBooking = useCallback(async (booking) => {
+    if (!booking.id) throw new Error('addBooking requires booking.id to already be set.');
+    const patch = { convertedEventId: null, activityLog: [], deletedAt: null, ...booking };
+    patch.history = [historyEntry('created', diffBookingFields({}, patch, currentUser?.bookingStatuses))];
+    const record = await createBookingApi(patch);
+    setBookings((prev) => [...prev, record]);
     if (record.venue) ensureVenueSaved(record.venue);
     return record;
-  }, [currentUser, patchList, historyEntry, ensureVenueSaved]);
+  }, [currentUser, historyEntry, ensureVenueSaved]);
 
-  const updateBooking = useCallback((id, patch) => {
-    if (!currentUser) return;
-    patchList(LIST_FIELDS.bookings, (currentUser.bookings || []).map((b) => {
-      if (b.id !== id) return b;
-      const next = { ...b, ...patch };
-      const changes = diffBookingFields(b, next, currentUser.bookingStatuses);
-      return changes.length ? { ...next, history: [...(b.history || []), historyEntry('edited', changes)] } : next;
-    }));
+  const updateBooking = useCallback(async (id, patch) => {
+    const existing = bookings.find((b) => b.id === id);
+    if (!existing) return;
+    const next = { ...existing, ...patch };
+    const changes = diffBookingFields(existing, next, currentUser?.bookingStatuses);
+    const merged = changes.length ? { ...patch, history: [...(existing.history || []), historyEntry('edited', changes)] } : patch;
+    const record = await updateBookingApi(id, merged);
+    setBookings((prev) => prev.map((b) => (b.id === id ? record : b)));
     if (patch.venue) ensureVenueSaved(patch.venue);
-  }, [currentUser, patchList, historyEntry, ensureVenueSaved]);
+    return record;
+  }, [bookings, currentUser, historyEntry, ensureVenueSaved]);
 
-  // Soft delete — hides the booking from normal views (see `bookings` below)
-  // but keeps the record, and its history, around so "who deleted this and
-  // when" stays answerable.
-  const deleteBooking = useCallback((id) => {
-    if (!currentUser) return;
-    patchList(LIST_FIELDS.bookings, (currentUser.bookings || []).map((b) => (
-      b.id === id ? { ...b, deletedAt: new Date().toISOString(), history: [...(b.history || []), historyEntry('deleted')] } : b
+  // Soft delete — hides the booking from normal views (filtered server-side
+  // by GET /api/bookings) but keeps the record, and its history, around so
+  // "who deleted this and when" stays answerable.
+  const deleteBooking = useCallback(async (id) => {
+    const existing = bookings.find((b) => b.id === id);
+    if (!existing) return;
+    const record = await updateBookingApi(id, {
+      deletedAt: new Date().toISOString(),
+      history: [...(existing.history || []), historyEntry('deleted')],
+    });
+    setBookings((prev) => prev.filter((b) => b.id !== id));
+    return record;
+  }, [bookings, historyEntry]);
+
+  // ---- Events (real API, not the blob — see the fetch effect above) ----
+  // Same id-must-already-be-set contract as addBooking above.
+  const addEvent = useCallback(async (event) => {
+    if (!event.id) throw new Error('addEvent requires event.id to already be set.');
+    const patch = { contractorBookings: [], deletedAt: null, ...event };
+    patch.history = [historyEntry('created', diffEventFields({}, patch, currentUser?.eventStatuses))];
+    const record = await createEventApi(patch);
+    setEvents((prev) => [...prev, record]);
+    if (record.venue) ensureVenueSaved(record.venue);
+    return record;
+  }, [currentUser, historyEntry, ensureVenueSaved]);
+
+  const updateEvent = useCallback(async (id, patch) => {
+    const existing = events.find((e) => e.id === id);
+    if (!existing) return;
+    const next = { ...existing, ...patch };
+    const changes = [
+      ...diffEventFields(existing, next, currentUser?.eventStatuses),
+      ...diffContractorAssignments(existing, next, contractors),
+    ];
+    const merged = changes.length ? { ...patch, history: [...(existing.history || []), historyEntry('edited', changes)] } : patch;
+    const record = await updateEventApi(id, merged);
+    setEvents((prev) => prev.map((e) => (e.id === id ? record : e)));
+    if (patch.venue) ensureVenueSaved(patch.venue);
+    return record;
+  }, [events, currentUser, historyEntry, ensureVenueSaved, contractors]);
+
+  // Soft delete — same reasoning as deleteBooking above.
+  const deleteEvent = useCallback(async (id) => {
+    const existing = events.find((e) => e.id === id);
+    if (!existing) return;
+    const record = await updateEventApi(id, {
+      deletedAt: new Date().toISOString(),
+      history: [...(existing.history || []), historyEntry('deleted')],
+    });
+    setEvents((prev) => prev.filter((e) => e.id !== id));
+    return record;
+  }, [events, historyEntry]);
+
+  // Spins up the linked Event once a booking is ready to move into staffing —
+  // carries over client/date/type and records the link back on the booking.
+  // Pre-generates the event id and only links it onto the booking once the
+  // event create actually succeeds, so a failure never leaves a booking
+  // pointing at an event that doesn't exist.
+  const convertBookingToEvent = useCallback(async (bookingId) => {
+    const booking = bookings.find((b) => b.id === bookingId);
+    if (!booking || booking.convertedEventId) return;
+    const client = clients.find((c) => c.id === booking.clientId);
+    const name = booking.eventName || [client ? `${client.firstName} ${client.lastName}` : '', booking.eventType]
+      .filter(Boolean).join(' ') || 'New Event';
+    const event = await addEvent({
+      id: uid('evt'),
+      name,
+      eventType: booking.eventType || '',
+      eventDate: booking.eventDate || '',
+      clientId: booking.clientId || '',
+      brideName: booking.brideName || '',
+      groomName: booking.groomName || '',
+      guestCount: booking.guestCount ?? '',
+      // Full shape (not just whatever keys the booking happens to have) —
+      // EventFormPage reads form.venue.<field> directly, so a partial object
+      // here would leave some fields undefined instead of controlled empty strings.
+      venue: {
+        name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '',
+        contactName: '', contactEmail: '',
+        ...booking.venue,
+      },
+      schedule: booking.schedule || [],
+    });
+    const convertedStatus = (currentUser?.bookingStatuses || []).find((s) => s.label.toLowerCase() === 'converted');
+    await updateBooking(bookingId, {
+      convertedEventId: event.id,
+      ...(convertedStatus ? { bookingStatus: convertedStatus.id } : {}),
+    });
+    return event;
+  }, [bookings, currentUser, addEvent, updateBooking, clients]);
+
+  // ---- Contractors (real API, not the blob — see the fetch effect above) ----
+  // Callers don't await these (matching the fire-and-forget feel of every
+  // other add/update/delete here) — the UI updates once the request
+  // resolves via setContractors, same eventual-consistency shape as the
+  // blob's own optimistic saves.
+  const addContractor = useCallback(async (contractor) => {
+    const record = await createContractorApi({ id: uid('con'), ...contractor });
+    setContractors((prev) => [...prev, record]);
+    return record;
+  }, []);
+
+  const updateContractor = useCallback(async (id, patch) => {
+    const record = await updateContractorApi(id, patch);
+    setContractors((prev) => prev.map((c) => (c.id === id ? record : c)));
+    return record;
+  }, []);
+
+  const deleteContractor = useCallback(async (id) => {
+    await deleteContractorApi(id);
+    setContractors((prev) => prev.filter((c) => c.id !== id));
+    // Also remove this contractor from any events' contractorBookings so
+    // they don't reference a contractor that no longer exists — events are
+    // real table rows now too, so this is a per-record update call rather
+    // than a single blob patch. allSettled (not all) so one failed unlink
+    // doesn't abort the rest, matching this codebase's existing tolerance
+    // for bulk best-effort ops (see AuthContext's migrate*OutOfBlob).
+    const affected = events.filter((e) => e.contractorBookings?.some((b) => b.contractorId === id));
+    await Promise.allSettled(affected.map((e) => (
+      updateEvent(e.id, { contractorBookings: e.contractorBookings.filter((b) => b.contractorId !== id) })
     )));
-  }, [currentUser, patchList, historyEntry]);
+  }, [events, updateEvent]);
+
+  // ---- Clients (real API, not the blob — see the fetch effect above) ----
+  // addClient's return value is actually awaited by callers (unlike most
+  // add* here) — BookingFormPage auto-selects a just-created client by its
+  // real id, so this has to resolve to the real record, not fire-and-forget.
+  const addClient = useCallback(async (client) => {
+    const record = await createClientApi({ id: uid('cli'), ...client });
+    setClients((prev) => [...prev, record]);
+    return record;
+  }, []);
+
+  const updateClient = useCallback(async (id, patch) => {
+    const record = await updateClientApi(id, patch);
+    setClients((prev) => prev.map((c) => (c.id === id ? record : c)));
+    return record;
+  }, []);
+
+  const deleteClient = useCallback(async (id) => {
+    await deleteClientApi(id);
+    setClients((prev) => prev.filter((c) => c.id !== id));
+    // Unlink this client from any events/bookings that referenced it — both
+    // are real table rows now, so per-record update calls rather than a
+    // single blob patch. allSettled so one failed unlink doesn't abort the
+    // rest (same reasoning as deleteContractor above).
+    const affectedEvents = events.filter((e) => e.clientId === id);
+    const affectedBookings = bookings.filter((b) => b.clientId === id);
+    await Promise.allSettled([
+      ...affectedEvents.map((e) => updateEvent(e.id, { clientId: null })),
+      ...affectedBookings.map((b) => updateBooking(b.id, { clientId: null })),
+    ]);
+  }, [events, bookings, updateEvent, updateBooking]);
 
   // ---- Booking statuses (color-coded + isBooked flag) ----
   const addBookingStatus = useCallback((status) => {
@@ -450,73 +576,6 @@ export function DataProvider({ children }) {
     patchList(LIST_FIELDS.setListLibrary, (currentUser.setListLibrary || []).filter((s) => s.id !== id));
   }, [currentUser, patchList]);
 
-  // ---- Events ----
-  const addEvent = useCallback((event) => {
-    if (!currentUser) return;
-    const record = { id: uid('evt'), createdAt: new Date().toISOString(), contractorBookings: [], deletedAt: null, ...event };
-    record.history = [historyEntry('created', diffEventFields({}, record, currentUser.eventStatuses))];
-    patchList(LIST_FIELDS.events, [...currentUser.events, record]);
-    if (record.venue) ensureVenueSaved(record.venue);
-    return record;
-  }, [currentUser, patchList, historyEntry, ensureVenueSaved]);
-
-  const updateEvent = useCallback((id, patch) => {
-    if (!currentUser) return;
-    patchList(LIST_FIELDS.events, currentUser.events.map((e) => {
-      if (e.id !== id) return e;
-      const next = { ...e, ...patch };
-      const changes = [
-        ...diffEventFields(e, next, currentUser.eventStatuses),
-        ...diffContractorAssignments(e, next, contractors),
-      ];
-      return changes.length ? { ...next, history: [...(e.history || []), historyEntry('edited', changes)] } : next;
-    }));
-    if (patch.venue) ensureVenueSaved(patch.venue);
-  }, [currentUser, patchList, historyEntry, ensureVenueSaved, contractors]);
-
-  // Soft delete — same reasoning as deleteBooking above.
-  const deleteEvent = useCallback((id) => {
-    if (!currentUser) return;
-    patchList(LIST_FIELDS.events, currentUser.events.map((e) => (
-      e.id === id ? { ...e, deletedAt: new Date().toISOString(), history: [...(e.history || []), historyEntry('deleted')] } : e
-    )));
-  }, [currentUser, patchList, historyEntry]);
-
-  // Spins up the linked Event once a booking is ready to move into staffing —
-  // carries over client/date/type and records the link back on the booking.
-  const convertBookingToEvent = useCallback((bookingId) => {
-    if (!currentUser) return;
-    const booking = (currentUser.bookings || []).find((b) => b.id === bookingId);
-    if (!booking || booking.convertedEventId) return;
-    const client = clients.find((c) => c.id === booking.clientId);
-    const name = booking.eventName || [client ? `${client.firstName} ${client.lastName}` : '', booking.eventType]
-      .filter(Boolean).join(' ') || 'New Event';
-    const event = addEvent({
-      name,
-      eventType: booking.eventType || '',
-      eventDate: booking.eventDate || '',
-      clientId: booking.clientId || '',
-      brideName: booking.brideName || '',
-      groomName: booking.groomName || '',
-      guestCount: booking.guestCount ?? '',
-      // Full shape (not just whatever keys the booking happens to have) —
-      // EventFormPage reads form.venue.<field> directly, so a partial object
-      // here would leave some fields undefined instead of controlled empty strings.
-      venue: {
-        name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '',
-        contactName: '', contactEmail: '',
-        ...booking.venue,
-      },
-      schedule: booking.schedule || [],
-    });
-    const convertedStatus = (currentUser.bookingStatuses || []).find((s) => s.label.toLowerCase() === 'converted');
-    updateBooking(bookingId, {
-      convertedEventId: event.id,
-      ...(convertedStatus ? { bookingStatus: convertedStatus.id } : {}),
-    });
-    return event;
-  }, [currentUser, addEvent, updateBooking, clients]);
-
   // ---- Derived helpers ----
   const getContractorById = useCallback((id) => contractors.find((c) => c.id === id), [contractors]);
 
@@ -541,7 +600,7 @@ export function DataProvider({ children }) {
   }, [getContractorById, currentUser]);
 
   const computeClientEventCounts = useCallback((clientId) => {
-    const clientEvents = (currentUser?.events || []).filter((e) => e.clientId === clientId);
+    const clientEvents = events.filter((e) => e.clientId === clientId);
     const counts = { pending: 0, confirmed: 0, declined: 0 };
     for (const e of clientEvents) {
       const status = currentUser?.eventStatuses.find((s) => s.id === e.eventStatus);
@@ -551,7 +610,7 @@ export function DataProvider({ children }) {
       else counts.pending++;
     }
     return counts;
-  }, [currentUser]);
+  }, [events, currentUser]);
 
   const computeVendorStatus = useCallback((event) => {
     if (!event.contractorBookings.length) return { status: 'none', pending: [], confirmed: [] };
@@ -571,8 +630,10 @@ export function DataProvider({ children }) {
     contractors,
     clients,
     venues: currentUser?.venues || [],
-    events: (currentUser?.events || []).filter((e) => !e.deletedAt),
-    bookings: (currentUser?.bookings || []).filter((b) => !b.deletedAt),
+    // Already filtered server-side (GET /api/events, /api/bookings both
+    // exclude deletedAt rows) — no client-side filter needed anymore.
+    events,
+    bookings,
     contractorTypes: currentUser?.contractorTypes || [],
     eventTypes: currentUser?.eventTypes || [],
     eventStatuses: currentUser?.eventStatuses || [],
@@ -633,7 +694,7 @@ export function DataProvider({ children }) {
     computeEventTotalCost,
     computeVendorStatus,
   }), [
-    currentUser, contractors, clients,
+    currentUser, contractors, clients, bookings, events,
     addContractor, updateContractor, deleteContractor,
     addClient, updateClient, deleteClient, computeClientEventCounts,
     addVenue, updateVenue, deleteVenue,
@@ -653,11 +714,11 @@ export function DataProvider({ children }) {
   ]);
 
   // Same blank-while-loading behavior as AuthProvider's own authLoading gate
-  // — every page here already assumes `contractors`/`clients` are
-  // synchronously populated (.find(...) inline in render bodies, no loading
-  // states of their own), so this keeps that assumption true rather than
-  // pushing a loading state into every consuming file.
-  if (currentUser && (!contractorsLoaded || !clientsLoaded)) return null;
+  // — every page here already assumes `contractors`/`clients`/`bookings`/
+  // `events` are synchronously populated (.find(...) inline in render
+  // bodies, no loading states of their own), so this keeps that assumption
+  // true rather than pushing a loading state into every consuming file.
+  if (currentUser && (!contractorsLoaded || !clientsLoaded || !bookingsLoaded || !eventsLoaded)) return null;
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

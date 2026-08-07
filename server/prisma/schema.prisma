@@ -8,61 +8,63 @@ datasource db {
 }
 
 model User {
-  id             String      @id @default(cuid())
-  firstName      String
-  lastName       String
-  email          String      @unique
-  phone          String?
-  passwordHash   String?
-  googleId       String?     @unique
+  id                  String               @id @default(cuid())
+  firstName           String
+  lastName            String
+  email               String               @unique
+  phone               String?
+  passwordHash        String?
+  googleId            String?              @unique
   // App operators, not signup-settable. isPlatformAdmin is grantable/revocable
   // by existing admins (server/src/routes/admin.js); isPlatformOwner is the
   // one admin who can never be revoked by anyone else — flipped manually,
   // never through any API.
-  isPlatformAdmin Boolean    @default(false)
-  isPlatformOwner Boolean    @default(false)
+  isPlatformAdmin     Boolean              @default(false)
+  isPlatformOwner     Boolean              @default(false)
   // Scoped platform-admin capabilities — { manageAccounts, manageAccountStatus,
   // manageSupport, manageAdmins }, all booleans. Only meaningful when
   // isPlatformAdmin is true. isPlatformOwner always bypasses this (see
   // requireAdminPermission in server/src/lib/membership.js).
-  adminPermissions Json      @default("{}")
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-  membership     Membership?
+  adminPermissions    Json                 @default("{}")
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  membership          Membership?
   passwordResetTokens PasswordResetToken[]
-  supportNotes   SupportNote[]
-  assignedThreads SupportThread[]
-  disabledAccounts Account[] @relation("AccountDisabledBy")
-  reminders      Reminder[]
+  supportNotes        SupportNote[]
+  assignedThreads     SupportThread[]
+  disabledAccounts    Account[]            @relation("AccountDisabledBy")
+  reminders           Reminder[]
 }
 
 model Account {
-  id             String          @id @default(cuid())
-  createdAt      DateTime        @default(now())
-  disabledAt     DateTime?       // set by a platform admin; blocks all account access when non-null
+  id               String            @id @default(cuid())
+  createdAt        DateTime          @default(now())
+  disabledAt       DateTime? // set by a platform admin; blocks all account access when non-null
   // Auditability for the disable action above — who disabled it, and why.
   // All three (disabledAt/disabledReason/disabledById) are cleared together
   // when the account is re-enabled.
-  disabledReason String?         @db.Text
-  disabledById   String?
-  disabledBy     User?           @relation("AccountDisabledBy", fields: [disabledById], references: [id], onDelete: SetNull)
-  memberships    Membership[]
-  emailThreads   EmailThread[]
-  eventDocuments EventDocument[]
+  disabledReason   String?           @db.Text
+  disabledById     String?
+  disabledBy       User?             @relation("AccountDisabledBy", fields: [disabledById], references: [id], onDelete: SetNull)
+  memberships      Membership[]
+  emailThreads     EmailThread[]
+  eventDocuments   EventDocument[]
   bookingDocuments BookingDocument[]
-  contracts      Contract[]
-  invoices       Invoice[]
-  inquiryLinks   InquiryLink[]
-  accountData    AccountData?
-  supportThreads SupportThread[]
-  reminders      Reminder[]
-  emailDomain    EmailDomain?
-  stagePlots     StagePlot[]
-  floorPlans     FloorPlan[]
-  guests         Guest[]
-  eventRsvpLinks EventRsvpLink[]
-  contractors    Contractor[]
-  clients        Client[]
+  contracts        Contract[]
+  invoices         Invoice[]
+  inquiryLinks     InquiryLink[]
+  accountData      AccountData?
+  supportThreads   SupportThread[]
+  reminders        Reminder[]
+  emailDomain      EmailDomain?
+  stagePlots       StagePlot[]
+  floorPlans       FloorPlan[]
+  guests           Guest[]
+  eventRsvpLinks   EventRsvpLink[]
+  contractors      Contractor[]
+  clients          Client[]
+  bookings         Booking[]
+  events           Event[]
 
   // Stripe Connect (Express) — set once onboarding starts. The three
   // booleans are a local cache of the connected Account object, synced by
@@ -72,10 +74,10 @@ model Account {
   // a few seconds. chargesEnabled (not just stripeAccountId being set) is
   // what every invoice-sending code path actually checks, since Stripe can
   // flag a previously-connected account and revoke it later.
-  stripeAccountId        String?  @unique
-  stripeDetailsSubmitted Boolean  @default(false)
-  stripeChargesEnabled   Boolean  @default(false)
-  stripePayoutsEnabled   Boolean  @default(false)
+  stripeAccountId        String? @unique
+  stripeDetailsSubmitted Boolean @default(false)
+  stripeChargesEnabled   Boolean @default(false)
+  stripePayoutsEnabled   Boolean @default(false)
 
   // Running invoice-numbering sequence and sticky footer memo — carried
   // into each new invoice's composer as a default, and advanced/updated
@@ -141,9 +143,9 @@ model Session {
 // what scopes every read so different EVL accounts never see each other's
 // threads.
 model EmailThread {
-  id              String   @id @default(cuid())
-  accountId       String
-  account         Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  id        String  @id @default(cuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   eventId         String
   contractorId    String
@@ -152,36 +154,36 @@ model EmailThread {
   // "reply+<this.id>@<RESEND_INBOUND_DOMAIN>" — null until a domain is
   // configured. Set once and never recomputed, since a contractor's mail
   // client keeps replying to whatever address a past email actually had.
-  replyToAlias    String?
-  subjectHint     String?
-  lastMessageAt   DateTime @default(now())
-  createdAt       DateTime @default(now())
+  replyToAlias  String?
+  subjectHint   String?
+  lastMessageAt DateTime @default(now())
+  createdAt     DateTime @default(now())
 
-  messages        EmailMessage[]
+  messages EmailMessage[]
 
   @@unique([accountId, eventId, contractorId])
   @@index([accountId])
 }
 
 model EmailMessage {
-  id              String      @id @default(cuid())
-  threadId        String
-  thread          EmailThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  id       String      @id @default(cuid())
+  threadId String
+  thread   EmailThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
-  direction       String      // 'outbound' | 'inbound'
-  fromAddress     String
-  toAddress       String
-  subject         String
-  body            String      @db.Text
+  direction   String // 'outbound' | 'inbound'
+  fromAddress String
+  toAddress   String
+  subject     String
+  body        String @db.Text
 
   templateId      String?
   sentByUserId    String?
-  resendMessageId String?     @unique
+  resendMessageId String? @unique
   inReplyTo       String?
   references      String?
 
-  readAt          DateTime?   // inbound-only; null = unread
-  createdAt       DateTime    @default(now())
+  readAt    DateTime? // inbound-only; null = unread
+  createdAt DateTime  @default(now())
 
   @@index([threadId, createdAt])
 }
@@ -209,63 +211,63 @@ model AccountData {
 // plain string, accountId scoping, lastMessageAt/readAt) since that's this
 // codebase's established pattern for threaded messages.
 model SupportThread {
-  id            String   @id @default(cuid())
-  ticketNumber  Int      @unique @default(autoincrement()) // human-facing, sequential across the whole platform
-  accountId     String
-  account       Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  id           String  @id @default(cuid())
+  ticketNumber Int     @unique @default(autoincrement()) // human-facing, sequential across the whole platform
+  accountId    String
+  account      Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
-  subject       String
-  status        String   @default("open") // 'open' | 'closed'
-  priority      String   @default("normal") // 'low' | 'normal' | 'high' | 'urgent'
+  subject             String
+  status              String   @default("open") // 'open' | 'closed'
+  priority            String   @default("normal") // 'low' | 'normal' | 'high' | 'urgent'
   // Required when closing (see PATCH /support/threads/:id) — cleared together on reopen.
-  closedReason       String? // 'completed' | 'not_completed' | 'other'
-  closedReasonDetail String? @db.Text
+  closedReason        String? // 'completed' | 'not_completed' | 'other'
+  closedReasonDetail  String?  @db.Text
   // Set once by the customer after a thread closes (see PATCH /threads/:id/rating) —
   // not cleared on reopen, so re-closing later just leaves the prior rating in place
   // until the customer rates again.
   satisfactionRating  Int?
-  satisfactionComment String? @db.Text
-  lastMessageAt DateTime @default(now())
-  createdAt     DateTime @default(now())
+  satisfactionComment String?  @db.Text
+  lastMessageAt       DateTime @default(now())
+  createdAt           DateTime @default(now())
 
   // Which admin owns this ticket — notifications route to them instead of
   // the shared support inbox once set (see notifyAdmin in routes/support.js).
   assignedAdminId String?
-  assignedAdmin    User?  @relation(fields: [assignedAdminId], references: [id], onDelete: SetNull)
+  assignedAdmin   User?   @relation(fields: [assignedAdminId], references: [id], onDelete: SetNull)
 
   // "reply+support-<this.id>@<RESEND_INBOUND_DOMAIN>" — null until a domain
   // is configured. Set once and never recomputed, same reasoning as
   // EmailThread.replyToAlias above.
-  replyToAlias  String?
+  replyToAlias String?
 
-  messages      SupportMessage[]
-  notes         SupportNote[]
+  messages SupportMessage[]
+  notes    SupportNote[]
 
   @@index([accountId])
 }
 
 model SupportMessage {
-  id              String        @id @default(cuid())
-  threadId        String
-  thread          SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  id       String        @id @default(cuid())
+  threadId String
+  thread   SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
-  direction       String        // 'user' | 'admin'
-  senderUserId    String
-  body            String        @db.Text
+  direction    String // 'user' | 'admin'
+  senderUserId String
+  body         String @db.Text
 
-  resendMessageId String?       @unique
+  resendMessageId String?             @unique
   attachments     SupportAttachment[]
 
-  readAt          DateTime?     // null = unread by the other side
-  createdAt       DateTime      @default(now())
+  readAt    DateTime? // null = unread by the other side
+  createdAt DateTime  @default(now())
 
   @@index([threadId, createdAt])
 }
 
 model SupportAttachment {
-  id          String         @id @default(cuid())
-  messageId   String
-  message     SupportMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  id        String         @id @default(cuid())
+  messageId String
+  message   SupportMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   filename    String
   contentType String
@@ -274,7 +276,7 @@ model SupportAttachment {
   data        Bytes?
   storageKey  String?
 
-  createdAt   DateTime       @default(now())
+  createdAt DateTime @default(now())
 
   @@index([messageId])
 }
@@ -284,15 +286,15 @@ model SupportAttachment {
 // the customer-facing route (server/src/routes/support.js) can't leak these
 // just by forgetting a filter.
 model SupportNote {
-  id           String        @id @default(cuid())
-  threadId     String
-  thread       SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  id       String        @id @default(cuid())
+  threadId String
+  thread   SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
   authorUserId String
-  author       User          @relation(fields: [authorUserId], references: [id], onDelete: Cascade)
-  body         String        @db.Text
+  author       User   @relation(fields: [authorUserId], references: [id], onDelete: Cascade)
+  body         String @db.Text
 
-  createdAt    DateTime      @default(now())
+  createdAt DateTime @default(now())
 
   @@index([threadId, createdAt])
 }
@@ -301,12 +303,12 @@ model SupportNote {
 // event's prep sheet. Stored directly in Postgres (Bytes) rather than an
 // external object store — no new service to configure, fine at this scale.
 model EventDocument {
-  id          String   @id @default(cuid())
-  accountId   String
-  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  id        String  @id @default(cuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
-  eventId     String?  // opaque localStorage id, same non-FK pattern as EmailThread; null for
-                        // account-level attachments not tied to an event (e.g. Set List library songs)
+  eventId     String? // opaque localStorage id, same non-FK pattern as EmailThread; null for
+  // account-level attachments not tied to an event (e.g. Set List library songs)
   filename    String
   contentType String
   size        Int
@@ -318,7 +320,7 @@ model EventDocument {
   data        Bytes?
   storageKey  String?
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([accountId, eventId])
 }
@@ -327,12 +329,12 @@ model EventDocument {
 // bookingId pattern as EventDocument.eventId above. category distinguishes
 // which tab a file belongs to.
 model BookingDocument {
-  id          String   @id @default(cuid())
-  accountId   String
-  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  id        String  @id @default(cuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
-  bookingId   String   // opaque localStorage id, same non-FK pattern as EventDocument.eventId
-  category    String   // 'proposal' | 'contract'
+  bookingId   String // opaque localStorage id, same non-FK pattern as EventDocument.eventId
+  category    String // 'proposal' | 'contract'
   filename    String
   contentType String
   size        Int
@@ -340,7 +342,7 @@ model BookingDocument {
   data        Bytes?
   storageKey  String?
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([accountId, bookingId])
 }
@@ -355,44 +357,44 @@ model BookingDocument {
 // out (e.g. on the move); they can also sign in-app via requireAuth routes,
 // whichever comes first.
 model Contract {
-  id              String   @id @default(cuid())
-  accountId       String
-  account         Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  id        String  @id @default(cuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
-  bookingId       String   // opaque localStorage id, same non-FK pattern as EventDocument.eventId
+  bookingId String // opaque localStorage id, same non-FK pattern as EventDocument.eventId
 
-  snapshot        Json
+  snapshot Json
   // Unlike everything in snapshot (frozen at send time), terms stays live —
   // editable at any point in the contract's lifecycle, independent of
   // status, and always read fresh when rendering/viewing the PDF.
-  terms           String?  @db.Text
-  status          String   @default("sent") // 'sent' | 'client_signed' | 'owner_signed' | 'fully_signed'
+  terms    String? @db.Text
+  status   String  @default("sent") // 'sent' | 'client_signed' | 'owner_signed' | 'fully_signed'
 
-  recipientEmail  String
-  recipientName   String?
-  ownerEmail      String
+  recipientEmail String
+  recipientName  String?
+  ownerEmail     String
 
-  clientTokenHash String?  @unique
-  ownerTokenHash  String?  @unique
+  clientTokenHash String? @unique
+  ownerTokenHash  String? @unique
 
   clientSignedAt       DateTime?
   clientSignatureName  String?
-  clientSignatureImage String? @db.Text
+  clientSignatureImage String?   @db.Text
 
-  ownerSignedAt        DateTime?
-  ownerSignatureName   String?
-  ownerSignatureImage  String? @db.Text
+  ownerSignedAt       DateTime?
+  ownerSignatureName  String?
+  ownerSignatureImage String?   @db.Text
 
-  sentAt          DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   // Audit trail: { id, at, type, note, actorEmail }[] — 'sent' | 'manual_sent'
   // | 'owner_signed' | 'client_signed' | 'terms_edited' | 'note'. actorEmail
   // is always a stamped string snapshot (same reasoning as ownerEmail above),
   // never a live User reference. Owner-only — never sent to the public,
   // token-based sign page.
-  log             Json     @default("[]")
+  log Json @default("[]")
 
   @@index([accountId, bookingId])
 }
@@ -408,15 +410,15 @@ model Contract {
 // booking exists), but optionally tied to one via `bookingId` when sent from
 // an in-progress Booking to fill in the remaining gaps — see `bookingId`.
 model InquiryLink {
-  id               String    @id @default(cuid())
-  accountId        String
-  account          Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  id        String  @id @default(cuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   // Raw token only ever exists in the URL/email — same reasoning as
   // Invoice.payTokenHash. Unlike Contract's sign tokens, the public view has
   // no email-confirmation gate (the prospect's email may not be known yet),
   // so possession of the token alone is the credential.
-  tokenHash        String    @unique
+  tokenHash   String    @unique
   // Plaintext copy of the same token, set only on isReusable rows. Every
   // other link type is a one-time secret that's already been delivered by
   // the time anyone needs it again (only the hash matters), but a reusable
@@ -425,15 +427,15 @@ model InquiryLink {
   // a meaningful security regression: this URL is *designed* to be public
   // (pasted on the business's own website), so storing it in the clear here
   // is no different from any other public link a business owns.
-  publicToken      String?   @unique
+  publicToken String?   @unique
   // 'open' -> 'submitted' -> 'applied' — each transition is one-way and
   // enforced by the routes (a used token can't be viewed/submitted again).
   // Regenerating a still-'open' link (lost/expired) reuses the same row —
   // it just swaps tokenHash/expiresAt, no new status. Doesn't apply to
   // isReusable rows below, which stay 'open' forever.
-  status           String    @default("open")
+  status      String    @default("open")
   // Null means "never expires" — only true for isReusable rows.
-  expiresAt        DateTime?
+  expiresAt   DateTime?
 
   // Marks the one account-wide "general" link a business can paste on their
   // own website (see server/src/routes/inquiryLinks.js's /reusable-link
@@ -442,27 +444,27 @@ model InquiryLink {
   // creates a brand-new ordinary (isReusable: false) InquiryLink row, so the
   // shared link keeps working for the next visitor and every submission
   // still flows through the same review/apply path as any other inquiry.
-  isReusable       Boolean   @default(false)
+  isReusable Boolean @default(false)
 
   // Opaque id (same non-FK pattern as Contract.bookingId) of the Booking
   // this link was sent from, if any — set when the agent already started a
   // booking manually and just wants the client to fill in the rest. Applying
   // a response with this set merges into that existing Booking instead of
   // creating a new one (see src/lib/applyInquiry.js).
-  bookingId        String?
+  bookingId String?
 
   // Set only if the agent typed a known email at link-creation time, to
   // drive the optional "email this link now" send. Purely informational —
   // the public routes never gate on it.
-  recipientEmail   String?
-  recipientName    String?
-  ownerEmail       String
+  recipientEmail String?
+  recipientName  String?
+  ownerEmail     String
 
   // The client's submission — a single opaque blob (like Contract.snapshot)
   // since it's write-once, read-by-owner-then-turned-into-real-records, not
   // queried by individual field. Null until status is 'submitted'/'applied'.
-  response         Json?
-  submittedAt      DateTime?
+  response    Json?
+  submittedAt DateTime?
 
   // Set once the agent applies it — opaque ids, same non-FK pattern as
   // Contract.bookingId, purely for reference (not used to prevent re-apply;
@@ -471,9 +473,9 @@ model InquiryLink {
   appliedBookingId String?
   appliedClientId  String?
 
-  sentAt           DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@index([accountId])
   @@index([accountId, bookingId])
@@ -492,30 +494,30 @@ model InquiryLink {
 // computeOfferingsTotal() (src/lib/offerings.js), same as Proposal never
 // storing a redundant total either.
 model Invoice {
-  id              String   @id @default(cuid())
-  accountId       String
-  account         Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  id        String  @id @default(cuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
-  bookingId       String   // opaque localStorage id, same non-FK pattern as Contract.bookingId
+  bookingId String // opaque localStorage id, same non-FK pattern as Contract.bookingId
 
   // Editable by the owner; defaults to Account.nextInvoiceNumber at create
   // time. Not DB-unique — editing it to fix/jump the sequence is expected,
   // and enforcing uniqueness would turn that into an error-prone edit.
-  number          Int?
-  snapshot        Json     // { businessInfo, client, lineItems: Offering[] }
-  dueDate         DateTime?
-  memo            String?  @db.Text
+  number        Int?
+  snapshot      Json // { businessInfo, client, lineItems: Offering[] }
+  dueDate       DateTime?
+  memo          String?   @db.Text
   // Off for invoices whose actual payment is handled outside GigWorks (a
   // separate invoicing tool, a check already arranged, etc.) — sending one
   // then skips the Stripe-connected gate entirely, and the public pay page
   // shows no Pay button, just the document itself.
-  acceptPayment   Boolean  @default(true)
+  acceptPayment Boolean   @default(true)
 
-  status          String   @default("draft") // 'draft' | 'sent' | 'partial' | 'paid' | 'void'
+  status           String  @default("draft") // 'draft' | 'sent' | 'partial' | 'paid' | 'void'
   // How much of the total has been recorded as paid — set to the full total
   // automatically by the Stripe webhook, or entered by hand when marking an
   // offline (cash/check/etc.) payment. Null/0 while still 'sent'.
-  paidAmount      Float?
+  paidAmount       Float?
   // Only set by the manual "Accept Payment" popover (mark-payment status
   // 'paid') — Stripe's own webhook payments leave these null since the
   // method/reference are implicit (always a card, via the pay link).
@@ -523,24 +525,24 @@ model Invoice {
   paymentReference String? // check number, only meaningful when method is 'check'
   paymentMemo      String? @db.Text // internal note about the payment, separate from the client-facing `memo` above
 
-  recipientEmail  String
-  recipientName   String?
-  ownerEmail      String
+  recipientEmail String
+  recipientName  String?
+  ownerEmail     String
 
   // Raw token emailed once, only its hash persisted — same reasoning as
   // Contract's clientTokenHash/PasswordResetToken.tokenHash. Only one role
   // (the client) ever needs a pay link, unlike Contract's client+owner pair.
-  payTokenHash    String?  @unique
+  payTokenHash String? @unique
 
   stripeCheckoutSessionId String? @unique
   stripePaymentIntentId   String?
 
-  sentAt          DateTime?
-  paidAt          DateTime?
-  voidedAt        DateTime?
-  receiptSentAt   DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  sentAt        DateTime?
+  paidAt        DateTime?
+  voidedAt      DateTime?
+  receiptSentAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([accountId, bookingId])
 }
@@ -552,36 +554,36 @@ model Invoice {
 // taken at create/edit time so the reminder still reads sensibly even if
 // the underlying contractor/client is later renamed or deleted.
 model Reminder {
-  id              String    @id @default(cuid())
+  id              String  @id @default(cuid())
   accountId       String
-  account         Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account         Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
   createdByUserId String?
-  createdByUser   User?     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdByUser   User?   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
-  relatedType     String?   // 'contractor' | 'client'
-  relatedId       String?
-  relatedName     String?
+  relatedType String? // 'contractor' | 'client'
+  relatedId   String?
+  relatedName String?
 
-  note            String    @db.Text
-  remindAt        DateTime
+  note           String    @db.Text
+  remindAt       DateTime
   // Whether an email alert should be sent when remindAt is reached — see
   // server/src/lib/reminderScheduler.js. emailSentAt guards against
   // re-sending on every poll tick once it's gone out; it's reset to null
   // whenever remindAt is edited so a moved reminder can still email at its
   // new time.
-  emailEnabled    Boolean   @default(false)
-  emailSentAt     DateTime?
+  emailEnabled   Boolean   @default(false)
+  emailSentAt    DateTime?
   // Atomic per-row claim so multiple concurrently-running backend instances
   // (see server/src/lib/reminderScheduler.js) never both send the same
   // reminder's email — claimed via a conditional updateMany, not a DB-level
   // lock (advisory locks don't compose safely with connection pooling).
   // Treated as stale after 5 minutes so a claim from a crashed instance
   // doesn't permanently block the reminder from ever being retried.
-  emailClaimedAt  DateTime?
-  completedAt     DateTime?
+  emailClaimedAt DateTime?
+  completedAt    DateTime?
 
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([accountId, remindAt])
 }
@@ -602,19 +604,19 @@ model Reminder {
 // platform's own default domain — see resolveFromHeader/resolveReplyDomain
 // in server/src/lib/mailer.js.
 model EmailDomain {
-  id             String    @id @default(cuid())
-  accountId      String    @unique
-  account        Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  id        String  @id @default(cuid())
+  accountId String  @unique
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   domain         String    @unique
   isCustomDomain Boolean   @default(false)
   resendDomainId String    @unique
   status         String    @default("pending") // 'pending' | 'verified' | 'failed'
-  dnsRecords     Json      // Resend's returned record list — auto-applied (GoDaddy) or shown as instructions, per isCustomDomain
+  dnsRecords     Json // Resend's returned record list — auto-applied (GoDaddy) or shown as instructions, per isCustomDomain
   verifiedAt     DateTime?
 
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // A band/orchestra event's stage plot — one document per event (opaque
@@ -630,14 +632,14 @@ model EmailDomain {
 // src/lib/canvasEngine/history.js for why undo/redo itself stays
 // client-side/session-only rather than adding to this problem further.
 model StagePlot {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   accountId String
-  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
   eventId   String
 
-  name      String             @default("Stage Plot")
-  pages     StagePlotPage[]
-  channels  StagePlotChannel[]
+  name     String             @default("Stage Plot")
+  pages    StagePlotPage[]
+  channels StagePlotChannel[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -654,17 +656,17 @@ model StagePlot {
 // sync on save — jsPDF has no canvas renderer, so PDF export embeds this
 // browser-rendered image rather than re-drawing the scene server-side.
 model StagePlotPage {
-  id                  String    @id @default(cuid())
-  stagePlotId         String
-  stagePlot           StagePlot @relation(fields: [stagePlotId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  stagePlotId String
+  stagePlot   StagePlot @relation(fields: [stagePlotId], references: [id], onDelete: Cascade)
 
   order               Int
-  name                String    @default("Page 1")
-  scene               Json      @default("{}")
+  name                String  @default("Page 1")
+  scene               Json    @default("{}")
   thumbnailStorageKey String?
 
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([stagePlotId, order])
 }
@@ -675,20 +677,20 @@ model StagePlotPage {
 // a specific icon placed on a page without making the canvas element's
 // position depend on this row (or vice versa).
 model StagePlotChannel {
-  id            String    @id @default(cuid())
-  stagePlotId   String
-  stagePlot     StagePlot @relation(fields: [stagePlotId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  stagePlotId String
+  stagePlot   StagePlot @relation(fields: [stagePlotId], references: [id], onDelete: Cascade)
 
   channelNumber Int
   source        String
   micOrDi       String?
   standType     String?
-  phantomPower  Boolean   @default(false)
-  monitorNotes  String?   @db.Text
+  phantomPower  Boolean @default(false)
+  monitorNotes  String? @db.Text
   elementId     String?
 
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([stagePlotId, channelNumber])
   @@index([stagePlotId])
@@ -701,13 +703,13 @@ model StagePlotChannel {
 // floor plans don't have an industry-standard tabular counterpart the way
 // stage plots have an I/O list.
 model FloorPlan {
-  id        String          @id @default(cuid())
+  id        String  @id @default(cuid())
   accountId String
-  account   Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
   eventId   String
 
-  name      String          @default("Floor Plan")
-  pages     FloorPlanPage[]
+  name  String          @default("Floor Plan")
+  pages FloorPlanPage[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -717,17 +719,17 @@ model FloorPlan {
 }
 
 model FloorPlanPage {
-  id                  String    @id @default(cuid())
-  floorPlanId         String
-  floorPlan           FloorPlan @relation(fields: [floorPlanId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  floorPlanId String
+  floorPlan   FloorPlan @relation(fields: [floorPlanId], references: [id], onDelete: Cascade)
 
   order               Int
-  name                String    @default("Page 1")
-  scene               Json      @default("{}")
+  name                String  @default("Page 1")
+  scene               Json    @default("{}")
   thumbnailStorageKey String?
 
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([floorPlanId, order])
 }
@@ -740,17 +742,17 @@ model FloorPlanPage {
 // that, the authenticated Guests tab reads/writes the same rows rather than
 // maintaining a second, disconnected list.
 model Guest {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   accountId String
-  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  eventId   String   // opaque localStorage id, same non-FK pattern as EventDocument.eventId
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  eventId   String // opaque localStorage id, same non-FK pattern as EventDocument.eventId
 
   name       String
   email      String?
   phone      String?
-  partySize  Int      @default(1)
-  rsvpStatus String   @default("invited") // 'invited' | 'confirmed' | 'declined'
-  notes      String?  @db.Text
+  partySize  Int     @default(1)
+  rsvpStatus String  @default("invited") // 'invited' | 'confirmed' | 'declined'
+  notes      String? @db.Text
 
   // 'rsvp_link' rows were created by a guest through the public link below;
   // 'manual' rows were entered directly by the planner. Purely informational.
@@ -772,8 +774,14 @@ model Guest {
 // `contractorId` string in their own blob-stored `contractorBookings[]` —
 // same opaque non-FK pattern already used everywhere else in this schema
 // (see EventDocument.eventId), not a real relation.
+//
+// `id` has no @default: the create route requires the caller to supply one
+// (see routes/contractors.js) so blob-migration preserves the original id
+// instead of minting a new one out from under any existing contractorId
+// reference — see Booking/Event's model comments below for why this matters
+// there far more than it does here.
 model Contractor {
-  id        String  @id @default(cuid())
+  id        String  @id
   accountId String
   account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
@@ -788,8 +796,8 @@ model Contractor {
   // [{ id, name, price }] — small and tightly coupled to the contractor
   // itself, no need for its own table (unlike Guest, which is independently
   // queried/written by the public RSVP route).
-  pricingTiers Json    @default("[]")
-  priceNotes   String? @db.Text
+  pricingTiers    Json    @default("[]")
+  priceNotes      String? @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -804,8 +812,10 @@ model Contractor {
 // and Events still reference a client by plain `clientId` string in their
 // own blob-stored data — same opaque non-FK pattern as everywhere else in
 // this schema (see EventDocument.eventId), not a real relation.
+//
+// `id` has no @default — same id-preservation reasoning as Contractor above.
 model Client {
-  id        String  @id @default(cuid())
+  id        String  @id
   accountId String
   account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
@@ -819,6 +829,115 @@ model Client {
   state     String?
   zip       String?
   notes     String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([accountId])
+}
+
+// A business's Booking pipeline — the pre-Event stage (inquiry through
+// signed contract) before staffing/logistics begin. Graduated out of the
+// blob for the same reasons as Contractor/Client, but unlike those two,
+// Booking and Event are referenced by opaque id from many other real
+// tables: Contract.bookingId, Invoice.bookingId, BookingDocument.bookingId,
+// InquiryLink.bookingId, and Booking.convertedEventId (which points at an
+// Event). None of those are enforced FKs — same opaque-string pattern as
+// everywhere else in this schema — which means nothing breaks if migration
+// preserves the original id, but WOULD silently orphan every one of those
+// references if it didn't. `id` therefore has no @default: the create route
+// requires the caller to supply it (see routes/bookings.js), and the
+// migration script passes through each blob record's existing id unchanged.
+//
+// eventDate/depositDueDate/nextFollowUpDate/contractSignedDate are plain
+// strings, not DateTime — see lib/format.js's formatEventDate, which
+// deliberately treats these as opaque 'YYYY-MM-DD' text to avoid a
+// UTC-shift bug that a real DATE/TIMESTAMP column would reintroduce.
+model Booking {
+  id        String  @id
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  eventName          String?
+  clientId           String?
+  eventDate          String?
+  eventType          String?
+  brideName          String?
+  groomName          String?
+  // String, not Int — BookingFormPage keeps this as a raw <input> string
+  // (only ever `Number()`-parsed inline for display/math), same reasoning
+  // as the date fields above.
+  guestCount         String?
+  depositAmount      Float?
+  depositDueDate     String?
+  depositPaid        Boolean   @default(false)
+  depositType        String?   @default("fixed")
+  // String, not Float — same reasoning as guestCount above.
+  depositPercent     String?
+  bookingStatus      String?
+  priority           String?
+  nextFollowUpDate   String?
+  contractSignedDate String?
+  referralSource     String?
+  notes              String?   @db.Text
+  convertedEventId   String?
+  deletedAt          DateTime?
+
+  venue       Json  @default("{}")
+  schedule    Json  @default("[]")
+  activityLog Json  @default("[]")
+  // Not defaulted (nullable instead) — distinguishes "never pushed to
+  // Proposal" from "has an empty proposal object," which BookingFormPage's
+  // pipeline stepper cares about.
+  proposal    Json?
+  history     Json  @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([accountId])
+}
+
+// A business's staffed/logistics event — created either standalone or by
+// converting a Booking (Booking.convertedEventId then points here). Same
+// id-preservation reasoning as Booking above: referenced by opaque id from
+// EventDocument.eventId, StagePlot.eventId, FloorPlan.eventId,
+// Guest.eventId, EventRsvpLink.eventId, Invoice.bookingId's own event chain,
+// and SetList storage — `id` has no @default for the same reason.
+model Event {
+  id        String  @id
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  name              String?
+  eventType         String?
+  eventDate         String?
+  eventDayOfTheWeek String?
+  clientId          String?
+  brideName         String?
+  groomName         String?
+  // String, not Int — same reasoning as Booking.guestCount above.
+  guestCount        String?
+  contactPhone      String?
+  contactPhoneExt   String?
+  contactEmail      String?
+  startTime         String?
+  endTime           String?
+  eventNote         String?   @db.Text
+  prepNotes         String?   @db.Text
+  eventStatus       String?
+  deletedAt         DateTime?
+
+  venue              Json @default("{}")
+  contractorBookings Json @default("[]")
+  categoryTabs       Json @default("[]")
+  schedule           Json @default("[]")
+  prepGroups         Json @default("[]")
+  requests           Json @default("[]")
+  shotList           Json @default("[]")
+  secondShooters     Json @default("[]")
+  otherExpenses      Json @default("[]")
+  history            Json @default("[]")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

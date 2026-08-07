@@ -85,11 +85,15 @@ export default function BookingsPage() {
     setDeleteTarget(null);
   }
 
-  function handleConvert(booking) {
-    const event = convertBookingToEvent(booking.id);
-    if (!event) return;
-    showToast('Event created');
-    navigate(`/events/${event.id}`);
+  async function handleConvert(booking) {
+    try {
+      const event = await convertBookingToEvent(booking.id);
+      if (!event) return;
+      showToast('Event created');
+      navigate(`/events/${event.id}`);
+    } catch (err) {
+      showToast(err.message || 'Failed to create event', 'error');
+    }
   }
 
   return (

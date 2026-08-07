@@ -621,7 +621,9 @@ export default function BookingFormPage() {
   useEffect(() => {
     if (!booking) return;
     if (autoSaveSkipRef.current) { autoSaveSkipRef.current = false; return; }
-    const timer = setTimeout(() => { persistBooking(); }, 800);
+    const timer = setTimeout(() => {
+      persistBooking().promise.catch((err) => setError(err.message || 'Failed to save changes.'));
+    }, 800);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form]);
@@ -874,7 +876,7 @@ export default function BookingFormPage() {
   // existing 800ms autosave effect persists it normally from here.
   async function handleApplyInquiryOverride(response) {
     const patch = buildBookingMergePatch(response, form, venues);
-    const resolved = resolveClientForMerge(response, { clients, addClient, currentClientId: form.clientId });
+    const resolved = await resolveClientForMerge(response, { clients, addClient, currentClientId: form.clientId });
     setForm((f) => ({ ...f, ...patch, clientId: resolved.clientId }));
     return { bookingId: form.id, clientId: resolved.clientId };
   }
@@ -891,31 +893,41 @@ export default function BookingFormPage() {
     };
   }
 
+  // Returns { patch, promise } — `patch` is the current form values, built
+  // and available synchronously so callers that just need up-to-date data
+  // (PDF generation, etc.) don't have to wait on the network; `promise` is
+  // the actual save, for callers that need to know whether it succeeded.
   function persistBooking() {
     const patch = buildBookingPatch();
-    if (booking) updateBooking(booking.id, patch);
-    else addBooking(patch);
-    return patch;
+    const promise = booking ? updateBooking(booking.id, patch) : addBooking(patch);
+    return { patch, promise };
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     const err = validate();
     if (err) { setError(err); setActiveTab('info'); return; }
     setSaving(true);
     const wasNew = !booking;
-    persistBooking();
-    setSaving(false);
-    showToast(wasNew ? 'Booking added' : 'Booking updated');
-    // Stay on the form after saving — only Back/Cancel or navigating
-    // elsewhere in the app should leave it. A brand-new booking's `id` was
-    // already generated up front in emptyForm() (for document uploads on an
-    // unsaved booking), so it's known before this save and doubles as the
-    // real record's id once persistBooking() creates it — swap the route
-    // from /bookings/new to /bookings/:id so the form is now in edit mode.
-    if (wasNew) {
-      clearDraft(NEW_BOOKING_DRAFT_KEY);
-      navigate(`/bookings/${form.id}`, { replace: true });
+    const { patch, promise } = persistBooking();
+    try {
+      await promise;
+      showToast(wasNew ? 'Booking added' : 'Booking updated');
+      // Stay on the form after saving — only Back/Cancel or navigating
+      // elsewhere in the app should leave it. A brand-new booking's `id`
+      // was already generated up front in emptyForm() (for document
+      // uploads on an unsaved booking), so it's known before this save and
+      // doubles as the real record's id once persistBooking() creates it —
+      // swap the route from /bookings/new to /bookings/:id so the form is
+      // now in edit mode.
+      if (wasNew) {
+        clearDraft(NEW_BOOKING_DRAFT_KEY);
+        navigate(`/bookings/${patch.id}`, { replace: true });
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to save booking.');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -924,11 +936,15 @@ export default function BookingFormPage() {
     navigate('/bookings');
   }
 
-  function handleConvert() {
-    const event = convertBookingToEvent(booking.id);
-    if (!event) return;
-    showToast('Event created');
-    navigate(`/events/${event.id}`);
+  async function handleConvert() {
+    try {
+      const event = await convertBookingToEvent(booking.id);
+      if (!event) return;
+      showToast('Event created');
+      navigate(`/events/${event.id}`);
+    } catch (err) {
+      showToast(err.message || 'Failed to create event', 'error');
+    }
   }
 
   function handlePushToProposal() {
@@ -938,8 +954,9 @@ export default function BookingFormPage() {
   }
 
   async function handleDownloadProposal() {
+    const { patch, promise } = persistBooking();
+    promise.catch((err) => showToast(err.message || 'Failed to save changes.', 'error'));
     try {
-      const patch = persistBooking();
       await generateProposalPdf({ booking: patch, client, businessInfo: currentUser.businessInfo || {} });
     } catch (err) {
       showToast(err.message || 'Failed to generate PDF', 'error');
@@ -957,7 +974,8 @@ export default function BookingFormPage() {
     }
     setLoadingProposalPreview(true);
     try {
-      const patch = persistBooking();
+      const { patch, promise } = persistBooking();
+      promise.catch((err) => showToast(err.message || 'Failed to save changes.', 'error'));
       const url = await getProposalPdfDataUrl({ booking: patch, client, businessInfo: currentUser.businessInfo || {} });
       setProposalPreviewUrl(url);
       setShowProposalPreview(true);
@@ -975,7 +993,8 @@ export default function BookingFormPage() {
     }
     setSendingProposal(true);
     try {
-      const patch = persistBooking();
+      const { patch, promise } = persistBooking();
+      promise.catch((err) => showToast(err.message || 'Failed to save changes.', 'error'));
       const businessInfo = currentUser.businessInfo || {};
       const fromName = businessInfo.name || `${currentUser.firstName} ${currentUser.lastName}`;
       const pdfAttachment = await generateProposalPdfAttachment({ booking: patch, client, businessInfo });
@@ -1356,7 +1375,7 @@ export default function BookingFormPage() {
     }
     setSendingContract(true);
     try {
-      persistBooking();
+      persistBooking().promise.catch((err) => showToast(err.message || 'Failed to save changes.', 'error'));
       const { contract: created, signLink, ownerSignLink, emailError } = await sendContract({
         bookingId: booking.id,
         recipientEmail: contractRecipientEmail.trim(),
@@ -1389,7 +1408,7 @@ export default function BookingFormPage() {
     }
     setSendingContract(true);
     try {
-      persistBooking();
+      persistBooking().promise.catch((err) => showToast(err.message || 'Failed to save changes.', 'error'));
       const { contract: created, signLink, ownerSignLink } = await sendContract({
         bookingId: booking.id,
         recipientEmail: contractRecipientEmail.trim(),

@@ -48,28 +48,35 @@ function ownerOf(account) {
     : null;
 }
 
-const DATA_SUMMARY_KEYS = ['contractors', 'clients', 'events', 'bookings'];
 const emptyDataSummary = { contractors: 0, clients: 0, events: 0, bookings: 0 };
 
-// One row's `data` blob can run into the hundreds of KB per account (see
-// AccountData's doc comment in schema.prisma) — pulling all of them into
-// this process just to read four array lengths doesn't scale with the
-// platform's total account count. jsonb_array_length computes each count in
-// Postgres instead, so only four small integers per account ever leave the
-// database.
+// Contractor/Client/Booking/Event are all real tables now (see each
+// model's schema comment) — a per-model groupBy count is the direct
+// equivalent of the jsonb_array_length query this replaced, and stays
+// correct as more of AccountData.data gets graduated out of the blob.
+// (This replaced a raw-SQL version that counted `data->'contractors'` etc.
+// directly in the blob — silently wrong, always 0, ever since Contractor/
+// Client moved to their own tables, since neither key exists in the blob
+// anymore. Booking/Event would have hit the exact same bug if left as-is.)
 async function fetchDataSummaries() {
-  const rows = await prisma.$queryRaw`
-    SELECT "accountId",
-      jsonb_array_length(CASE WHEN jsonb_typeof(data->'contractors') = 'array' THEN data->'contractors' ELSE '[]'::jsonb END) AS contractors,
-      jsonb_array_length(CASE WHEN jsonb_typeof(data->'clients') = 'array' THEN data->'clients' ELSE '[]'::jsonb END) AS clients,
-      jsonb_array_length(CASE WHEN jsonb_typeof(data->'events') = 'array' THEN data->'events' ELSE '[]'::jsonb END) AS events,
-      jsonb_array_length(CASE WHEN jsonb_typeof(data->'bookings') = 'array' THEN data->'bookings' ELSE '[]'::jsonb END) AS bookings
-    FROM "AccountData"
-  `;
+  const [contractorCounts, clientCounts, bookingCounts, eventCounts] = await Promise.all([
+    prisma.contractor.groupBy({ by: ['accountId'], _count: { _all: true } }),
+    prisma.client.groupBy({ by: ['accountId'], _count: { _all: true } }),
+    prisma.booking.groupBy({ by: ['accountId'], _count: { _all: true }, where: { deletedAt: null } }),
+    prisma.event.groupBy({ by: ['accountId'], _count: { _all: true }, where: { deletedAt: null } }),
+  ]);
   const byAccountId = new Map();
-  for (const row of rows) {
-    byAccountId.set(row.accountId, Object.fromEntries(DATA_SUMMARY_KEYS.map((k) => [k, Number(row[k])])));
-  }
+  const apply = (rows, key) => {
+    for (const row of rows) {
+      const existing = byAccountId.get(row.accountId) || { ...emptyDataSummary };
+      existing[key] = row._count._all;
+      byAccountId.set(row.accountId, existing);
+    }
+  };
+  apply(contractorCounts, 'contractors');
+  apply(clientCounts, 'clients');
+  apply(bookingCounts, 'bookings');
+  apply(eventCounts, 'events');
   return byAccountId;
 }
 

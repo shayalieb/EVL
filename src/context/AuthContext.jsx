@@ -3,6 +3,8 @@ import { loadUserData } from '../lib/storage';
 import { buildSeedUserData, buildDefaultBookingStatuses } from '../lib/seed';
 import { createContractor } from '../lib/contractors';
 import { createClient } from '../lib/clients';
+import { createBooking } from '../lib/bookings';
+import { createEvent } from '../lib/events';
 
 // Relative in production (e.g. `/api`) — vercel.json proxies /api/* to the
 // Railway backend so the browser only ever talks to the frontend's own
@@ -72,6 +74,33 @@ async function migrateClientsOutOfBlob(blob) {
   return next;
 }
 
+// Same idea again, for Booking/Event (see server/prisma/schema.prisma's
+// Booking/Event model comments) — the biggest of this whole graduation
+// series, since they're the two most actively-edited record types in the
+// app. Each blob record already carries its own id (BookingFormPage/
+// EventFormPage's emptyForm() generates one up front, before the record is
+// ever saved), and createBooking/createEvent's routes require and preserve
+// that id rather than minting a new one — critical here, since Contract/
+// Invoice/documents/StagePlot/FloorPlan/Guest/EventRsvpLink/InquiryLink all
+// reference a booking/event by that same opaque id.
+async function migrateBookingsOutOfBlob(blob) {
+  const results = await Promise.allSettled(blob.bookings.map((b) => createBooking(b)));
+  const stillEmbedded = blob.bookings.filter((_, i) => results[i].status === 'rejected');
+  const next = { ...blob };
+  if (stillEmbedded.length) next.bookings = stillEmbedded;
+  else delete next.bookings;
+  return next;
+}
+
+async function migrateEventsOutOfBlob(blob) {
+  const results = await Promise.allSettled(blob.events.map((e) => createEvent(e)));
+  const stillEmbedded = blob.events.filter((_, i) => results[i].status === 'rejected');
+  const next = { ...blob };
+  if (stillEmbedded.length) next.events = stillEmbedded;
+  else delete next.events;
+  return next;
+}
+
 export function AuthProvider({ children }) {
   const [serverUser, setServerUser] = useState(null);
   const [localBlob, setLocalBlob] = useState(null);
@@ -98,12 +127,29 @@ export function AuthProvider({ children }) {
 
       const hadContractors = blob.contractors?.length;
       const hadClients = blob.clients?.length;
+      const hadBookings = blob.bookings?.length;
+      const hadEvents = blob.events?.length;
       if (hadContractors) blob = await migrateContractorsOutOfBlob(blob);
       if (hadClients) blob = await migrateClientsOutOfBlob(blob);
-      if (hadContractors || hadClients) {
-        const saved = await apiFetch('/account-data', { method: 'PUT', body: JSON.stringify({ data: blob, version: versionRef.current }) });
-        versionRef.current = saved.version;
-        setSizeWarning(saved.sizeWarning || null);
+      if (hadBookings) blob = await migrateBookingsOutOfBlob(blob);
+      if (hadEvents) blob = await migrateEventsOutOfBlob(blob);
+      if (hadContractors || hadClients || hadBookings || hadEvents) {
+        // Non-fatal: two tabs (or two logins close together) hydrating
+        // concurrently both see the embedded arrays and both attempt this
+        // shrink-and-write-back; the second one loses the optimistic-
+        // concurrency `version` check and 409s. Left uncaught, that
+        // propagates out of hydrate() and the outer effect below treats any
+        // failure as "not authenticated," logging that tab out — instead,
+        // just leave the (still-migrated, still self-healing per-record)
+        // blob as next hydrate's problem, same tolerance already documented
+        // above for individual record migration failures.
+        try {
+          const saved = await apiFetch('/account-data', { method: 'PUT', body: JSON.stringify({ data: blob, version: versionRef.current }) });
+          versionRef.current = saved.version;
+          setSizeWarning(saved.sizeWarning || null);
+        } catch {
+          // swallow — next hydrate re-migrates whatever's still embedded
+        }
       }
     } else {
       // No account-wide record yet — either a brand-new signup, or the
@@ -113,6 +159,8 @@ export function AuthProvider({ children }) {
       blob = loadUserData(user.id) || seedBlob(user);
       if (blob.contractors?.length) blob = await migrateContractorsOutOfBlob(blob);
       if (blob.clients?.length) blob = await migrateClientsOutOfBlob(blob);
+      if (blob.bookings?.length) blob = await migrateBookingsOutOfBlob(blob);
+      if (blob.events?.length) blob = await migrateEventsOutOfBlob(blob);
       const created = await apiFetch('/account-data', { method: 'PUT', body: JSON.stringify({ data: blob }) });
       versionRef.current = created.version;
       setSizeWarning(created.sizeWarning || null);

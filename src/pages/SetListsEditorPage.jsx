@@ -184,11 +184,12 @@ export default function SetListsEditorPage() {
   async function handleSave() {
     setSaving(true);
     try {
-      // updateEvent updates currentUser.events synchronously/optimistically
-      // (the network PUT happens in the background) — `dirty` re-derives
-      // from that on the next render, no manual re-sync needed here.
-      updateEvent(eventId, { setLists });
+      // `dirty` re-derives from the updated `events` state on the next
+      // render once this resolves, no manual re-sync needed here.
+      await updateEvent(eventId, { setLists });
       showToast('Set lists saved');
+    } catch (err) {
+      showToast(err.message || 'Failed to save set lists', 'error');
     } finally {
       setSaving(false);
     }

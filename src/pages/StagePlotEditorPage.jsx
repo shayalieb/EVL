@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useData } from '../context/DataContext';
 import { getOrCreateStagePlot, addStagePlotPage, deleteStagePlotPage } from '../lib/stagePlots';
 import { generateStagePlotPdf } from '../lib/stagePlotPdf';
 import StagePlotPageEditor from '../components/StagePlotPageEditor';
@@ -9,7 +10,8 @@ import StagePlotChannelList from '../components/StagePlotChannelList';
 export default function StagePlotEditorPage() {
   const { eventId } = useParams();
   const { currentUser } = useAuth();
-  const event = currentUser?.events?.find((e) => e.id === eventId);
+  const { events } = useData();
+  const event = events.find((e) => e.id === eventId);
   const [plot, setPlot] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [activePageId, setActivePageId] = useState(null);
