@@ -51,14 +51,20 @@ export default function ContractorPickerRow({
       data-testid="contractor-picker-row"
       className={`rounded-lg border-l-4 border-l-indigo-400 border border-slate-200 bg-white ${isDragging ? 'opacity-40' : ''}`}
     >
-      <div className="flex items-center gap-3 px-3.5 pt-3.5 pb-2.5">
+      {/* flex-wrap — this row has 8+ fixed-width controls that add up to
+          well over a phone's viewport width; wrapping lets them flow onto
+          additional lines instead of overflowing the page horizontally.
+          w-full on the name button forces it onto its own first line on
+          narrow screens (where wrapping starts) rather than sharing a line
+          with the drag handle and leaving little room for anything else. */}
+      <div className="flex flex-wrap items-center gap-3 px-3.5 pt-3.5 pb-2.5">
         <span className="cursor-grab text-slate-300 select-none" aria-hidden="true">⠿</span>
 
         <button
           type="button"
           onClick={() => onOpenContractor(contractor)}
           data-testid="contractor-picker-row-name-button"
-          className="flex-1 min-w-0 text-left"
+          className="flex-1 min-w-0 sm:min-w-[8rem] w-full sm:w-auto text-left"
         >
           <div className="text-sm font-medium text-slate-800 truncate hover:text-indigo-600 hover:underline">
             {contractor.firstName} {contractor.lastName}

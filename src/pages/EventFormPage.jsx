@@ -1286,7 +1286,7 @@ export default function EventFormPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-[1fr_1fr_auto] gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3">
                 <div>
                   <label className={labelClass}>Event Start Time</label>
                   <input type="time" value={form.startTime} onChange={(e) => update('startTime', e.target.value)} data-testid="event-form-start-time-input" className={inputClass} />
@@ -1451,27 +1451,31 @@ export default function EventFormPage() {
           ) : (
             <div className="space-y-2">
               {form.schedule.map((item) => (
-                <div key={item.id} data-testid="event-form-schedule-item-row" className="flex items-start gap-2">
+                // flex-wrap + full-width-on-mobile inputs — the fixed w-32/
+                // w-48 widths below add up to more than a phone viewport on
+                // their own; wrapping lets time/name/details stack instead
+                // of overflowing the page horizontally.
+                <div key={item.id} data-testid="event-form-schedule-item-row" className="flex flex-wrap items-start gap-2">
                   <input
                     type="time"
                     value={item.time}
                     onChange={(e) => updateScheduleItem(item.id, { time: e.target.value })}
                     data-testid="event-form-schedule-item-time-input"
-                    className="shrink-0 w-32 px-2.5 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                    className="w-full sm:w-32 sm:shrink-0 px-2.5 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                   />
                   <input
                     value={item.name}
                     onChange={(e) => updateScheduleItem(item.id, { name: e.target.value })}
                     placeholder="e.g. Ceremony"
                     data-testid="event-form-schedule-item-name-input"
-                    className="shrink-0 w-48 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                    className="w-full sm:w-48 sm:shrink-0 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                   />
                   <input
                     value={item.details}
                     onChange={(e) => updateScheduleItem(item.id, { details: e.target.value })}
                     placeholder="Details…"
                     data-testid="event-form-schedule-item-details-input"
-                    className="flex-1 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                    className="flex-1 min-w-[10rem] px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                   />
                   <button
                     type="button"
@@ -1507,10 +1511,15 @@ export default function EventFormPage() {
           )}
 
           {showBulkRow && (
-            <div className="flex items-center gap-3 px-3 pb-2">
-              <span className="cursor-grab text-slate-300 select-none invisible" aria-hidden="true">⠿</span>
+            // flex-wrap so the functional controls (select + button) never
+            // overflow on mobile; the aria-hidden spacers only exist to
+            // align this row's controls with ContractorPickerRow's columns
+            // above, which is meaningless once that row wraps on mobile too
+            // — hidden below sm rather than reserving dead space there.
+            <div className="flex flex-wrap items-center gap-3 px-3 pb-2">
+              <span className="hidden sm:inline cursor-grab text-slate-300 select-none invisible" aria-hidden="true">⠿</span>
               <div className="flex-1 min-w-0 text-xs font-semibold text-slate-500">Bulk send</div>
-              <div className="shrink-0 w-12" aria-hidden="true" />
+              <div className="hidden sm:block shrink-0 w-12" aria-hidden="true" />
               <select
                 value={bulkTemplateId}
                 onChange={(e) => setBulkTemplateId(e.target.value)}
@@ -1529,9 +1538,9 @@ export default function EventFormPage() {
               >
                 Send to All
               </button>
-              <div className="shrink-0 ml-3 w-32" aria-hidden="true" />
-              <div className="w-20 shrink-0" aria-hidden="true" />
-              <div className="shrink-0 w-6" aria-hidden="true" />
+              <div className="hidden sm:block shrink-0 ml-3 w-32" aria-hidden="true" />
+              <div className="hidden sm:block w-20 shrink-0" aria-hidden="true" />
+              <div className="hidden sm:block shrink-0 w-6" aria-hidden="true" />
               {canAddContractor && addContractorButton}
             </div>
           )}
