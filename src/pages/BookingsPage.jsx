@@ -14,8 +14,29 @@ import { formatCurrency as currency, formatEventDate } from '../lib/format';
 import { matchesSearch } from '../lib/search';
 import { usePagination } from '../lib/usePagination';
 import { listInquiryLinks } from '../lib/inquiryLinks';
+import { listContracts } from '../lib/contracts';
+import { listInvoices } from '../lib/invoices';
+import { pipelineSteps, currentPipelineStep } from '../lib/bookingPipeline';
 import SendInquiryLinkModal from '../components/SendInquiryLinkModal';
 import ReviewInquiryModal from '../components/ReviewInquiryModal';
+
+// Rough "how far along" color for the Stage column — not the full palette
+// PipelineStepper uses (that's built for a multi-step visual, not a single
+// glanceable label), just early/mid/late plus a distinct green for
+// actually-paid.
+function stageColor(stage) {
+  if (stage.label === 'Payment' && stage.state === 'done') return '#22c55e';
+  if (stage.label === 'Booking' || stage.label === 'Proposal') return '#94a3b8';
+  return '#6366f1';
+}
+
+// Soft, informational-only signal that the manually-set bookingStatus badge
+// may no longer reflect reality — never blocks or auto-corrects anything.
+// Heuristic: once the real pipeline is at Signed or later, a status that
+// still isn't flagged `isBooked` is worth a second look.
+function stageAheadOfStatus(stage, status) {
+  return ['Signed', 'Event', 'Payment'].includes(stage.label) && !status?.isBooked;
+}
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -43,10 +64,20 @@ export default function BookingsPage() {
   const [sendInquiryModalOpen, setSendInquiryModalOpen] = useState(false);
   const [pendingInquiries, setPendingInquiries] = useState([]);
   const [reviewingInquiry, setReviewingInquiry] = useState(null);
+  // Account-wide, fetched once — same lightweight local-fetch pattern
+  // HomePage.jsx already uses for its own invoices (not routed through
+  // DataContext, since neither is read anywhere else on this page). Feeds
+  // the Stage column below: each row derives its real pipeline position via
+  // the same pipelineSteps() BookingFormPage's own stepper uses, rather than
+  // this list only ever showing the separate, manually-set status badge.
+  const [contracts, setContracts] = useState([]);
+  const [invoices, setInvoices] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
     listInquiryLinks({ status: 'submitted' }).then((links) => { if (!cancelled) setPendingInquiries(links); }).catch(() => {});
+    listContracts().then((list) => { if (!cancelled) setContracts(list); }).catch(() => {});
+    listInvoices().then((list) => { if (!cancelled) setInvoices(list); }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
@@ -201,6 +232,7 @@ export default function BookingsPage() {
             <thead>
               <tr className="border-b border-slate-100 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                 <th className="px-4 py-3">Status</th>
+                <th className="hidden sm:table-cell px-4 py-3">Stage</th>
                 <th className="px-4 py-3">Client</th>
                 <th className="hidden sm:table-cell px-4 py-3">Follow-up</th>
                 <th className="px-4 py-3">Event Date</th>
@@ -213,7 +245,7 @@ export default function BookingsPage() {
             <tbody>
               {filteredBookings.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
+                  <td colSpan={9} className="px-4 py-10 text-center text-slate-400">
                     {bookings.length === 0
                       ? 'No bookings yet. Add an inquiry or quote to start tracking the sales pipeline.'
                       : 'No bookings match your search or filters.'}
@@ -226,11 +258,27 @@ export default function BookingsPage() {
                 const canConvert = !b.convertedEventId;
                 const priority = PRIORITIES.find((p) => p.value === b.priority);
                 const tone = followUpTone(b.nextFollowUpDate);
+                const contract = contracts
+                  .filter((c) => c.bookingId === b.id)
+                  .sort((x, y) => new Date(y.createdAt) - new Date(x.createdAt))[0] || null;
+                const bookingInvoices = invoices.filter((inv) => inv.bookingId === b.id);
+                const stage = currentPipelineStep(pipelineSteps(b, b.proposal, contract, bookingInvoices));
+                const stageMismatch = stageAheadOfStatus(stage, status);
 
                 return (
                   <tr key={b.id} data-testid="booking-row" className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                     <td className="px-4 py-3">
-                      {status && <Badge color={status.color}>{status.label}</Badge>}
+                      <div className="flex items-center gap-1.5">
+                        {status && <Badge color={status.color}>{status.label}</Badge>}
+                        {stageMismatch && (
+                          <Tooltip content={`Pipeline shows this is at "${stage.label}" already — status may be out of date.`}>
+                            <span data-testid="booking-row-stage-mismatch-hint" className="text-amber-500 cursor-default" aria-label="Status may be out of date">⚠</span>
+                          </Tooltip>
+                        )}
+                      </div>
+                    </td>
+                    <td className="hidden sm:table-cell px-4 py-3">
+                      <Badge color={stageColor(stage)}>{stage.label}</Badge>
                     </td>
                     <td className="px-4 py-3 font-medium text-slate-800">
                       <div className="flex items-center gap-2">

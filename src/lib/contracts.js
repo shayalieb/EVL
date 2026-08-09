@@ -5,6 +5,13 @@ export async function getContractForBooking(bookingId) {
   return data.contract;
 }
 
+// Every contract on the account (see BookingsPage.jsx's Stage column, which
+// needs each booking's contract status without a fetch per row).
+export async function listContracts() {
+  const data = await apiFetch('/contracts');
+  return data.contracts;
+}
+
 // `manual`+`reason`: skips the actual outbound email and logs a
 // 'manual_sent' entry with the reason instead of 'sent' — for contracts
 // delivered outside GigWorks (printed, texted, signed in person, etc.).

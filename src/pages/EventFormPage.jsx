@@ -601,6 +601,20 @@ export default function EventFormPage() {
     }));
   }
 
+  // Shared by sendAndMarkEmailed and the manual-contact-log handler below —
+  // both want to nudge a contractor's status forward on outreach activity,
+  // but only ever out of the 'tentative' bucket. Without this guard, a
+  // routine follow-up email or a logged call against an already-Confirmed
+  // (or Not Available/Declined) contractor would silently revert them back
+  // to a tentative status, destroying that signal.
+  function advanceInquiryStatusIfTentative(contractorId, label, color) {
+    const currentBooking = form.contractorBookings.find((b) => b.contractorId === contractorId);
+    const currentStatus = inquiryStatuses.find((s) => s.id === currentBooking?.inquiryStatusId);
+    if (statusBucket(currentStatus) !== 'tentative') return;
+    const nextStatus = getOrCreateInquiryStatus(label, color);
+    if (nextStatus) changeBookingStatus(contractorId, nextStatus.id);
+  }
+
   function changeBookingTier(contractorId, pricingTierId) {
     setForm((f) => ({
       ...f,
@@ -734,8 +748,7 @@ export default function EventFormPage() {
       contractorEmail: contractor.email,
       subject, body, templateId, fromName,
     });
-    const emailedStatus = getOrCreateInquiryStatus('Emailed', '#eab308');
-    if (emailedStatus) changeBookingStatus(contractor.id, emailedStatus.id);
+    advanceInquiryStatusIfTentative(contractor.id, 'Emailed', '#eab308');
   }
 
   async function handleUploadDocument(e) {
@@ -2279,6 +2292,11 @@ export default function EventFormPage() {
         })()}
         fromName={fromName}
         onChanged={() => refreshThreadSummaries(form.id)}
+        onOutreachSent={(kind) => {
+          if (!openThreadContractorId) return;
+          if (kind === 'email') advanceInquiryStatusIfTentative(openThreadContractorId, 'Emailed', '#eab308');
+          else advanceInquiryStatusIfTentative(openThreadContractorId, 'Called', '#eab308');
+        }}
       />
 
       <PrepEmailModal

@@ -62,9 +62,23 @@ function serializeForPublic(contract, role) {
 
 router.use(requireAuth, asyncHandler(attachMembership));
 
+// bookingId scopes to that one booking's most recent contract (existing
+// shape: a single `contract`, possibly null). Omitting it returns every
+// contract on the account instead (`contracts`, an array) — used by
+// BookingsPage.jsx's Stage column, which needs to know each booking's
+// contract status without a query per row. A booking can have more than one
+// Contract row (e.g. a resend creates a new one), so the list form can't
+// just be the single-booking query with the filter dropped — findMany, not
+// findFirst.
 router.get('/', asyncHandler(async (req, res) => {
   const { bookingId } = req.query;
-  if (!bookingId) return res.status(400).json({ error: 'bookingId is required.' });
+  if (!bookingId) {
+    const contracts = await prisma.contract.findMany({
+      where: { accountId: req.membership.accountId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return res.json({ contracts: contracts.map(serializeForOwner) });
+  }
 
   const contract = await prisma.contract.findFirst({
     where: { accountId: req.membership.accountId, bookingId },

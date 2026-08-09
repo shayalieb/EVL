@@ -199,6 +199,35 @@ router.get('/summary', asyncHandler(async (req, res) => {
   res.json({ summaries });
 }));
 
+// Same shape as GET /summary above, but account-wide instead of scoped to
+// one event — the roster page (ContractorsPage.jsx) needs "was this
+// contractor contacted at all, on any gig" at a glance, not "on this one
+// event." A contractor can have threads on several events; this collapses
+// them to one row per contractor (latest lastMessageAt across all of them,
+// unread counts summed). Grouped in JS, not a Prisma groupBy — groupBy
+// can't include the nested `messages` needed for the unread count in the
+// same query, and GET /summary above already solves that the same way.
+router.get('/roster-summary', asyncHandler(async (req, res) => {
+  const threads = await prisma.emailThread.findMany({
+    where: { accountId: req.membership.accountId },
+    include: { messages: { select: { direction: true, readAt: true } } },
+  });
+
+  const summaries = {};
+  for (const thread of threads) {
+    const unread = thread.messages.filter((m) => m.direction === 'inbound' && !m.readAt).length;
+    const existing = summaries[thread.contractorId];
+    if (!existing) {
+      summaries[thread.contractorId] = { hasThread: true, unreadCount: unread, lastMessageAt: thread.lastMessageAt, threadCount: 1 };
+    } else {
+      existing.unreadCount += unread;
+      existing.threadCount += 1;
+      if (thread.lastMessageAt > existing.lastMessageAt) existing.lastMessageAt = thread.lastMessageAt;
+    }
+  }
+  res.json({ summaries });
+}));
+
 router.patch('/:threadId/read', asyncHandler(async (req, res) => {
   const thread = await prisma.emailThread.findUnique({ where: { id: req.params.threadId } });
   if (!thread || thread.accountId !== req.membership.accountId) {

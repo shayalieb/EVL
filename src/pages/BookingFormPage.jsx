@@ -36,6 +36,7 @@ import { computeOfferingTotal, computeOfferingsTotal } from '../lib/offerings';
 import { matchesSearch } from '../lib/search';
 import { DEFAULT_ACCENT_COLOR } from '../lib/colorTheme';
 import { isWedding } from '../lib/eventType';
+import { pipelineSteps, proposalStatusInfo, contractStatusInfo } from '../lib/bookingPipeline';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -372,44 +373,9 @@ function ClientCombobox({ clients, value, onChange }) {
   );
 }
 
-// Pure presentational read of state that already exists elsewhere on the
-// page (booking, proposal, contract, event) — no new data, just orientation.
-function pipelineSteps(booking, proposal, contract, invoices) {
-  const proposalSent = !!proposal?.sentAt;
-  const contractSent = !!contract;
-  const fullySigned = contract?.status === 'fully_signed';
-  const hasEvent = !!booking?.convertedEventId;
-  const invoicePaid = (invoices || []).some((inv) => inv.status === 'paid');
-  const invoiceAwaitingPayment = (invoices || []).some((inv) => inv.status === 'sent' || inv.status === 'partial');
-  const state = (done, current) => (done ? 'done' : current ? 'current' : 'upcoming');
-  return [
-    { label: 'Booking', state: state(!!booking, !booking) },
-    { label: 'Proposal', state: state(proposalSent, !!booking && !proposalSent) },
-    { label: 'Contract', state: state(contractSent, proposalSent && !contractSent) },
-    { label: 'Signed', state: state(fullySigned, contractSent && !fullySigned) },
-    { label: 'Event', state: state(hasEvent, fullySigned && !hasEvent) },
-    { label: 'Payment', state: state(invoicePaid, invoiceAwaitingPayment && !invoicePaid) },
-  ];
-}
-
-// Quick-glance status badges shown at the top of the page, alongside the
-// PipelineStepper — same underlying data (proposal.sentAt, contract.status)
-// as the stepper and each tab's own status banner, just surfaced where a
-// stakeholder can see it without clicking into either tab.
-function proposalStatusInfo(proposal) {
-  if (!proposal) return { label: 'Not Started', color: '#94a3b8' };
-  if (!proposal.sentAt) return { label: 'Draft', color: '#94a3b8' };
-  return { label: 'Sent', color: '#22c55e' };
-}
-
-function contractStatusInfo(contract) {
-  if (!contract) return { label: 'Not Started', color: '#94a3b8' };
-  if (contract.status === 'fully_signed') return { label: 'Fully Signed', color: '#22c55e' };
-  if (contract.status === 'client_signed') return { label: 'Awaiting Your Signature', color: '#eab308' };
-  if (contract.status === 'owner_signed') return { label: 'Awaiting Client Signature', color: '#eab308' };
-  return { label: 'Awaiting Signatures', color: '#eab308' }; // status === 'sent'
-}
-
+// pipelineSteps/proposalStatusInfo/contractStatusInfo now live in
+// src/lib/bookingPipeline.js — shared with BookingsPage.jsx's Stage column,
+// so every view deriving "where is this booking really at" agrees.
 function PipelineStepper({ steps }) {
   return (
     <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mb-5">

@@ -5,6 +5,14 @@ export async function getThreadSummaries(eventId) {
   return data.summaries;
 }
 
+// Same shape as getThreadSummaries, but across every event on the account —
+// one row per contractor instead of per (event, contractor). See
+// ContractorsPage.jsx's Last Contact column.
+export async function getRosterSummary() {
+  const data = await apiFetch('/email/threads/roster-summary');
+  return data.summaries;
+}
+
 export async function getThread(eventId, contractorId) {
   const data = await apiFetch(`/email/threads?eventId=${encodeURIComponent(eventId)}&contractorId=${encodeURIComponent(contractorId)}`);
   return data.thread;

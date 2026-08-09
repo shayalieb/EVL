@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import ContractorModal from '../components/ContractorModal';
@@ -8,10 +8,23 @@ import SearchInput from '../components/ui/SearchInput';
 import FilterSelect from '../components/ui/FilterSelect';
 import Pagination from '../components/ui/Pagination';
 import { useToast } from '../components/ui/Toast';
-import { formatCurrency as currency } from '../lib/format';
+import { formatCurrency as currency, formatEventDate } from '../lib/format';
 import { getPricingTiers } from '../lib/pricingTiers';
 import { matchesSearch } from '../lib/search';
 import { usePagination } from '../lib/usePagination';
+import { getRosterSummary } from '../lib/email/threads';
+
+// "Was this contractor inquired with" answered at a glance instead of
+// requiring you to already know which event to check — see the
+// GET /email/threads/roster-summary endpoint this reads from.
+function lastContactLabel(iso) {
+  if (!iso) return 'Never';
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 30) return `${days}d ago`;
+  return formatEventDate(new Date(iso).toISOString().slice(0, 10));
+}
 
 export default function ContractorsPage() {
   const { contractors, deleteContractor } = useData();
@@ -25,6 +38,16 @@ export default function ContractorsPage() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [priceFilter, setPriceFilter] = useState('');
+  // Account-wide, fetched once — same lightweight local-fetch pattern used
+  // elsewhere (HomePage.jsx's invoices, BookingsPage.jsx's contracts) for
+  // data that isn't otherwise read on this page.
+  const [contactSummary, setContactSummary] = useState({});
+
+  useEffect(() => {
+    let cancelled = false;
+    getRosterSummary().then((summaries) => { if (!cancelled) setContactSummary(summaries); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const categoryOptions = [...new Set(contractors.map((c) => c.contractorType1).filter(Boolean))]
     .sort()
@@ -129,6 +152,7 @@ export default function ContractorsPage() {
                 <th className="hidden sm:table-cell px-4 py-3">Phone</th>
                 <th className="px-4 py-3">Category</th>
                 <th className="hidden sm:table-cell px-4 py-3">Role</th>
+                <th className="hidden sm:table-cell px-4 py-3">Last Contact</th>
                 <th className="px-4 py-3">Price</th>
                 <th className="hidden sm:table-cell px-4 py-3 text-center">Notes</th>
                 <th className="px-4 py-3 text-right">Actions</th>
@@ -137,7 +161,7 @@ export default function ContractorsPage() {
             <tbody>
               {filteredContractors.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
+                  <td colSpan={9} className="px-4 py-10 text-center text-slate-400">
                     {contractors.length === 0
                       ? 'No contractors yet. Add your first contractor to build your vendor roster.'
                       : 'No contractors match your search or filters.'}
@@ -164,6 +188,28 @@ export default function ContractorsPage() {
                   <td className="hidden sm:table-cell px-4 py-3 text-slate-500">{c.phone || '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{c.contractorType1}</td>
                   <td className="hidden sm:table-cell px-4 py-3 text-slate-500">{c.contractorType2 || '—'}</td>
+                  <td className="hidden sm:table-cell px-4 py-3">
+                    {(() => {
+                      const summary = contactSummary[c.id];
+                      return (
+                        <div className="flex items-center gap-1.5">
+                          <span className={summary?.lastMessageAt ? 'text-slate-600' : 'text-slate-300'}>
+                            {lastContactLabel(summary?.lastMessageAt)}
+                          </span>
+                          {summary?.unreadCount > 0 && (
+                            <Tooltip content={`${summary.unreadCount} unread repl${summary.unreadCount === 1 ? 'y' : 'ies'}`}>
+                              <span
+                                data-testid="contractor-row-unread-badge"
+                                className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold"
+                              >
+                                {summary.unreadCount}
+                              </span>
+                            </Tooltip>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </td>
                   <td className="px-4 py-3 text-slate-700">
                     {(() => {
                       const tiers = getPricingTiers(c);

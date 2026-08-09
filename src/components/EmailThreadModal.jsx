@@ -12,7 +12,7 @@ function formatTimestamp(iso) {
   return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-export default function EmailThreadModal({ open, onClose, eventId, contractorId, contractorEmail, contractorLabel, fromName, onChanged }) {
+export default function EmailThreadModal({ open, onClose, eventId, contractorId, contractorEmail, contractorLabel, fromName, onChanged, onOutreachSent }) {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [thread, setThread] = useState(null);
@@ -62,6 +62,7 @@ export default function EmailThreadModal({ open, onClose, eventId, contractorId,
       const t = await getThread(eventId, contractorId);
       setThread(t);
       onChanged?.();
+      onOutreachSent?.('email');
       showToast('Reply sent');
     } catch (err) {
       showToast(err.message || 'Failed to send reply', 'error');
@@ -80,6 +81,7 @@ export default function EmailThreadModal({ open, onClose, eventId, contractorId,
       const t = await getThread(eventId, contractorId);
       setThread(t);
       onChanged?.();
+      onOutreachSent?.('manual');
       showToast('Contact logged');
     } catch (err) {
       showToast(err.message || 'Failed to log contact', 'error');
