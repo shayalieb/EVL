@@ -10,6 +10,7 @@ import GroupChipSelector from '../components/GroupChipSelector';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Modal from '../components/ui/Modal';
 import HistoryModal from '../components/HistoryModal';
+import StagePlotEditorPage from './StagePlotEditorPage';
 import VenueCombobox from '../components/VenueCombobox';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
@@ -194,6 +195,7 @@ export default function EventFormPage() {
   const [form, setForm] = useState(emptyForm());
   const [addingType, setAddingType] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [stagePlotModalOpen, setStagePlotModalOpen] = useState(false);
   const [emailHistoryEntries, setEmailHistoryEntries] = useState([]);
   const [newTypeLabel, setNewTypeLabel] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -1062,13 +1064,14 @@ export default function EventFormPage() {
         </div>
         <div className="flex gap-2 shrink-0">
           {isEditing && currentUser.activeVerticals?.includes('band_orchestra') && (
-            <Link
-              to={`/events/${eventId}/stage-plot`}
+            <button
+              type="button"
+              onClick={() => setStagePlotModalOpen(true)}
               data-testid="event-form-stage-plot-link"
               className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
             >
               Stage Plot
-            </Link>
+            </button>
           )}
           {isEditing && currentUser.activeVerticals?.includes('band_orchestra') && (
             <Link
@@ -2222,6 +2225,16 @@ export default function EventFormPage() {
         title="Event History"
         entries={[...(event?.history || []), ...emailHistoryEntries]}
       />
+
+      <Modal
+        open={stagePlotModalOpen}
+        onClose={() => setStagePlotModalOpen(false)}
+        title={`Stage Plot${event?.name ? ` — ${event.name}` : ''}`}
+        widthClass="max-w-[1650px]"
+        bodyClassName="px-6 py-5 max-h-[85vh] overflow-y-auto"
+      >
+        {stagePlotModalOpen && <StagePlotEditorPage onClose={() => setStagePlotModalOpen(false)} />}
+      </Modal>
 
       <AcceptPaymentModal
         open={!!payingContractorId}

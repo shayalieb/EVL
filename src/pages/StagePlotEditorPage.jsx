@@ -7,8 +7,13 @@ import { generateStagePlotPdf } from '../lib/stagePlotPdf';
 import StagePlotPageEditor from '../components/StagePlotPageEditor';
 import StagePlotChannelList from '../components/StagePlotChannelList';
 
-export default function StagePlotEditorPage() {
+// onClose is only passed when this is rendered inside EventFormPage's
+// "Stage Plot" popup (see EventFormPage.jsx) rather than at its own route —
+// useParams() still resolves eventId correctly either way, since this
+// component sits inside the /events/:eventId route tree in both cases.
+export default function StagePlotEditorPage({ onClose } = {}) {
   const { eventId } = useParams();
+  const isModal = !!onClose;
   const { currentUser } = useAuth();
   const { events } = useData();
   const event = events.find((e) => e.id === eventId);
@@ -81,21 +86,37 @@ export default function StagePlotEditorPage() {
   const selectedElement = selectedElementId ? activePage?.scene?.elements?.find((e) => e.id === selectedElementId) : null;
 
   return (
-    <div className="p-6 max-w-[1500px] mx-auto">
+    <div className={isModal ? '' : 'p-6 max-w-[1500px] mx-auto'}>
       <div className="flex items-center justify-between mb-4">
-        <div>
-          <Link to={`/events/${eventId}`} className="text-xs font-semibold text-slate-400 hover:text-slate-600">&larr; Back to event</Link>
-          <h1 className="text-lg font-bold text-slate-800">Stage Plot{event?.name ? ` — ${event.name}` : ''}</h1>
+        {isModal ? (
+          <div />
+        ) : (
+          <div>
+            <Link to={`/events/${eventId}`} className="text-xs font-semibold text-slate-400 hover:text-slate-600">&larr; Back to event</Link>
+            <h1 className="text-lg font-bold text-slate-800">Stage Plot{event?.name ? ` — ${event.name}` : ''}</h1>
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            disabled={exporting}
+            data-testid="stageplot-export-pdf-button"
+            className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold disabled:opacity-50"
+          >
+            {exporting ? 'Exporting…' : 'Download PDF'}
+          </button>
+          {isModal && (
+            <button
+              type="button"
+              onClick={onClose}
+              data-testid="stageplot-modal-done-button"
+              className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
+            >
+              Done
+            </button>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={handleExportPdf}
-          disabled={exporting}
-          data-testid="stageplot-export-pdf-button"
-          className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold disabled:opacity-50"
-        >
-          {exporting ? 'Exporting…' : 'Download PDF'}
-        </button>
       </div>
 
       <div className="flex items-center gap-1 mb-3 border-b border-slate-200">
