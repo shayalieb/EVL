@@ -1582,7 +1582,7 @@ export default function EventFormPage() {
                   bk.paymentStatus === 'paid' ? sum + (Number(bk.paidAmount) || 0) : sum
                 ), 0);
                 return (
-                  <ContractorBucketSection key={b.value} label={b.label} count={entries.length} total={sectionTotal} paid={sectionPaid} defaultOpen={b.value !== 'unavailable'}>
+                  <ContractorBucketSection key={b.value} label={b.label} count={entries.length} total={sectionTotal} paid={sectionPaid} defaultOpen>
                     <div className="space-y-3">
                       {entries.map(({ booking: bk, index: i }) => (
                         <ContractorPickerRow

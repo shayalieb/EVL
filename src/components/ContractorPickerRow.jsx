@@ -27,6 +27,11 @@ export default function ContractorPickerRow({
 
   const currentBucket = statusBucket(status);
   const statusesByBucket = Object.fromEntries(BUCKETS.map((b) => [b.value, inquiryStatuses.filter((s) => statusBucket(s) === b.value)]));
+  const bucketStripClass = {
+    confirmed: 'border-l-green-400',
+    tentative: 'border-l-yellow-400',
+    unavailable: 'border-l-red-400',
+  }[currentBucket] || 'border-l-indigo-400';
 
   // Switching bucket picks that bucket's first configured status (e.g.
   // whichever inquiry status is first in Settings' Tentative group) — the
@@ -49,7 +54,7 @@ export default function ContractorPickerRow({
       onDragOver={(e) => { e.preventDefault(); onDragOver(index); }}
       onDrop={() => onDrop(index)}
       data-testid="contractor-picker-row"
-      className={`rounded-lg border-l-4 border-l-indigo-400 border border-slate-200 bg-white ${isDragging ? 'opacity-40' : ''}`}
+      className={`rounded-lg border-l-4 ${bucketStripClass} border border-slate-200 bg-white ${isDragging ? 'opacity-40' : ''}`}
     >
       {/* flex-wrap — this row has 8+ fixed-width controls that add up to
           well over a phone's viewport width; wrapping lets them flow onto
