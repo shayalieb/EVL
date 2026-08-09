@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import CanvasStage from '../lib/canvasEngine/CanvasStage';
 import { useUndoRedo } from '../lib/canvasEngine/history';
-import { createEmptyScene, deleteElement, deleteAnnotation, deleteStroke, addLayer, updateLayer } from '../lib/canvasEngine/sceneModel';
+import { createEmptyScene, deleteElement, deleteAnnotation, deleteStroke, addLayer, updateLayer, updateElement } from '../lib/canvasEngine/sceneModel';
 import { FLOOR_PLAN_ICON_LIST, FLOOR_PLAN_ICONS } from '../lib/canvasEngine/floorPlanIcons';
 import { saveFloorPlanPage } from '../lib/floorPlans';
 import FloorPlanItemList, { SEATABLE_TABLE_IDS } from './FloorPlanItemList';
+import FloorPlanNumberList from './FloorPlanNumberList';
 
 const AUTOSAVE_DELAY_MS = 2000;
 const toolbarButtonClass = 'px-3 py-1.5 rounded-lg border border-slate-300 text-sm disabled:opacity-40';
@@ -93,6 +94,24 @@ export default function FloorPlanPageEditor({ eventId, page, onSaved }) {
       ...s,
       elements: s.elements.map((e) => (e.id === selectedElementId ? { ...e, seats } : e)),
     }));
+  }
+
+  const elementNumbers = Object.fromEntries(
+    scene.elements.filter((e) => e.number != null).map((e) => [e.id, e.number])
+  );
+
+  function assignNumber(elementId) {
+    if (!elementId) return;
+    const nextNumber = Math.max(0, ...scene.elements.map((e) => e.number || 0)) + 1;
+    apply((s) => updateElement(s, elementId, { number: nextNumber }));
+  }
+
+  function updateElementFields(elementId, patch) {
+    apply((s) => updateElement(s, elementId, patch));
+  }
+
+  function clearNumber(elementId) {
+    apply((s) => updateElement(s, elementId, { number: undefined, name: undefined, description: undefined }));
   }
 
   return (
@@ -193,6 +212,16 @@ export default function FloorPlanPageEditor({ eventId, page, onSaved }) {
           width={820}
           height={580}
           iconRegistry={FLOOR_PLAN_ICONS}
+          elementNumbers={elementNumbers}
+        />
+
+        <FloorPlanNumberList
+          elements={scene.elements}
+          selectedElementId={selectedElementId}
+          onSelectElement={setSelectedElementId}
+          onAssignNumber={assignNumber}
+          onUpdateElement={updateElementFields}
+          onClearNumber={clearNumber}
         />
       </div>
     </div>

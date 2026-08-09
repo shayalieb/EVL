@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Stage, Layer, Rect, Text, Line, Group, Image as KonvaImage, Transformer } from 'react-konva';
+import { Stage, Layer, Rect, Text, Line, Group, Image as KonvaImage, Transformer, Circle } from 'react-konva';
 import { gridLinePositions, snapPointToGrid } from './measurement';
 import { useSvgImage, preloadIconRegistry } from './useSvgImage';
 
@@ -13,31 +13,35 @@ const NOTE_HEIGHT = 60;
 // labeled box for anything unregistered (e.g. the internal canvas-engine
 // demo page's placeholder icon set), so this component works whether or
 // not a real icon set is wired up.
-function ElementShape({ element, icon, isSelected, onSelect, onDragEnd, shapeRef }) {
+function ElementShape({ element, icon, number, isSelected, onSelect, onDragEnd, shapeRef }) {
   const image = useSvgImage(icon?.svg);
-  const common = {
-    x: element.x,
-    y: element.y,
-    rotation: element.rotation,
-    scaleX: element.scaleX,
-    scaleY: element.scaleY,
-    draggable: true,
-    onClick: onSelect,
-    onTap: onSelect,
-    onDragEnd: (e) => onDragEnd(element.id, { x: e.target.x(), y: e.target.y() }),
-  };
-  // Seat count only ever gets set on Floor Plan table elements (see
-  // FloorPlanItemList.jsx's SEATABLE_TABLE_IDS) — harmless to check
-  // generically here since Stage Plot elements never have it.
+  // Icon, label, and number badge all live inside one draggable/transformable
+  // Group instead of as separate top-level siblings — Konva moves/transforms
+  // a Group's whole subtree as one unit natively, which is what keeps the
+  // label glued to the icon during a live drag (previously the icon alone
+  // was draggable and dragged via Konva's internal pointer transaction,
+  // bypassing React — the label, bound to element.x/y as a React prop,
+  // stayed frozen at the old position until onDragEnd finally re-rendered
+  // it). Children are positioned relative to the Group's own (0,0) origin.
   const baseLabel = element.label || icon?.label || element.iconId || '';
   const labelText = element.seats ? `${baseLabel} (${element.seats})` : baseLabel;
+  const labelY = icon ? ICON_SIZE / 2 + 12 : 24;
 
   return (
-    <>
+    <Group
+      ref={shapeRef}
+      x={element.x}
+      y={element.y}
+      rotation={element.rotation}
+      scaleX={element.scaleX}
+      scaleY={element.scaleY}
+      draggable
+      onClick={onSelect}
+      onTap={onSelect}
+      onDragEnd={(e) => onDragEnd(element.id, { x: e.target.x(), y: e.target.y() })}
+    >
       {icon && image ? (
         <KonvaImage
-          ref={shapeRef}
-          {...common}
           image={image}
           width={ICON_SIZE}
           height={ICON_SIZE}
@@ -49,8 +53,6 @@ function ElementShape({ element, icon, isSelected, onSelect, onDragEnd, shapeRef
         />
       ) : (
         <Rect
-          ref={shapeRef}
-          {...common}
           width={40}
           height={40}
           offsetX={20}
@@ -62,18 +64,33 @@ function ElementShape({ element, icon, isSelected, onSelect, onDragEnd, shapeRef
         />
       )}
       <Text
-        x={element.x}
-        y={element.y}
+        x={-34}
+        y={labelY}
         text={labelText}
         fontSize={10}
         fill="#334155"
-        offsetX={34}
-        offsetY={icon ? -(ICON_SIZE / 2 + 12) : -24}
         width={68}
         align="center"
         listening={false}
       />
-    </>
+      {number != null && (
+        <Group x={16} y={-24} listening={false}>
+          <Circle radius={9} fill="#4f46e5" stroke="#fff" strokeWidth={1.5} />
+          <Text
+            text={String(number)}
+            fontSize={10}
+            fontStyle="bold"
+            fill="#fff"
+            width={18}
+            height={18}
+            offsetX={9}
+            offsetY={9}
+            align="center"
+            verticalAlign="middle"
+          />
+        </Group>
+      )}
+    </Group>
   );
 }
 
@@ -149,6 +166,7 @@ export default function CanvasStage({
   onSelectStroke,
   stageRef,
   iconRegistry,
+  elementNumbers,
 }) {
   const internalStageRef = useRef(null);
   const trRef = useRef(null);
@@ -378,6 +396,7 @@ export default function CanvasStage({
               key={el.id}
               element={el}
               icon={iconRegistry?.[el.iconId]}
+              number={elementNumbers?.[el.id]}
               isSelected={el.id === selectedElementId}
               onSelect={() => { onSelectElement?.(el.id); onSelectAnnotation?.(null); onSelectStroke?.(null); }}
               onDragEnd={(id, pos) => onMutate((s) => ({

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
-import { getOrCreateStagePlot, addStagePlotPage, deleteStagePlotPage } from '../lib/stagePlots';
+import { getOrCreateStagePlot, addStagePlotPage, deleteStagePlotPage, updateStagePlotChannel } from '../lib/stagePlots';
 import { generateStagePlotPdf } from '../lib/stagePlotPdf';
 import StagePlotPageEditor from '../components/StagePlotPageEditor';
 import StagePlotChannelList from '../components/StagePlotChannelList';
@@ -16,6 +16,7 @@ export default function StagePlotEditorPage() {
   const [loadError, setLoadError] = useState('');
   const [activePageId, setActivePageId] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const [selectedElementId, setSelectedElementId] = useState(null);
 
   useEffect(() => {
     getOrCreateStagePlot(eventId)
@@ -26,8 +27,25 @@ export default function StagePlotEditorPage() {
       .catch((err) => setLoadError(err.message));
   }, [eventId]);
 
+  // A selected icon only means something on the page it was selected on —
+  // clear it whenever the active page changes instead of leaving a stale
+  // elementId pointing at an icon on a different page.
+  useEffect(() => {
+    setSelectedElementId(null);
+  }, [activePageId]);
+
   function handlePageSaved(pageId, patch) {
     setPlot((prev) => (prev ? { ...prev, pages: prev.pages.map((pg) => (pg.id === pageId ? { ...pg, ...patch } : pg)) } : prev));
+  }
+
+  // Deleting a canvas icon shouldn't delete its linked I/O channel row (a
+  // channel is independently maintained data, per StagePlotChannelList.jsx)
+  // — just unlink it so it stops pointing at an icon that no longer exists.
+  async function handleElementDeleted(elementId) {
+    const channel = plot.channels.find((c) => c.elementId === elementId);
+    if (!channel) return;
+    const updated = await updateStagePlotChannel(eventId, channel.id, { elementId: null });
+    setPlot((prev) => ({ ...prev, channels: prev.channels.map((c) => (c.id === updated.id ? updated : c)) }));
   }
 
   async function handleAddPage() {
@@ -57,6 +75,10 @@ export default function StagePlotEditorPage() {
 
   const sortedPages = plot.pages.slice().sort((a, b) => a.order - b.order);
   const activePage = sortedPages.find((p) => p.id === activePageId);
+  const elementNumbers = Object.fromEntries(
+    plot.channels.filter((c) => c.elementId).map((c) => [c.elementId, c.channelNumber])
+  );
+  const selectedElement = selectedElementId ? activePage?.scene?.elements?.find((e) => e.id === selectedElementId) : null;
 
   return (
     <div className="p-6 max-w-[1500px] mx-auto">
@@ -112,12 +134,19 @@ export default function StagePlotEditorPage() {
             eventId={eventId}
             page={activePage}
             onSaved={(patch) => handlePageSaved(activePage.id, patch)}
+            selectedElementId={selectedElementId}
+            onSelectElement={setSelectedElementId}
+            onElementDeleted={handleElementDeleted}
+            elementNumbers={elementNumbers}
           />
         )}
         <StagePlotChannelList
           eventId={eventId}
           channels={plot.channels}
           onChannelsChange={(channels) => setPlot((prev) => ({ ...prev, channels }))}
+          selectedElementId={selectedElementId}
+          selectedElement={selectedElement}
+          onSelectElement={setSelectedElementId}
         />
       </div>
     </div>

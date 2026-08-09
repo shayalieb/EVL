@@ -13,11 +13,10 @@ const toolbarButtonClass = 'px-3 py-1.5 rounded-lg border border-slate-300 text-
 // autosave, and the toolbar/palette/canvas around it. Mounted fresh (via
 // `key={page.id}` in StagePlotEditorPage) on every page switch so each
 // page gets its own isolated undo/redo stack, never a shared/bleeding one.
-export default function StagePlotPageEditor({ eventId, page, onSaved }) {
+export default function StagePlotPageEditor({ eventId, page, onSaved, selectedElementId, onSelectElement, onElementDeleted, elementNumbers }) {
   const initialScene = page.scene && Object.keys(page.scene).length > 0 ? page.scene : createEmptyScene();
   const { scene, apply, replaceCurrent, undo, redo, canUndo, canRedo } = useUndoRedo(initialScene);
   const [mode, setMode] = useState('select');
-  const [selectedElementId, setSelectedElementId] = useState(null);
   const [selectedAnnotationId, setSelectedAnnotationId] = useState(null);
   const [selectedStrokeId, setSelectedStrokeId] = useState(null);
   const [saveStatus, setSaveStatus] = useState('saved');
@@ -64,8 +63,9 @@ export default function StagePlotPageEditor({ eventId, page, onSaved }) {
 
   function handleDeleteSelected() {
     if (selectedElementId) {
+      onElementDeleted?.(selectedElementId);
       apply((s) => deleteElement(s, selectedElementId));
-      setSelectedElementId(null);
+      onSelectElement(null);
     } else if (selectedAnnotationId) {
       apply((s) => deleteAnnotation(s, selectedAnnotationId));
       setSelectedAnnotationId(null);
@@ -137,7 +137,7 @@ export default function StagePlotPageEditor({ eventId, page, onSaved }) {
           onAdjust={replaceCurrent}
           mode={mode}
           selectedElementId={selectedElementId}
-          onSelectElement={setSelectedElementId}
+          onSelectElement={onSelectElement}
           selectedAnnotationId={selectedAnnotationId}
           onSelectAnnotation={setSelectedAnnotationId}
           selectedStrokeId={selectedStrokeId}
@@ -146,6 +146,7 @@ export default function StagePlotPageEditor({ eventId, page, onSaved }) {
           width={820}
           height={580}
           iconRegistry={STAGE_PLOT_ICONS}
+          elementNumbers={elementNumbers}
         />
       </div>
     </div>

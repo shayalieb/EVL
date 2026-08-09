@@ -11,7 +11,11 @@
 //   scalePxPerUnit: number,   // how many on-screen px = one `unit`
 //   gridSpacing: number,      // grid line interval, in `unit`
 //   layers: [{ id, name, visible, locked }],
-//   elements: [{ id, layerId, iconId, x, y, rotation, scaleX, scaleY, label }],
+//   elements: [{ id, layerId, iconId, x, y, rotation, scaleX, scaleY, label,
+//     number?, name?, description? }],  // number/name/description: Floor
+//     Plan's optional numbered-note fields (CanvasStage.jsx renders `number`
+//     as an on-canvas badge when set) — Stage Plot links icons to notes via
+//     a separate StagePlotChannel row instead (see elementId on that model).
 //   strokes: [{ id, layerId, points: [x, y, x, y, ...], color, strokeWidth }],
 //   annotations: [{ id, layerId, x, y, text }],
 // }
