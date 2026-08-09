@@ -114,6 +114,26 @@ export default function FloorPlanPageEditor({ eventId, page, onSaved }) {
     apply((s) => updateElement(s, elementId, { number: undefined, name: undefined, description: undefined }));
   }
 
+  // Backs the canvas double-click popup (CanvasStage.jsx) — same
+  // name/description fields the Item Notes list already edits, so both
+  // are just two views onto the same element. Auto-assigns the next
+  // number in the same apply() call (one undo step) if this element
+  // didn't have one yet, exactly like using the list's own "+ Add Note
+  // for Selected Item" button does — using the popup is what makes an
+  // item show up in the list, not a separate step.
+  const elementContent = Object.fromEntries(
+    scene.elements.filter((e) => e.name || e.description).map((e) => [e.id, { name: e.name, description: e.description }])
+  );
+
+  function updateElementContent(elementId, { name, description }) {
+    apply((s) => {
+      const el = s.elements.find((e) => e.id === elementId);
+      const patch = { name, description };
+      if (el && el.number == null) patch.number = Math.max(0, ...s.elements.map((e) => e.number || 0)) + 1;
+      return updateElement(s, elementId, patch);
+    });
+  }
+
   return (
     <div className="flex-1 min-w-0">
       <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -122,7 +142,9 @@ export default function FloorPlanPageEditor({ eventId, page, onSaved }) {
         <div className="w-px h-6 bg-slate-200 mx-1" />
         <button type="button" onClick={() => setMode('select')} className={`${toolbarButtonClass} ${mode === 'select' ? 'bg-indigo-600 text-white border-indigo-600' : ''}`}>Select</button>
         <button type="button" onClick={() => setMode('draw')} className={`${toolbarButtonClass} ${mode === 'draw' ? 'bg-indigo-600 text-white border-indigo-600' : ''}`}>Draw</button>
+        <button type="button" onClick={() => setMode('arrow')} data-testid="floorplan-arrow-button" className={`${toolbarButtonClass} ${mode === 'arrow' ? 'bg-indigo-600 text-white border-indigo-600' : ''}`}>Arrow</button>
         <button type="button" onClick={() => setMode('note')} data-testid="floorplan-note-button" className={`${toolbarButtonClass} ${mode === 'note' ? 'bg-indigo-600 text-white border-indigo-600' : ''}`}>Add Note</button>
+        <button type="button" onClick={() => setMode('text')} data-testid="floorplan-text-button" className={`${toolbarButtonClass} ${mode === 'text' ? 'bg-indigo-600 text-white border-indigo-600' : ''}`}>Add Text</button>
         <div className="w-px h-6 bg-slate-200 mx-1" />
         <button type="button" onClick={() => rotateSelected(-15)} disabled={!selectedElementId} data-testid="floorplan-rotate-left-button" className={toolbarButtonClass} title="Rotate left 15°">⟲</button>
         <button type="button" onClick={() => rotateSelected(15)} disabled={!selectedElementId} data-testid="floorplan-rotate-right-button" className={toolbarButtonClass} title="Rotate right 15°">⟳</button>
@@ -219,6 +241,8 @@ export default function FloorPlanPageEditor({ eventId, page, onSaved }) {
             height={580}
             iconRegistry={FLOOR_PLAN_ICONS}
             elementNumbers={elementNumbers}
+            elementContent={elementContent}
+            onUpdateElementContent={updateElementContent}
           />
         </div>
 

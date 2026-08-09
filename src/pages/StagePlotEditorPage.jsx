@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
-import { getOrCreateStagePlot, addStagePlotPage, deleteStagePlotPage, updateStagePlotChannel } from '../lib/stagePlots';
+import { getOrCreateStagePlot, addStagePlotPage, deleteStagePlotPage, updateStagePlotChannel, addStagePlotChannel } from '../lib/stagePlots';
 import { generateStagePlotPdf } from '../lib/stagePlotPdf';
 import StagePlotPageEditor from '../components/StagePlotPageEditor';
 import StagePlotChannelList from '../components/StagePlotChannelList';
@@ -53,6 +53,24 @@ export default function StagePlotEditorPage({ onClose } = {}) {
     setPlot((prev) => ({ ...prev, channels: prev.channels.map((c) => (c.id === updated.id ? updated : c)) }));
   }
 
+  // Backs the canvas double-click popup (CanvasStage.jsx) — "Name" and
+  // "Description" map onto the same source/monitorNotes fields the I/O
+  // List already edits, so both are just two views onto the same channel
+  // row. Creating a channel this way (an icon with no linked channel yet)
+  // auto-assigns its channelNumber server-side, same as the list's own
+  // "+ Add Channel for Selected Icon" button — using the popup is what
+  // makes an icon show up in the I/O List, not a separate step.
+  async function handleUpdateElementContent(elementId, { name, description }) {
+    const channel = plot.channels.find((c) => c.elementId === elementId);
+    if (channel) {
+      const updated = await updateStagePlotChannel(eventId, channel.id, { source: name, monitorNotes: description });
+      setPlot((prev) => ({ ...prev, channels: prev.channels.map((c) => (c.id === updated.id ? updated : c)) }));
+    } else {
+      const created = await addStagePlotChannel(eventId, { source: name, monitorNotes: description, elementId });
+      setPlot((prev) => ({ ...prev, channels: [...prev.channels, created] }));
+    }
+  }
+
   async function handleAddPage() {
     const page = await addStagePlotPage(eventId);
     setPlot((prev) => ({ ...prev, pages: [...prev.pages, page] }));
@@ -82,6 +100,9 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   const activePage = sortedPages.find((p) => p.id === activePageId);
   const elementNumbers = Object.fromEntries(
     plot.channels.filter((c) => c.elementId).map((c) => [c.elementId, c.channelNumber])
+  );
+  const elementContent = Object.fromEntries(
+    plot.channels.filter((c) => c.elementId).map((c) => [c.elementId, { name: c.source, description: c.monitorNotes }])
   );
   const selectedElement = selectedElementId ? activePage?.scene?.elements?.find((e) => e.id === selectedElementId) : null;
 
@@ -159,6 +180,8 @@ export default function StagePlotEditorPage({ onClose } = {}) {
             onSelectElement={setSelectedElementId}
             onElementDeleted={handleElementDeleted}
             elementNumbers={elementNumbers}
+            elementContent={elementContent}
+            onUpdateElementContent={handleUpdateElementContent}
           />
         )}
         <StagePlotChannelList

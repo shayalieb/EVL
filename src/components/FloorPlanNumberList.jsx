@@ -69,12 +69,19 @@ export default function FloorPlanNumberList({ elements, selectedElementId, onSel
                   />
                 </td>
                 <td className="px-1 py-1">
-                  <input
-                    value={el.description || ''}
-                    onChange={(e) => onUpdateElement(el.id, { description: e.target.value })}
-                    placeholder="Notes for the venue/vendor…"
-                    data-testid="floorplan-number-description-input"
-                    className={cellInputClass}
+                  {/* Read-only rich-text preview — Description can now
+                      contain formatting set via the canvas icon popup
+                      (CanvasStage.jsx), which a plain <input> can't display
+                      (it would show raw tags). Editing happens by
+                      double-clicking the item on canvas; this cell's click
+                      just jumps the selection there. */}
+                  <button
+                    type="button"
+                    onClick={() => onSelectElement(el.id)}
+                    title="Double-click this item on the canvas to edit its description"
+                    data-testid="floorplan-number-description-preview"
+                    className="w-full text-left px-1.5 py-1 rounded hover:bg-slate-50 text-xs text-slate-600 truncate [&_*]:inline"
+                    dangerouslySetInnerHTML={{ __html: el.description?.trim() ? el.description : '<span class="text-slate-300">Notes for the venue/vendor…</span>' }}
                   />
                 </td>
                 <td className="px-1 py-1">

@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { Stage, Layer, Rect, Text, Line, Group, Image as KonvaImage, Transformer, Circle } from 'react-konva';
+import { Stage, Layer, Rect, Text, Line, Arrow, Group, Image as KonvaImage, Transformer, Circle } from 'react-konva';
 import { gridLinePositions, snapPointToGrid } from './measurement';
 import { useSvgImage, preloadIconRegistry } from './useSvgImage';
+import RichTextToolbar from '../../components/ui/RichTextToolbar';
 
 const ICON_SIZE = 44;
 const NOTE_WIDTH = 140;
 const NOTE_HEIGHT = 60;
+const TEXT_LABEL_WIDTH = 160;
+const TEXT_LABEL_HEIGHT = 32;
 
 // Renders a placed element as its real hand-authored icon (see
 // iconRegistry.js/stagePlotIcons.js/floorPlanIcons.js) when the scene's
@@ -13,7 +16,7 @@ const NOTE_HEIGHT = 60;
 // labeled box for anything unregistered (e.g. the internal canvas-engine
 // demo page's placeholder icon set), so this component works whether or
 // not a real icon set is wired up.
-function ElementShape({ element, icon, number, isSelected, onSelect, onDragEnd, shapeRef }) {
+function ElementShape({ element, icon, number, isSelected, onSelect, onEdit, onDragEnd, shapeRef }) {
   const image = useSvgImage(icon?.svg);
   // Icon, label, and number badge all live inside one draggable/transformable
   // Group instead of as separate top-level siblings — Konva moves/transforms
@@ -38,6 +41,8 @@ function ElementShape({ element, icon, number, isSelected, onSelect, onDragEnd, 
       draggable
       onClick={onSelect}
       onTap={onSelect}
+      onDblClick={onEdit}
+      onDblTap={onEdit}
       onDragEnd={(e) => onDragEnd(element.id, { x: e.target.x(), y: e.target.y() })}
     >
       {icon && image ? (
@@ -101,17 +106,37 @@ function ElementShape({ element, icon, number, isSelected, onSelect, onDragEnd, 
 // with the textarea overlay used to edit it.
 function AnnotationNote({ annotation, isSelected, isEditing, onSelect, onEdit, onDragEnd }) {
   if (isEditing) return null; // the HTML textarea overlay stands in while editing
+  const hasText = !!annotation.text?.trim();
+  const groupProps = {
+    x: annotation.x,
+    y: annotation.y,
+    draggable: true,
+    onClick: onSelect,
+    onTap: onSelect,
+    onDblClick: onEdit,
+    onDblTap: onEdit,
+    onDragEnd: (e) => onDragEnd(annotation.id, { x: e.target.x(), y: e.target.y() }),
+  };
+
+  // 'text' style: a free-floating label (zone/area labels like "FOH" or
+  // "Green Room") — no card background, auto-sized to its content (no
+  // `width` given to Konva's Text lets it size itself rather than wrap).
+  if (annotation.style === 'text') {
+    return (
+      <Group {...groupProps}>
+        <Text
+          text={hasText ? annotation.text : 'Double-click to edit…'}
+          fontSize={14}
+          fill={isSelected ? '#4f46e5' : hasText ? '#1e293b' : '#94a3b8'}
+          fontStyle={hasText ? 'normal' : 'italic'}
+          padding={4}
+        />
+      </Group>
+    );
+  }
+
   return (
-    <Group
-      x={annotation.x}
-      y={annotation.y}
-      draggable
-      onClick={onSelect}
-      onTap={onSelect}
-      onDblClick={onEdit}
-      onDblTap={onEdit}
-      onDragEnd={(e) => onDragEnd(annotation.id, { x: e.target.x(), y: e.target.y() })}
-    >
+    <Group {...groupProps}>
       <Rect
         width={NOTE_WIDTH}
         height={NOTE_HEIGHT}
@@ -124,10 +149,10 @@ function AnnotationNote({ annotation, isSelected, isEditing, onSelect, onEdit, o
         shadowOpacity={0.15}
       />
       <Text
-        text={annotation.text?.trim() ? annotation.text : 'Double-click to edit…'}
+        text={hasText ? annotation.text : 'Double-click to edit…'}
         fontSize={12}
-        fill={annotation.text?.trim() ? '#78350f' : '#a16207'}
-        fontStyle={annotation.text?.trim() ? 'normal' : 'italic'}
+        fill={hasText ? '#78350f' : '#a16207'}
+        fontStyle={hasText ? 'normal' : 'italic'}
         x={7}
         y={7}
         width={NOTE_WIDTH - 14}
@@ -156,7 +181,7 @@ export default function CanvasStage({
   height = 600,
   showGrid = true,
   snapEnabled = true,
-  mode = 'select', // 'select' | 'draw' | 'note'
+  mode = 'select', // 'select' | 'draw' | 'note' | 'text' | 'arrow'
   strokeColor = '#1e293b',
   selectedElementId,
   onSelectElement,
@@ -167,16 +192,24 @@ export default function CanvasStage({
   stageRef,
   iconRegistry,
   elementNumbers,
+  elementContent,
+  onUpdateElementContent,
 }) {
   const internalStageRef = useRef(null);
   const trRef = useRef(null);
   const shapeRefs = useRef({});
   const editTextareaRef = useRef(null);
+  const nameInputRef = useRef(null);
+  const descriptionEditRef = useRef(null);
   const [zoom, setZoom] = useState(1);
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
   const [drawingPoints, setDrawingPoints] = useState(null);
   const [editingAnnotationId, setEditingAnnotationId] = useState(null);
   const [draftText, setDraftText] = useState('');
+  const [editingElementId, setEditingElementId] = useState(null);
+  const [editingElementRect, setEditingElementRect] = useState(null);
+  const [draftName, setDraftName] = useState('');
+  const [draftDescriptionHtml, setDraftDescriptionHtml] = useState('');
 
   // Decode every registered icon once up front rather than lazily on first
   // placement — without this, the *first* time any given icon type is
@@ -198,6 +231,27 @@ export default function CanvasStage({
     const raf = requestAnimationFrame(() => editTextareaRef.current?.focus());
     return () => cancelAnimationFrame(raf);
   }, [editingAnnotationId]);
+
+  // Same Konva-focus-steal race as the note textarea above, for the icon
+  // popup's Name field (the first thing a user would want to type into).
+  useEffect(() => {
+    if (!editingElementId) return;
+    const raf = requestAnimationFrame(() => nameInputRef.current?.focus());
+    return () => cancelAnimationFrame(raf);
+  }, [editingElementId]);
+
+  // contentEditable isn't a controlled input — its content has to be set
+  // imperatively when a new editing session starts (same pattern as every
+  // other RichTextToolbar usage in this app, e.g. PrepEmailModal.jsx).
+  // Deliberately only keyed on editingElementId, not draftDescriptionHtml —
+  // syncing on every keystroke would reset the cursor to the start on each
+  // one, since onInput below is what drives draftDescriptionHtml in the
+  // first place.
+  useEffect(() => {
+    if (editingElementId && descriptionEditRef.current) {
+      descriptionEditRef.current.innerHTML = draftDescriptionHtml;
+    }
+  }, [editingElementId]);
 
   function assignStageRef(node) {
     internalStageRef.current = node;
@@ -286,19 +340,60 @@ export default function CanvasStage({
       : { ...s, annotations: s.annotations.filter((a) => a.id !== id) }));
   }
 
+  // Anchors the popup to the icon's actual on-screen box (rotation/scale
+  // aware, via Konva's own getClientRect) rather than its raw scene x/y —
+  // an icon can be rotated via the toolbar's ⟲/⟳ buttons, and a fixed
+  // offset from the unrotated origin would visibly drift off the icon once
+  // rotated. relativeTo the Stage itself excludes the Stage's own pan/zoom
+  // transform (so this comes back in the same scene-coordinate space as
+  // element.x/y), which is then converted to screen position the same way
+  // the note textarea overlay already does, below.
+  function startEditingElement(elementId) {
+    const node = shapeRefs.current[elementId];
+    if (!node || !internalStageRef.current) return;
+    setEditingElementRect(node.getClientRect({ relativeTo: internalStageRef.current }));
+    const existing = elementContent?.[elementId];
+    setDraftName(existing?.name || '');
+    setDraftDescriptionHtml(existing?.description || '');
+    setEditingElementId(elementId);
+  }
+
+  // Only actually calls onUpdateElementContent if there's something to
+  // save (new content typed) or something to update (content already
+  // existed) — opening and closing the popup on an icon with nothing typed
+  // shouldn't silently create/number a channel or list row for it.
+  function commitEditingElement() {
+    const id = editingElementId;
+    if (!id) return;
+    setEditingElementId(null);
+    const hadExisting = !!elementContent?.[id];
+    const nameTrimmed = draftName.trim();
+    const descriptionTextOnly = draftDescriptionHtml.replace(/<[^>]*>/g, '').trim();
+    if (hadExisting || nameTrimmed || descriptionTextOnly) {
+      onUpdateElementContent?.(id, { name: draftName, description: draftDescriptionHtml });
+    }
+  }
+
   function handleStageMouseDown(e) {
     const clickedEmptyCanvas = e.target === e.target.getStage();
 
-    if (mode === 'note') {
+    if (mode === 'note' || mode === 'text') {
       if (!clickedEmptyCanvas) return; // let the existing shape's own click/dblclick handle it
       const { x, y } = stagePointToScene(internalStageRef.current.getPointerPosition());
       const id = `note_${Date.now().toString(36)}_${Math.round(Math.random() * 1e6)}`;
+      const style = mode === 'text' ? 'text' : 'note';
       onMutate((s) => ({
         ...s,
-        annotations: [...s.annotations, { id, layerId: s.layers.find((l) => !l.locked)?.id || s.layers[0]?.id, x, y, text: '' }],
+        annotations: [...s.annotations, { id, layerId: s.layers.find((l) => !l.locked)?.id || s.layers[0]?.id, x, y, text: '', style }],
       }));
       setDraftText('');
       setEditingAnnotationId(id);
+      return;
+    }
+
+    if (mode === 'arrow') {
+      const { x, y } = stagePointToScene(internalStageRef.current.getPointerPosition());
+      setDrawingPoints([x, y, x, y]);
       return;
     }
 
@@ -316,13 +411,40 @@ export default function CanvasStage({
   }
 
   function handleStageMouseMove() {
-    if (mode !== 'draw' || !drawingPoints) return;
+    if (!drawingPoints) return;
     const { x, y } = stagePointToScene(internalStageRef.current.getPointerPosition());
+    if (mode === 'arrow') {
+      // Two points only (start, live end) — replaces the end point on every
+      // move, unlike 'draw' below which appends every sampled point to
+      // build up a freehand path.
+      setDrawingPoints((prev) => [prev[0], prev[1], x, y]);
+      return;
+    }
+    if (mode !== 'draw') return;
     setDrawingPoints((prev) => [...prev, x, y]);
   }
 
   function handleStageMouseUp() {
-    if (mode !== 'draw' || !drawingPoints) return;
+    if (!drawingPoints) return;
+    if (mode === 'arrow') {
+      const isRealDrag = drawingPoints[0] !== drawingPoints[2] || drawingPoints[1] !== drawingPoints[3];
+      if (isRealDrag) {
+        onMutate((s) => ({
+          ...s,
+          strokes: [...s.strokes, {
+            id: `stroke_${Date.now().toString(36)}_${Math.round(Math.random() * 1e6)}`,
+            layerId: s.layers[0]?.id,
+            points: drawingPoints,
+            color: strokeColor,
+            strokeWidth: 2,
+            kind: 'arrow',
+          }],
+        }));
+      }
+      setDrawingPoints(null);
+      return;
+    }
+    if (mode !== 'draw') return;
     if (drawingPoints.length >= 4) {
       onMutate((s) => ({
         ...s,
@@ -332,6 +454,7 @@ export default function CanvasStage({
           points: drawingPoints,
           color: strokeColor,
           strokeWidth: 2,
+          kind: 'line',
         }],
       }));
     }
@@ -345,7 +468,7 @@ export default function CanvasStage({
   return (
     <div
       className="relative shrink-0 border border-slate-200 rounded-lg overflow-hidden bg-white"
-      style={{ width, height, cursor: mode === 'note' ? 'copy' : mode === 'draw' ? 'crosshair' : 'default' }}
+      style={{ width, height, cursor: mode === 'note' || mode === 'text' ? 'copy' : mode === 'draw' || mode === 'arrow' ? 'crosshair' : 'default' }}
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
     >
@@ -372,24 +495,34 @@ export default function CanvasStage({
         </Layer>
 
         <Layer>
-          {scene.strokes.filter((s) => visibleLayerIds.has(s.layerId)).map((s) => (
-            <Line
-              key={s.id}
-              points={s.points}
-              stroke={s.id === selectedStrokeId ? '#4f46e5' : s.color}
-              strokeWidth={s.id === selectedStrokeId ? s.strokeWidth + 1 : s.strokeWidth}
-              lineCap="round"
-              lineJoin="round"
-              tension={0.4}
-              // Thin freehand strokes are hard to click precisely — widens
-              // the invisible hit-test area without changing how the line
+          {scene.strokes.filter((s) => visibleLayerIds.has(s.layerId)).map((s) => {
+            const isSelectedStroke = s.id === selectedStrokeId;
+            const resolvedColor = isSelectedStroke ? '#4f46e5' : s.color;
+            const resolvedWidth = isSelectedStroke ? s.strokeWidth + 1 : s.strokeWidth;
+            const common = {
+              points: s.points,
+              stroke: resolvedColor,
+              strokeWidth: resolvedWidth,
+              lineCap: 'round',
+              lineJoin: 'round',
+              // Thin strokes are hard to click precisely — widens the
+              // invisible hit-test area without changing how the line
               // actually looks, so selecting one to delete it is reliable.
-              hitStrokeWidth={Math.max(s.strokeWidth, 16)}
-              onClick={() => { if (mode === 'select') { onSelectStroke?.(s.id); onSelectElement?.(null); onSelectAnnotation?.(null); } }}
-              onTap={() => { if (mode === 'select') { onSelectStroke?.(s.id); onSelectElement?.(null); onSelectAnnotation?.(null); } }}
-            />
+              hitStrokeWidth: Math.max(s.strokeWidth, 16),
+              onClick: () => { if (mode === 'select') { onSelectStroke?.(s.id); onSelectElement?.(null); onSelectAnnotation?.(null); } },
+              onTap: () => { if (mode === 'select') { onSelectStroke?.(s.id); onSelectElement?.(null); onSelectAnnotation?.(null); } },
+            };
+            return s.kind === 'arrow' ? (
+              <Arrow key={s.id} {...common} fill={resolvedColor} pointerLength={isSelectedStroke ? 12 : 10} pointerWidth={isSelectedStroke ? 12 : 10} />
+            ) : (
+              <Line key={s.id} {...common} tension={0.4} />
+            );
+          })}
+          {drawingPoints && (mode === 'arrow' ? (
+            <Arrow points={drawingPoints} stroke={strokeColor} fill={strokeColor} strokeWidth={2} lineCap="round" lineJoin="round" pointerLength={10} pointerWidth={10} />
+          ) : (
+            <Line points={drawingPoints} stroke={strokeColor} strokeWidth={2} lineCap="round" lineJoin="round" tension={0.4} />
           ))}
-          {drawingPoints && <Line points={drawingPoints} stroke={strokeColor} strokeWidth={2} lineCap="round" lineJoin="round" tension={0.4} />}
 
           {scene.elements.filter((el) => visibleLayerIds.has(el.layerId)).map((el) => (
             <ElementShape
@@ -399,6 +532,7 @@ export default function CanvasStage({
               number={elementNumbers?.[el.id]}
               isSelected={el.id === selectedElementId}
               onSelect={() => { onSelectElement?.(el.id); onSelectAnnotation?.(null); onSelectStroke?.(null); }}
+              onEdit={() => startEditingElement(el.id)}
               onDragEnd={(id, pos) => onMutate((s) => ({
                 ...s,
                 elements: s.elements.map((e) => (e.id === id ? { ...e, ...(snapEnabled ? snapPointToGrid(pos, s.scalePxPerUnit, s.gridSpacing) : pos) } : e)),
@@ -450,14 +584,58 @@ export default function CanvasStage({
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.blur(); }
           }}
           data-testid="canvas-annotation-textarea"
-          className="absolute rounded border-2 border-indigo-500 bg-yellow-50 text-amber-900 text-xs p-1.5 resize-none outline-none"
+          className={editingAnnotation.style === 'text'
+            ? 'absolute rounded border border-dashed border-indigo-400 bg-white/90 text-slate-800 text-sm px-1.5 py-1 resize-none outline-none whitespace-nowrap overflow-x-auto'
+            : 'absolute rounded border-2 border-indigo-500 bg-yellow-50 text-amber-900 text-xs p-1.5 resize-none outline-none'}
           style={{
             left: editingAnnotation.x * zoom + stagePos.x,
             top: editingAnnotation.y * zoom + stagePos.y,
-            width: NOTE_WIDTH * zoom,
-            height: NOTE_HEIGHT * zoom,
+            width: (editingAnnotation.style === 'text' ? TEXT_LABEL_WIDTH : NOTE_WIDTH) * zoom,
+            height: (editingAnnotation.style === 'text' ? TEXT_LABEL_HEIGHT : NOTE_HEIGHT) * zoom,
           }}
         />
+      )}
+
+      {editingElementId && editingElementRect && (
+        <div
+          className="absolute z-10 bg-white rounded-lg border border-slate-300 shadow-lg p-3 w-72"
+          style={{
+            left: editingElementRect.x * zoom + stagePos.x,
+            top: (editingElementRect.y + editingElementRect.height) * zoom + stagePos.y + 6,
+          }}
+          onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) commitEditingElement(); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') commitEditingElement(); }}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-slate-500">Icon Details</span>
+            <button
+              type="button"
+              onClick={commitEditingElement}
+              data-testid="canvas-element-popup-close-button"
+              className="text-slate-400 hover:text-slate-600 text-sm leading-none"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+          <input
+            ref={nameInputRef}
+            value={draftName}
+            onChange={(e) => setDraftName(e.target.value)}
+            placeholder="Name"
+            data-testid="canvas-element-popup-name-input"
+            className="w-full px-2 py-1.5 mb-2 rounded border border-slate-300 text-sm outline-none focus:border-indigo-400"
+          />
+          <RichTextToolbar editorRef={descriptionEditRef} onFormat={() => setDraftDescriptionHtml(descriptionEditRef.current?.innerHTML || '')} />
+          <div
+            ref={descriptionEditRef}
+            contentEditable
+            suppressContentEditableWarning
+            onInput={() => setDraftDescriptionHtml(descriptionEditRef.current?.innerHTML || '')}
+            data-testid="canvas-element-popup-description-input"
+            className="w-full min-h-[70px] max-h-40 overflow-y-auto px-2 py-1.5 rounded border border-slate-300 text-sm outline-none focus:border-indigo-400"
+          />
+        </div>
       )}
     </div>
   );

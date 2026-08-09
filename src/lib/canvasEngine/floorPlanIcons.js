@@ -102,6 +102,38 @@ export const FLOOR_PLAN_ICON_LIST = [
     svg: icon('<circle cx="24" cy="18" r="6"/><path d="M16 46 L16 30 Q16 24 24 24 Q32 24 32 30 L32 46"/><circle cx="42" cy="18" r="6"/><path d="M34 46 L34 30 Q34 24 42 24 Q50 24 50 30 L50 46"/>'),
   },
   {
+    id: 'registration-table',
+    label: 'Registration Table',
+    category: 'Service',
+    // Same table-rect base as Buffet Table, with a clipboard/list on top
+    // instead of dishes — a check-in table is a distinct, common need at
+    // corporate events/galas that a wedding-focused set doesn't cover.
+    svg: icon('<rect x="10" y="24" width="44" height="16" rx="1"/><rect x="26" y="14" width="12" height="16" rx="1"/><line x1="29" y1="19" x2="35" y2="19" stroke-width="1.2"/><line x1="29" y1="23" x2="35" y2="23" stroke-width="1.2"/>'),
+  },
+  {
+    id: 'coat-check',
+    label: 'Coat Check',
+    category: 'Service',
+    svg: icon('<line x1="10" y1="12" x2="54" y2="12" stroke-width="2.5"/><path d="M18 12 L18 16 L12 24 L24 24 Z"/><path d="M32 12 L32 16 L26 24 L38 24 Z"/><path d="M46 12 L46 16 L40 24 L52 24 Z"/>'),
+  },
+  {
+    id: 'photo-backdrop',
+    label: 'Photo Backdrop',
+    category: 'Service',
+    // Distinct from the enclosed Photo Booth above — a step-and-repeat/
+    // backdrop wall, drawn as a flat panel on two support feet.
+    svg: icon('<rect x="8" y="28" width="48" height="8" rx="1"/><rect x="14" y="36" width="4" height="10"/><rect x="46" y="36" width="4" height="10"/>'),
+  },
+  {
+    id: 'generator',
+    label: 'Generator / Power',
+    category: 'Utility',
+    // Floor Plan had no power/utility icon at all despite outdoor tented
+    // events routinely needing one — Stage Plot already has this category
+    // (Power Strip), Floor Plan didn't.
+    svg: icon('<rect x="10" y="16" width="44" height="32" rx="3"/><path d="M34 20 L24 34 L31 34 L28 44 L40 28 L33 28 Z"/>'),
+  },
+  {
     id: 'entrance',
     label: 'Entrance',
     category: 'Wayfinding',
@@ -112,6 +144,12 @@ export const FLOOR_PLAN_ICON_LIST = [
     label: 'Fire Exit',
     category: 'Wayfinding',
     svg: icon('<rect x="24" y="10" width="16" height="44" rx="1"/><line x1="10" y1="32" x2="30" y2="32"/><path d="M22 24 L10 32 L22 40"/>'),
+  },
+  {
+    id: 'first-aid',
+    label: 'First Aid Station',
+    category: 'Wayfinding',
+    svg: icon('<rect x="10" y="10" width="44" height="44" rx="4"/><rect x="27" y="18" width="10" height="28" rx="2"/><rect x="18" y="27" width="28" height="10" rx="2"/>'),
   },
 ];
 

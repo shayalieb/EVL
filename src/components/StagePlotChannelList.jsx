@@ -121,12 +121,20 @@ export default function StagePlotChannelList({ eventId, channels, onChannelsChan
                   />
                 </td>
                 <td className="px-1 py-1">
-                  <input
-                    value={channel.monitorNotes || ''}
-                    onChange={(e) => handleFieldChange(channel, { monitorNotes: e.target.value })}
-                    placeholder="Monitor mix, cues…"
-                    data-testid="stageplot-channel-notes-input"
-                    className={cellInputClass}
+                  {/* Read-only rich-text preview — Notes can now contain
+                      formatting set via the canvas icon popup
+                      (CanvasStage.jsx), which a plain <input> can't display
+                      (it would show raw tags). Editing happens by
+                      double-clicking the linked icon on canvas; this cell's
+                      click just jumps the selection there. */}
+                  <button
+                    type="button"
+                    onClick={() => channel.elementId && onSelectElement?.(channel.elementId)}
+                    disabled={!channel.elementId}
+                    title={channel.elementId ? 'Double-click this icon on the canvas to edit notes' : 'Link an icon to add notes'}
+                    data-testid="stageplot-channel-notes-preview"
+                    className="w-full text-left px-1.5 py-1 rounded hover:bg-slate-50 disabled:hover:bg-transparent text-xs text-slate-600 truncate [&_*]:inline"
+                    dangerouslySetInnerHTML={{ __html: channel.monitorNotes?.trim() ? channel.monitorNotes : '<span class="text-slate-300">Monitor mix, cues…</span>' }}
                   />
                 </td>
                 <td className="px-1 py-1">

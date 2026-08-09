@@ -16,8 +16,12 @@
 //     Plan's optional numbered-note fields (CanvasStage.jsx renders `number`
 //     as an on-canvas badge when set) — Stage Plot links icons to notes via
 //     a separate StagePlotChannel row instead (see elementId on that model).
-//   strokes: [{ id, layerId, points: [x, y, x, y, ...], color, strokeWidth }],
-//   annotations: [{ id, layerId, x, y, text }],
+//   strokes: [{ id, layerId, points: [x, y, x, y, ...], color, strokeWidth,
+//     kind? }],  // kind: 'line' (default, freehand) | 'arrow' (straight,
+//     start->end, rendered with an arrowhead)
+//   annotations: [{ id, layerId, x, y, text, style? }],  // style: 'note'
+//     (default — yellow sticky card) | 'text' (free-floating label, no
+//     card, auto-sized to content)
 // }
 
 let counter = 0;
@@ -65,8 +69,8 @@ export function deleteElement(scene, id) {
   return { ...scene, elements: scene.elements.filter((el) => el.id !== id) };
 }
 
-export function addStroke(scene, { points, color = '#1e293b', strokeWidth = 2, layerId }) {
-  const stroke = { id: sceneId('stroke'), layerId: layerId || scene.layers[0]?.id || DEFAULT_LAYER_ID, points, color, strokeWidth };
+export function addStroke(scene, { points, color = '#1e293b', strokeWidth = 2, kind = 'line', layerId }) {
+  const stroke = { id: sceneId('stroke'), layerId: layerId || scene.layers[0]?.id || DEFAULT_LAYER_ID, points, color, strokeWidth, kind };
   return { ...scene, strokes: [...scene.strokes, stroke] };
 }
 
@@ -74,8 +78,8 @@ export function deleteStroke(scene, id) {
   return { ...scene, strokes: scene.strokes.filter((s) => s.id !== id) };
 }
 
-export function addAnnotation(scene, { x, y, text = '', layerId }) {
-  const annotation = { id: sceneId('note'), layerId: layerId || scene.layers[0]?.id || DEFAULT_LAYER_ID, x, y, text };
+export function addAnnotation(scene, { x, y, text = '', style = 'note', layerId }) {
+  const annotation = { id: sceneId('note'), layerId: layerId || scene.layers[0]?.id || DEFAULT_LAYER_ID, x, y, text, style };
   return { ...scene, annotations: [...scene.annotations, annotation] };
 }
 

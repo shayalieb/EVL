@@ -13,7 +13,7 @@ const toolbarButtonClass = 'px-3 py-1.5 rounded-lg border border-slate-300 text-
 // autosave, and the toolbar/palette/canvas around it. Mounted fresh (via
 // `key={page.id}` in StagePlotEditorPage) on every page switch so each
 // page gets its own isolated undo/redo stack, never a shared/bleeding one.
-export default function StagePlotPageEditor({ eventId, page, onSaved, selectedElementId, onSelectElement, onElementDeleted, elementNumbers }) {
+export default function StagePlotPageEditor({ eventId, page, onSaved, selectedElementId, onSelectElement, onElementDeleted, elementNumbers, elementContent, onUpdateElementContent }) {
   const initialScene = page.scene && Object.keys(page.scene).length > 0 ? page.scene : createEmptyScene();
   const { scene, apply, replaceCurrent, undo, redo, canUndo, canRedo } = useUndoRedo(initialScene);
   const [mode, setMode] = useState('select');
@@ -96,7 +96,9 @@ export default function StagePlotPageEditor({ eventId, page, onSaved, selectedEl
         <div className="w-px h-6 bg-slate-200 mx-1" />
         <button type="button" onClick={() => setMode('select')} className={`${toolbarButtonClass} ${mode === 'select' ? 'bg-indigo-600 text-white border-indigo-600' : ''}`}>Select</button>
         <button type="button" onClick={() => setMode('draw')} className={`${toolbarButtonClass} ${mode === 'draw' ? 'bg-indigo-600 text-white border-indigo-600' : ''}`}>Draw</button>
+        <button type="button" onClick={() => setMode('arrow')} data-testid="stageplot-arrow-button" className={`${toolbarButtonClass} ${mode === 'arrow' ? 'bg-indigo-600 text-white border-indigo-600' : ''}`}>Arrow</button>
         <button type="button" onClick={() => setMode('note')} data-testid="stageplot-note-button" className={`${toolbarButtonClass} ${mode === 'note' ? 'bg-indigo-600 text-white border-indigo-600' : ''}`}>Add Note</button>
+        <button type="button" onClick={() => setMode('text')} data-testid="stageplot-text-button" className={`${toolbarButtonClass} ${mode === 'text' ? 'bg-indigo-600 text-white border-indigo-600' : ''}`}>Add Text</button>
         <div className="w-px h-6 bg-slate-200 mx-1" />
         <button type="button" onClick={() => rotateSelected(-15)} disabled={!selectedElementId} data-testid="stageplot-rotate-left-button" className={toolbarButtonClass} title="Rotate left 15°">⟲</button>
         <button type="button" onClick={() => rotateSelected(15)} disabled={!selectedElementId} data-testid="stageplot-rotate-right-button" className={toolbarButtonClass} title="Rotate right 15°">⟳</button>
@@ -152,6 +154,8 @@ export default function StagePlotPageEditor({ eventId, page, onSaved, selectedEl
           height={580}
           iconRegistry={STAGE_PLOT_ICONS}
           elementNumbers={elementNumbers}
+          elementContent={elementContent}
+          onUpdateElementContent={onUpdateElementContent}
         />
       </div>
     </div>
