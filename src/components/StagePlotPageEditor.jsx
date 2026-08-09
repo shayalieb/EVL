@@ -84,7 +84,12 @@ export default function StagePlotPageEditor({ eventId, page, onSaved, selectedEl
   }
 
   return (
-    <div className="flex-1 min-w-0">
+    // min-w matches the palette (176px) + canvas (fixed width={820}) + gap —
+    // Konva's Stage canvas doesn't shrink below its own pixel width, so
+    // without this the parent's flex-wrap row (see StagePlotEditorPage.jsx)
+    // never triggers and the I/O List squeezes into/overlaps the canvas
+    // instead of wrapping to its own row on narrower viewports.
+    <div className="flex-1 min-w-[1020px]">
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <button type="button" onClick={undo} disabled={!canUndo} data-testid="stageplot-undo-button" className={toolbarButtonClass}>Undo</button>
         <button type="button" onClick={redo} disabled={!canRedo} data-testid="stageplot-redo-button" className={toolbarButtonClass}>Redo</button>

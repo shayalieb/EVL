@@ -127,7 +127,7 @@ export default function StagePlotEditorPage() {
         )}
       </div>
 
-      <div className="flex gap-4 items-start">
+      <div className="flex flex-wrap gap-4 items-start">
         {activePage && (
           <StagePlotPageEditor
             key={activePage.id}

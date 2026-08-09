@@ -149,71 +149,78 @@ export default function FloorPlanPageEditor({ eventId, page, onSaved }) {
         </span>
       </div>
 
-      <div className="flex gap-4">
-        <div className="w-48 shrink-0 space-y-4">
-          <div>
-            <div className="text-xs font-semibold text-slate-500 mb-2">Furniture &amp; Decor</div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {FLOOR_PLAN_ICON_LIST.map((iconDef) => (
-                <div
-                  key={iconDef.id}
-                  draggable
-                  onDragStart={(e) => e.dataTransfer.setData('application/x-canvas-icon', iconDef.id)}
-                  data-testid={`floorplan-icon-${iconDef.id}`}
-                  title={iconDef.label}
-                  className="flex flex-col items-center gap-1 px-1.5 py-2 rounded-lg border border-slate-200 bg-slate-50 cursor-grab select-none hover:border-indigo-300 hover:bg-indigo-50"
-                >
-                  <span className="w-7 h-7" dangerouslySetInnerHTML={{ __html: iconDef.svg }} />
-                  <span className="text-[10px] text-center leading-tight text-slate-600">{iconDef.label}</span>
-                </div>
-              ))}
+      <div className="flex flex-wrap gap-4">
+        {/* Palette+canvas kept together with a min-width matching their
+            fixed-size content (Konva's Stage canvas doesn't shrink below
+            its own width={820}) so the number list below wraps to its own
+            row instead of squeezing/overlapping the canvas on narrower
+            viewports. */}
+        <div className="flex gap-4 min-w-[1028px]">
+          <div className="w-48 shrink-0 space-y-4">
+            <div>
+              <div className="text-xs font-semibold text-slate-500 mb-2">Furniture &amp; Decor</div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {FLOOR_PLAN_ICON_LIST.map((iconDef) => (
+                  <div
+                    key={iconDef.id}
+                    draggable
+                    onDragStart={(e) => e.dataTransfer.setData('application/x-canvas-icon', iconDef.id)}
+                    data-testid={`floorplan-icon-${iconDef.id}`}
+                    title={iconDef.label}
+                    className="flex flex-col items-center gap-1 px-1.5 py-2 rounded-lg border border-slate-200 bg-slate-50 cursor-grab select-none hover:border-indigo-300 hover:bg-indigo-50"
+                  >
+                    <span className="w-7 h-7" dangerouslySetInnerHTML={{ __html: iconDef.svg }} />
+                    <span className="text-[10px] text-center leading-tight text-slate-600">{iconDef.label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
 
-          <div>
-            <div className="text-xs font-semibold text-slate-500 mb-2">Scale</div>
-            <label className="block text-[11px] text-slate-400 mb-1">Pixels per {scene.unit}</label>
-            <input
-              type="number"
-              value={scene.scalePxPerUnit}
-              onChange={(e) => replaceCurrent((s) => ({ ...s, scalePxPerUnit: Number(e.target.value) || 1 }))}
-              className="w-full px-2 py-1 rounded border border-slate-300 text-sm"
-            />
-          </div>
-
-          <div>
-            <div className="text-xs font-semibold text-slate-500 mb-2">Layers</div>
-            <div className="space-y-1">
-              {scene.layers.map((layer) => (
-                <label key={layer.id} className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={layer.visible} onChange={(e) => apply((s) => updateLayer(s, layer.id, { visible: e.target.checked }))} />
-                  {layer.name}
-                </label>
-              ))}
+            <div>
+              <div className="text-xs font-semibold text-slate-500 mb-2">Scale</div>
+              <label className="block text-[11px] text-slate-400 mb-1">Pixels per {scene.unit}</label>
+              <input
+                type="number"
+                value={scene.scalePxPerUnit}
+                onChange={(e) => replaceCurrent((s) => ({ ...s, scalePxPerUnit: Number(e.target.value) || 1 }))}
+                className="w-full px-2 py-1 rounded border border-slate-300 text-sm"
+              />
             </div>
-            <button type="button" onClick={() => apply((s) => addLayer(s))} className="mt-2 text-xs font-semibold text-indigo-600">+ Add layer</button>
+
+            <div>
+              <div className="text-xs font-semibold text-slate-500 mb-2">Layers</div>
+              <div className="space-y-1">
+                {scene.layers.map((layer) => (
+                  <label key={layer.id} className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={layer.visible} onChange={(e) => apply((s) => updateLayer(s, layer.id, { visible: e.target.checked }))} />
+                    {layer.name}
+                  </label>
+                ))}
+              </div>
+              <button type="button" onClick={() => apply((s) => addLayer(s))} className="mt-2 text-xs font-semibold text-indigo-600">+ Add layer</button>
+            </div>
+
+            <FloorPlanItemList elements={scene.elements} />
           </div>
 
-          <FloorPlanItemList elements={scene.elements} />
+          <CanvasStage
+            scene={scene}
+            onMutate={apply}
+            onAdjust={replaceCurrent}
+            mode={mode}
+            selectedElementId={selectedElementId}
+            onSelectElement={setSelectedElementId}
+            selectedAnnotationId={selectedAnnotationId}
+            onSelectAnnotation={setSelectedAnnotationId}
+            selectedStrokeId={selectedStrokeId}
+            onSelectStroke={setSelectedStrokeId}
+            stageRef={stageRef}
+            width={820}
+            height={580}
+            iconRegistry={FLOOR_PLAN_ICONS}
+            elementNumbers={elementNumbers}
+          />
         </div>
-
-        <CanvasStage
-          scene={scene}
-          onMutate={apply}
-          onAdjust={replaceCurrent}
-          mode={mode}
-          selectedElementId={selectedElementId}
-          onSelectElement={setSelectedElementId}
-          selectedAnnotationId={selectedAnnotationId}
-          onSelectAnnotation={setSelectedAnnotationId}
-          selectedStrokeId={selectedStrokeId}
-          onSelectStroke={setSelectedStrokeId}
-          stageRef={stageRef}
-          width={820}
-          height={580}
-          iconRegistry={FLOOR_PLAN_ICONS}
-          elementNumbers={elementNumbers}
-        />
 
         <FloorPlanNumberList
           elements={scene.elements}
