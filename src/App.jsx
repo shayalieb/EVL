@@ -13,6 +13,7 @@ import ContractSignPage from './pages/ContractSignPage';
 import InvoicePayPage from './pages/InvoicePayPage';
 import InquiryFormPage from './pages/InquiryFormPage';
 import RsvpPage from './pages/RsvpPage';
+import ContractorCalendarPage from './pages/ContractorCalendarPage';
 import AppLayout from './layouts/AppLayout';
 import HomePage from './pages/HomePage';
 import NoAccountAccessPage from './pages/NoAccountAccessPage';
@@ -126,6 +127,7 @@ function AppRoutes() {
       <Route path="/invoice/:token" element={<InvoicePayPage />} />
       <Route path="/inquiry/:token" element={<InquiryFormPage />} />
       <Route path="/rsvp/:token" element={<RsvpPage />} />
+      <Route path="/gigs/:token" element={<ContractorCalendarPage />} />
       <Route path="/portal" element={<PortalArea />}>
         <Route index element={<PortalProtectedRoute />} />
         <Route path="login" element={<PortalLoginGate />} />

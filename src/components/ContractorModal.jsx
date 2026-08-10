@@ -5,6 +5,7 @@ import CurrencyInput from './ui/CurrencyInput';
 import { useData } from '../context/DataContext';
 import { uid } from '../lib/storage';
 import { getPricingTiers } from '../lib/pricingTiers';
+import { getContractorCalendarLink, regenerateContractorCalendarLink } from '../lib/contractors';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -27,6 +28,8 @@ export default function ContractorModal({ open, onClose, contractor }) {
   const [newTypeLabel, setNewTypeLabel] = useState('');
   const [error, setError] = useState('');
   const [tierPendingDelete, setTierPendingDelete] = useState(null);
+  const [calendarLink, setCalendarLink] = useState('');
+  const [calendarLinkCopied, setCalendarLinkCopied] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -45,8 +48,36 @@ export default function ContractorModal({ open, onClose, contractor }) {
       setAddingType(false);
       setNewTypeLabel('');
       setTierPendingDelete(null);
+      setCalendarLink('');
+      setCalendarLinkCopied(false);
     }
   }, [open, contractor]);
+
+  // Get-or-create — the link is only actually minted server-side the first
+  // time someone copies it, same pattern as EventFormPage's RSVP link.
+  async function handleCopyCalendarLink() {
+    try {
+      const link = calendarLink || await getContractorCalendarLink(contractor.id);
+      if (!calendarLink) setCalendarLink(link);
+      await navigator.clipboard.writeText(link);
+      setCalendarLinkCopied(true);
+      setTimeout(() => setCalendarLinkCopied(false), 2000);
+    } catch (err) {
+      setError(err.message || 'Failed to copy gig calendar link.');
+    }
+  }
+
+  async function handleRegenerateCalendarLink() {
+    try {
+      const link = await regenerateContractorCalendarLink(contractor.id);
+      setCalendarLink(link);
+      await navigator.clipboard.writeText(link);
+      setCalendarLinkCopied(true);
+      setTimeout(() => setCalendarLinkCopied(false), 2000);
+    } catch (err) {
+      setError(err.message || 'Failed to regenerate gig calendar link.');
+    }
+  }
 
   function update(field, val) {
     setForm((f) => ({ ...f, [field]: val }));
@@ -119,6 +150,33 @@ export default function ContractorModal({ open, onClose, contractor }) {
             <input type="tel" value={form.phone} onChange={(e) => update('phone', e.target.value)} data-testid="contractor-modal-phone-input" className={inputClass} />
           </div>
         </div>
+
+        {contractor && (
+          <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="text-xs text-slate-500">
+              <span className="font-semibold text-slate-600">Gig calendar link</span> — a bookmarkable page showing this contractor their own pending/confirmed gigs.
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleCopyCalendarLink}
+                data-testid="contractor-modal-copy-calendar-link-button"
+                className="px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50"
+              >
+                {calendarLinkCopied ? 'Link Copied!' : 'Copy Link'}
+              </button>
+              <button
+                type="button"
+                onClick={handleRegenerateCalendarLink}
+                title="Invalidate the old link and copy a new one"
+                data-testid="contractor-modal-regenerate-calendar-link-button"
+                className="px-2 py-1.5 rounded-lg text-slate-400 hover:text-slate-600 text-xs"
+              >
+                ↻
+              </button>
+            </div>
+          </div>
+        )}
 
         <div>
           <label className={labelClass}>Category *</label>

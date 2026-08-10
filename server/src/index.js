@@ -27,6 +27,7 @@ import stagePlotsRouter from './routes/stagePlots.js';
 import floorPlansRouter from './routes/floorPlans.js';
 import guestsRouter, { publicRsvpRouter } from './routes/guests.js';
 import contractorsRouter from './routes/contractors.js';
+import { publicContractorCalendarRouter } from './routes/contractorCalendar.js';
 import clientsRouter from './routes/clients.js';
 import bookingsRouter from './routes/bookings.js';
 import eventsRouter from './routes/events.js';
@@ -166,6 +167,10 @@ app.use('/api/events', eventsRouter);
 app.use('/api/portal', portalSession, portalRouter);
 // Public/unauthenticated — same reasoning as /api/contract-sign above.
 app.use('/api/rsvp', publicRsvpRouter);
+// Public/unauthenticated — a contractor opens this from a bookmarked/
+// home-screen link, not while logged into the app. See routes/
+// contractorCalendar.js.
+app.use('/api/contractor-calendar', publicContractorCalendarRouter);
 // Public/unauthenticated — recipients click this link from an email, not
 // while logged into the app, and it's fully stateless (see calendar.js).
 app.use('/api/calendar', calendarRouter);

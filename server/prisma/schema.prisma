@@ -61,6 +61,7 @@ model Account {
   floorPlans       FloorPlan[]
   guests           Guest[]
   eventRsvpLinks   EventRsvpLink[]
+  contractorCalendarLinks ContractorCalendarLink[]
   contractors      Contractor[]
   clients          Client[]
   bookings         Booking[]
@@ -998,4 +999,26 @@ model EventRsvpLink {
   updatedAt DateTime @updatedAt
 
   @@unique([accountId, eventId])
+}
+
+// A persistent, non-expiring link per contractor (unlike ClientPortalToken's
+// 30-min magic link) showing that contractor their own gig calendar —
+// meant to be bookmarked/added to a home screen, not re-requested each
+// visit. Same tokenHash/publicToken shape as EventRsvpLink for the same
+// reason: tokenHash is what the public route looks up by (a DB dump alone
+// can't produce a usable link), publicToken is the plaintext copy shown
+// to the owner to re-view/copy anytime without consuming it.
+model ContractorCalendarLink {
+  id           String  @id @default(cuid())
+  accountId    String
+  account      Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  contractorId String
+
+  tokenHash   String @unique
+  publicToken String @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([accountId, contractorId])
 }
