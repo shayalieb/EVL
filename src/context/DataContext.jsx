@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { uid } from '../lib/storage';
-import { getTierPrice } from '../lib/pricingTiers';
+import { getBookingTotal, computeDurationHours as computeDurationHoursUtil } from '../lib/pricingTiers';
 import { statusBucket } from '../lib/inquiryStatusBucket';
 import { formatEventDate, formatCurrency } from '../lib/format';
 import { listContractors, createContractor as createContractorApi, updateContractorApi, deleteContractorApi } from '../lib/contractors';
@@ -579,23 +579,22 @@ export function DataProvider({ children }) {
   // ---- Derived helpers ----
   const getContractorById = useCallback((id) => contractors.find((c) => c.id === id), [contractors]);
 
-  const computeDurationHours = useCallback((startTime, endTime) => {
-    if (!startTime || !endTime) return null;
-    const [sh, sm] = startTime.split(':').map(Number);
-    const [eh, em] = endTime.split(':').map(Number);
-    let minutes = (eh * 60 + em) - (sh * 60 + sm);
-    if (minutes < 0) minutes += 24 * 60; // crosses midnight
-    return minutes / 60;
-  }, []);
+  // Moved to lib/pricingTiers.js so getOvertimeHours there can share it —
+  // re-exported here unchanged so existing useData().computeDurationHours
+  // callers (EventFormPage) don't need to change.
+  const computeDurationHours = computeDurationHoursUtil;
 
   // Not Avail contractors don't count toward cost — they're not actually
   // being booked/paid, so their rate shouldn't inflate the event total.
+  // getBookingTotal folds in overtime (auto-calculated from the booking's
+  // own start/end time against the tier's included hours, or a manual
+  // override) alongside the base tier price.
   const computeEventTotalCost = useCallback((event) => {
     return event.contractorBookings.reduce((sum, b) => {
       const status = currentUser?.inquiryStatuses?.find((s) => s.id === b.inquiryStatusId);
       if (statusBucket(status) === 'unavailable') return sum;
       const contractor = getContractorById(b.contractorId);
-      return sum + (contractor ? getTierPrice(contractor, b.pricingTierId) : 0);
+      return sum + (contractor ? getBookingTotal(b, contractor) : 0);
     }, 0);
   }, [getContractorById, currentUser]);
 

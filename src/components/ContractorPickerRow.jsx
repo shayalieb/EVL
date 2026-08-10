@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import Badge from './ui/Badge';
 import { formatCurrency as currency } from '../lib/format';
-import { getPricingTier, getPricingTiers } from '../lib/pricingTiers';
+import { getPricingTier, getPricingTiers, getOvertimeHours, getOvertimeAmount } from '../lib/pricingTiers';
 import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
 
 const timeInputClass = 'px-2 py-1 rounded-lg border border-slate-300 text-xs focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -13,7 +13,7 @@ const PAYMENT_METHOD_LABELS = { ach: 'ACH', check: 'Check', card: 'Card', other:
 
 export default function ContractorPickerRow({
   booking, contractor, inquiryStatuses, index, emailTemplates, threadSummary,
-  onStatusChange, onRemove, onRequestSend, onOpenContractor, onOpenThread, onTierChange, onTimeChange,
+  onStatusChange, onRemove, onRequestSend, onOpenContractor, onOpenThread, onTierChange, onTimeChange, onOvertimeChange,
   onPayClick, onMarkUnpaid,
   onDragStart, onDragOver, onDrop, isDragging,
 }) {
@@ -24,6 +24,10 @@ export default function ContractorPickerRow({
   const unreadCount = threadSummary?.unreadCount || 0;
   const tiers = getPricingTiers(contractor);
   const activeTier = getPricingTier(contractor, booking.pricingTierId);
+  const tierTracksOvertime = Number(activeTier?.includedHours) > 0 && Number(activeTier?.overtimeRate) > 0;
+  const isManualOvertime = booking.overtimeHoursOverride !== null && booking.overtimeHoursOverride !== undefined && booking.overtimeHoursOverride !== '';
+  const overtimeHours = tierTracksOvertime ? getOvertimeHours(booking, contractor) : 0;
+  const overtimeAmount = tierTracksOvertime ? getOvertimeAmount(booking, contractor) : 0;
 
   const currentBucket = statusBucket(status);
   const statusesByBucket = Object.fromEntries(BUCKETS.map((b) => [b.value, inquiryStatuses.filter((s) => statusBucket(s) === b.value)]));
@@ -245,6 +249,29 @@ export default function ContractorPickerRow({
           className={timeInputClass}
         />
       </div>
+
+      {tierTracksOvertime && (
+        <div className="flex items-center gap-2 px-3.5 pb-3.5 pl-9">
+          <label className="text-xs font-semibold text-slate-400">OT Hours</label>
+          <input
+            type="number"
+            min="0"
+            step="0.5"
+            value={booking.overtimeHoursOverride ?? ''}
+            placeholder={overtimeHours > 0 ? overtimeHours.toFixed(1) : '0'}
+            onChange={(e) => onOvertimeChange(booking.contractorId, e.target.value === '' ? null : e.target.value)}
+            title={isManualOvertime ? 'Manual override — clear to go back to auto (from Start/End time)' : 'Auto-calculated from Start/End time vs. the tier\'s included hours'}
+            data-testid="contractor-picker-row-overtime-hours-input"
+            className={`${timeInputClass} w-16`}
+          />
+          <span className="text-xs text-slate-400">{isManualOvertime ? '(manual)' : '(auto)'}</span>
+          {overtimeAmount > 0 && (
+            <span data-testid="contractor-picker-row-overtime-amount" className="text-xs font-semibold text-slate-600 ml-auto">
+              +{currency(overtimeAmount)} OT
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -20,7 +20,7 @@ import { renderEmailTemplate } from '../lib/mergeFields';
 import { uid } from '../lib/storage';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
 import { formatCurrency as currency, formatEventDate, formatEventTime } from '../lib/format';
-import { getPricingTiers, getTierPrice } from '../lib/pricingTiers';
+import { getPricingTiers, getBookingTotal } from '../lib/pricingTiers';
 import { getPrepContractors, renderPrepSheetEmail, requestsLabels } from '../lib/prepSheet';
 import { generatePrepSheetPdf, generatePrepSheetPdfAttachment } from '../lib/prepSheetPdf';
 import { listDocuments, uploadDocument, deleteDocument, documentDownloadUrl } from '../lib/documents';
@@ -559,7 +559,7 @@ export default function EventFormPage() {
 
   const payingBooking = form.contractorBookings.find((b) => b.contractorId === payingContractorId);
   const payingContractor = payingBooking ? contractors.find((c) => c.id === payingBooking.contractorId) : null;
-  const payingAmountDue = payingBooking && payingContractor ? getTierPrice(payingContractor, payingBooking.pricingTierId) : undefined;
+  const payingAmountDue = payingBooking && payingContractor ? getBookingTotal(payingBooking, payingContractor) : undefined;
 
   function getOrCreateInquiryStatus(label, color, bucket = 'tentative') {
     const existing = inquiryStatuses.find((s) => s.label.toLowerCase() === label.toLowerCase());
@@ -630,6 +630,15 @@ export default function EventFormPage() {
     setForm((f) => ({
       ...f,
       contractorBookings: f.contractorBookings.map((b) => (b.contractorId === contractorId ? { ...b, [field]: value } : b)),
+    }));
+  }
+
+  // null clears the override (back to auto — see lib/pricingTiers.js's
+  // getOvertimeHours), any other value (including '0') is a manual one.
+  function changeBookingOvertime(contractorId, overtimeHoursOverride) {
+    setForm((f) => ({
+      ...f,
+      contractorBookings: f.contractorBookings.map((b) => (b.contractorId === contractorId ? { ...b, overtimeHoursOverride } : b)),
     }));
   }
 
@@ -1590,7 +1599,7 @@ export default function EventFormPage() {
                 if (entries.length === 0) return null;
                 const sectionTotal = b.value === 'unavailable' ? undefined : entries.reduce((sum, { booking: bk }) => {
                   const c = contractors.find((x) => x.id === bk.contractorId);
-                  return sum + (c ? getTierPrice(c, bk.pricingTierId) : 0);
+                  return sum + (c ? getBookingTotal(bk, c) : 0);
                 }, 0);
                 const sectionPaid = b.value !== 'confirmed' ? 0 : entries.reduce((sum, { booking: bk }) => (
                   bk.paymentStatus === 'paid' ? sum + (Number(bk.paidAmount) || 0) : sum
@@ -1610,6 +1619,7 @@ export default function EventFormPage() {
                           onStatusChange={changeBookingStatus}
                           onTierChange={changeBookingTier}
                           onTimeChange={changeBookingTime}
+                          onOvertimeChange={changeBookingOvertime}
                           onRemove={removeContractorFromEvent}
                           onRequestSend={handleRequestSend}
                           onOpenContractor={setEditingContractor}

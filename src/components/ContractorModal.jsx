@@ -11,7 +11,7 @@ const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm 
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 
 function emptyPricingTiers() {
-  return [{ id: uid('tier'), name: 'Standard', price: '' }];
+  return [{ id: uid('tier'), name: 'Standard', price: '', includedHours: '', overtimeRate: '' }];
 }
 
 const emptyForm = {
@@ -43,7 +43,13 @@ export default function ContractorModal({ open, onClose, contractor }) {
         lastName: contractor.lastName,
         contractorType1: contractor.contractorType1,
         contractorType2: contractor.contractorType2 || '',
-        pricingTiers: getPricingTiers(contractor).map((t) => ({ ...t, id: t.id === 'legacy' ? uid('tier') : t.id, price: String(t.price) })),
+        pricingTiers: getPricingTiers(contractor).map((t) => ({
+          ...t,
+          id: t.id === 'legacy' ? uid('tier') : t.id,
+          price: String(t.price),
+          includedHours: t.includedHours ? String(t.includedHours) : '',
+          overtimeRate: t.overtimeRate ? String(t.overtimeRate) : '',
+        })),
         priceNotes: contractor.priceNotes || '',
         email: contractor.email || '',
         phone: contractor.phone || '',
@@ -137,7 +143,7 @@ export default function ContractorModal({ open, onClose, contractor }) {
   }
 
   function addTier() {
-    setForm((f) => ({ ...f, pricingTiers: [...f.pricingTiers, { id: uid('tier'), name: '', price: '' }] }));
+    setForm((f) => ({ ...f, pricingTiers: [...f.pricingTiers, { id: uid('tier'), name: '', price: '', includedHours: '', overtimeRate: '' }] }));
   }
 
   function confirmDeleteTier() {
@@ -161,7 +167,13 @@ export default function ContractorModal({ open, onClose, contractor }) {
     }
     const payload = {
       ...form,
-      pricingTiers: form.pricingTiers.map((t) => ({ ...t, name: t.name.trim() || 'Standard', price: Number(t.price) || 0 })),
+      pricingTiers: form.pricingTiers.map((t) => ({
+        ...t,
+        name: t.name.trim() || 'Standard',
+        price: Number(t.price) || 0,
+        includedHours: Number(t.includedHours) || 0,
+        overtimeRate: Number(t.overtimeRate) || 0,
+      })),
     };
     if (contractor) updateContractor(contractor.id, payload);
     else addContractor(payload);
@@ -299,26 +311,51 @@ export default function ContractorModal({ open, onClose, contractor }) {
           </div>
           <div className="space-y-2">
             {form.pricingTiers.map((tier) => (
-              <div key={tier.id} className="flex items-center gap-2">
-                <input
-                  value={tier.name}
-                  onChange={(e) => updateTier(tier.id, { name: e.target.value })}
-                  placeholder="e.g. Full Band"
-                  data-testid="contractor-modal-tier-name-input"
-                  className={`${inputClass} flex-1`}
-                />
-                <CurrencyInput value={tier.price} onChange={(v) => updateTier(tier.id, { price: v })} data-testid="contractor-modal-tier-price-input" className="w-28" />
-                {form.pricingTiers.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setTierPendingDelete(tier.id)}
-                    data-testid="contractor-modal-tier-remove-button"
-                    className="shrink-0 w-8 h-8 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
-                    aria-label="Remove pricing tier"
-                  >
-                    ✕
-                  </button>
-                )}
+              <div key={tier.id} className="border border-slate-200 rounded-lg p-2 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={tier.name}
+                    onChange={(e) => updateTier(tier.id, { name: e.target.value })}
+                    placeholder="e.g. Full Band"
+                    data-testid="contractor-modal-tier-name-input"
+                    className={`${inputClass} flex-1`}
+                  />
+                  <CurrencyInput value={tier.price} onChange={(v) => updateTier(tier.id, { price: v })} data-testid="contractor-modal-tier-price-input" className="w-28" />
+                  {form.pricingTiers.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setTierPendingDelete(tier.id)}
+                      data-testid="contractor-modal-tier-remove-button"
+                      className="shrink-0 w-8 h-8 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
+                      aria-label="Remove pricing tier"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                {/* Both optional — leave blank and this tier just never
+                    tracks overtime (see lib/pricingTiers.js's tierHasOvertime). */}
+                <div className="flex items-center gap-1.5 pl-0.5 text-xs text-slate-400">
+                  <span className="shrink-0">After</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={tier.includedHours}
+                    onChange={(e) => updateTier(tier.id, { includedHours: e.target.value })}
+                    placeholder="0"
+                    data-testid="contractor-modal-tier-included-hours-input"
+                    className={`${inputClass} w-16 py-1`}
+                  />
+                  <span className="shrink-0">hrs, overtime</span>
+                  <CurrencyInput
+                    value={tier.overtimeRate}
+                    onChange={(v) => updateTier(tier.id, { overtimeRate: v })}
+                    data-testid="contractor-modal-tier-overtime-rate-input"
+                    className="w-24"
+                  />
+                  <span className="shrink-0">/hr</span>
+                </div>
               </div>
             ))}
           </div>
