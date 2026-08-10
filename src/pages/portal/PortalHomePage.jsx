@@ -2,16 +2,55 @@ import { useEffect, useState } from 'react';
 import { usePortalAuth } from '../../context/PortalAuthContext';
 import { listPortalEvents, listPortalBookings, listPortalInvoices } from '../../lib/portal';
 import { formatEventDate, formatCurrency, formatVenueLine } from '../../lib/format';
+import { Skeleton, SkeletonCard } from '../../components/ui/Skeleton';
 
 function StatusBadge({ status }) {
   if (!status) return null;
   return (
     <span
-      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold"
+      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold"
       style={{ backgroundColor: `${status.color}1a`, color: status.color }}
     >
       {status.label}
     </span>
+  );
+}
+
+function MilestoneProgressBar({ statusLabel = '' }) {
+  const steps = ['Inquiry', 'Contract Signed', 'Deposit Paid', 'Event Ready'];
+  const lower = statusLabel.toLowerCase();
+  
+  let currentStep = 1;
+  if (lower.includes('signed') || lower.includes('contract')) currentStep = 2;
+  if (lower.includes('deposit') || lower.includes('confirmed') || lower.includes('paid')) currentStep = 3;
+  if (lower.includes('ready') || lower.includes('completed') || lower.includes('finalized')) currentStep = 4;
+
+  return (
+    <div className="mt-3 pt-3 border-t border-slate-100">
+      <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 mb-1.5">
+        {steps.map((step, idx) => {
+          const stepNum = idx + 1;
+          const isDone = stepNum <= currentStep;
+          return (
+            <span key={step} className={isDone ? 'text-indigo-600 font-bold' : 'text-slate-400'}>
+              {step}
+            </span>
+          );
+        })}
+      </div>
+      <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden flex">
+        {steps.map((_, idx) => {
+          const stepNum = idx + 1;
+          const isDone = stepNum <= currentStep;
+          return (
+            <div
+              key={idx}
+              className={`h-full flex-1 border-r border-white last:border-0 transition-all duration-300 ${isDone ? 'bg-indigo-600' : 'bg-slate-200'}`}
+            />
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -37,8 +76,6 @@ export default function PortalHomePage() {
     return () => { cancelled = true; };
   }, []);
 
-  if (loading) return null;
-
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="bg-white border-b border-slate-200">
@@ -63,72 +100,85 @@ export default function PortalHomePage() {
       </div>
 
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <h2 className="text-sm font-bold text-slate-700 mb-4">Your Events</h2>
-          {events.length === 0 ? (
-            <div className="text-sm text-slate-400 text-center py-6">No events yet.</div>
-          ) : (
-            <div className="space-y-3">
-              {events.map((e) => (
-                <div key={e.id} data-testid="portal-event-row" className="flex items-center justify-between gap-3 border-b border-slate-100 last:border-0 pb-3 last:pb-0">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-slate-800 truncate">{e.name}</div>
-                    <div className="text-xs text-slate-400">
-                      {e.eventDate ? formatEventDate(e.eventDate) : 'Date TBD'}
-                      {formatVenueLine(e.venue) ? ` · ${formatVenueLine(e.venue)}` : ''}
+        {loading ? (
+          <>
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </>
+        ) : (
+          <>
+            <div className="bg-white rounded-xl border border-slate-200 p-5">
+              <h2 className="text-sm font-bold text-slate-700 mb-4">Your Events</h2>
+              {events.length === 0 ? (
+                <div className="text-sm text-slate-400 text-center py-6">No events yet.</div>
+              ) : (
+                <div className="space-y-4 divide-y divide-slate-100">
+                  {events.map((e) => (
+                    <div key={e.id} data-testid="portal-event-row" className="pt-3 first:pt-0">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-slate-800 truncate">{e.name}</div>
+                          <div className="text-xs text-slate-400">
+                            {e.eventDate ? formatEventDate(e.eventDate) : 'Date TBD'}
+                            {formatVenueLine(e.venue) ? ` · ${formatVenueLine(e.venue)}` : ''}
+                          </div>
+                        </div>
+                        <StatusBadge status={e.status} />
+                      </div>
+                      <MilestoneProgressBar statusLabel={e.status?.label || ''} />
                     </div>
-                  </div>
-                  <StatusBadge status={e.status} />
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          )}
-        </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <h2 className="text-sm font-bold text-slate-700 mb-4">Your Bookings</h2>
-          {bookings.length === 0 ? (
-            <div className="text-sm text-slate-400 text-center py-6">No bookings yet.</div>
-          ) : (
-            <div className="space-y-3">
-              {bookings.map((b) => (
-                <div key={b.id} data-testid="portal-booking-row" className="flex items-center justify-between gap-3 border-b border-slate-100 last:border-0 pb-3 last:pb-0">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-slate-800 truncate">{b.eventName || b.eventType || 'Booking'}</div>
-                    <div className="text-xs text-slate-400">{b.eventDate ? formatEventDate(b.eventDate) : 'Date TBD'}</div>
-                  </div>
-                  <StatusBadge status={b.status} />
+            <div className="bg-white rounded-xl border border-slate-200 p-5">
+              <h2 className="text-sm font-bold text-slate-700 mb-4">Your Bookings</h2>
+              {bookings.length === 0 ? (
+                <div className="text-sm text-slate-400 text-center py-6">No bookings yet.</div>
+              ) : (
+                <div className="space-y-3">
+                  {bookings.map((b) => (
+                    <div key={b.id} data-testid="portal-booking-row" className="flex items-center justify-between gap-3 border-b border-slate-100 last:border-0 pb-3 last:pb-0">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-slate-800 truncate">{b.eventName || b.eventType || 'Booking'}</div>
+                        <div className="text-xs text-slate-400">{b.eventDate ? formatEventDate(b.eventDate) : 'Date TBD'}</div>
+                      </div>
+                      <StatusBadge status={b.status} />
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          )}
-        </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <h2 className="text-sm font-bold text-slate-700 mb-4">Payment History</h2>
-          {invoices.length === 0 ? (
-            <div className="text-sm text-slate-400 text-center py-6">No invoices yet.</div>
-          ) : (
-            <div className="space-y-3">
-              {invoices.map((inv) => (
-                <div key={inv.id} data-testid="portal-invoice-row" className="flex items-center justify-between gap-3 border-b border-slate-100 last:border-0 pb-3 last:pb-0">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-slate-800">Invoice #{inv.number}</div>
-                    <div className="text-xs text-slate-400">{inv.dueDate ? `Due ${formatEventDate(inv.dueDate.slice(0, 10))}` : ''}</div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <div className="text-sm font-semibold text-slate-700">{formatCurrency(inv.total)}</div>
-                    <div className="text-xs text-slate-400">{INVOICE_STATUS_LABELS[inv.status] || inv.status}</div>
-                  </div>
+            <div className="bg-white rounded-xl border border-slate-200 p-5">
+              <h2 className="text-sm font-bold text-slate-700 mb-4">Payment History</h2>
+              {invoices.length === 0 ? (
+                <div className="text-sm text-slate-400 text-center py-6">No invoices yet.</div>
+              ) : (
+                <div className="space-y-3">
+                  {invoices.map((inv) => (
+                    <div key={inv.id} data-testid="portal-invoice-row" className="flex items-center justify-between gap-3 border-b border-slate-100 last:border-0 pb-3 last:pb-0">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-slate-800">Invoice #{inv.number}</div>
+                        <div className="text-xs text-slate-400">{inv.dueDate ? `Due ${formatEventDate(inv.dueDate.slice(0, 10))}` : ''}</div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-sm font-semibold text-slate-700">{formatCurrency(inv.total)}</div>
+                        <div className="text-xs text-slate-400">{INVOICE_STATUS_LABELS[inv.status] || inv.status}</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          )}
-        </div>
 
-        <p className="text-xs text-slate-400 text-center">
-          Need to make a payment, sign a document, or RSVP? Use the link from the email we sent you for that specific request.
-        </p>
+            <p className="text-xs text-slate-400 text-center">
+              Need to make a payment, sign a document, or RSVP? Use the link from the email we sent you for that specific request.
+            </p>
+          </>
+        )}
       </div>
     </div>
   );

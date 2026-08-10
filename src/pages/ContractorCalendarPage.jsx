@@ -1,15 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { API_BASE } from '../context/AuthContext';
-import { getContractorCalendarByToken } from '../lib/contractors';
+import { getContractorCalendarByToken, respondToGigByToken } from '../lib/contractors';
 import EventsCalendarView from '../components/events/EventsCalendarView';
+import { Skeleton, SkeletonTable } from '../components/ui/Skeleton';
+import Modal from '../components/ui/Modal';
 
-// EventsCalendarView colors events by looking up `evt.eventStatus` in an
-// `eventStatuses` list — reused as-is (no changes to that shared component)
-// by relabeling each gig's server-derived bucket as its "eventStatus" and
-// supplying this 2-entry list instead of the account's real (unrelated)
-// event-status colors. Matches the green/yellow used for the same
-// confirmed/tentative buckets elsewhere (see ContractorPickerRow.jsx).
 const BUCKET_COLORS = [
   { id: 'confirmed', color: '#22c55e' },
   { id: 'tentative', color: '#eab308' },
@@ -20,6 +16,9 @@ export default function ContractorCalendarPage() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [selectedGig, setSelectedGig] = useState(null);
+  const [respondingGigId, setRespondingGigId] = useState(null);
+  const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -30,19 +29,7 @@ export default function ContractorCalendarPage() {
     return () => { cancelled = true; };
   }, [token]);
 
-  // "Add to Home Screen" support — this is a single-page SPA (one
-  // index.html), so a per-contractor manifest/icon can only be scoped by
-  // injecting these tags at runtime rather than baking them into the
-  // static HTML. Both iOS Safari and Android Chrome read the live DOM at
-  // the moment of the user's manual "Add to Home Screen" action, not a
-  // frozen initial-load snapshot, so this works reliably. Removed on
-  // unmount so it doesn't leak into other pages of the app.
   useEffect(() => {
-    // API_BASE (same resolution apiFetch uses) rather than a hardcoded
-    // relative /api path — in production that's proxied to the backend by
-    // vercel.json, but locally the frontend (5173) and backend (4000) are
-    // different origins with no such proxy, so a relative path here would
-    // silently 404 the manifest fetch outside of production.
     const manifestLink = document.createElement('link');
     manifestLink.rel = 'manifest';
     manifestLink.href = `${API_BASE}/contractor-calendar/${token}/manifest.webmanifest`;
@@ -71,9 +58,35 @@ export default function ContractorCalendarPage() {
     };
   }, [token]);
 
-  if (loading) {
-    return <div data-testid="contractor-calendar-loading" className="min-h-screen flex items-center justify-center text-sm text-slate-400">Loading…</div>;
+  async function handleRespond(gigId, action) {
+    setRespondingGigId(gigId);
+    try {
+      await respondToGigByToken(token, gigId, action);
+      const updatedData = await getContractorCalendarByToken(token);
+      setData(updatedData);
+      if (selectedGig && selectedGig.id === gigId) {
+        setSelectedGig(updatedData.gigs.find((g) => g.id === gigId) || null);
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to update gig status.');
+    } finally {
+      setRespondingGigId(null);
+    }
   }
+
+  if (loading) {
+    return (
+      <div data-testid="contractor-calendar-loading" className="min-h-screen bg-slate-50 p-4 max-w-3xl mx-auto space-y-4">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between">
+          <Skeleton className="h-8 w-32 rounded-lg" />
+          <Skeleton className="h-5 w-24 rounded-md" />
+        </div>
+        <SkeletonTable rows={3} />
+        <Skeleton className="h-64 w-full rounded-xl" />
+      </div>
+    );
+  }
+
   if (error || !data) {
     return (
       <div data-testid="contractor-calendar-error" className="min-h-screen flex items-center justify-center text-sm text-red-600 px-4 text-center">
@@ -86,59 +99,197 @@ export default function ContractorCalendarPage() {
   const calendarEvents = gigs.map((g) => ({ ...g, eventStatus: g.bucket }));
 
   return (
-    <div data-testid="contractor-calendar-page" className="min-h-screen bg-slate-50">
-      <div className="bg-white border-b border-slate-200">
+    <div data-testid="contractor-calendar-page" className={`min-h-screen ${darkMode ? 'dark-backstage bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-800'} transition-colors duration-200`}>
+      <div className={`${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'} border-b`}>
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
             {businessInfo?.logo
               ? <img src={businessInfo.logo} alt={businessInfo.name} className="h-8 max-w-[140px] object-contain" />
-              : <div className="text-sm font-bold text-slate-800 truncate">{businessInfo?.name || 'GigWorks'}</div>}
+              : <div className="text-sm font-bold truncate">{businessInfo?.name || 'GigWorks'}</div>}
           </div>
-          <span className="text-sm text-slate-500">Hi, {contractor.firstName}</span>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setDarkMode(!darkMode)}
+              title="Toggle Backstage Dark Mode"
+              className={`p-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 border ${darkMode ? 'bg-slate-700 border-slate-600 text-yellow-400' : 'bg-slate-100 border-slate-200 text-slate-600'}`}
+            >
+              {darkMode ? '☀️ Light' : '🌙 Backstage Mode'}
+            </button>
+            <span className="text-sm text-slate-500">Hi, {contractor.firstName}</span>
+          </div>
         </div>
       </div>
 
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
-        <div className="flex items-center gap-4 text-xs text-slate-500">
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green-500" /> Confirmed</span>
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-yellow-500" /> Pending</span>
+        <div className="flex items-center justify-between text-xs text-slate-500">
+          <div className="flex items-center gap-4">
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green-500" /> Confirmed</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-yellow-500" /> Pending Confirmation</span>
+          </div>
         </div>
 
-        {/* The calendar grid below only ever shows one month at a time,
-            defaulting to the current one — a contractor whose gigs are all
-            in a future month would see a blank grid with no indication
-            anything's scheduled. This list is always visible regardless of
-            which month the grid is showing. */}
         {gigs.length === 0 ? (
-          <div data-testid="contractor-calendar-empty" className="bg-white rounded-xl border border-slate-200 text-sm text-slate-400 text-center py-6">No upcoming gigs yet.</div>
+          <div data-testid="contractor-calendar-empty" className={`${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'} rounded-xl border text-sm text-slate-400 text-center py-6`}>No upcoming gigs yet.</div>
         ) : (
-          <div className="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100">
-            {gigs.map((g) => (
-              <div key={g.id} data-testid="contractor-calendar-gig-row" className="flex items-center justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                  <div className="text-sm font-medium text-slate-800 truncate">{g.name}</div>
-                  <div className="text-xs text-slate-400">
-                    {g.eventDate ? new Date(`${g.eventDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Date TBD'}
-                    {g.venue?.name ? ` · ${g.venue.name}` : ''}
+          <div className={`${darkMode ? 'bg-slate-800 border-slate-700 divide-slate-700' : 'bg-white border-slate-200 divide-slate-100'} rounded-xl border divide-y overflow-hidden`}>
+            {gigs.map((g) => {
+              const isPending = g.bucket === 'tentative';
+              const isResponding = respondingGigId === g.id;
+              return (
+                <div
+                  key={g.id}
+                  data-testid="contractor-calendar-gig-row"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3.5 hover:bg-slate-50/50 cursor-pointer"
+                  onClick={() => setSelectedGig(g)}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm font-semibold truncate">{g.name}</div>
+                      <span
+                        className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                        style={{ backgroundColor: g.bucket === 'confirmed' ? '#22c55e1a' : '#eab3081a', color: g.bucket === 'confirmed' ? '#16a34a' : '#a16207' }}
+                      >
+                        {g.bucket === 'confirmed' ? 'Confirmed' : 'Pending'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-2">
+                      <span>{g.eventDate ? new Date(`${g.eventDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Date TBD'}</span>
+                      {g.venue?.name && <span>· {g.venue.name}</span>}
+                      {g.startTime && <span>· {g.startTime}</span>}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    {isPending ? (
+                      <>
+                        <button
+                          type="button"
+                          disabled={isResponding}
+                          onClick={() => handleRespond(g.id, 'confirm')}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold disabled:opacity-50 transition-colors"
+                        >
+                          {isResponding ? '...' : 'Accept Gig'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isResponding}
+                          onClick={() => handleRespond(g.id, 'decline')}
+                          className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 text-xs font-medium disabled:opacity-50"
+                        >
+                          Decline
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedGig(g)}
+                        className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      >
+                        View Details →
+                      </button>
+                    )}
                   </div>
                 </div>
-                <span
-                  className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full"
-                  style={{ backgroundColor: g.bucket === 'confirmed' ? '#22c55e1a' : '#eab3081a', color: g.bucket === 'confirmed' ? '#16a34a' : '#a16207' }}
-                >
-                  {g.bucket === 'confirmed' ? 'Confirmed' : 'Pending'}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
-        <EventsCalendarView events={calendarEvents} eventStatuses={BUCKET_COLORS} onSelectEvent={() => {}} />
+        <EventsCalendarView events={calendarEvents} eventStatuses={BUCKET_COLORS} onSelectEvent={(evt) => setSelectedGig(evt)} />
 
         <p className="text-xs text-slate-400 text-center pt-2">
           Add this page to your home screen for quick access — tap Share then &quot;Add to Home Screen&quot; (iOS) or the menu then &quot;Install app&quot; (Android).
         </p>
       </div>
+
+      {selectedGig && (
+        <Modal title={selectedGig.name} onClose={() => setSelectedGig(null)} testId="contractor-gig-detail-modal">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <div className="text-sm font-semibold text-slate-800">
+                  {selectedGig.eventDate ? new Date(`${selectedGig.eventDate}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : 'Date TBD'}
+                </div>
+                <div className="text-xs text-slate-500">Gig Details & Logistics</div>
+              </div>
+              <span
+                className="text-xs font-semibold px-2.5 py-1 rounded-full"
+                style={{ backgroundColor: selectedGig.bucket === 'confirmed' ? '#22c55e1a' : '#eab3081a', color: selectedGig.bucket === 'confirmed' ? '#16a34a' : '#a16207' }}
+              >
+                {selectedGig.bucket === 'confirmed' ? 'Confirmed' : 'Pending Confirmation'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs bg-slate-50 p-3 rounded-lg border border-slate-200">
+              <div>
+                <span className="font-semibold text-slate-500 block">Call Time</span>
+                <span className="text-sm font-bold text-slate-800">{selectedGig.callTime || 'TBD'}</span>
+              </div>
+              <div>
+                <span className="font-semibold text-slate-500 block">Soundcheck</span>
+                <span className="text-sm font-bold text-slate-800">{selectedGig.soundcheckTime || 'TBD'}</span>
+              </div>
+              <div>
+                <span className="font-semibold text-slate-500 block">Performance Start</span>
+                <span className="text-slate-800 font-medium">{selectedGig.startTime || 'TBD'}</span>
+              </div>
+              <div>
+                <span className="font-semibold text-slate-500 block">Performance End</span>
+                <span className="text-slate-800 font-medium">{selectedGig.endTime || 'TBD'}</span>
+              </div>
+            </div>
+
+            {selectedGig.venue?.name && (
+              <div className="space-y-1">
+                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Venue Location</div>
+                <div className="text-sm font-semibold text-slate-800">{selectedGig.venue.name}</div>
+                {(selectedGig.venue.address || selectedGig.venue.city) && (
+                  <div className="text-xs text-slate-600">
+                    {[selectedGig.venue.address, selectedGig.venue.city, selectedGig.venue.state, selectedGig.venue.zipCode].filter(Boolean).join(', ')}
+                  </div>
+                )}
+                {selectedGig.venue.address && (
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${selectedGig.venue.name} ${selectedGig.venue.address} ${selectedGig.venue.city || ''}`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700 mt-1"
+                  >
+                    📍 Open in Maps →
+                  </a>
+                )}
+              </div>
+            )}
+
+            {selectedGig.notes && (
+              <div className="space-y-1">
+                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Gig Notes</div>
+                <p className="text-xs text-slate-700 bg-slate-50 p-2.5 rounded-lg border border-slate-200 whitespace-pre-wrap">{selectedGig.notes}</p>
+              </div>
+            )}
+
+            {selectedGig.bucket === 'tentative' && (
+              <div className="pt-2 flex items-center gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => handleRespond(selectedGig.id, 'confirm')}
+                  className="flex-1 py-2 rounded-lg bg-emerald-600 text-white font-semibold text-xs hover:bg-emerald-700"
+                >
+                  Accept Gig
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleRespond(selectedGig.id, 'decline')}
+                  className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 font-semibold text-xs hover:bg-slate-50"
+                >
+                  Decline
+                </button>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

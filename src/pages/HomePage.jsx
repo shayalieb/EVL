@@ -6,6 +6,8 @@ import { formatCurrency } from '../lib/format';
 import { listInvoices } from '../lib/invoices';
 import { CalendarIcon, ClockIcon, DollarIcon, UsersIcon, WrenchIcon, AlertIcon } from '../components/ui/icons';
 
+import Skeleton from '../components/ui/Skeleton';
+
 // At-risk window for the "needs attention soon" panel below — events inside
 // this many days that still have unconfirmed vendors are the ones actually
 // worth surfacing; further out, "pending" is just normal pipeline state, not
@@ -38,7 +40,7 @@ function PanelHeading({ children, color, icon }) {
 
 function StatTile({ label, value, color = '#64748b', icon, testId }) {
   return (
-    <div data-testid={testId} className="relative bg-white rounded-xl border border-slate-200 px-5 py-4 overflow-hidden">
+    <div data-testid={testId} className="relative bg-white rounded-xl border border-slate-200 px-5 py-4 overflow-hidden shadow-xs hover:shadow-md transition-shadow duration-200">
       <span className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: color }} />
       <div className="flex items-start justify-between gap-2 mb-1.5">
         <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</div>
@@ -58,14 +60,14 @@ export default function HomePage() {
   } = useData();
   const navigate = useNavigate();
 
-  // Not routed through DataContext — invoices aren't read anywhere else in
-  // the app yet (only inside a Booking's own Invoices tab, scoped to that
-  // one booking), so a page-local fetch keeps this contained rather than
-  // adding a new account-wide entity everywhere `useData()` is consumed.
   const [invoices, setInvoices] = useState([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(true);
   useEffect(() => {
     let cancelled = false;
-    listInvoices().then((list) => { if (!cancelled) setInvoices(list); }).catch(() => {});
+    listInvoices()
+      .then((list) => { if (!cancelled) setInvoices(list); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setInvoicesLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
@@ -157,7 +159,12 @@ export default function HomePage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <PanelHeading color="#e11d48" icon={<DollarIcon className="w-3.5 h-3.5" />}>Overdue Invoices</PanelHeading>
-          {overdueInvoices.length === 0 ? (
+          {invoicesLoading ? (
+            <div className="space-y-2 py-2">
+              <Skeleton className="h-10 w-full rounded-lg" />
+              <Skeleton className="h-10 w-full rounded-lg" />
+            </div>
+          ) : overdueInvoices.length === 0 ? (
             <div className="text-sm text-slate-400 text-center py-6">No overdue invoices.</div>
           ) : (
             <div className="space-y-1">

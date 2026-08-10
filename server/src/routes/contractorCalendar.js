@@ -32,17 +32,23 @@ async function findLinkByToken(token) {
 // Only what a contractor needs to see their own gig on the calendar — same
 // "narrow projection for a public route" reasoning as guests.js's
 // publicEventInfo, plus the derived `bucket` this route computes.
-function publicGigInfo(event, bucket) {
+function publicGigInfo(event, booking, bucket) {
   return {
     id: event.id,
     name: event.name || '',
     eventDate: event.eventDate || '',
-    startTime: event.startTime || '',
-    endTime: event.endTime || '',
+    startTime: booking?.startTime || event.startTime || '',
+    endTime: booking?.endTime || event.endTime || '',
+    callTime: booking?.callTime || event.callTime || '',
+    soundcheckTime: event.soundcheckTime || '',
+    notes: event.notes || '',
     venue: {
       name: event.venue?.name || '',
+      address: event.venue?.address || '',
       city: event.venue?.city || '',
       state: event.venue?.state || '',
+      zipCode: event.venue?.zipCode || '',
+      notes: event.venue?.notes || '',
     },
     bucket,
   };
@@ -55,10 +61,6 @@ publicContractorCalendarRouter.get('/:token/manifest.webmanifest', calendarViewL
   const accountData = await prisma.accountData.findUnique({ where: { accountId: link.accountId } });
   const businessName = accountData?.data?.businessInfo?.name || 'GigWorks';
 
-  // start_url/scope MUST be this contractor's own token URL, not a shared
-  // generic one — a static manifest would give every contractor's home
-  // screen icon the same fixed launch target, which defeats the feature
-  // (found during design review, see plan notes).
   const startUrl = `/gigs/${req.params.token}`;
   res.setHeader('Content-Type', 'application/manifest+json');
   res.json({
@@ -85,7 +87,7 @@ publicContractorCalendarRouter.get('/:token', calendarViewLimiter, asyncHandler(
     prisma.accountData.findUnique({ where: { accountId: link.accountId } }),
     prisma.event.findMany({
       where: { accountId: link.accountId, deletedAt: null },
-      select: { id: true, name: true, eventDate: true, startTime: true, endTime: true, venue: true, contractorBookings: true },
+      select: { id: true, name: true, eventDate: true, startTime: true, endTime: true, callTime: true, soundcheckTime: true, notes: true, venue: true, contractorBookings: true },
     }),
   ]);
   if (!contractor || contractor.accountId !== link.accountId) return res.status(404).json({ error: 'This contractor could not be found.' });
@@ -97,10 +99,9 @@ publicContractorCalendarRouter.get('/:token', calendarViewLimiter, asyncHandler(
     if (!booking) continue;
     const status = inquiryStatuses.find((s) => s.id === booking.inquiryStatusId);
     const bucket = statusBucket(status);
-    if (bucket === 'unavailable') continue; // not really "their" gig anymore
     if (bucket === 'confirmed' && !link.showConfirmed) continue;
     if (bucket === 'tentative' && !link.showTentative) continue;
-    gigs.push(publicGigInfo(event, bucket));
+    gigs.push(publicGigInfo(event, booking, bucket));
   }
   gigs.sort((a, b) => (a.eventDate || '').localeCompare(b.eventDate || ''));
 
@@ -109,6 +110,48 @@ publicContractorCalendarRouter.get('/:token', calendarViewLimiter, asyncHandler(
     businessInfo: accountData?.data?.businessInfo || null,
     gigs,
   });
+}));
+
+// Contractor 1-tap Gig Response (Accept / Decline) directly via token link
+publicContractorCalendarRouter.post('/:token/gigs/:eventId/respond', calendarViewLimiter, asyncHandler(async (req, res) => {
+  const { action } = req.body; // 'confirm' | 'decline'
+  if (action !== 'confirm' && action !== 'decline') {
+    return res.status(400).json({ error: 'Action must be confirm or decline.' });
+  }
+
+  const link = await findLinkByToken(req.params.token);
+  if (!link) return res.status(404).json({ error: 'This link is invalid.' });
+
+  const [event, accountData] = await Promise.all([
+    prisma.event.findUnique({ where: { id: req.params.eventId } }),
+    prisma.accountData.findUnique({ where: { accountId: link.accountId } }),
+  ]);
+
+  if (!event || event.accountId !== link.accountId) {
+    return res.status(404).json({ error: 'Event not found.' });
+  }
+
+  const inquiryStatuses = accountData?.data?.inquiryStatuses || [];
+  const targetBucket = action === 'confirm' ? 'confirmed' : 'unavailable';
+  const targetStatus = inquiryStatuses.find((s) => statusBucket(s) === targetBucket);
+
+  if (!targetStatus) {
+    return res.status(400).json({ error: `No status found for bucket "${targetBucket}".` });
+  }
+
+  const contractorBookings = (event.contractorBookings || []).map((b) => {
+    if (b.contractorId === link.contractorId) {
+      return { ...b, inquiryStatusId: targetStatus.id };
+    }
+    return b;
+  });
+
+  await prisma.event.update({
+    where: { id: event.id },
+    data: { contractorBookings },
+  });
+
+  res.json({ success: true, newBucket: targetBucket, statusId: targetStatus.id });
 }));
 
 export default publicContractorCalendarRouter;

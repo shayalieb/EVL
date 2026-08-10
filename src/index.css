@@ -2,7 +2,34 @@
 
 body {
   margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Backstage Dark Mode Theme */
+.dark-backstage {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+}
+.dark-backstage .bg-white {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+.dark-backstage .text-slate-800,
+.dark-backstage .text-slate-700 {
+  color: #f8fafc !important;
+}
+.dark-backstage .text-slate-500,
+.dark-backstage .text-slate-400 {
+  color: #94a3b8 !important;
+}
+.dark-backstage .border-slate-200,
+.dark-backstage .border-slate-100 {
+  border-color: #334155 !important;
+}
+.dark-backstage .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #334155 !important;
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }

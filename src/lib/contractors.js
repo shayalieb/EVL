@@ -54,3 +54,10 @@ export async function getContractorCalendarByToken(token) {
   // returns { contractor, businessInfo, gigs }
   return apiFetch(`/contractor-calendar/${encodeURIComponent(token)}`);
 }
+
+export async function respondToGigByToken(token, eventId, action) {
+  return apiFetch(`/contractor-calendar/${encodeURIComponent(token)}/gigs/${encodeURIComponent(eventId)}/respond`, {
+    method: 'POST',
+    body: JSON.stringify({ action }),
+  });
+}
