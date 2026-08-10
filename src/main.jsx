@@ -16,6 +16,22 @@ Sentry.init({
   tracesSampleRate: 0.1,
 })
 
+// A tab left open across a deploy still holds the OLD index.html's chunk
+// references (jsPDF, etc. are all dynamically import()'d — see lib/*Pdf.js)
+// — once a new build replaces the old hashed files on Vercel, those old
+// chunk URLs 404 into vercel.json's SPA catch-all and come back as HTML,
+// which the browser reports as this exact "Failed to fetch dynamically
+// imported module" error. Vite fires `vite:preloadError` for precisely
+// this case; reloading picks up the current index.html and its valid
+// chunk hashes. Guarded with sessionStorage so a genuinely broken deploy
+// (or offline tab) reloads once, not in a loop.
+window.addEventListener('vite:preloadError', () => {
+  const key = 'vite-preload-reload-attempted';
+  if (sessionStorage.getItem(key)) return;
+  sessionStorage.setItem(key, '1');
+  window.location.reload();
+});
+
 function ErrorFallback() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
