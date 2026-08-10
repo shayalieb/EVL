@@ -59,6 +59,11 @@ export async function updateContractTerms(contractId, terms) {
 
 // ---- Public (unauthenticated, token-based — used by ContractSignPage) ----
 
+export async function getContractByToken(token) {
+  const data = await apiFetch(`/contract-sign/${encodeURIComponent(token)}`);
+  return data.contract;
+}
+
 export async function viewContractByToken(token, email) {
   const data = await apiFetch(`/contract-sign/${encodeURIComponent(token)}/view`, {
     method: 'POST',

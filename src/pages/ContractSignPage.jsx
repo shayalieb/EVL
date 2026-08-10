@@ -1,9 +1,9 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import Logo from '../components/ui/Logo';
 import SubmitButton from '../components/ui/SubmitButton';
 import ContractDocument from '../components/ContractDocument';
-import { viewContractByToken, submitContractSignature } from '../lib/contracts';
+import { getContractByToken, viewContractByToken, submitContractSignature } from '../lib/contracts';
 import { generateContractPdf } from '../lib/contractPdf';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -18,12 +18,29 @@ export default function ContractSignPage() {
   const [verifiedEmail, setVerifiedEmail] = useState('');
   const [contract, setContract] = useState(null);
   const [error, setError] = useState('');
-  const [verifying, setVerifying] = useState(false);
+  const [verifying, setVerifying] = useState(true);
   const [signerName, setSignerName] = useState('');
   const [signatureImage, setSignatureImage] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const signHereRef = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getContractByToken(token)
+      .then((data) => {
+        if (!cancelled && data) {
+          setContract(data);
+        }
+      })
+      .catch(() => {
+        // Fallback to manual email verification if token lookup requires email
+      })
+      .finally(() => {
+        if (!cancelled) setVerifying(false);
+      });
+    return () => { cancelled = true; };
+  }, [token]);
 
   async function handleVerify(e) {
     e.preventDefault();
@@ -34,7 +51,7 @@ export default function ContractSignPage() {
       setContract(data);
       setVerifiedEmail(email.trim());
     } catch (err) {
-      setError(err.message || 'Something went wrong.');
+      setError(err.message || 'This link is invalid or has expired.');
     } finally {
       setVerifying(false);
     }

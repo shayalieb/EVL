@@ -275,17 +275,25 @@ async function findByToken(token) {
   return { contract, role };
 }
 
-publicContractsRouter.post('/:token/view', asyncHandler(async (req, res) => {
-  const { email } = req.body || {};
-  if (!email?.trim()) return res.status(400).json({ error: 'Email is required.' });
-
+publicContractsRouter.get('/:token', asyncHandler(async (req, res) => {
   const found = await findByToken(req.params.token);
   if (!found) return res.status(404).json({ error: 'This link is invalid or has expired.' });
 
   const { contract, role } = found;
-  const expectedEmail = role === 'client' ? contract.recipientEmail : contract.ownerEmail;
-  if (email.trim().toLowerCase() !== expectedEmail.toLowerCase()) {
-    return res.status(403).json({ error: "That email doesn't match this link." });
+  res.json({ contract: serializeForPublic(contract, role) });
+}));
+
+publicContractsRouter.post('/:token/view', asyncHandler(async (req, res) => {
+  const found = await findByToken(req.params.token);
+  if (!found) return res.status(404).json({ error: 'This link is invalid or has expired.' });
+
+  const { contract, role } = found;
+  const { email } = req.body || {};
+  if (email?.trim()) {
+    const expectedEmail = role === 'client' ? contract.recipientEmail : contract.ownerEmail;
+    if (expectedEmail && email.trim().toLowerCase() !== expectedEmail.toLowerCase()) {
+      return res.status(403).json({ error: "That email doesn't match this link." });
+    }
   }
 
   res.json({ contract: serializeForPublic(contract, role) });
@@ -293,17 +301,19 @@ publicContractsRouter.post('/:token/view', asyncHandler(async (req, res) => {
 
 publicContractsRouter.post('/:token/submit', asyncHandler(async (req, res) => {
   const { email, signatureName, signatureImage } = req.body || {};
-  if (!email?.trim() || !signatureName?.trim() || !signatureImage) {
-    return res.status(400).json({ error: 'Email, signatureName, and signatureImage are required.' });
+  if (!signatureName?.trim() || !signatureImage) {
+    return res.status(400).json({ error: 'Signature name and signature image are required.' });
   }
 
   const found = await findByToken(req.params.token);
   if (!found) return res.status(404).json({ error: 'This link is invalid or has expired.' });
 
   const { contract, role } = found;
-  const expectedEmail = role === 'client' ? contract.recipientEmail : contract.ownerEmail;
-  if (email.trim().toLowerCase() !== expectedEmail.toLowerCase()) {
-    return res.status(403).json({ error: "That email doesn't match this link." });
+  if (email?.trim()) {
+    const expectedEmail = role === 'client' ? contract.recipientEmail : contract.ownerEmail;
+    if (expectedEmail && email.trim().toLowerCase() !== expectedEmail.toLowerCase()) {
+      return res.status(403).json({ error: "That email doesn't match this link." });
+    }
   }
 
   if (role === 'client') {

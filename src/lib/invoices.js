@@ -61,6 +61,12 @@ export async function voidInvoice(invoiceId) {
 
 // ---- Public (unauthenticated, token-based — used by InvoicePayPage) ----
 
+export async function getInvoiceByToken(token, sessionId) {
+  const query = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : '';
+  const data = await apiFetch(`/invoice-pay/${encodeURIComponent(token)}${query}`);
+  return data.invoice;
+}
+
 export async function viewInvoiceByToken(token, email, sessionId) {
   const query = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : '';
   const data = await apiFetch(`/invoice-pay/${encodeURIComponent(token)}/view${query}`, {

@@ -86,17 +86,35 @@ const DEFAULT_ACCENT_COLOR = '#6366f1';
 // throughout (no flexbox/grid) since email clients — Outlook especially —
 // render a much smaller CSS subset than a browser.
 //
-// `bodyHtml` is trusted, pre-built HTML (callers already escapeHtml() any
-// interpolated user text before handing it in, same as before this helper
-// existed) — this function only supplies the shell around it.
+// Converts base64 Data URLs (data:image/...) into inline CID attachments
+// (cid:business-logo) so major email clients (Gmail, Outlook, Yahoo) display
+// the logo crisp and clear instead of blocking inline base64 data URLs.
 export function buildActionEmailHtml({ businessInfo, heading, bodyHtml, buttonText, buttonUrl, footnote }) {
   const accent = businessInfo?.accentColor || DEFAULT_ACCENT_COLOR;
   const name = businessInfo?.name || 'GigWorks';
-  const logoBlock = businessInfo?.logo
-    ? `<img src="${businessInfo.logo}" alt="${escapeHtml(name)}" style="max-height:48px;max-width:220px;display:block;margin:0 auto 16px;" />`
+  const attachments = [];
+  let logoSrc = businessInfo?.logo || '';
+
+  if (logoSrc.startsWith('data:image/')) {
+    const match = logoSrc.match(/^data:(image\/[a-zA-Z0-9+-]+);base64,(.+)$/);
+    if (match) {
+      const mimeType = match[1];
+      const ext = mimeType.split('/')[1] || 'png';
+      const base64Data = match[2];
+      attachments.push({
+        filename: `logo.${ext}`,
+        content: Buffer.from(base64Data, 'base64'),
+        content_id: 'business-logo',
+      });
+      logoSrc = 'cid:business-logo';
+    }
+  }
+
+  const logoBlock = logoSrc
+    ? `<img src="${logoSrc}" alt="${escapeHtml(name)}" style="max-height:48px;max-width:220px;display:block;margin:0 auto 16px;" />`
     : `<div style="font-size:20px;font-weight:700;color:#1e293b;text-align:center;margin-bottom:16px;">${escapeHtml(name)}</div>`;
 
-  return `
+  const htmlString = `
 <div style="background-color:#f8fafc;padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
   <div style="max-width:480px;margin:0 auto;background-color:#ffffff;border-radius:16px;padding:32px;border:1px solid #e2e8f0;">
     ${logoBlock}
@@ -110,21 +128,29 @@ export function buildActionEmailHtml({ businessInfo, heading, bodyHtml, buttonTe
   </div>
   <p style="text-align:center;font-size:11px;color:#94a3b8;margin-top:20px;">Powered by GigWorks</p>
 </div>`;
+
+  // Return a String instance with attached inline attachments so existing callers
+  // using html: buildActionEmailHtml(...) work transparently.
+  const result = new String(htmlString);
+  result.attachments = attachments;
+  return result;
 }
 
 // Throws if RESEND_API_KEY isn't configured — callers catch and respond 503,
 // matching the existing lazy-init behavior in resend.js.
 export async function sendMail({ from, to, subject, html, replyTo, headers, attachments }) {
   const resend = getResendClient();
-  // NOTE: the SDK's own field is `replyTo` (camelCase) — it maps this to the
-  // API's `reply_to` internally. Passing `reply_to` here is silently dropped.
+  const finalHtml = typeof html === 'object' && html !== null ? html.toString() : html;
+  const embeddedAttachments = (typeof html === 'object' && html !== null && Array.isArray(html.attachments)) ? html.attachments : [];
+  const finalAttachments = [...(attachments || []), ...embeddedAttachments];
+
   return resend.emails.send({
     from,
     to,
     subject,
-    html,
+    html: finalHtml,
     ...(replyTo ? { replyTo } : {}),
     ...(headers ? { headers } : {}),
-    ...(attachments?.length ? { attachments } : {}),
+    ...(finalAttachments.length ? { attachments: finalAttachments } : {}),
   });
 }

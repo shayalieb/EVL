@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import Logo from '../components/ui/Logo';
 import SubmitButton from '../components/ui/SubmitButton';
 import InvoiceDocument from '../components/InvoiceDocument';
-import { viewInvoiceByToken, startInvoiceCheckout } from '../lib/invoices';
+import { getInvoiceByToken, viewInvoiceByToken, startInvoiceCheckout } from '../lib/invoices';
 import { formatCurrency as currency, formatEventDate } from '../lib/format';
 import { generateInvoicePdf } from '../lib/invoicePdf';
 
@@ -18,8 +18,26 @@ export default function InvoicePayPage() {
   const [verifiedEmail, setVerifiedEmail] = useState('');
   const [invoice, setInvoice] = useState(null);
   const [error, setError] = useState('');
-  const [verifying, setVerifying] = useState(false);
+  const [verifying, setVerifying] = useState(true);
   const [payingNow, setPayingNow] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getInvoiceByToken(token, sessionId)
+      .then((data) => {
+        if (!cancelled && data) {
+          setInvoice(data);
+          setVerifiedEmail(data.recipientEmail || '');
+        }
+      })
+      .catch(() => {
+        // Fallback to manual email verification if token lookup requires email
+      })
+      .finally(() => {
+        if (!cancelled) setVerifying(false);
+      });
+    return () => { cancelled = true; };
+  }, [token, sessionId]);
 
   async function handleVerify(e) {
     e.preventDefault();
@@ -30,7 +48,7 @@ export default function InvoicePayPage() {
       setInvoice(data);
       setVerifiedEmail(email.trim());
     } catch (err) {
-      setError(err.message || 'Something went wrong.');
+      setError(err.message || 'This link is invalid or has expired.');
     } finally {
       setVerifying(false);
     }

@@ -386,20 +386,38 @@ function checkEmail(invoice, email) {
   return !!email?.trim() && email.trim().toLowerCase() === invoice.recipientEmail.toLowerCase();
 }
 
-publicInvoicesRouter.post('/:token/view', asyncHandler(async (req, res) => {
-  const { email } = req.body || {};
-  if (!email?.trim()) return res.status(400).json({ error: 'Email is required.' });
-
+publicInvoicesRouter.get('/:token', asyncHandler(async (req, res) => {
   let invoice = await findByToken(req.params.token);
   if (!invoice) return res.status(404).json({ error: 'This link is invalid or has expired.' });
-  if (!checkEmail(invoice, email)) {
+
+  const sessionId = req.query.session_id;
+  if (sessionId && invoice.status === 'sent') {
+    try {
+      const account = await prisma.account.findUnique({ where: { id: invoice.accountId } });
+      const stripe = getStripeClient();
+      const session = await stripe.checkout.sessions.retrieve(sessionId, { stripeAccount: account.stripeAccountId });
+      if (session.payment_status === 'paid') {
+        invoice = await prisma.invoice.update({
+          where: { id: invoice.id },
+          data: { status: 'paid', paidAmount: invoiceTotal(invoice), paidAt: new Date(), stripePaymentIntentId: session.payment_intent },
+        });
+      }
+    } catch {
+      // best effort — the webhook will still catch this shortly if this check fails
+    }
+  }
+
+  res.json({ invoice: serializeForPublic(invoice) });
+}));
+
+publicInvoicesRouter.post('/:token/view', asyncHandler(async (req, res) => {
+  const { email } = req.body || {};
+  let invoice = await findByToken(req.params.token);
+  if (!invoice) return res.status(404).json({ error: 'This link is invalid or has expired.' });
+  if (email?.trim() && !checkEmail(invoice, email)) {
     return res.status(403).json({ error: "That email doesn't match this link." });
   }
 
-  // The browser can land back here (from Stripe's success_url) before the
-  // checkout.session.completed webhook has been processed — a stale status
-  // here means "the client already paid, the business doesn't know yet",
-  // so do a one-off live check rather than waiting on the webhook alone.
   const sessionId = req.query.session_id;
   if (sessionId && invoice.status === 'sent') {
     try {
@@ -422,11 +440,9 @@ publicInvoicesRouter.post('/:token/view', asyncHandler(async (req, res) => {
 
 publicInvoicesRouter.post('/:token/checkout', asyncHandler(async (req, res) => {
   const { email } = req.body || {};
-  if (!email?.trim()) return res.status(400).json({ error: 'Email is required.' });
-
   const invoice = await findByToken(req.params.token);
   if (!invoice) return res.status(404).json({ error: 'This link is invalid or has expired.' });
-  if (!checkEmail(invoice, email)) {
+  if (email?.trim() && !checkEmail(invoice, email)) {
     return res.status(403).json({ error: "That email doesn't match this link." });
   }
   if (invoice.status !== 'sent' && invoice.status !== 'partial') {
