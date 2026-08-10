@@ -116,6 +116,16 @@ export default function BookingsPage() {
     setDeleteTarget(null);
   }
 
+  // Bookings have no single name field (unlike Event) — same fallback
+  // chain as the row's own display label above.
+  function deleteTargetLabel() {
+    if (!deleteTarget) return '';
+    if (deleteTarget.eventName) return deleteTarget.eventName;
+    const client = clients.find((c) => c.id === deleteTarget.clientId);
+    if (client) return `${client.firstName} ${client.lastName}`;
+    return deleteTarget.eventType || '';
+  }
+
   async function handleConvert(booking) {
     try {
       const event = await convertBookingToEvent(booking.id);
@@ -388,7 +398,8 @@ export default function BookingsPage() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
         title="Delete booking?"
-        description="This will permanently delete this booking record."
+        description="This removes the booking from your active list. It's permanently erased after 30 days — until then it can still be recovered."
+        confirmText={deleteTargetLabel() || undefined}
       />
 
       <SendInquiryLinkModal open={sendInquiryModalOpen} onClose={() => setSendInquiryModalOpen(false)} />

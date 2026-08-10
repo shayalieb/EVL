@@ -275,6 +275,7 @@ export default function ContractorsPage() {
         onConfirm={handleDelete}
         title="Delete contractor?"
         description={`This will remove ${deleteTarget?.firstName} ${deleteTarget?.lastName} from your roster and from any events they're booked on.`}
+        confirmText={deleteTarget ? `${deleteTarget.firstName} ${deleteTarget.lastName}` : undefined}
       />
     </div>
   );

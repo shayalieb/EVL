@@ -34,6 +34,7 @@ import eventsRouter from './routes/events.js';
 import portalRouter from './routes/portal.js';
 import { startReminderScheduler } from './lib/reminderScheduler.js';
 import { startReminderRuleEngine } from './lib/reminderRuleEngine.js';
+import { startDeletedRecordPurger } from './lib/deletedRecordPurger.js';
 
 // No-ops safely with no DSN set — nothing breaks in dev/test environments
 // or before SENTRY_DSN is added to Railway's env vars, this just silently
@@ -203,3 +204,4 @@ const port = process.env.PORT || 4000;
 app.listen(port, () => console.log(`Server listening on ${port}`));
 startReminderScheduler();
 startReminderRuleEngine();
+startDeletedRecordPurger();

@@ -277,7 +277,8 @@ export default function EventsPage() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
         title="Delete event?"
-        description={`This will permanently delete "${deleteTarget?.name}" and its contractor bookings.`}
+        description={`This removes "${deleteTarget?.name}" and its contractor bookings from your active events. It's permanently erased after 30 days — until then it can still be recovered.`}
+        confirmText={deleteTarget?.name || undefined}
       />
     </div>
   );
