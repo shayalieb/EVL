@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
-import { resolveFromHeader, resolveReplyDomain, sendMail } from '../lib/mailer.js';
+import { resolveFromHeader, resolveReplyDomain, sendMail, buildActionEmailHtml } from '../lib/mailer.js';
 import { downloadFileBuffer } from '../lib/fileStorage.js';
 
 const router = Router();
@@ -80,12 +80,13 @@ router.post('/send', asyncHandler(async (req, res) => {
   // (no template) sends.
   let localPart = 'hello';
   let effectiveFromName = fromName;
+  const accountData = await prisma.accountData.findUnique({ where: { accountId } });
   if (templateId) {
-    const accountData = await prisma.accountData.findUnique({ where: { accountId } });
     const template = accountData?.data?.emailTemplates?.find((t) => t.id === templateId);
     if (template?.fromLocalPart) localPart = template.fromLocalPart;
     if (template?.fromDisplayName) effectiveFromName = template.fromDisplayName;
   }
+  const businessInfo = accountData?.data?.businessInfo || {};
   const fromAddress = await resolveFromHeader({ accountId, fromName: effectiveFromName, localPart });
   const headers = lastMessage?.resendMessageId
     ? { 'In-Reply-To': lastMessage.resendMessageId, References: lastMessage.resendMessageId }
@@ -93,7 +94,10 @@ router.post('/send', asyncHandler(async (req, res) => {
 
   let sent;
   try {
-    sent = await sendMail({ from: fromAddress, to: contractorEmail, subject, html: body, replyTo: thread.replyToAlias, headers, attachments });
+    // bodyHtml, not escapeHtml(body) — this is already-composed HTML from
+    // the client (free text or a loaded email template), same trust
+    // boundary as every other buildActionEmailHtml caller.
+    sent = await sendMail({ from: fromAddress, to: contractorEmail, subject, html: buildActionEmailHtml({ businessInfo, bodyHtml: body }), replyTo: thread.replyToAlias, headers, attachments });
   } catch {
     return res.status(503).json({ error: 'Email sending is not configured yet.' });
   }

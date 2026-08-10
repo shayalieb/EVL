@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
+import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
-import { resolveFromHeader, sendMail } from '../lib/mailer.js';
+import { resolveFromHeader, sendMail, buildActionEmailHtml } from '../lib/mailer.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -39,8 +40,13 @@ router.post('/send', sendLimiter, asyncHandler(async (req, res) => {
 
   let data, error;
   try {
+    const accountData = await prisma.accountData.findUnique({ where: { accountId: req.membership.accountId } });
+    const businessInfo = accountData?.data?.businessInfo || {};
     const from = await resolveFromHeader({ accountId: req.membership.accountId, fromName, localPart: 'hello' });
-    ({ data, error } = await sendMail({ from, to, subject, html: body, replyTo, attachments }));
+    // bodyHtml, not escapeHtml(body) — this is already-composed HTML from the
+    // client (a proposal cover note, etc.), same trust boundary as every
+    // other buildActionEmailHtml caller.
+    ({ data, error } = await sendMail({ from, to, subject, html: buildActionEmailHtml({ businessInfo, bodyHtml: body }), replyTo, attachments }));
   } catch {
     return res.status(503).json({ error: 'Email sending is not configured yet.' });
   }
