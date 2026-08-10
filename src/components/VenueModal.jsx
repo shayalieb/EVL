@@ -8,7 +8,7 @@ const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 
 const emptyForm = {
   name: '', address1: '', address2: '', city: '', state: '', zip: '',
-  contactName: '', contactEmail: '', locationNote: '', loadInInfo: '',
+  contactName: '', contactPhone: '', contactPhoneExt: '', contactEmail: '', locationNote: '', loadInInfo: '',
 };
 
 // Editing/deleting a saved venue here never touches past bookings/events —
@@ -30,6 +30,8 @@ export default function VenueModal({ open, onClose, venue, onSaved }) {
         state: venue.state || '',
         zip: venue.zip || '',
         contactName: venue.contactName || '',
+        contactPhone: venue.contactPhone || '',
+        contactPhoneExt: venue.contactPhoneExt || '',
         contactEmail: venue.contactEmail || '',
         locationNote: venue.locationNote || '',
         loadInInfo: venue.loadInInfo || '',
@@ -97,16 +99,27 @@ export default function VenueModal({ open, onClose, venue, onSaved }) {
             <label className={labelClass}>Contact Name</label>
             <input value={form.contactName} onChange={(e) => update('contactName', e.target.value)} data-testid="venue-modal-contactname-input" className={inputClass} />
           </div>
-          <div>
-            <label className={labelClass}>Contact Email</label>
-            <input
-              type="email"
-              value={form.contactEmail}
-              onChange={(e) => update('contactEmail', formatEmailInput(e.target.value))}
-              data-testid="venue-modal-contactemail-input"
-              className={inputClass}
-            />
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <label className={labelClass}>Contact Phone</label>
+              <input type="tel" value={form.contactPhone} onChange={(e) => update('contactPhone', e.target.value)} data-testid="venue-modal-contactphone-input" className={inputClass} />
+            </div>
+            <div className="w-20">
+              <label className={labelClass}>Ext.</label>
+              <input value={form.contactPhoneExt} onChange={(e) => update('contactPhoneExt', e.target.value)} data-testid="venue-modal-contactphoneext-input" className={inputClass} />
+            </div>
           </div>
+        </div>
+
+        <div>
+          <label className={labelClass}>Contact Email</label>
+          <input
+            type="email"
+            value={form.contactEmail}
+            onChange={(e) => update('contactEmail', formatEmailInput(e.target.value))}
+            data-testid="venue-modal-contactemail-input"
+            className={inputClass}
+          />
         </div>
 
         <div>

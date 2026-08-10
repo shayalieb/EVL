@@ -70,7 +70,7 @@ const PAYMENT_METHOD_LABELS = { ach: 'ACH', check: 'Check', card: 'Card', other:
 export function emptyVenue() {
   return {
     name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '',
-    contactName: '', contactEmail: '',
+    contactName: '', contactPhone: '', contactPhoneExt: '', contactEmail: '',
   };
 }
 
@@ -812,6 +812,8 @@ export default function BookingFormPage() {
         state: venue.state || '',
         zip: venue.zip || '',
         contactName: venue.contactName || '',
+        contactPhone: venue.contactPhone || '',
+        contactPhoneExt: venue.contactPhoneExt || '',
         contactEmail: venue.contactEmail || '',
         locationNote: venue.locationNote || '',
         loadInInfo: venue.loadInInfo || '',
@@ -1850,6 +1852,18 @@ export default function BookingFormPage() {
                   <label className={labelClass}>Venue Contact</label>
                   <input value={form.venue.contactName} onChange={(e) => updateVenue('contactName', e.target.value)} data-testid="booking-form-venue-contactname-input" className={inputClass} />
                 </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className={labelClass}>Venue Contact Phone</label>
+                    <input type="tel" value={form.venue.contactPhone} onChange={(e) => updateVenue('contactPhone', e.target.value)} data-testid="booking-form-venue-contactphone-input" className={inputClass} />
+                  </div>
+                  <div className="w-20">
+                    <label className={labelClass}>Ext.</label>
+                    <input value={form.venue.contactPhoneExt} onChange={(e) => updateVenue('contactPhoneExt', e.target.value)} data-testid="booking-form-venue-contactphoneext-input" className={inputClass} />
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Venue Contact Email</label>
                   <input

@@ -18,7 +18,7 @@ export default function VenuesPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [search, setSearch] = useState('');
 
-  const filteredVenues = venues.filter((v) => matchesSearch(search, [v.name, v.address1, v.city, v.state, v.contactName, v.contactEmail]));
+  const filteredVenues = venues.filter((v) => matchesSearch(search, [v.name, v.address1, v.city, v.state, v.contactName, v.contactPhone, v.contactEmail]));
 
   function openAdd() {
     setEditingVenue(null);
@@ -83,7 +83,8 @@ export default function VenuesPage() {
               )}
               {filteredVenues.map((v) => {
                 const addressLine = [v.address1, v.city, v.state].filter(Boolean).join(', ');
-                const contactLine = [v.contactName, v.contactEmail].filter(Boolean).join(' · ');
+                const contactPhoneLine = v.contactPhone ? `${v.contactPhone}${v.contactPhoneExt ? ` ext. ${v.contactPhoneExt}` : ''}` : '';
+                const contactLine = [v.contactName, contactPhoneLine, v.contactEmail].filter(Boolean).join(' · ');
                 return (
                   <tr key={v.id} data-testid="venue-row" className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                     <td className="px-4 py-3 font-medium text-slate-800">

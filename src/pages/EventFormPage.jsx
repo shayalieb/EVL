@@ -112,7 +112,7 @@ function emptyForm() {
     guestCount: '',
     venue: {
       name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '',
-      contactName: '', contactEmail: '',
+      contactName: '', contactPhone: '', contactPhoneExt: '', contactEmail: '',
     },
     contactPhone: '', contactPhoneExt: '', contactEmail: '',
     startTime: '', endTime: '',
@@ -266,7 +266,7 @@ export default function EventFormPage() {
         // Defaults spread first so events saved before contactName/
         // contactEmail existed still get controlled ('') instead of
         // undefined values for them.
-        venue: { name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '', contactName: '', contactEmail: '', ...event.venue },
+        venue: { name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '', contactName: '', contactPhone: '', contactPhoneExt: '', contactEmail: '', ...event.venue },
         contactPhone: event.contactPhone, contactPhoneExt: event.contactPhoneExt || '', contactEmail: event.contactEmail,
         startTime: event.startTime, endTime: event.endTime,
         eventNote: event.eventNote || '',
@@ -450,6 +450,8 @@ export default function EventFormPage() {
         state: venue.state || '',
         zip: venue.zip || '',
         contactName: venue.contactName || '',
+        contactPhone: venue.contactPhone || '',
+        contactPhoneExt: venue.contactPhoneExt || '',
         contactEmail: venue.contactEmail || '',
         locationNote: venue.locationNote || '',
         loadInInfo: venue.loadInInfo || '',
@@ -1374,6 +1376,18 @@ export default function EventFormPage() {
                   <label className={labelClass}>Venue Contact</label>
                   <input value={form.venue.contactName} onChange={(e) => updateVenue('contactName', e.target.value)} data-testid="event-form-venue-contactname-input" className={inputClass} />
                 </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className={labelClass}>Venue Contact Phone</label>
+                    <input type="tel" value={form.venue.contactPhone} onChange={(e) => updateVenue('contactPhone', e.target.value)} data-testid="event-form-venue-contactphone-input" className={inputClass} />
+                  </div>
+                  <div className="w-20">
+                    <label className={labelClass}>Ext.</label>
+                    <input value={form.venue.contactPhoneExt} onChange={(e) => updateVenue('contactPhoneExt', e.target.value)} data-testid="event-form-venue-contactphoneext-input" className={inputClass} />
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Venue Contact Email</label>
                   <input type="email" value={form.venue.contactEmail} onChange={(e) => updateVenue('contactEmail', e.target.value)} data-testid="event-form-venue-contactemail-input" className={inputClass} />
