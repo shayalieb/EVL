@@ -25,12 +25,22 @@ function todayLocalDate() {
 // contractor after a gig; the caller owns what actually happens with the
 // collected values via `onAccept` (async — throwing shows the error inline
 // and keeps the modal open, same as a failed fetch would).
-export default function AcceptPaymentModal({ open, title = 'Accept Payment', amountDue, amountLabel = 'Amount due', initialValues, onClose, onAccept }) {
+//
+// `overtime` is optional and contractor-only (an invoice has no such
+// concept) — when passed, this becomes the primary place to reconcile
+// actual overtime hours worked, since that's usually only known once
+// you're actually paying the contractor. Editing hours here recomputes
+// Amount live; the resolved hours come back to the caller via
+// onAccept's `overtimeHours` so it can persist the same override
+// ContractorPickerRow's own OT Hours field writes to — one field, two
+// convenient places to edit it.
+export default function AcceptPaymentModal({ open, title = 'Accept Payment', amountDue, amountLabel = 'Amount due', initialValues, overtime, onClose, onAccept }) {
   const [amount, setAmount] = useState('');
   const [paymentDate, setPaymentDate] = useState(todayLocalDate());
   const [method, setMethod] = useState('');
   const [checkNumber, setCheckNumber] = useState('');
   const [memo, setMemo] = useState('');
+  const [overtimeHours, setOvertimeHours] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -41,6 +51,7 @@ export default function AcceptPaymentModal({ open, title = 'Accept Payment', amo
       setMethod(initialValues?.method || '');
       setCheckNumber(initialValues?.checkNumber || '');
       setMemo(initialValues?.memo || '');
+      setOvertimeHours(overtime ? String(overtime.hours || '') : '');
       setError('');
     }
     // Only meant to reset when the popover opens, not on every keystroke of
@@ -50,6 +61,13 @@ export default function AcceptPaymentModal({ open, title = 'Accept Payment', amo
   }, [open]);
 
   if (!open) return null;
+
+  function handleOvertimeHoursChange(value) {
+    setOvertimeHours(value);
+    // Recomputes Amount for you, same as amountDue's initial suggestion —
+    // still just a starting point, Amount stays freely editable afterward.
+    if (overtime) setAmount(String(overtime.baseAmount + (Number(value) || 0) * overtime.rate));
+  }
 
   async function handleAccept() {
     if (!(Number(amount) > 0)) {
@@ -77,6 +95,7 @@ export default function AcceptPaymentModal({ open, title = 'Accept Payment', amo
         method,
         checkNumber: method === 'check' ? checkNumber.trim() : undefined,
         memo: memo.trim() || undefined,
+        ...(overtime ? { overtimeHours: Number(overtimeHours) || 0 } : {}),
       });
       onClose();
     } catch (err) {
@@ -90,6 +109,24 @@ export default function AcceptPaymentModal({ open, title = 'Accept Payment', amo
     <Modal open={open} onClose={submitting ? undefined : onClose} title={title}>
       <div className="space-y-4">
         {error && <div data-testid="accept-payment-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
+
+        {overtime && (
+          <div>
+            <label className={labelClass}>Overtime Hours</label>
+            <input
+              type="number"
+              min="0"
+              step="0.5"
+              value={overtimeHours}
+              onChange={(e) => handleOvertimeHoursChange(e.target.value)}
+              data-testid="accept-payment-overtime-hours-input"
+              className={inputClass}
+            />
+            <div className="text-xs text-slate-400 mt-1">
+              {currency(overtime.baseAmount)} base + {overtimeHours || 0} hrs × {currency(overtime.rate)}/hr
+            </div>
+          </div>
+        )}
 
         <div>
           <label className={labelClass}>Amount</label>

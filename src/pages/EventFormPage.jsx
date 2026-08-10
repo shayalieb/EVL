@@ -20,7 +20,7 @@ import { renderEmailTemplate } from '../lib/mergeFields';
 import { uid } from '../lib/storage';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
 import { formatCurrency as currency, formatEventDate, formatEventTime } from '../lib/format';
-import { getPricingTiers, getBookingTotal } from '../lib/pricingTiers';
+import { getPricingTiers, getPricingTier, getTierPrice, getBookingTotal, getOvertimeHours } from '../lib/pricingTiers';
 import { getPrepContractors, renderPrepSheetEmail, requestsLabels } from '../lib/prepSheet';
 import { generatePrepSheetPdf, generatePrepSheetPdfAttachment } from '../lib/prepSheetPdf';
 import { listDocuments, uploadDocument, deleteDocument, documentDownloadUrl } from '../lib/documents';
@@ -560,6 +560,13 @@ export default function EventFormPage() {
   const payingBooking = form.contractorBookings.find((b) => b.contractorId === payingContractorId);
   const payingContractor = payingBooking ? contractors.find((c) => c.id === payingBooking.contractorId) : null;
   const payingAmountDue = payingBooking && payingContractor ? getBookingTotal(payingBooking, payingContractor) : undefined;
+  const payingTier = payingContractor ? getPricingTier(payingContractor, payingBooking?.pricingTierId) : null;
+  const payingTierTracksOvertime = Number(payingTier?.includedHours) > 0 && Number(payingTier?.overtimeRate) > 0;
+  const payingOvertime = payingTierTracksOvertime ? {
+    hours: getOvertimeHours(payingBooking, payingContractor),
+    rate: payingTier.overtimeRate,
+    baseAmount: getTierPrice(payingContractor, payingBooking.pricingTierId),
+  } : undefined;
 
   function getOrCreateInquiryStatus(label, color, bucket = 'tentative') {
     const existing = inquiryStatuses.find((s) => s.label.toLowerCase() === label.toLowerCase());
@@ -657,6 +664,11 @@ export default function EventFormPage() {
         paymentMethod: payload.method,
         paymentReference: payload.checkNumber || null,
         paymentMemo: payload.memo || null,
+        // Only present when AcceptPaymentModal was given an `overtime` prop
+        // (i.e. the tier actually tracks it) — reconciling hours at payment
+        // time writes back to the same override ContractorPickerRow's own
+        // OT Hours field uses, so both stay in sync.
+        ...(payload.overtimeHours !== undefined ? { overtimeHoursOverride: payload.overtimeHours } : {}),
       } : b)),
     }));
   }
@@ -2265,6 +2277,7 @@ export default function EventFormPage() {
         title={`Pay ${payingContractor ? `${payingContractor.firstName} ${payingContractor.lastName}` : 'Contractor'}`}
         amountDue={payingAmountDue}
         amountLabel="Rate"
+        overtime={payingOvertime}
         initialValues={payingBooking?.paymentStatus === 'paid' ? {
           amount: payingBooking.paidAmount,
           paymentDate: payingBooking.paidAt,
