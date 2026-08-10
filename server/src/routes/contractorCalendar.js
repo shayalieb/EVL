@@ -39,9 +39,7 @@ function publicGigInfo(event, booking, bucket) {
     eventDate: event.eventDate || '',
     startTime: booking?.startTime || event.startTime || '',
     endTime: booking?.endTime || event.endTime || '',
-    callTime: booking?.callTime || event.callTime || '',
-    soundcheckTime: event.soundcheckTime || '',
-    notes: event.notes || '',
+    callTime: booking?.callTime || '',
     venue: {
       name: event.venue?.name || '',
       address: event.venue?.address || '',
@@ -87,7 +85,7 @@ publicContractorCalendarRouter.get('/:token', calendarViewLimiter, asyncHandler(
     prisma.accountData.findUnique({ where: { accountId: link.accountId } }),
     prisma.event.findMany({
       where: { accountId: link.accountId, deletedAt: null },
-      select: { id: true, name: true, eventDate: true, startTime: true, endTime: true, callTime: true, soundcheckTime: true, notes: true, venue: true, contractorBookings: true },
+      select: { id: true, name: true, eventDate: true, startTime: true, endTime: true, venue: true, contractorBookings: true },
     }),
   ]);
   if (!contractor || contractor.accountId !== link.accountId) return res.status(404).json({ error: 'This contractor could not be found.' });
@@ -99,6 +97,7 @@ publicContractorCalendarRouter.get('/:token', calendarViewLimiter, asyncHandler(
     if (!booking) continue;
     const status = inquiryStatuses.find((s) => s.id === booking.inquiryStatusId);
     const bucket = statusBucket(status);
+    if (bucket === 'unavailable') continue; // not really "their" gig anymore
     if (bucket === 'confirmed' && !link.showConfirmed) continue;
     if (bucket === 'tentative' && !link.showTentative) continue;
     gigs.push(publicGigInfo(event, booking, bucket));
