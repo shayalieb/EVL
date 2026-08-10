@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import ContractorPickerRow from '../components/ContractorPickerRow';
 import ContractorModal from '../components/ContractorModal';
@@ -20,7 +20,7 @@ import { renderEmailTemplate } from '../lib/mergeFields';
 import { uid } from '../lib/storage';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
 import { formatCurrency as currency, formatEventDate, formatEventTime } from '../lib/format';
-import { getPricingTiers, getPricingTier, getTierPrice, getBookingTotal, getOvertimeHours } from '../lib/pricingTiers';
+import { getPricingTiers, getPricingTier, getTierPrice, getBookingTotal, getOvertimeHours, getOvertimeAmount } from '../lib/pricingTiers';
 import { getPrepContractors, renderPrepSheetEmail, requestsLabels } from '../lib/prepSheet';
 import { generatePrepSheetPdf, generatePrepSheetPdfAttachment } from '../lib/prepSheetPdf';
 import { listDocuments, uploadDocument, deleteDocument, documentDownloadUrl } from '../lib/documents';
@@ -392,13 +392,20 @@ export default function EventFormPage() {
   // Financials tab can pull its invoices for Revenue. Events created
   // directly (not converted from a booking) simply have no sourceBooking.
   const sourceBooking = event ? bookings.find((b) => b.convertedEventId === event.id) : null;
-  const [eventInvoices, setEventInvoices] = useState([]);
+  // Fetched account-wide (not just this event's sourceBooking) so the
+  // Financials tab's margin benchmark below can compare this gig against
+  // every other one — one fetch either way, listInvoices(undefined) is the
+  // account's full list per its own doc comment.
+  const [allInvoices, setAllInvoices] = useState([]);
   useEffect(() => {
-    if (!sourceBooking) { setEventInvoices([]); return; }
     let cancelled = false;
-    listInvoices(sourceBooking.id).then((list) => { if (!cancelled) setEventInvoices(list); }).catch(() => {});
+    listInvoices().then((list) => { if (!cancelled) setAllInvoices(list); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [sourceBooking?.id]);
+  }, []);
+  const eventInvoices = useMemo(
+    () => (sourceBooking ? allInvoices.filter((inv) => inv.bookingId === sourceBooking.id) : []),
+    [allInvoices, sourceBooking?.id]
+  );
 
   // Vendor email activity folded into the History popup — fetched lazily,
   // only while the modal is actually open, rather than on every page load,
@@ -525,6 +532,40 @@ export default function EventFormPage() {
   const availableContractorsForActiveTab = availableContractors.filter((c) => matchesActiveCategoryTab(c.id));
 
   const totalCost = computeEventTotalCost(form);
+
+  // Per-contractor cost breakdown feeding the Financials tab — Not Avail
+  // excluded, same reasoning as computeEventTotalCost (they're not actually
+  // being booked/paid). Base/overtime split and paid/outstanding come from
+  // this one pass so the totals below and the itemized list can't drift
+  // apart from each other.
+  const contractorCostRows = form.contractorBookings
+    .filter((b) => {
+      const status = inquiryStatuses.find((s) => s.id === b.inquiryStatusId);
+      return statusBucket(status) !== 'unavailable';
+    })
+    .map((b) => {
+      const c = contractors.find((x) => x.id === b.contractorId);
+      if (!c) return null;
+      const tier = getPricingTier(c, b.pricingTierId);
+      const base = getTierPrice(c, b.pricingTierId);
+      const overtime = getOvertimeAmount(b, c);
+      const isPaid = b.paymentStatus === 'paid';
+      return {
+        contractorId: b.contractorId,
+        name: `${c.firstName} ${c.lastName}`,
+        tierName: tier?.name,
+        base,
+        overtime,
+        total: base + overtime,
+        isPaid,
+        paidAmount: isPaid ? Number(b.paidAmount) || 0 : 0,
+      };
+    })
+    .filter(Boolean);
+  const baseCostTotal = contractorCostRows.reduce((sum, r) => sum + r.base, 0);
+  const overtimeCostTotal = contractorCostRows.reduce((sum, r) => sum + r.overtime, 0);
+  const contractorPaidTotal = contractorCostRows.reduce((sum, r) => sum + r.paidAmount, 0);
+  const contractorOutstanding = totalCost - contractorPaidTotal;
 
   // Party size defaults to 1 when blank (a guest being added mid-edit) so
   // the running totals never dip due to a momentarily-empty input.
@@ -2178,6 +2219,16 @@ export default function EventFormPage() {
               <div className="rounded-xl border border-slate-200 p-4">
                 <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Contractor Costs</div>
                 <div className="text-xl font-bold text-slate-800" data-testid="event-form-financials-contractor-costs">{currency(totalCost)}</div>
+                {overtimeCostTotal > 0 && (
+                  <div className="text-xs text-slate-400 mt-1" data-testid="event-form-financials-cost-breakdown">
+                    {currency(baseCostTotal)} base + {currency(overtimeCostTotal)} overtime
+                  </div>
+                )}
+                {totalCost > 0 && (
+                  <div className="text-xs text-slate-400 mt-1" data-testid="event-form-financials-contractor-paid">
+                    {currency(contractorPaidTotal)} paid · {currency(contractorOutstanding)} outstanding
+                  </div>
+                )}
               </div>
               <div className="rounded-xl border border-slate-200 p-4">
                 <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Other Expenses</div>
@@ -2195,6 +2246,37 @@ export default function EventFormPage() {
                 {profitMargin !== null && <span className="text-sm font-semibold text-slate-400 ml-2">({profitMargin.toFixed(1)}% margin)</span>}
               </span>
             </div>
+
+            {contractorCostRows.length > 0 && (
+              <div className="mb-6">
+                <h4 className="text-sm font-bold text-slate-700 mb-3">Contractor Breakdown</h4>
+                <div className="space-y-1.5">
+                  {contractorCostRows.map((r) => (
+                    <div
+                      key={r.contractorId}
+                      data-testid="event-form-financials-contractor-row"
+                      className="flex items-center justify-between gap-3 text-sm px-3 py-2 rounded-lg border border-slate-100 bg-slate-50/60"
+                    >
+                      <div className="min-w-0 truncate">
+                        <span className="font-medium text-slate-700">{r.name}</span>
+                        {r.tierName && <span className="text-xs text-slate-400 ml-1.5">{r.tierName}</span>}
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-slate-500">
+                          {currency(r.base)}{r.overtime > 0 ? ` + ${currency(r.overtime)} OT` : ''}
+                        </span>
+                        <span
+                          data-testid="event-form-financials-contractor-row-status"
+                          className={`text-xs font-semibold px-2 py-0.5 rounded-full ${r.isPaid ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}
+                        >
+                          {r.isPaid ? 'Paid' : 'Unpaid'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-sm font-bold text-slate-700">Other Expenses</h4>
