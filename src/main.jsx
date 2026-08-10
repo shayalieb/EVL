@@ -25,7 +25,17 @@ Sentry.init({
 // this case; reloading picks up the current index.html and its valid
 // chunk hashes. Guarded with sessionStorage so a genuinely broken deploy
 // (or offline tab) reloads once, not in a loop.
-window.addEventListener('vite:preloadError', () => {
+window.addEventListener('vite:preloadError', (event) => {
+  // Left un-prevented, this same failure also surfaces a second time as an
+  // uncaught promise rejection — Sentry would log both, making one stale
+  // tab look like two unrelated errors. The captureMessage below is the
+  // deliberate, single, low-severity record of it instead.
+  event.preventDefault();
+  Sentry.captureMessage('Stale chunk after deploy — reloading', {
+    level: 'info',
+    extra: { message: event.payload?.message },
+  });
+
   const key = 'vite-preload-reload-attempted';
   if (sessionStorage.getItem(key)) return;
   sessionStorage.setItem(key, '1');
