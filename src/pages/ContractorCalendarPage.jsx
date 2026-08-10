@@ -5,6 +5,9 @@ import { getContractorCalendarByToken, respondToGigByToken } from '../lib/contra
 import EventsCalendarView from '../components/events/EventsCalendarView';
 import { Skeleton, SkeletonTable } from '../components/ui/Skeleton';
 import Modal from '../components/ui/Modal';
+import { formatCurrency as currency } from '../lib/format';
+
+const PAYMENT_METHOD_LABELS = { ach: 'ACH', check: 'Check', card: 'Credit/Debit Card', other: 'Other' };
 
 const BUCKET_COLORS = [
   { id: 'confirmed', color: '#22c55e' },
@@ -96,7 +99,7 @@ export default function ContractorCalendarPage() {
   }
 
   const { contractor, businessInfo, gigs } = data;
-  const calendarEvents = gigs.map((g) => ({ ...g, eventStatus: g.bucket }));
+  const calendarEvents = gigs.map((g) => ({ ...g, eventStatus: g.bucket, paid: g.paymentStatus === 'paid' }));
 
   return (
     <div data-testid="contractor-calendar-page" className={`min-h-screen ${darkMode ? 'dark-backstage bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-800'} transition-colors duration-200`}>
@@ -152,6 +155,14 @@ export default function ContractorCalendarPage() {
                       >
                         {g.bucket === 'confirmed' ? 'Confirmed' : 'Pending'}
                       </span>
+                      {g.paymentStatus === 'paid' && (
+                        <span
+                          data-testid="contractor-calendar-gig-paid-badge"
+                          className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700"
+                        >
+                          💰 Paid
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-2">
                       <span>{g.eventDate ? new Date(`${g.eventDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Date TBD'}</span>
@@ -204,7 +215,7 @@ export default function ContractorCalendarPage() {
       </div>
 
       {selectedGig && (
-        <Modal title={selectedGig.name} onClose={() => setSelectedGig(null)} testId="contractor-gig-detail-modal">
+        <Modal open title={selectedGig.name} onClose={() => setSelectedGig(null)} testId="contractor-gig-detail-modal">
           <div className="space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
@@ -238,6 +249,21 @@ export default function ContractorCalendarPage() {
                 <span className="font-semibold text-slate-500 block">Performance End</span>
                 <span className="text-slate-800 font-medium">{selectedGig.endTime || 'TBD'}</span>
               </div>
+            </div>
+
+            <div className="space-y-1">
+              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Payment</div>
+              {selectedGig.paymentStatus === 'paid' ? (
+                <div data-testid="contractor-gig-detail-payment-paid" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs bg-indigo-50 text-indigo-700 p-2.5 rounded-lg border border-indigo-100">
+                  <span className="font-bold text-sm">💰 Paid{selectedGig.paidAmount != null ? ` — ${currency(selectedGig.paidAmount)}` : ''}</span>
+                  {selectedGig.paidAt && <span>{new Date(`${selectedGig.paidAt}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
+                  {selectedGig.paymentMethod && <span>{PAYMENT_METHOD_LABELS[selectedGig.paymentMethod] || selectedGig.paymentMethod}</span>}
+                </div>
+              ) : (
+                <div data-testid="contractor-gig-detail-payment-unpaid" className="text-xs text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  Not yet paid
+                </div>
+              )}
             </div>
 
             {selectedGig.venue?.name && (

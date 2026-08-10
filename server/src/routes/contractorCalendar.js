@@ -33,6 +33,7 @@ async function findLinkByToken(token) {
 // "narrow projection for a public route" reasoning as guests.js's
 // publicEventInfo, plus the derived `bucket` this route computes.
 function publicGigInfo(event, booking, bucket) {
+  const isPaid = booking?.paymentStatus === 'paid';
   return {
     id: event.id,
     name: event.name || '',
@@ -49,6 +50,13 @@ function publicGigInfo(event, booking, bucket) {
       notes: event.venue?.notes || '',
     },
     bucket,
+    // Manual payment tracking mirrors EventFormPage's markContractorPaid —
+    // only surface amount/date/method once actually marked paid, not the
+    // business's other bookkeeping fields (check number, memo).
+    paymentStatus: isPaid ? 'paid' : 'unpaid',
+    paidAmount: isPaid ? (booking.paidAmount ?? null) : null,
+    paidAt: isPaid ? (booking.paidAt ?? null) : null,
+    paymentMethod: isPaid ? (booking.paymentMethod ?? null) : null,
   };
 }
 
