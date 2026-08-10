@@ -60,6 +60,20 @@ const TABS = [
 
 const PAYMENT_METHOD_LABELS = { ach: 'ACH', check: 'Check', card: 'Card', other: 'Other' };
 
+// Default legal boilerplate for a fresh contract draft — an ordinary
+// section from here on (see withDefaultEsignSection below), so it's fully
+// editable/removable in SectionsEditor exactly like a hand-typed one.
+const ESIGN_SECTION_TITLE = 'Electronic Signature Consent';
+const ESIGN_SECTION_TEXT = 'By signing this document electronically, all parties agree that their electronic signature is the legal equivalent of a handwritten signature, and consent to conduct this transaction electronically. Electronic records of this agreement are as valid, binding, and enforceable as a signed paper original, consistent with the U.S. Electronic Signatures in Global and National Commerce Act (E-SIGN) and applicable state law.';
+
+// Appends the default e-signature section unless one's already present
+// (matched by title, so a user who's edited its wording isn't treated as
+// having a "different" section and given a duplicate).
+function withDefaultEsignSection(sections) {
+  if (sections.some((s) => s.title === ESIGN_SECTION_TITLE)) return sections;
+  return [...sections, { id: uid('section'), title: ESIGN_SECTION_TITLE, text: ESIGN_SECTION_TEXT, value: '' }];
+}
+
 // Mirrors EventFormPage's venue shape exactly — a booking's location carries
 // straight into the event created from it, so a partial object here would
 // leave that event's venue fields undefined (React controlled-input warnings).
@@ -733,9 +747,17 @@ export default function BookingFormPage() {
       // account-wide default when the proposal doesn't have any of its own
       // yet — that default is read-only now (see settings/TemplatesTab.jsx's
       // one-time migration into a real named template), nothing writes back
-      // to it anymore.
+      // to it anymore. Either way, ensure the e-signature disclosure is
+      // present — it belongs to the contract regardless of which path fed
+      // these sections in, since a proposal's own sections (Technical
+      // Rider, etc.) never carry it. withDefaultEsignSection is a no-op if
+      // it's already there (e.g. the legacy-default path, or the user's own
+      // template already has one), and it's just an ordinary section from
+      // here on — same edit/remove as anything else in SectionsEditor.
       setContractSections(
-        booking?.proposal?.sections?.length ? booking.proposal.sections : (currentUser.contractTemplate?.sections || [])
+        withDefaultEsignSection(
+          booking?.proposal?.sections?.length ? booking.proposal.sections : (currentUser.contractTemplate?.sections || [])
+        )
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

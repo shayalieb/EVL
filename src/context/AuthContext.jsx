@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { loadUserData } from '../lib/storage';
+import { loadUserData, uid } from '../lib/storage';
 import { buildSeedUserData, buildDefaultBookingStatuses } from '../lib/seed';
 import { createContractor } from '../lib/contractors';
 import { createClient } from '../lib/clients';
@@ -39,7 +39,18 @@ function seedBlob(profile) {
     lastName: profile.lastName,
     phone: profile.phone || '',
     businessInfo: { name: profile.businessName || '', address: '', phone: profile.phone || '', email: '', logo: '', accentColor: '#6366f1', documentLayout: 'classic', documentTextScale: 1 },
-    contractTemplate: { title: 'Event Contract', sections: [] },
+    // Pre-populated but ordinary — SectionsEditor treats it like any other
+    // section, so it's fully editable/removable from Settings > Templates
+    // or right on a booking's own Contract tab, same as a hand-typed one.
+    contractTemplate: {
+      title: 'Event Contract',
+      sections: [{
+        id: uid('section'),
+        title: 'Electronic Signature Consent',
+        text: 'By signing this document electronically, all parties agree that their electronic signature is the legal equivalent of a handwritten signature, and consent to conduct this transaction electronically. Electronic records of this agreement are as valid, binding, and enforceable as a signed paper original, consistent with the U.S. Electronic Signatures in Global and National Commerce Act (E-SIGN) and applicable state law.',
+        value: '',
+      }],
+    },
     // proposalTemplate comes from buildSeedUserData below (vertical-specific
     // section defaults for party_planning; empty for the others).
     ...buildSeedUserData(profile.vertical),
