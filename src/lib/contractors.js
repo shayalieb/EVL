@@ -19,17 +19,33 @@ export async function deleteContractorApi(id) {
   return apiFetch(`/contractors/${id}`, { method: 'DELETE' });
 }
 
-// Get-or-create — always returns a usable URL, same pattern as
-// src/lib/guests.js's getRsvpLink.
+// Get-or-create — always returns a usable link, same pattern as
+// src/lib/guests.js's getRsvpLink. Returns { calendarLink, showConfirmed,
+// showTentative } — the visibility flags come along so the caller can
+// initialize checkboxes without a second round trip.
 export async function getContractorCalendarLink(contractorId) {
-  const data = await apiFetch(`/contractors/${contractorId}/calendar-link`);
-  return data.calendarLink;
+  return apiFetch(`/contractors/${contractorId}/calendar-link`);
 }
 
 // Rotates the link's token — the previously-shared URL stops working.
 export async function regenerateContractorCalendarLink(contractorId) {
-  const data = await apiFetch(`/contractors/${contractorId}/calendar-link/regenerate`, { method: 'POST' });
-  return data.calendarLink;
+  return apiFetch(`/contractors/${contractorId}/calendar-link/regenerate`, { method: 'POST' });
+}
+
+// Which gig buckets this contractor is allowed to see on their own link —
+// unavailable/declined gigs are never shown regardless (see the server
+// route), only confirmed/tentative are owner-toggleable.
+export async function updateContractorCalendarLinkVisibility(contractorId, { showConfirmed, showTentative }) {
+  return apiFetch(`/contractors/${contractorId}/calendar-link`, {
+    method: 'PATCH',
+    body: JSON.stringify({ showConfirmed, showTentative }),
+  });
+}
+
+// Emails the contractor their own calendar link — requires an email on
+// file, 400s otherwise.
+export async function emailContractorCalendarLink(contractorId) {
+  return apiFetch(`/contractors/${contractorId}/calendar-link/email`, { method: 'POST' });
 }
 
 // ---- Public (unauthenticated, token-based — used by ContractorCalendarPage) ----

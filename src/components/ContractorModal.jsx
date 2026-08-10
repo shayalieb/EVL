@@ -5,7 +5,7 @@ import CurrencyInput from './ui/CurrencyInput';
 import { useData } from '../context/DataContext';
 import { uid } from '../lib/storage';
 import { getPricingTiers } from '../lib/pricingTiers';
-import { getContractorCalendarLink, regenerateContractorCalendarLink } from '../lib/contractors';
+import { getContractorCalendarLink, regenerateContractorCalendarLink, updateContractorCalendarLinkVisibility, emailContractorCalendarLink } from '../lib/contractors';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -30,6 +30,10 @@ export default function ContractorModal({ open, onClose, contractor }) {
   const [tierPendingDelete, setTierPendingDelete] = useState(null);
   const [calendarLink, setCalendarLink] = useState('');
   const [calendarLinkCopied, setCalendarLinkCopied] = useState(false);
+  const [showConfirmed, setShowConfirmed] = useState(true);
+  const [showTentative, setShowTentative] = useState(true);
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -50,14 +54,28 @@ export default function ContractorModal({ open, onClose, contractor }) {
       setTierPendingDelete(null);
       setCalendarLink('');
       setCalendarLinkCopied(false);
+      setShowConfirmed(true);
+      setShowTentative(true);
+      setEmailSending(false);
+      setEmailSent(false);
+      // Get-or-create eagerly (unlike a lazy fetch-on-copy) since the
+      // visibility checkboxes below need real state to reflect the moment
+      // the modal opens, not just once someone's clicked Copy/Email first.
+      if (contractor) {
+        getContractorCalendarLink(contractor.id)
+          .then((d) => {
+            setCalendarLink(d.calendarLink);
+            setShowConfirmed(d.showConfirmed);
+            setShowTentative(d.showTentative);
+          })
+          .catch(() => {}); // non-critical — Copy/Email below still work via their own fallback fetch
+      }
     }
   }, [open, contractor]);
 
-  // Get-or-create — the link is only actually minted server-side the first
-  // time someone copies it, same pattern as EventFormPage's RSVP link.
   async function handleCopyCalendarLink() {
     try {
-      const link = calendarLink || await getContractorCalendarLink(contractor.id);
+      const link = calendarLink || (await getContractorCalendarLink(contractor.id)).calendarLink;
       if (!calendarLink) setCalendarLink(link);
       await navigator.clipboard.writeText(link);
       setCalendarLinkCopied(true);
@@ -69,13 +87,44 @@ export default function ContractorModal({ open, onClose, contractor }) {
 
   async function handleRegenerateCalendarLink() {
     try {
-      const link = await regenerateContractorCalendarLink(contractor.id);
-      setCalendarLink(link);
-      await navigator.clipboard.writeText(link);
+      const d = await regenerateContractorCalendarLink(contractor.id);
+      setCalendarLink(d.calendarLink);
+      await navigator.clipboard.writeText(d.calendarLink);
       setCalendarLinkCopied(true);
       setTimeout(() => setCalendarLinkCopied(false), 2000);
     } catch (err) {
       setError(err.message || 'Failed to regenerate gig calendar link.');
+    }
+  }
+
+  async function handleToggleVisibility(field, value) {
+    const prevConfirmed = showConfirmed;
+    const prevTentative = showTentative;
+    if (field === 'showConfirmed') setShowConfirmed(value);
+    else setShowTentative(value);
+    try {
+      await updateContractorCalendarLinkVisibility(contractor.id, {
+        showConfirmed: field === 'showConfirmed' ? value : showConfirmed,
+        showTentative: field === 'showTentative' ? value : showTentative,
+      });
+    } catch (err) {
+      setShowConfirmed(prevConfirmed);
+      setShowTentative(prevTentative);
+      setError(err.message || 'Failed to update visibility.');
+    }
+  }
+
+  async function handleEmailCalendarLink() {
+    setEmailSending(true);
+    try {
+      const d = await emailContractorCalendarLink(contractor.id);
+      setCalendarLink(d.calendarLink);
+      setEmailSent(true);
+      setTimeout(() => setEmailSent(false), 2000);
+    } catch (err) {
+      setError(err.message || 'Failed to email gig calendar link.');
+    } finally {
+      setEmailSending(false);
     }
   }
 
@@ -152,28 +201,61 @@ export default function ContractorModal({ open, onClose, contractor }) {
         </div>
 
         {contractor && (
-          <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-            <div className="text-xs text-slate-500">
-              <span className="font-semibold text-slate-600">Gig calendar link</span> — a bookmarkable page showing this contractor their own pending/confirmed gigs.
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 space-y-2.5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-xs text-slate-500">
+                <span className="font-semibold text-slate-600">Gig calendar link</span> — a bookmarkable page showing this contractor their own gigs.
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleCopyCalendarLink}
+                  data-testid="contractor-modal-copy-calendar-link-button"
+                  className="px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50"
+                >
+                  {calendarLinkCopied ? 'Link Copied!' : 'Copy Link'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleEmailCalendarLink}
+                  disabled={!form.email || emailSending}
+                  title={!form.email ? 'Add an email address first' : 'Email this link to the contractor'}
+                  data-testid="contractor-modal-email-calendar-link-button"
+                  className="px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {emailSent ? 'Emailed!' : emailSending ? 'Sending…' : 'Email Link'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRegenerateCalendarLink}
+                  title="Invalidate the old link and copy a new one"
+                  data-testid="contractor-modal-regenerate-calendar-link-button"
+                  className="px-2 py-1.5 rounded-lg text-slate-400 hover:text-slate-600 text-xs"
+                >
+                  ↻
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={handleCopyCalendarLink}
-                data-testid="contractor-modal-copy-calendar-link-button"
-                className="px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50"
-              >
-                {calendarLinkCopied ? 'Link Copied!' : 'Copy Link'}
-              </button>
-              <button
-                type="button"
-                onClick={handleRegenerateCalendarLink}
-                title="Invalidate the old link and copy a new one"
-                data-testid="contractor-modal-regenerate-calendar-link-button"
-                className="px-2 py-1.5 rounded-lg text-slate-400 hover:text-slate-600 text-xs"
-              >
-                ↻
-              </button>
+            <div className="flex items-center gap-4 pt-1.5 border-t border-slate-200/70">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Contractor can see</span>
+              <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={showConfirmed}
+                  onChange={(e) => handleToggleVisibility('showConfirmed', e.target.checked)}
+                  data-testid="contractor-modal-show-confirmed-checkbox"
+                />
+                Confirmed gigs
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={showTentative}
+                  onChange={(e) => handleToggleVisibility('showTentative', e.target.checked)}
+                  data-testid="contractor-modal-show-tentative-checkbox"
+                />
+                Pending gigs
+              </label>
             </div>
           </div>
         )}

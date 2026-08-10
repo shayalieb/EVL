@@ -1017,6 +1017,14 @@ model ContractorCalendarLink {
   tokenHash   String @unique
   publicToken String @unique
 
+  // Owner-configurable — lets a business hide pending/tentative gigs from
+  // a contractor's own view (e.g. don't want them seeing an unconfirmed
+  // booking) without hiding confirmed ones too. Unavailable/declined gigs
+  // are never shown regardless of these flags (not really "theirs"
+  // anymore) — see the public route's filtering logic.
+  showConfirmed Boolean @default(true)
+  showTentative Boolean @default(true)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -98,6 +98,8 @@ publicContractorCalendarRouter.get('/:token', calendarViewLimiter, asyncHandler(
     const status = inquiryStatuses.find((s) => s.id === booking.inquiryStatusId);
     const bucket = statusBucket(status);
     if (bucket === 'unavailable') continue; // not really "their" gig anymore
+    if (bucket === 'confirmed' && !link.showConfirmed) continue;
+    if (bucket === 'tentative' && !link.showTentative) continue;
     gigs.push(publicGigInfo(event, bucket));
   }
   gigs.sort((a, b) => (a.eventDate || '').localeCompare(b.eventDate || ''));

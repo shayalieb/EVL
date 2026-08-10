@@ -5,12 +5,21 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
 import { createWithPreservedId } from '../lib/idPreservingCreate.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
+import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
 
 function frontendUrl() {
   return process.env.FRONTEND_URL || 'http://localhost:5173';
+}
+
+function serializeCalendarLink(link) {
+  return {
+    calendarLink: `${frontendUrl()}/gigs/${link.publicToken}`,
+    showConfirmed: link.showConfirmed,
+    showTentative: link.showTentative,
+  };
 }
 
 function serializeContractor(c) {
@@ -120,12 +129,37 @@ router.get('/:id/calendar-link', asyncHandler(async (req, res) => {
       data: { accountId: req.membership.accountId, contractorId: req.params.id, tokenHash: hashToken(token), publicToken: token },
     });
   }
-  res.json({ calendarLink: `${frontendUrl()}/gigs/${link.publicToken}` });
+  res.json(serializeCalendarLink(link));
+}));
+
+// Owner-configurable visibility (see the ContractorCalendarLink model
+// comment) — get-or-create first, same as the GET above, since a business
+// might toggle these before ever having copied/emailed the link.
+router.patch('/:id/calendar-link', asyncHandler(async (req, res) => {
+  const existing = await prisma.contractor.findUnique({ where: { id: req.params.id } });
+  if (!existing || existing.accountId !== req.membership.accountId) {
+    return res.status(404).json({ error: 'Contractor not found.' });
+  }
+
+  const { showConfirmed, showTentative } = req.body || {};
+  const data = {};
+  if (showConfirmed !== undefined) data.showConfirmed = !!showConfirmed;
+  if (showTentative !== undefined) data.showTentative = !!showTentative;
+
+  const token = generateToken();
+  const link = await prisma.contractorCalendarLink.upsert({
+    where: { accountId_contractorId: { accountId: req.membership.accountId, contractorId: req.params.id } },
+    update: data,
+    create: { accountId: req.membership.accountId, contractorId: req.params.id, tokenHash: hashToken(token), publicToken: token, ...data },
+  });
+  res.json(serializeCalendarLink(link));
 }));
 
 // Rotates the link's token — the previously-shared URL stops working (e.g.
 // a contractor lost their phone, or the link leaked), a fresh one is
-// returned to re-share.
+// returned to re-share. Visibility settings are untouched (not part of
+// `update` below), so regenerating doesn't reset what the contractor's
+// allowed to see.
 router.post('/:id/calendar-link/regenerate', asyncHandler(async (req, res) => {
   const existing = await prisma.contractor.findUnique({ where: { id: req.params.id } });
   if (!existing || existing.accountId !== req.membership.accountId) {
@@ -138,7 +172,49 @@ router.post('/:id/calendar-link/regenerate', asyncHandler(async (req, res) => {
     update: { tokenHash: hashToken(token), publicToken: token },
     create: { accountId: req.membership.accountId, contractorId: req.params.id, tokenHash: hashToken(token), publicToken: token },
   });
-  res.json({ calendarLink: `${frontendUrl()}/gigs/${link.publicToken}` });
+  res.json(serializeCalendarLink(link));
+}));
+
+// Emails the contractor their own calendar link (get-or-create first, same
+// as GET above — a business might email it before ever copying it).
+router.post('/:id/calendar-link/email', asyncHandler(async (req, res) => {
+  const existing = await prisma.contractor.findUnique({ where: { id: req.params.id } });
+  if (!existing || existing.accountId !== req.membership.accountId) {
+    return res.status(404).json({ error: 'Contractor not found.' });
+  }
+  if (!existing.email) {
+    return res.status(400).json({ error: 'This contractor has no email address on file.' });
+  }
+
+  let link = await prisma.contractorCalendarLink.findUnique({
+    where: { accountId_contractorId: { accountId: req.membership.accountId, contractorId: req.params.id } },
+  });
+  if (!link) {
+    const token = generateToken();
+    link = await prisma.contractorCalendarLink.create({
+      data: { accountId: req.membership.accountId, contractorId: req.params.id, tokenHash: hashToken(token), publicToken: token },
+    });
+  }
+
+  const accountData = await prisma.accountData.findUnique({ where: { accountId: req.membership.accountId } });
+  const businessInfo = accountData?.data?.businessInfo || {};
+  const fromName = businessInfo.name || 'GigWorks';
+  const calendarLink = `${frontendUrl()}/gigs/${link.publicToken}`;
+
+  await sendMail({
+    from: await resolveFromHeader({ accountId: req.membership.accountId, fromName, localPart: 'gigs' }),
+    to: existing.email,
+    subject: `Your gig calendar — ${fromName}`,
+    html: buildActionEmailHtml({
+      businessInfo,
+      heading: 'Your Gig Calendar',
+      bodyHtml: `<p>Hi ${escapeHtml(existing.firstName)}, here's your personal link to see your upcoming gigs with ${escapeHtml(fromName)} — bookmark it, or add it to your phone's home screen for quick access anytime.</p>`,
+      buttonText: 'View My Gigs',
+      buttonUrl: calendarLink,
+    }),
+  });
+
+  res.json(serializeCalendarLink(link));
 }));
 
 export default router;
