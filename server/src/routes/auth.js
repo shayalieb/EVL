@@ -8,7 +8,7 @@ import { allPermissions, getMembershipWithAccount, serializeMembership } from '.
 import { sendMail, buildFromHeader } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { MIN_PASSWORD_LENGTH, passwordTooWeak } from '../lib/password.js';
-import { VERTICALS } from '../lib/verticals.js';
+import { SIGNUP_VERTICALS } from '../lib/verticals.js';
 
 const router = Router();
 const SALT_ROUNDS = 12;
@@ -53,8 +53,10 @@ router.post('/signup', credentialsLimiter, asyncHandler(async (req, res) => {
   const normalizedEmail = email.trim().toLowerCase();
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   // Falls back to the schema default rather than 400ing on a missing/invalid
-  // value, so an old or cached signup form never hard-fails signup itself.
-  const accountVertical = VERTICALS.includes(vertical) ? vertical : undefined;
+  // value, so an old or cached signup form never hard-fails signup itself —
+  // same fallback for a currently-deactivated vertical (see
+  // SIGNUP_VERTICALS) as for a genuinely-invalid one.
+  const accountVertical = SIGNUP_VERTICALS.includes(vertical) ? vertical : undefined;
 
   try {
     const { user, membership, account } = await prisma.$transaction(async (tx) => {

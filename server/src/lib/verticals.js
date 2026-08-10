@@ -1,7 +1,14 @@
 // Canonical vertical list — the allowed values for Account.vertical
 // (server/prisma/schema.prisma) and the single source every vertical-gated
-// route/serializer reads from.
+// route/serializer reads from. Existing accounts on any of these keep
+// working exactly as before regardless of SIGNUP_VERTICALS below.
 export const VERTICALS = ['band_orchestra', 'party_planning', 'photography'];
+
+// Which verticals a NEW signup can currently choose — a separate,
+// temporary business gate from VERTICALS above (edit this list directly to
+// pause/resume accepting signups for a vertical; deactivated 2026-08-10 for
+// party_planning/photography, per the account owner, until reactivated).
+export const SIGNUP_VERTICALS = ['band_orchestra'];
 
 // Which verticals' tools/routes an account can actually use — its own
 // `vertical` default, plus everything else once a platform admin has

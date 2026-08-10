@@ -6,11 +6,15 @@ import { formatPhoneNumber } from '../lib/format';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
-// Keep in sync with server/src/lib/verticals.js's VERTICALS list.
+// Keep in sync with server/src/lib/verticals.js's VERTICALS list. `active`
+// gates new signups only (server/src/lib/verticals.js's SIGNUP_VERTICALS is
+// the real enforcement) — existing accounts on a deactivated vertical are
+// untouched. Flip back to true here + add back to SIGNUP_VERTICALS to
+// reactivate.
 const VERTICAL_OPTIONS = [
-  { id: 'band_orchestra', label: 'Band & Orchestra', description: 'Book musicians and crew for gigs' },
-  { id: 'party_planning', label: 'Event and Party Planning', description: 'Coordinate vendors for events' },
-  { id: 'photography', label: 'Photography', description: 'Manage shoots and shot lists' },
+  { id: 'band_orchestra', label: 'Band & Orchestra', description: 'Book musicians and crew for gigs', active: true },
+  { id: 'party_planning', label: 'Event and Party Planning', description: 'Coordinate vendors for events', active: false },
+  { id: 'photography', label: 'Photography', description: 'Manage shoots and shot lists', active: false },
 ];
 
 export default function AuthPage() {
@@ -169,15 +173,25 @@ export default function AuthPage() {
                   <button
                     key={opt.id}
                     type="button"
+                    disabled={!opt.active}
                     onClick={() => setVertical(opt.id)}
                     data-testid={`auth-signup-vertical-${opt.id}-button`}
                     className={`w-full text-left px-3 py-2 rounded-lg border text-sm transition-colors ${
-                      vertical === opt.id
+                      !opt.active
+                        ? 'border-slate-100 text-slate-300 cursor-not-allowed'
+                        : vertical === opt.id
                         ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
                         : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    <div className="font-semibold">{opt.label}</div>
+                    <div className="font-semibold flex items-center gap-2">
+                      {opt.label}
+                      {!opt.active && (
+                        <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-400">
+                          Not accepting signups
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-slate-400">{opt.description}</div>
                   </button>
                 ))}
