@@ -584,6 +584,15 @@ export default function EventFormPage() {
   // is tracked separately below for cash-in-hand visibility.
   const revenueTotal = eventInvoices.filter((inv) => inv.status !== 'void').reduce((sum, inv) => sum + (inv.total || 0), 0);
   const collectedTotal = eventInvoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0);
+  // Deposit lives on the sourceBooking (Booking.depositAmount/depositPaid/
+  // depositDueDate), not the invoice — a business collects it up front,
+  // often before any invoice exists, so it's the one piece of pre-gig cash
+  // flow the invoice-driven "collected so far" line above can't show.
+  const depositInfo = sourceBooking?.depositAmount ? {
+    amount: Number(sourceBooking.depositAmount) || 0,
+    paid: !!sourceBooking.depositPaid,
+    dueDate: sourceBooking.depositDueDate,
+  } : null;
   const otherExpensesTotal = (form.otherExpenses || []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const netProfit = revenueTotal - totalCost - otherExpensesTotal;
   const profitMargin = revenueTotal > 0 ? (netProfit / revenueTotal) * 100 : null;
@@ -2227,6 +2236,14 @@ export default function EventFormPage() {
                   <>
                     <div className="text-xl font-bold text-slate-800" data-testid="event-form-financials-revenue">{currency(revenueTotal)}</div>
                     <div className="text-xs text-slate-400 mt-1">{currency(collectedTotal)} collected so far</div>
+                    {depositInfo && (
+                      <div
+                        data-testid="event-form-financials-deposit"
+                        className={`text-xs mt-1 font-medium ${depositInfo.paid ? 'text-emerald-600' : 'text-amber-600'}`}
+                      >
+                        {currency(depositInfo.amount)} deposit {depositInfo.paid ? 'paid' : `due${depositInfo.dueDate ? ` ${formatEventDate(depositInfo.dueDate)}` : ''}`}
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div className="text-sm text-slate-400 mt-1">No linked invoices</div>
