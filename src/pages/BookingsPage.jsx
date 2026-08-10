@@ -244,6 +244,7 @@ export default function BookingsPage() {
                 <th className="px-4 py-3">Status</th>
                 <th className="hidden sm:table-cell px-4 py-3">Stage</th>
                 <th className="px-4 py-3">Client</th>
+                <th className="px-4 py-3">Event</th>
                 <th className="hidden sm:table-cell px-4 py-3">Follow-up</th>
                 <th className="px-4 py-3">Event Date</th>
                 <th className="hidden sm:table-cell px-4 py-3">Event Type</th>
@@ -255,7 +256,7 @@ export default function BookingsPage() {
             <tbody>
               {filteredBookings.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-slate-400">
+                  <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
                     {bookings.length === 0
                       ? 'No bookings yet. Add an inquiry or quote to start tracking the sales pipeline.'
                       : 'No bookings match your search or filters.'}
@@ -305,6 +306,21 @@ export default function BookingsPage() {
                           <span>{client ? `${client.firstName} ${client.lastName}` : '—'}</span>
                         )}
                       </div>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {b.eventName && (b.convertedEventId || canEdit) ? (
+                        <button
+                          type="button"
+                          onClick={() => (b.convertedEventId ? navigate(`/events/${b.convertedEventId}`) : openEdit(b))}
+                          title={b.convertedEventId ? 'Open event' : 'Open booking'}
+                          data-testid="booking-row-event-name-link"
+                          className="hover:text-indigo-600 hover:underline text-left"
+                        >
+                          {b.eventName}
+                        </button>
+                      ) : (
+                        b.eventName || <span className="text-slate-300">—</span>
+                      )}
                     </td>
                     <td className="hidden sm:table-cell px-4 py-3">
                       {b.nextFollowUpDate ? (
