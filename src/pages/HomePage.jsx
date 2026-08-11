@@ -148,7 +148,7 @@ export default function HomePage() {
       const evtBooking = bookings.find((b) => b.convertedEventId === evt.id);
       if (!evtBooking) continue;
       const evtRevenue = invoices
-        .filter((inv) => inv.bookingId === evtBooking.id && inv.status !== 'void')
+        .filter((inv) => inv.bookingId === evtBooking.id && inv.status !== 'void' && inv.status !== 'draft')
         .reduce((sum, inv) => sum + (inv.total || 0), 0);
       if (evtRevenue <= 0) continue;
       const evtCost = computeEventTotalCost(evt);

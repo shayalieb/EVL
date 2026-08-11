@@ -34,6 +34,14 @@ const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 const cardClass = 'bg-white rounded-2xl border border-slate-200 p-6';
 const cardTitleClass = 'text-base font-bold text-slate-800 mb-5';
+const INVOICE_STATUS_LABELS = { draft: 'Draft', sent: 'Sent', partial: 'Partial', paid: 'Paid', void: 'Void' };
+const INVOICE_STATUS_STYLES = {
+  draft: 'bg-slate-100 text-slate-500',
+  sent: 'bg-blue-100 text-blue-700',
+  partial: 'bg-amber-100 text-amber-700',
+  paid: 'bg-emerald-100 text-emerald-700',
+  void: 'bg-slate-100 text-slate-400',
+};
 
 // One collapsible group per contractor status bucket (Confirmed/Tentative/
 // Not Avail) on the Contractors tab — see src/lib/inquiryStatusBucket.js.
@@ -582,8 +590,13 @@ export default function EventFormPage() {
 
   // Revenue is the full invoiced total (not just what's been collected) so
   // the deal's value shows up as soon as an invoice goes out; "collected"
-  // is tracked separately below for cash-in-hand visibility.
-  const revenueTotal = eventInvoices.filter((inv) => inv.status !== 'void').reduce((sum, inv) => sum + (inv.total || 0), 0);
+  // is tracked separately below for cash-in-hand visibility. Draft invoices
+  // are excluded — they're still fully editable/deletable and were never
+  // actually sent to the client, so counting one here would overstate real
+  // revenue with something that isn't a commitment yet. Shown separately
+  // (draftTotal) instead of just silently vanishing.
+  const revenueTotal = eventInvoices.filter((inv) => inv.status !== 'void' && inv.status !== 'draft').reduce((sum, inv) => sum + (inv.total || 0), 0);
+  const draftTotal = eventInvoices.filter((inv) => inv.status === 'draft').reduce((sum, inv) => sum + (inv.total || 0), 0);
   const collectedTotal = eventInvoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0);
   // Deposit lives on the sourceBooking (Booking.depositAmount/depositPaid/
   // depositDueDate), not the invoice — a business collects it up front,
@@ -621,7 +634,7 @@ export default function EventFormPage() {
       const evtBooking = bookings.find((b) => b.convertedEventId === evt.id);
       if (!evtBooking) continue;
       const evtRevenue = allInvoices
-        .filter((inv) => inv.bookingId === evtBooking.id && inv.status !== 'void')
+        .filter((inv) => inv.bookingId === evtBooking.id && inv.status !== 'void' && inv.status !== 'draft')
         .reduce((sum, inv) => sum + (inv.total || 0), 0);
       if (evtRevenue <= 0) continue;
       const evtCost = computeEventTotalCost(evt);
@@ -2294,6 +2307,11 @@ export default function EventFormPage() {
                   <>
                     <div className="text-xl font-bold text-slate-800" data-testid="event-form-financials-revenue">{currency(revenueTotal)}</div>
                     <div className="text-xs text-slate-400 mt-1">{currency(collectedTotal)} collected so far</div>
+                    {draftTotal > 0 && (
+                      <div data-testid="event-form-financials-draft-total" className="text-xs text-slate-400 mt-1">
+                        {currency(draftTotal)} in draft (not yet sent)
+                      </div>
+                    )}
                     {depositInfo && (
                       <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                         <span
@@ -2379,6 +2397,40 @@ export default function EventFormPage() {
                 </div>
               )}
             </div>
+
+            {eventInvoices.length > 0 && (
+              <div className="mb-6">
+                <h4 className="text-sm font-bold text-slate-700 mb-3">Invoice Breakdown</h4>
+                <div className="space-y-1.5">
+                  {[...eventInvoices].sort((a, b) => (a.number ?? Infinity) - (b.number ?? Infinity)).map((inv) => (
+                    <button
+                      key={inv.id}
+                      type="button"
+                      onClick={() => navigate(`/bookings/${inv.bookingId}`)}
+                      data-testid="event-form-financials-invoice-row"
+                      className="w-full flex items-center justify-between gap-3 text-sm px-3 py-2 rounded-lg border border-slate-100 bg-slate-50/60 hover:bg-slate-100/60 text-left"
+                    >
+                      <div className="min-w-0 truncate">
+                        <span className="font-medium text-slate-700">{inv.recipientName || `Invoice #${inv.number ?? '—'}`}</span>
+                        {inv.dueDate && <span className="text-xs text-slate-400 ml-1.5">Due {formatEventDate(inv.dueDate.slice(0, 10))}</span>}
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-slate-500">
+                          {currency(inv.total)}
+                          {inv.status === 'partial' && ` (${currency(inv.paidAmount)} paid)`}
+                        </span>
+                        <span
+                          data-testid="event-form-financials-invoice-row-status"
+                          className={`text-xs font-semibold px-2 py-0.5 rounded-full ${INVOICE_STATUS_STYLES[inv.status] || 'bg-slate-100 text-slate-500'}`}
+                        >
+                          {INVOICE_STATUS_LABELS[inv.status] || inv.status}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {contractorCostRows.length > 0 && (
               <div className="mb-6">
