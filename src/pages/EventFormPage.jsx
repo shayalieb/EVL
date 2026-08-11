@@ -597,6 +597,31 @@ export default function EventFormPage() {
   const netProfit = revenueTotal - totalCost - otherExpensesTotal;
   const profitMargin = revenueTotal > 0 ? (netProfit / revenueTotal) * 100 : null;
 
+  // Average margin across every OTHER event in the account that has actual
+  // invoiced revenue — "this gig: 34% vs. your average: 41%" is a much
+  // more useful number than the margin alone, which says nothing about
+  // whether it's a good result for this business. Excludes the current
+  // event (comparing it to itself would be meaningless) and anything with
+  // no revenue (an unbooked/unconverted event has no real margin to
+  // compare). Uses computeEventTotalCost, same as this event's own
+  // totalCost, so overtime is folded into every gig's cost the same way.
+  const marginBenchmark = useMemo(() => {
+    const margins = [];
+    for (const evt of events) {
+      if (evt.id === event?.id) continue;
+      const evtBooking = bookings.find((b) => b.convertedEventId === evt.id);
+      if (!evtBooking) continue;
+      const evtRevenue = allInvoices
+        .filter((inv) => inv.bookingId === evtBooking.id && inv.status !== 'void')
+        .reduce((sum, inv) => sum + (inv.total || 0), 0);
+      if (evtRevenue <= 0) continue;
+      const evtCost = computeEventTotalCost(evt);
+      margins.push(((evtRevenue - evtCost) / evtRevenue) * 100);
+    }
+    if (!margins.length) return null;
+    return margins.reduce((sum, m) => sum + m, 0) / margins.length;
+  }, [events, bookings, allInvoices, event?.id, computeEventTotalCost]);
+
   // "Actual" once both sides of the P&L are actually settled, not just
   // planned: every confirmed contractor is paid (Tentative/Not Avail don't
   // count — they're not committed spend yet) and every real invoice (not a
@@ -2269,24 +2294,35 @@ export default function EventFormPage() {
               </div>
             </div>
 
-            <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 mb-6 flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-slate-700">Net Profit</span>
+            <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 mb-6">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-slate-700">Net Profit</span>
+                  <span
+                    data-testid="event-form-financials-settlement-badge"
+                    title={isActualFinancials ? 'Every confirmed contractor is paid and every invoice is paid — this is realized, not estimated.' : 'Based on tier prices and invoiced amounts, not yet fully paid/collected — will shift as contractors get paid and invoices settle.'}
+                    className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${isActualFinancials ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}
+                  >
+                    {isActualFinancials ? 'Actual' : 'Projected'}
+                  </span>
+                </div>
                 <span
-                  data-testid="event-form-financials-settlement-badge"
-                  title={isActualFinancials ? 'Every confirmed contractor is paid and every invoice is paid — this is realized, not estimated.' : 'Based on tier prices and invoiced amounts, not yet fully paid/collected — will shift as contractors get paid and invoices settle.'}
-                  className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${isActualFinancials ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}
+                  data-testid="event-form-financials-net-profit"
+                  className={`text-2xl font-bold ${netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}
                 >
-                  {isActualFinancials ? 'Actual' : 'Projected'}
+                  {currency(netProfit)}
+                  {profitMargin !== null && <span className="text-sm font-semibold text-slate-400 ml-2">({profitMargin.toFixed(1)}% margin)</span>}
                 </span>
               </div>
-              <span
-                data-testid="event-form-financials-net-profit"
-                className={`text-2xl font-bold ${netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}
-              >
-                {currency(netProfit)}
-                {profitMargin !== null && <span className="text-sm font-semibold text-slate-400 ml-2">({profitMargin.toFixed(1)}% margin)</span>}
-              </span>
+              {profitMargin !== null && marginBenchmark !== null && (
+                <div data-testid="event-form-financials-benchmark" className="text-xs text-slate-400 mt-2 text-right">
+                  Your average across other gigs:{' '}
+                  <span className={`font-semibold ${profitMargin >= marginBenchmark ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    {marginBenchmark.toFixed(1)}%
+                  </span>
+                  {' '}({profitMargin >= marginBenchmark ? 'above' : 'below'} average)
+                </div>
+              )}
             </div>
 
             {contractorCostRows.length > 0 && (
