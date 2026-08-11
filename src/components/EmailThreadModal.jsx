@@ -8,6 +8,12 @@ const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm 
 
 const CONTACT_CHANNELS = ['Phone Call', 'Text Message', 'In Person', 'Other'];
 
+const AI_CLASSIFICATION_BADGE = {
+  confirmed: { label: 'AI: Confirmed', className: 'bg-emerald-100 text-emerald-700' },
+  declined: { label: 'AI: Declined', className: 'bg-red-100 text-red-700' },
+  ambiguous: { label: 'Needs Review', className: 'bg-amber-100 text-amber-700' },
+};
+
 function formatTimestamp(iso) {
   return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
@@ -117,7 +123,17 @@ export default function EmailThreadModal({ open, onClose, eventId, contractorId,
                       m.direction === 'outbound' ? 'bg-indigo-100 text-slate-800' : 'bg-slate-100 text-slate-800'
                     }`}
                   >
-                    <div className={`text-xs font-semibold mb-1 ${m.direction === 'outbound' ? 'text-indigo-500' : 'opacity-70'}`}>{m.subject}</div>
+                    <div className={`flex items-center gap-1.5 mb-1 ${m.direction === 'outbound' ? 'text-indigo-500' : 'opacity-70'}`}>
+                      <span className="text-xs font-semibold">{m.subject}</span>
+                      {m.direction === 'inbound' && AI_CLASSIFICATION_BADGE[m.aiClassification] && (
+                        <span
+                          data-testid="email-thread-ai-classification-badge"
+                          className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${AI_CLASSIFICATION_BADGE[m.aiClassification].className}`}
+                        >
+                          {AI_CLASSIFICATION_BADGE[m.aiClassification].label}
+                        </span>
+                      )}
+                    </div>
                     <div className="whitespace-pre-wrap break-words" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(m.body) }} />
                     <div className={`text-[10px] mt-1.5 ${m.direction === 'outbound' ? 'text-indigo-400' : 'text-slate-400'}`}>
                       {formatTimestamp(m.createdAt)}

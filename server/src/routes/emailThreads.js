@@ -21,6 +21,7 @@ function serializeMessage(m) {
     sentByUserId: m.sentByUserId,
     readAt: m.readAt,
     createdAt: m.createdAt,
+    aiClassification: m.aiClassification,
   };
 }
 

@@ -186,6 +186,12 @@ model EmailMessage {
   readAt    DateTime? // inbound-only; null = unread
   createdAt DateTime  @default(now())
 
+  // inbound-only — Claude's read on whether this reply means the contractor
+  // is confirming or declining the gig. 'confirmed' | 'declined' | 'ambiguous',
+  // or null if classification hasn't run (outbound/manual messages, or the
+  // classifier errored/was unavailable). See emailReplyClassifier.js.
+  aiClassification String?
+
   @@index([threadId, createdAt])
 }
 

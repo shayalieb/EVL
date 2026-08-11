@@ -5,6 +5,9 @@ import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getResendClient } from '../lib/resend.js';
 import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
+import { stripQuotedText, stripQuotedHtml } from '../lib/emailQuoteStrip.js';
+import { classifyContractorReply } from '../lib/emailReplyClassifier.js';
+import { applyAiReplyClassification } from '../lib/contractorAiStatusUpdate.js';
 
 const router = Router();
 
@@ -32,6 +35,36 @@ function safeReplyText(full) {
   if (full?.text) return full.text;
   if (full?.html) return sanitizeHtml(full.html, { allowedTags: [], allowedAttributes: {} });
   return '';
+}
+
+function toPlainText(html) {
+  return sanitizeHtml(html || '', { allowedTags: [], allowedAttributes: {} });
+}
+
+// Strips the quoted thread history out of an inbound contractor reply so
+// only their new words are stored/shown/classified — see
+// emailQuoteStrip.js. Returns the HTML to store as EmailMessage.body (same
+// permissive-tags trust boundary as before quote-stripping was added —
+// EmailThreadModal.jsx sanitizes with DOMPurify at render time) and the
+// plain text to feed the AI classifier.
+function cleanReplyContent(full) {
+  const plainReply = full?.text
+    ? stripQuotedText(full.text)
+    : stripQuotedText(toPlainText(full?.html));
+
+  let storedBody = full?.html
+    ? stripQuotedHtml(full.html, { allowedTags: false, allowedAttributes: false, allowVulnerableTags: true })
+    : escapeHtml(plainReply);
+
+  // Stripping can occasionally consume the whole message (e.g. a bottom-post
+  // reply, or a client that doesn't mark quotes in a way we recognize) — an
+  // empty bubble is worse than an unstripped one, so fall back to the raw
+  // body rather than show nothing.
+  if (!toPlainText(storedBody).trim() && full?.html) {
+    storedBody = full.html;
+  }
+
+  return { storedBody, plainReply };
 }
 
 function extractThreadId(addresses) {
@@ -152,6 +185,28 @@ router.post('/resend', asyncHandler(async (req, res) => {
     return res.json({ ok: true });
   }
 
+  const { storedBody, plainReply } = cleanReplyContent(full);
+
+  const [contractor, eventRecord] = await Promise.all([
+    prisma.contractor.findUnique({ where: { id: thread.contractorId } }),
+    prisma.event.findUnique({ where: { id: thread.eventId } }),
+  ]);
+  const contractorName = contractor ? [contractor.firstName, contractor.lastName].filter(Boolean).join(' ') : null;
+
+  // Best-effort — a classifier failure (no API key yet, no credits, rate
+  // limit, network error) should never block storing the reply itself.
+  let aiClassification = null;
+  try {
+    aiClassification = await classifyContractorReply({
+      replyText: plainReply,
+      contractorName,
+      eventName: eventRecord?.name,
+      eventDate: eventRecord?.eventDate,
+    });
+  } catch (err) {
+    console.error(`AI reply classification failed for thread ${thread.id}:`, err);
+  }
+
   try {
     await prisma.emailMessage.create({
       data: {
@@ -160,14 +215,39 @@ router.post('/resend', asyncHandler(async (req, res) => {
         fromAddress: full?.from || event.data.from,
         toAddress: thread.contractorEmail,
         subject: full?.subject || event.data.subject || '',
-        body: full?.html || full?.text || '',
+        body: storedBody,
         resendMessageId: event.data.email_id,
         inReplyTo: full?.headers?.['in-reply-to'] || null,
+        aiClassification,
       },
     });
     await prisma.emailThread.update({ where: { id: thread.id }, data: { lastMessageAt: new Date() } });
   } catch (err) {
     if (err.code !== 'P2002') throw err; // duplicate webhook delivery — idempotent no-op
+    return res.json({ ok: true });
+  }
+
+  // Confident (non-ambiguous) classification — try to auto-update the
+  // contractor's booking status. Also best-effort: this is a bonus on top of
+  // the message already being safely stored above, not a requirement for
+  // this webhook to succeed.
+  if (eventRecord && (aiClassification === 'confirmed' || aiClassification === 'declined')) {
+    try {
+      const accountData = await prisma.accountData.findUnique({ where: { accountId: thread.accountId } });
+      const inquiryStatuses = accountData?.data?.inquiryStatuses || [];
+      const update = applyAiReplyClassification({
+        event: eventRecord,
+        inquiryStatuses,
+        contractorId: thread.contractorId,
+        classification: aiClassification,
+        contractorName,
+      });
+      if (update) {
+        await prisma.event.update({ where: { id: eventRecord.id }, data: update });
+      }
+    } catch (err) {
+      console.error(`Failed to apply AI status update for thread ${thread.id}:`, err);
+    }
   }
 
   res.json({ ok: true });

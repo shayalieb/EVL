@@ -6,6 +6,7 @@ const TYPE_LABELS = {
   deleted: 'Deleted',
   emailed: 'Emailed vendor',
   'email-reply': 'Vendor replied',
+  'ai-status-update': 'AI status update',
 };
 
 function formatWhen(at) {

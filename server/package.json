@@ -13,6 +13,7 @@
     "backfill:storage": "node scripts/backfillFileStorage.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.116.0",
     "@prisma/client": "^5.20.0",
     "@quixo3/prisma-session-store": "^3.1.13",
     "@sentry/node": "^10.69.0",
