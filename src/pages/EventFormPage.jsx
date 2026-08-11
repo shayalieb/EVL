@@ -616,6 +616,12 @@ export default function EventFormPage() {
   } : null;
   const depositOverdue = !!depositInfo && !depositInfo.paid && depositInfo.daysUntilDue !== null && depositInfo.daysUntilDue < 0;
   const otherExpensesTotal = (form.otherExpenses || []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  // Same paid/outstanding split contractor costs already have — an "Other
+  // Expense" (venue rental, permits, rented equipment) is still a real
+  // liability the moment it's logged, but whether it's actually been paid
+  // is a separate, worth-tracking fact, same reasoning as contractor pay.
+  const otherExpensesPaidTotal = (form.otherExpenses || []).reduce((sum, e) => sum + (e.paid ? Number(e.amount) || 0 : 0), 0);
+  const otherExpensesOutstanding = otherExpensesTotal - otherExpensesPaidTotal;
   const netProfit = revenueTotal - totalCost - otherExpensesTotal;
   const profitMargin = revenueTotal > 0 ? (netProfit / revenueTotal) * 100 : null;
 
@@ -651,10 +657,13 @@ export default function EventFormPage() {
   // projection even if everyone already-confirmed has been paid), and every
   // real invoice (not a still-editable draft, not void) is fully paid.
   // Not Avail doesn't count toward either — excluded from cost entirely,
-  // same as computeEventTotalCost. Vacuously true with nothing to settle on
-  // a side, so "no contractors yet" doesn't block it — but at least one
-  // side needs real activity, or a brand-new empty event would misleadingly
-  // show as "Actual" from having nothing to reconcile.
+  // same as computeEventTotalCost. Every logged Other Expense being marked
+  // paid is the third leg of the same idea — an unpaid rental/permit is
+  // just as much an unsettled liability as an unpaid contractor. Vacuously
+  // true with nothing to settle on a side, so "no contractors/expenses yet"
+  // doesn't block it — but at least one side needs real activity, or a
+  // brand-new empty event would misleadingly show as "Actual" from having
+  // nothing to reconcile.
   const confirmedContractorBookings = form.contractorBookings.filter(
     (b) => statusBucket(inquiryStatuses.find((s) => s.id === b.inquiryStatusId)) === 'confirmed'
   );
@@ -664,8 +673,10 @@ export default function EventFormPage() {
   const settledInvoices = eventInvoices.filter((inv) => inv.status !== 'void' && inv.status !== 'draft');
   const costsSettled = tentativeContractorBookings.length === 0 && confirmedContractorBookings.every((b) => b.paymentStatus === 'paid');
   const revenueSettled = settledInvoices.every((inv) => inv.status === 'paid');
-  const hasFinancialActivity = confirmedContractorBookings.length > 0 || tentativeContractorBookings.length > 0 || settledInvoices.length > 0;
-  const isActualFinancials = hasFinancialActivity && costsSettled && revenueSettled;
+  const expensesSettled = (form.otherExpenses || []).every((e) => e.paid);
+  const hasFinancialActivity = confirmedContractorBookings.length > 0 || tentativeContractorBookings.length > 0
+    || settledInvoices.length > 0 || (form.otherExpenses || []).length > 0;
+  const isActualFinancials = hasFinancialActivity && costsSettled && revenueSettled && expensesSettled;
 
   // Writes straight to the booking (not local form state, unlike most of
   // this page) — deposit fields live on sourceBooking, a different record
@@ -2364,6 +2375,11 @@ export default function EventFormPage() {
               <div className="rounded-xl border border-slate-200 p-4">
                 <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Other Expenses</div>
                 <div className="text-xl font-bold text-slate-800" data-testid="event-form-financials-other-expenses">{currency(otherExpensesTotal)}</div>
+                {otherExpensesTotal > 0 && (
+                  <div className="text-xs text-slate-400 mt-1" data-testid="event-form-financials-other-expenses-paid">
+                    {currency(otherExpensesPaidTotal)} paid · {currency(otherExpensesOutstanding)} outstanding
+                  </div>
+                )}
               </div>
             </div>
 
@@ -2373,7 +2389,7 @@ export default function EventFormPage() {
                   <span className="text-sm font-bold text-slate-700">Net Profit</span>
                   <span
                     data-testid="event-form-financials-settlement-badge"
-                    title={isActualFinancials ? 'Every contractor is resolved (Confirmed & paid, or Not Avail) and every invoice is paid — this is realized, not estimated.' : 'Based on tier prices and invoiced amounts — will shift until every contractor is resolved (none left Tentative) and paid, and invoices settle.'}
+                    title={isActualFinancials ? 'Every contractor is resolved (Confirmed & paid, or Not Avail), every invoice is paid, and every expense is marked paid — this is realized, not estimated.' : 'Based on tier prices and invoiced amounts — will shift until every contractor is resolved (none left Tentative) and paid, every invoice settles, and every expense is marked paid.'}
                     className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${isActualFinancials ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}
                   >
                     {isActualFinancials ? 'Actual' : 'Projected'}
@@ -2499,6 +2515,15 @@ export default function EventFormPage() {
                       data-testid="event-form-expense-amount-input"
                       className={`w-32 ${inputClass}`}
                     />
+                    <label className="shrink-0 flex items-center gap-1.5 text-xs text-slate-500">
+                      <input
+                        type="checkbox"
+                        checked={!!exp.paid}
+                        onChange={(e) => updateOtherExpense(exp.id, { paid: e.target.checked })}
+                        data-testid="event-form-expense-paid-checkbox"
+                      />
+                      Paid
+                    </label>
                     <button
                       type="button"
                       onClick={() => removeOtherExpense(exp.id)}
