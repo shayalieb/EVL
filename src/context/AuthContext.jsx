@@ -167,14 +167,45 @@ export function AuthProvider({ children }) {
       // first login since business data moved from this browser's
       // localStorage into the shared account backend. In the latter case,
       // reuse whatever was already entered here so it isn't lost.
-      blob = loadUserData(user.id) || seedBlob(user);
-      if (blob.contractors?.length) blob = await migrateContractorsOutOfBlob(blob);
-      if (blob.clients?.length) blob = await migrateClientsOutOfBlob(blob);
-      if (blob.bookings?.length) blob = await migrateBookingsOutOfBlob(blob);
-      if (blob.events?.length) blob = await migrateEventsOutOfBlob(blob);
-      const created = await apiFetch('/account-data', { method: 'PUT', body: JSON.stringify({ data: blob }) });
-      versionRef.current = created.version;
-      setSizeWarning(created.sizeWarning || null);
+      const candidate = loadUserData(user.id) || seedBlob(user);
+
+      // Claim the account-data row *before* migrating any embedded
+      // contractors/clients/bookings/events into their own tables. Those
+      // migrations make real, undeduplicated POST /contractors, /events,
+      // etc. calls — if two hydrate() calls raced here (two tabs, a fast
+      // reload mid-hydrate), both would otherwise seed and migrate their
+      // own independent copies of the same sample/local data. PUT
+      // /account-data's create path is protected by AccountData.accountId's
+      // unique constraint (see accountData.js), so only the winner of this
+      // PUT proceeds past it — the loser adopts the winner's real data
+      // instead of seeding at all.
+      let claimed = true;
+      try {
+        const created = await apiFetch('/account-data', { method: 'PUT', body: JSON.stringify({ data: candidate }) });
+        versionRef.current = created.version;
+        setSizeWarning(created.sizeWarning || null);
+        blob = candidate;
+      } catch (err) {
+        if (err.status !== 409 || !err.body) throw err;
+        claimed = false;
+        blob = err.body.data;
+        versionRef.current = err.body.version;
+        setSizeWarning(null);
+      }
+
+      if (claimed) {
+        let migrated = blob;
+        if (migrated.contractors?.length) migrated = await migrateContractorsOutOfBlob(migrated);
+        if (migrated.clients?.length) migrated = await migrateClientsOutOfBlob(migrated);
+        if (migrated.bookings?.length) migrated = await migrateBookingsOutOfBlob(migrated);
+        if (migrated.events?.length) migrated = await migrateEventsOutOfBlob(migrated);
+        if (migrated !== blob) {
+          const saved = await apiFetch('/account-data', { method: 'PUT', body: JSON.stringify({ data: migrated, version: versionRef.current }) });
+          versionRef.current = saved.version;
+          setSizeWarning(saved.sizeWarning || null);
+        }
+        blob = migrated;
+      }
     }
     if (!blob.bookingStatuses) {
       // Backfill accounts created before Bookings existed so the status
