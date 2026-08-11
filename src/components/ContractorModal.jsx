@@ -345,7 +345,11 @@ export default function ContractorModal({ open, onClose, contractor }) {
                     onChange={(e) => updateTier(tier.id, { includedHours: e.target.value })}
                     placeholder="0"
                     data-testid="contractor-modal-tier-included-hours-input"
-                    className={`${inputClass} w-16 py-1`}
+                    // max-w- not w-16: inputClass bakes in w-full, which
+                    // wins the cascade over a plain width utility applied
+                    // alongside it (same fix as EventFormPage's expense
+                    // amount field — see that comment for the mechanism).
+                    className={`${inputClass} max-w-[4rem] py-1`}
                   />
                   <span className="shrink-0">hrs, overtime</span>
                   <CurrencyInput

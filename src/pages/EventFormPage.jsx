@@ -696,7 +696,7 @@ export default function EventFormPage() {
   }
 
   function addOtherExpense() {
-    setForm((f) => ({ ...f, otherExpenses: [...(f.otherExpenses || []), { id: uid('expense'), label: '', amount: '' }] }));
+    setForm((f) => ({ ...f, otherExpenses: [...(f.otherExpenses || []), { id: uid('expense'), name: '', description: '', amount: '' }] }));
   }
   function updateOtherExpense(id, patch) {
     setForm((f) => ({ ...f, otherExpenses: f.otherExpenses.map((e) => (e.id === id ? { ...e, ...patch } : e)) }));
@@ -2497,42 +2497,60 @@ export default function EventFormPage() {
             ) : (
               <div className="space-y-2">
                 {form.otherExpenses.map((exp) => (
-                  <div key={exp.id} data-testid="event-form-expense-row" className="flex items-center gap-2">
-                    <input
-                      value={exp.label}
-                      onChange={(e) => updateOtherExpense(exp.id, { label: e.target.value })}
-                      placeholder="e.g. Venue rental"
-                      data-testid="event-form-expense-label-input"
-                      className={`flex-1 ${inputClass}`}
-                    />
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={exp.amount}
-                      onChange={(e) => updateOtherExpense(exp.id, { amount: e.target.value })}
-                      placeholder="0.00"
-                      data-testid="event-form-expense-amount-input"
-                      className={`w-32 ${inputClass}`}
-                    />
-                    <label className="shrink-0 flex items-center gap-1.5 text-xs text-slate-500">
+                  <div key={exp.id} data-testid="event-form-expense-row" className="border border-slate-200 rounded-lg p-2.5 space-y-2">
+                    <div className="flex items-center gap-2">
                       <input
-                        type="checkbox"
-                        checked={!!exp.paid}
-                        onChange={(e) => updateOtherExpense(exp.id, { paid: e.target.checked })}
-                        data-testid="event-form-expense-paid-checkbox"
+                        // exp.label is a fallback read for expenses saved
+                        // before this field was split into name/description —
+                        // never written to going forward.
+                        value={exp.name ?? exp.label ?? ''}
+                        onChange={(e) => updateOtherExpense(exp.id, { name: e.target.value })}
+                        placeholder="Name (e.g. Venue rental)"
+                        data-testid="event-form-expense-name-input"
+                        className={`flex-1 font-medium ${inputClass}`}
                       />
-                      Paid
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => removeOtherExpense(exp.id)}
-                      data-testid="event-form-expense-remove-button"
-                      className="shrink-0 w-9 h-9 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
-                      aria-label="Remove expense"
-                    >
-                      ✕
-                    </button>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={exp.amount}
+                        onChange={(e) => updateOtherExpense(exp.id, { amount: e.target.value })}
+                        placeholder="0.00"
+                        data-testid="event-form-expense-amount-input"
+                        // max-w- not w-32: inputClass bakes in w-full, and a
+                        // plain width utility loses that cascade fight (its
+                        // width:100% becomes this item's flex-basis since
+                        // it has no explicit flex-* of its own, ballooning
+                        // it and starving the sibling name input — same
+                        // fix already used by guestCount's max-w-[10rem]).
+                        className={`max-w-[8rem] ${inputClass}`}
+                      />
+                      <label className="shrink-0 flex items-center gap-1.5 text-xs text-slate-500">
+                        <input
+                          type="checkbox"
+                          checked={!!exp.paid}
+                          onChange={(e) => updateOtherExpense(exp.id, { paid: e.target.checked })}
+                          data-testid="event-form-expense-paid-checkbox"
+                        />
+                        Paid
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => removeOtherExpense(exp.id)}
+                        data-testid="event-form-expense-remove-button"
+                        className="shrink-0 w-9 h-9 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
+                        aria-label="Remove expense"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <input
+                      value={exp.description || ''}
+                      onChange={(e) => updateOtherExpense(exp.id, { description: e.target.value })}
+                      placeholder="Description (optional) — e.g. deposit for grand ballroom, includes setup/teardown"
+                      data-testid="event-form-expense-description-input"
+                      className={`w-full text-xs ${inputClass}`}
+                    />
                   </div>
                 ))}
               </div>
