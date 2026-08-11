@@ -177,7 +177,7 @@ export default function EventFormPage() {
   const {
     events, eventTypes, addEventType, eventStatuses, inquiryStatuses, addInquiryStatus, emailTemplates,
     contractors, contractorTypes, clients, venues, addEvent, updateEvent, computeDurationHours,
-    bookings, computeEventTotalCost,
+    bookings, updateBooking, computeEventTotalCost,
   } = useData();
   const { can, currentUser, role } = useAuth();
   const { showToast } = useToast();
@@ -215,6 +215,7 @@ export default function EventFormPage() {
   const [activeCategoryTab, setActiveCategoryTab] = useState('');
   const [documents, setDocuments] = useState([]);
   const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [markingDepositPaid, setMarkingDepositPaid] = useState(false);
   const [docPendingDelete, setDocPendingDelete] = useState(null);
   const [prepEmailModalOpen, setPrepEmailModalOpen] = useState(false);
   const [sendingPrepEmail, setSendingPrepEmail] = useState(false);
@@ -588,11 +589,19 @@ export default function EventFormPage() {
   // depositDueDate), not the invoice — a business collects it up front,
   // often before any invoice exists, so it's the one piece of pre-gig cash
   // flow the invoice-driven "collected so far" line above can't show.
+  // daysUntilDue: negative once overdue, 0 same-day, positive still ahead —
+  // date-only strings parsed at local midnight (same pattern as the
+  // eventDate formatting elsewhere on this page) so this doesn't drift a
+  // day off around a UTC boundary.
   const depositInfo = sourceBooking?.depositAmount ? {
     amount: Number(sourceBooking.depositAmount) || 0,
     paid: !!sourceBooking.depositPaid,
     dueDate: sourceBooking.depositDueDate,
+    daysUntilDue: sourceBooking.depositDueDate
+      ? Math.round((new Date(`${sourceBooking.depositDueDate}T00:00:00`) - new Date(new Date().toDateString())) / 86400000)
+      : null,
   } : null;
+  const depositOverdue = !!depositInfo && !depositInfo.paid && depositInfo.daysUntilDue !== null && depositInfo.daysUntilDue < 0;
   const otherExpensesTotal = (form.otherExpenses || []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const netProfit = revenueTotal - totalCost - otherExpensesTotal;
   const profitMargin = revenueTotal > 0 ? (netProfit / revenueTotal) * 100 : null;
@@ -644,6 +653,23 @@ export default function EventFormPage() {
   const revenueSettled = settledInvoices.every((inv) => inv.status === 'paid');
   const hasFinancialActivity = confirmedContractorBookings.length > 0 || tentativeContractorBookings.length > 0 || settledInvoices.length > 0;
   const isActualFinancials = hasFinancialActivity && costsSettled && revenueSettled;
+
+  // Writes straight to the booking (not local form state, unlike most of
+  // this page) — deposit fields live on sourceBooking, a different record
+  // from the event this form is editing, so there's nothing to save here
+  // beyond the one field.
+  async function handleMarkDepositPaid() {
+    if (!sourceBooking) return;
+    setMarkingDepositPaid(true);
+    try {
+      await updateBooking(sourceBooking.id, { depositPaid: true });
+      showToast('Deposit marked paid');
+    } catch (err) {
+      showToast(err.message || 'Failed to mark deposit paid', 'error');
+    } finally {
+      setMarkingDepositPaid(false);
+    }
+  }
 
   function addOtherExpense() {
     setForm((f) => ({ ...f, otherExpenses: [...(f.otherExpenses || []), { id: uid('expense'), label: '', amount: '' }] }));
@@ -2269,11 +2295,33 @@ export default function EventFormPage() {
                     <div className="text-xl font-bold text-slate-800" data-testid="event-form-financials-revenue">{currency(revenueTotal)}</div>
                     <div className="text-xs text-slate-400 mt-1">{currency(collectedTotal)} collected so far</div>
                     {depositInfo && (
-                      <div
-                        data-testid="event-form-financials-deposit"
-                        className={`text-xs mt-1 font-medium ${depositInfo.paid ? 'text-emerald-600' : 'text-amber-600'}`}
-                      >
-                        {currency(depositInfo.amount)} deposit {depositInfo.paid ? 'paid' : `due${depositInfo.dueDate ? ` ${formatEventDate(depositInfo.dueDate)}` : ''}`}
+                      <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                        <span
+                          data-testid="event-form-financials-deposit"
+                          className={`text-xs font-medium ${depositInfo.paid ? 'text-emerald-600' : depositOverdue ? 'text-red-600' : 'text-amber-600'}`}
+                        >
+                          {currency(depositInfo.amount)} deposit —{' '}
+                          {depositInfo.paid
+                            ? 'paid'
+                            : depositOverdue
+                            ? `${Math.abs(depositInfo.daysUntilDue)} day${Math.abs(depositInfo.daysUntilDue) === 1 ? '' : 's'} overdue`
+                            : depositInfo.daysUntilDue === 0
+                            ? 'due today'
+                            : depositInfo.daysUntilDue !== null
+                            ? `due in ${depositInfo.daysUntilDue} day${depositInfo.daysUntilDue === 1 ? '' : 's'} (${formatEventDate(depositInfo.dueDate)})`
+                            : 'due'}
+                        </span>
+                        {!depositInfo.paid && (
+                          <button
+                            type="button"
+                            onClick={handleMarkDepositPaid}
+                            disabled={markingDepositPaid}
+                            data-testid="event-form-financials-mark-deposit-paid-button"
+                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 disabled:opacity-50"
+                          >
+                            {markingDepositPaid ? 'Saving…' : 'Mark Paid'}
+                          </button>
+                        )}
                       </div>
                     )}
                   </>
