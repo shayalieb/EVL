@@ -55,7 +55,7 @@ function StatTile({ label, value, color = '#64748b', icon, testId }) {
 
 export default function HomePage() {
   const {
-    events, clients, contractors, eventStatuses,
+    events, bookings, clients, contractors, eventStatuses,
     computeEventTotalCost, computeVendorStatus, computeClientEventCounts, getContractorById,
   } = useData();
   const navigate = useNavigate();
@@ -134,6 +134,40 @@ export default function HomePage() {
     return Math.max(1, Math.floor((Date.now() - new Date(dueDate).getTime()) / 86400000));
   }
 
+  // Same per-gig margin math as EventFormPage's Financials tab benchmark —
+  // only gigs with real invoiced revenue count (an unbooked/unconverted
+  // event has no real margin to include), so this reads as "how are the
+  // gigs we've actually billed doing", not diluted by every event ever
+  // created. worst is null when there's only one qualifying gig, so it
+  // isn't shown as both the best AND the worst result.
+  const financialsSnapshot = useMemo(() => {
+    const gigs = [];
+    let totalRevenue = 0;
+    let totalCosts = 0;
+    for (const evt of events) {
+      const evtBooking = bookings.find((b) => b.convertedEventId === evt.id);
+      if (!evtBooking) continue;
+      const evtRevenue = invoices
+        .filter((inv) => inv.bookingId === evtBooking.id && inv.status !== 'void')
+        .reduce((sum, inv) => sum + (inv.total || 0), 0);
+      if (evtRevenue <= 0) continue;
+      const evtCost = computeEventTotalCost(evt);
+      totalRevenue += evtRevenue;
+      totalCosts += evtCost;
+      gigs.push({ id: evt.id, name: evt.name, margin: ((evtRevenue - evtCost) / evtRevenue) * 100 });
+    }
+    const avgMargin = gigs.length ? gigs.reduce((sum, g) => sum + g.margin, 0) / gigs.length : null;
+    const sorted = [...gigs].sort((a, b) => b.margin - a.margin);
+    return {
+      totalRevenue,
+      totalCosts,
+      avgMargin,
+      count: gigs.length,
+      bestGig: sorted[0] || null,
+      worstGig: sorted.length > 1 ? sorted[sorted.length - 1] : null,
+    };
+  }, [events, bookings, invoices, computeEventTotalCost]);
+
   return (
     <div>
       <h2 className="text-2xl font-bold text-slate-800 mb-4">Home</h2>
@@ -152,6 +186,62 @@ export default function HomePage() {
           testId="home-stat-needs-confirmation"
         />
       </div>
+
+      {invoicesLoading ? (
+        <Skeleton className="h-40 w-full rounded-xl mb-6" />
+      ) : financialsSnapshot.count > 0 && (
+        <div className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
+          <PanelHeading color="#0d9488" icon={<DollarIcon className="w-3.5 h-3.5" />}>Financials Snapshot</PanelHeading>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+            <div>
+              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Total Revenue</div>
+              <div className="text-xl font-bold text-slate-800" data-testid="home-financials-total-revenue">{currency(financialsSnapshot.totalRevenue)}</div>
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Total Contractor Costs</div>
+              <div className="text-xl font-bold text-slate-800" data-testid="home-financials-total-costs">{currency(financialsSnapshot.totalCosts)}</div>
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Average Margin</div>
+              <div className="text-xl font-bold text-slate-800" data-testid="home-financials-avg-margin">
+                {financialsSnapshot.avgMargin.toFixed(1)}%
+              </div>
+            </div>
+          </div>
+          {(financialsSnapshot.bestGig || financialsSnapshot.worstGig) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-slate-100">
+              {financialsSnapshot.bestGig && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/events/${financialsSnapshot.bestGig.id}`)}
+                  data-testid="home-financials-best-gig"
+                  className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-emerald-100 bg-emerald-50/50 hover:bg-emerald-50 text-left"
+                >
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wide">Best Margin</div>
+                    <div className="text-sm font-medium text-slate-800 truncate">{financialsSnapshot.bestGig.name}</div>
+                  </div>
+                  <span className="text-sm font-bold text-emerald-600 shrink-0">{financialsSnapshot.bestGig.margin.toFixed(1)}%</span>
+                </button>
+              )}
+              {financialsSnapshot.worstGig && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/events/${financialsSnapshot.worstGig.id}`)}
+                  data-testid="home-financials-worst-gig"
+                  className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-red-100 bg-red-50/50 hover:bg-red-50 text-left"
+                >
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-semibold text-red-600 uppercase tracking-wide">Lowest Margin</div>
+                    <div className="text-sm font-medium text-slate-800 truncate">{financialsSnapshot.worstGig.name}</div>
+                  </div>
+                  <span className="text-sm font-bold text-red-600 shrink-0">{financialsSnapshot.worstGig.margin.toFixed(1)}%</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Money/risk at a glance — the two things most likely to actually
           cost a solo operator, surfaced before the general-purpose panels
