@@ -70,7 +70,7 @@ async function upsertAutoReminder({ accountId, createdByUserId, relatedType, rel
 
 async function createEventReminders() {
   const candidates = await prisma.event.findMany({
-    where: { deletedAt: null, eventDate: { gte: todayISO(), lte: addDaysISO(EVENT_AT_RISK_DAYS) } },
+    where: { deletedAt: null, completedAt: null, eventDate: { gte: todayISO(), lte: addDaysISO(EVENT_AT_RISK_DAYS) } },
     select: { id: true, accountId: true, name: true, eventDate: true, contractorBookings: true },
   });
   if (!candidates.length) return;
@@ -144,7 +144,7 @@ async function completeResolvedReminders() {
   const invoiceIds = pending.filter((r) => r.relatedType === 'invoice').map((r) => r.relatedId);
 
   const events = eventIds.length
-    ? await prisma.event.findMany({ where: { id: { in: eventIds } }, select: { id: true, accountId: true, deletedAt: true, contractorBookings: true } })
+    ? await prisma.event.findMany({ where: { id: { in: eventIds } }, select: { id: true, accountId: true, deletedAt: true, completedAt: true, contractorBookings: true } })
     : [];
   const eventAccountIds = [...new Set(events.map((e) => e.accountId))];
   const [accountDataRows, invoices] = await Promise.all([
@@ -163,7 +163,7 @@ async function completeResolvedReminders() {
   for (const reminder of pending) {
     if (reminder.relatedType === 'event') {
       const event = eventsById.get(reminder.relatedId);
-      const stillAtRisk = event && !event.deletedAt && isVendorPending(event, inquiryStatusesByAccount.get(event.accountId));
+      const stillAtRisk = event && !event.deletedAt && !event.completedAt && isVendorPending(event, inquiryStatusesByAccount.get(event.accountId));
       if (!stillAtRisk) toComplete.push(reminder.id);
     } else {
       const invoice = invoicesById.get(reminder.relatedId);

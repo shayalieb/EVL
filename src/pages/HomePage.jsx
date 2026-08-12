@@ -79,7 +79,7 @@ export default function HomePage() {
     };
 
     const upcoming = events
-      .filter((e) => e.eventDate >= today && !isCancelled(e))
+      .filter((e) => e.eventDate >= today && !isCancelled(e) && !e.completedAt)
       .sort((a, b) => a.eventDate.localeCompare(b.eventDate));
 
     const pipelineValue = upcoming.reduce((sum, e) => sum + computeEventTotalCost(e), 0);

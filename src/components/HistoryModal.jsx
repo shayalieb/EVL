@@ -7,6 +7,8 @@ const TYPE_LABELS = {
   emailed: 'Emailed vendor',
   'email-reply': 'Vendor replied',
   'ai-status-update': 'AI status update',
+  completed: 'Marked complete',
+  restored: 'Restored to active',
 };
 
 function formatWhen(at) {

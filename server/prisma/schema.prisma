@@ -921,6 +921,11 @@ model Booking {
   notes              String?   @db.Text
   convertedEventId   String?
   deletedAt          DateTime?
+  // Distinct from deletedAt — a completed booking is done, not gone; it
+  // stays fully intact and just moves out of the active list into the
+  // Completed tab (BookingsPage.jsx). Set/cleared via a plain PATCH, same
+  // mechanism as deletedAt.
+  completedAt        DateTime?
 
   venue       Json  @default("{}")
   schedule    Json  @default("[]")
@@ -966,6 +971,8 @@ model Event {
   prepNotes         String?   @db.Text
   eventStatus       String?
   deletedAt         DateTime?
+  // Same "done, not gone" reasoning as Booking.completedAt above.
+  completedAt       DateTime?
 
   venue              Json @default("{}")
   contractorBookings Json @default("[]")

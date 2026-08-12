@@ -262,6 +262,34 @@ export function DataProvider({ children }) {
     return record;
   }, [bookings, historyEntry]);
 
+  // Distinct from deleteBooking above — a completed booking stays fully
+  // intact and visible (just filtered into BookingsPage's Completed tab
+  // instead of the active list), not soft-deleted/purged. See
+  // BookingsPage.jsx's Mark Complete action for the "this booking has a
+  // linked event too" prompt that decides whether to also call
+  // completeEvent alongside this.
+  const completeBooking = useCallback(async (id) => {
+    const existing = bookings.find((b) => b.id === id);
+    if (!existing) return;
+    const record = await updateBookingApi(id, {
+      completedAt: new Date().toISOString(),
+      history: [...(existing.history || []), historyEntry('completed')],
+    });
+    setBookings((prev) => prev.map((b) => (b.id === id ? record : b)));
+    return record;
+  }, [bookings, historyEntry]);
+
+  const restoreBooking = useCallback(async (id) => {
+    const existing = bookings.find((b) => b.id === id);
+    if (!existing) return;
+    const record = await updateBookingApi(id, {
+      completedAt: null,
+      history: [...(existing.history || []), historyEntry('restored')],
+    });
+    setBookings((prev) => prev.map((b) => (b.id === id ? record : b)));
+    return record;
+  }, [bookings, historyEntry]);
+
   // ---- Events (real API, not the blob — see the fetch effect above) ----
   // Same id-must-already-be-set contract as addBooking above.
   const addEvent = useCallback(async (event) => {
@@ -298,6 +326,29 @@ export function DataProvider({ children }) {
       history: [...(existing.history || []), historyEntry('deleted')],
     });
     setEvents((prev) => prev.filter((e) => e.id !== id));
+    return record;
+  }, [events, historyEntry]);
+
+  // Same "stays intact, just moves tabs" reasoning as completeBooking below.
+  const completeEvent = useCallback(async (id) => {
+    const existing = events.find((e) => e.id === id);
+    if (!existing) return;
+    const record = await updateEventApi(id, {
+      completedAt: new Date().toISOString(),
+      history: [...(existing.history || []), historyEntry('completed')],
+    });
+    setEvents((prev) => prev.map((e) => (e.id === id ? record : e)));
+    return record;
+  }, [events, historyEntry]);
+
+  const restoreEvent = useCallback(async (id) => {
+    const existing = events.find((e) => e.id === id);
+    if (!existing) return;
+    const record = await updateEventApi(id, {
+      completedAt: null,
+      history: [...(existing.history || []), historyEntry('restored')],
+    });
+    setEvents((prev) => prev.map((e) => (e.id === id ? record : e)));
     return record;
   }, [events, historyEntry]);
 
@@ -656,6 +707,8 @@ export function DataProvider({ children }) {
     addBooking,
     updateBooking,
     deleteBooking,
+    completeBooking,
+    restoreBooking,
     convertBookingToEvent,
     addBookingStatus,
     updateBookingStatus,
@@ -688,6 +741,8 @@ export function DataProvider({ children }) {
     addEvent,
     updateEvent,
     deleteEvent,
+    completeEvent,
+    restoreEvent,
     getContractorById,
     computeDurationHours,
     computeEventTotalCost,
@@ -697,7 +752,7 @@ export function DataProvider({ children }) {
     addContractor, updateContractor, deleteContractor,
     addClient, updateClient, deleteClient, computeClientEventCounts,
     addVenue, updateVenue, deleteVenue,
-    addBooking, updateBooking, deleteBooking, convertBookingToEvent,
+    addBooking, updateBooking, deleteBooking, completeBooking, restoreBooking, convertBookingToEvent,
     addBookingStatus, updateBookingStatus, removeBookingStatus,
     addContractorType, removeContractorType,
     addEventType, removeEventType,
@@ -708,7 +763,7 @@ export function DataProvider({ children }) {
     addContractTemplate, updateContractTemplate, removeContractTemplate,
     addOffering, updateOffering, deleteOffering,
     addSetListLibraryItem, updateSetListLibraryItem, deleteSetListLibraryItem,
-    addEvent, updateEvent, deleteEvent,
+    addEvent, updateEvent, deleteEvent, completeEvent, restoreEvent,
     getContractorById, computeDurationHours, computeEventTotalCost, computeVendorStatus,
   ]);
 

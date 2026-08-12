@@ -4,7 +4,9 @@ import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { PRIORITIES } from './BookingFormPage';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import MarkCompleteModal from '../components/MarkCompleteModal';
 import Badge from '../components/ui/Badge';
+import Tabs from '../components/ui/Tabs';
 import Tooltip from '../components/ui/Tooltip';
 import SearchInput from '../components/ui/SearchInput';
 import FilterSelect from '../components/ui/FilterSelect';
@@ -49,13 +51,23 @@ function followUpTone(dateStr) {
   return 'upcoming';
 }
 
+const VIEW_TABS = [
+  { id: 'active', label: 'Active' },
+  { id: 'completed', label: 'Completed' },
+];
+
 export default function BookingsPage() {
-  const { bookings, bookingStatuses, eventTypes, clients, deleteBooking, convertBookingToEvent } = useData();
+  const {
+    bookings, events, bookingStatuses, eventTypes, clients,
+    deleteBooking, completeBooking, restoreBooking, completeEvent, convertBookingToEvent,
+  } = useData();
   const { can } = useAuth();
   const canEdit = can('manageBookings');
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [completeTarget, setCompleteTarget] = useState(null);
+  const [activeTab, setActiveTab] = useState('active');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
@@ -93,6 +105,7 @@ export default function BookingsPage() {
 
   const hasFilters = !!(search || statusFilter || priorityFilter || eventTypeFilter || depositFilter);
   const filteredBookings = bookings.filter((b) => {
+    if (activeTab === 'completed' ? !b.completedAt : !!b.completedAt) return false;
     if (statusFilter && b.bookingStatus !== statusFilter) return false;
     if (priorityFilter && b.priority !== priorityFilter) return false;
     if (eventTypeFilter && b.eventType !== eventTypeFilter) return false;
@@ -135,6 +148,32 @@ export default function BookingsPage() {
     } catch (err) {
       showToast(err.message || 'Failed to create event', 'error');
     }
+  }
+
+  // A booking's linked event (if any, and not already completed) gets a
+  // "complete this too?" prompt — otherwise there's nothing to choose
+  // between, so it just completes directly.
+  function handleMarkComplete(booking) {
+    const linkedEvent = booking.convertedEventId ? events.find((e) => e.id === booking.convertedEventId) : null;
+    if (linkedEvent && !linkedEvent.completedAt) {
+      setCompleteTarget({ booking, linkedEvent });
+      return;
+    }
+    completeBooking(booking.id);
+    showToast('Booking marked complete');
+  }
+
+  async function handleConfirmComplete({ includePrimary, includeLinked }) {
+    const { booking, linkedEvent } = completeTarget;
+    if (includePrimary) await completeBooking(booking.id);
+    if (includeLinked && linkedEvent) await completeEvent(linkedEvent.id);
+    showToast('Marked complete');
+    setCompleteTarget(null);
+  }
+
+  function handleRestore(booking) {
+    restoreBooking(booking.id);
+    showToast('Booking restored to active');
   }
 
   return (
@@ -189,6 +228,10 @@ export default function BookingsPage() {
           </div>
         </div>
       )}
+
+      <div className="mb-4">
+        <Tabs tabs={VIEW_TABS} activeTab={activeTab} onChange={setActiveTab} />
+      </div>
 
       <div className="flex items-center gap-2 flex-wrap mb-4">
         <SearchInput value={search} onChange={setSearch} placeholder="Search bookings…" className="w-64" testId="bookings-search-input" />
@@ -257,9 +300,11 @@ export default function BookingsPage() {
               {filteredBookings.length === 0 && (
                 <tr>
                   <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
-                    {bookings.length === 0
-                      ? 'No bookings yet. Add an inquiry or quote to start tracking the sales pipeline.'
-                      : 'No bookings match your search or filters.'}
+                    {activeTab === 'completed'
+                      ? 'No completed bookings yet.'
+                      : bookings.length === 0
+                        ? 'No bookings yet. Add an inquiry or quote to start tracking the sales pipeline.'
+                        : 'No bookings match your search or filters.'}
                   </td>
                 </tr>
               )}
@@ -358,7 +403,18 @@ export default function BookingsPage() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {canEdit && (
+                      {canEdit && activeTab === 'completed' ? (
+                        <div className="flex justify-end items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleRestore(b)}
+                            data-testid="booking-row-restore-button"
+                            className="px-2 py-1 rounded-lg text-xs font-semibold text-indigo-600 hover:bg-indigo-50 whitespace-nowrap"
+                          >
+                            ↺ Restore
+                          </button>
+                        </div>
+                      ) : canEdit && (
                         <div className="flex justify-end items-center gap-1">
                           {b.convertedEventId ? (
                             <button
@@ -390,6 +446,15 @@ export default function BookingsPage() {
                           </button>
                           <button
                             type="button"
+                            onClick={() => handleMarkComplete(b)}
+                            data-testid="booking-row-complete-button"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"
+                            aria-label="Mark booking complete"
+                          >
+                            ✓
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => setDeleteTarget(b)}
                             data-testid="booking-row-delete-button"
                             className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
@@ -416,6 +481,14 @@ export default function BookingsPage() {
         title="Delete booking?"
         description="This removes the booking from your active list. It's permanently erased after 30 days — until then it can still be recovered."
         confirmText={deleteTargetLabel() || undefined}
+      />
+
+      <MarkCompleteModal
+        open={!!completeTarget}
+        onClose={() => setCompleteTarget(null)}
+        onConfirm={handleConfirmComplete}
+        primaryLabel={`Booking: ${completeTarget?.booking?.eventName || 'this booking'}`}
+        linkedLabel={completeTarget?.linkedEvent ? `Also mark its event: ${completeTarget.linkedEvent.name || 'this event'}` : null}
       />
 
       <SendInquiryLinkModal open={sendInquiryModalOpen} onClose={() => setSendInquiryModalOpen(false)} />

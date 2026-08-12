@@ -31,6 +31,7 @@ function serializeBooking(b) {
     notes: b.notes,
     convertedEventId: b.convertedEventId,
     deletedAt: b.deletedAt,
+    completedAt: b.completedAt,
     venue: b.venue,
     schedule: b.schedule,
     activityLog: b.activityLog,
@@ -47,7 +48,7 @@ const WRITABLE_FIELDS = [
   'eventName', 'clientId', 'eventDate', 'eventType', 'brideName', 'groomName', 'guestCount',
   'depositAmount', 'depositDueDate', 'depositPaid', 'depositType', 'depositPercent',
   'bookingStatus', 'priority', 'nextFollowUpDate', 'contractSignedDate', 'referralSource', 'notes',
-  'convertedEventId', 'deletedAt',
+  'convertedEventId', 'deletedAt', 'completedAt',
   'venue', 'schedule', 'activityLog', 'proposal', 'history',
 ];
 

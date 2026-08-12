@@ -28,6 +28,7 @@ function serializeEvent(e) {
     prepNotes: e.prepNotes,
     eventStatus: e.eventStatus,
     deletedAt: e.deletedAt,
+    completedAt: e.completedAt,
     venue: e.venue,
     contractorBookings: e.contractorBookings,
     categoryTabs: e.categoryTabs,
@@ -48,7 +49,7 @@ function serializeEvent(e) {
 const WRITABLE_FIELDS = [
   'name', 'eventType', 'eventDate', 'eventDayOfTheWeek', 'clientId', 'brideName', 'groomName', 'guestCount',
   'contactPhone', 'contactPhoneExt', 'contactEmail', 'startTime', 'endTime', 'eventNote', 'prepNotes',
-  'eventStatus', 'deletedAt',
+  'eventStatus', 'deletedAt', 'completedAt',
   'venue', 'contractorBookings', 'categoryTabs', 'schedule', 'prepGroups', 'requests', 'shotList',
   'secondShooters', 'otherExpenses', 'history',
 ];

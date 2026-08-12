@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import MarkCompleteModal from '../components/MarkCompleteModal';
 import Tooltip from '../components/ui/Tooltip';
 import Badge from '../components/ui/Badge';
 import Tabs from '../components/ui/Tabs';
@@ -18,6 +19,7 @@ import { usePagination } from '../lib/usePagination';
 const VIEW_TABS = [
   { id: 'list', label: 'List View' },
   { id: 'calendar', label: 'Calendar View' },
+  { id: 'completed', label: 'Completed' },
 ];
 
 function formatDateWithWeekday(dateStr) {
@@ -28,12 +30,17 @@ function formatDateWithWeekday(dateStr) {
 }
 
 export default function EventsPage() {
-  const { events, eventStatuses, eventTypes, deleteEvent, computeEventTotalCost, computeVendorStatus, getContractorById } = useData();
+  const {
+    events, bookings, eventStatuses, eventTypes,
+    deleteEvent, completeEvent, restoreEvent, completeBooking,
+    computeEventTotalCost, computeVendorStatus, getContractorById,
+  } = useData();
   const { can } = useAuth();
   const canEdit = can('manageEvents');
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [completeTarget, setCompleteTarget] = useState(null);
   const [activeTab, setActiveTab] = useState('list');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -47,8 +54,35 @@ export default function EventsPage() {
     setDeleteTarget(null);
   }
 
+  // The reverse of BookingsPage's lookup — a Booking points forward at its
+  // converted Event via convertedEventId, so finding the source booking
+  // from here means searching for it rather than following a field.
+  function handleMarkComplete(evt) {
+    const linkedBooking = bookings.find((b) => b.convertedEventId === evt.id);
+    if (linkedBooking && !linkedBooking.completedAt) {
+      setCompleteTarget({ event: evt, linkedBooking });
+      return;
+    }
+    completeEvent(evt.id);
+    showToast('Event marked complete');
+  }
+
+  async function handleConfirmComplete({ includePrimary, includeLinked }) {
+    const { event: evt, linkedBooking } = completeTarget;
+    if (includePrimary) await completeEvent(evt.id);
+    if (includeLinked && linkedBooking) await completeBooking(linkedBooking.id);
+    showToast('Marked complete');
+    setCompleteTarget(null);
+  }
+
+  function handleRestore(evt) {
+    restoreEvent(evt.id);
+    showToast('Event restored to active');
+  }
+
   const hasFilters = !!(search || statusFilter || vendorFilter || eventTypeFilter || contractorsFilter);
   const filteredEvents = events.filter((evt) => {
+    if (activeTab === 'completed' ? !evt.completedAt : !!evt.completedAt) return false;
     if (statusFilter && evt.eventStatus !== statusFilter) return false;
     if (vendorFilter && computeVendorStatus(evt).status !== vendorFilter) return false;
     if (eventTypeFilter && evt.eventType !== eventTypeFilter) return false;
@@ -152,9 +186,11 @@ export default function EventsPage() {
               {filteredEvents.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
-                    {events.length === 0
-                      ? 'No events yet. Add your first event to start booking contractors.'
-                      : 'No events match your search or filters.'}
+                    {activeTab === 'completed'
+                      ? 'No completed events yet.'
+                      : events.length === 0
+                        ? 'No events yet. Add your first event to start booking contractors.'
+                        : 'No events match your search or filters.'}
                   </td>
                 </tr>
               )}
@@ -239,7 +275,18 @@ export default function EventsPage() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {canEdit && (
+                      {canEdit && activeTab === 'completed' ? (
+                        <div className="flex justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleRestore(evt)}
+                            data-testid="event-row-restore-button"
+                            className="px-2 py-1 rounded-lg text-xs font-semibold text-indigo-600 hover:bg-indigo-50 whitespace-nowrap"
+                          >
+                            ↺ Restore
+                          </button>
+                        </div>
+                      ) : canEdit && (
                         <div className="flex justify-end gap-1">
                           <button
                             type="button"
@@ -249,6 +296,15 @@ export default function EventsPage() {
                             aria-label="Edit event"
                           >
                             ✎
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMarkComplete(evt)}
+                            data-testid="event-row-complete-button"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"
+                            aria-label="Mark event complete"
+                          >
+                            ✓
                           </button>
                           <button
                             type="button"
@@ -279,6 +335,14 @@ export default function EventsPage() {
         title="Delete event?"
         description={`This removes "${deleteTarget?.name}" and its contractor bookings from your active events. It's permanently erased after 30 days — until then it can still be recovered.`}
         confirmText={deleteTarget?.name || undefined}
+      />
+
+      <MarkCompleteModal
+        open={!!completeTarget}
+        onClose={() => setCompleteTarget(null)}
+        onConfirm={handleConfirmComplete}
+        primaryLabel={`Event: ${completeTarget?.event?.name || 'this event'}`}
+        linkedLabel={completeTarget?.linkedBooking ? `Also mark its booking: ${completeTarget.linkedBooking.eventName || 'this booking'}` : null}
       />
     </div>
   );
