@@ -1,8 +1,9 @@
 import { Router } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { attachMembership } from '../lib/membership.js';
+import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createWithPreservedId } from '../lib/idPreservingCreate.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
@@ -70,6 +71,68 @@ router.post('/', asyncHandler(async (req, res) => {
     priceNotes: priceNotes?.trim() || null,
   }, req.membership.accountId);
   res.status(201).json({ contractor: serializeContractor(contractor) });
+}));
+
+// Real external email out to an arbitrary chunk of the roster, so this is
+// permission-gated (manageContractors — the page it's driven from) and
+// rate-limited the same way email.js's single-send /send route is.
+const bulkEmailLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many bulk sends. Please try again later.' },
+});
+
+// One request handles the whole selected batch (rather than the client
+// firing one call per contractor) so a single send action gets a single
+// rate-limit slot and one clear "N sent, M skipped" result instead of
+// juggling N separate in-flight requests client-side.
+router.post('/bulk-email', bulkEmailLimiter, asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageContractors) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
+  const { contractorIds, subject, body, fromName } = req.body || {};
+  if (!Array.isArray(contractorIds) || !contractorIds.length) {
+    return res.status(400).json({ error: 'Select at least one contractor.' });
+  }
+  if (!subject?.trim() || !body?.trim()) {
+    return res.status(400).json({ error: 'Subject and body are required.' });
+  }
+
+  const contractors = await prisma.contractor.findMany({
+    where: { id: { in: contractorIds }, accountId: req.membership.accountId },
+  });
+
+  const withEmail = contractors.filter((c) => c.email);
+  const skipped = contractors
+    .filter((c) => !c.email)
+    .map((c) => ({ contractorId: c.id, name: `${c.firstName} ${c.lastName}`.trim(), reason: 'No email on file' }));
+
+  let from, html;
+  try {
+    const accountData = await prisma.accountData.findUnique({ where: { accountId: req.membership.accountId } });
+    const businessInfo = accountData?.data?.businessInfo || {};
+    from = await resolveFromHeader({ accountId: req.membership.accountId, fromName, localPart: 'hello' });
+    html = buildActionEmailHtml({ businessInfo, bodyHtml: body });
+  } catch {
+    return res.status(503).json({ error: 'Email sending is not configured yet.' });
+  }
+
+  const results = await Promise.allSettled(
+    withEmail.map((c) => sendMail({ from, to: c.email, subject, html }).then((r) => {
+      if (r.error) throw new Error(r.error.message || 'Failed to send.');
+      return c;
+    }))
+  );
+  results.forEach((r, i) => {
+    if (r.status === 'rejected') {
+      const c = withEmail[i];
+      skipped.push({ contractorId: c.id, name: `${c.firstName} ${c.lastName}`.trim(), reason: r.reason?.message || 'Failed to send.' });
+    }
+  });
+
+  res.json({ sentCount: results.filter((r) => r.status === 'fulfilled').length, skipped });
 }));
 
 router.patch('/:id', asyncHandler(async (req, res) => {

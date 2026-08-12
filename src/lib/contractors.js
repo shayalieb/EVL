@@ -19,6 +19,17 @@ export async function deleteContractorApi(id) {
   return apiFetch(`/contractors/${id}`, { method: 'DELETE' });
 }
 
+// One request, whole batch — returns { sentCount, skipped: [{contractorId,
+// name, reason}] } so the caller can report exactly who didn't get it and
+// why (no email on file vs. an actual send failure), see
+// ContractorsPage.jsx's BulkEmailModal.
+export async function bulkEmailContractors({ contractorIds, subject, body, fromName }) {
+  return apiFetch('/contractors/bulk-email', {
+    method: 'POST',
+    body: JSON.stringify({ contractorIds, subject, body, fromName }),
+  });
+}
+
 // Get-or-create — always returns a usable link, same pattern as
 // src/lib/guests.js's getRsvpLink. Returns { calendarLink, showConfirmed,
 // showTentative } — the visibility flags come along so the caller can

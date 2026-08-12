@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import ContractorModal from '../components/ContractorModal';
+import BulkEmailModal from '../components/BulkEmailModal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Tooltip from '../components/ui/Tooltip';
 import SearchInput from '../components/ui/SearchInput';
@@ -38,6 +39,8 @@ export default function ContractorsPage() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [priceFilter, setPriceFilter] = useState('');
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
   // Account-wide, fetched once — same lightweight local-fetch pattern used
   // elsewhere (HomePage.jsx's invoices, BookingsPage.jsx's contracts) for
   // data that isn't otherwise read on this page.
@@ -72,6 +75,28 @@ export default function ContractorsPage() {
   });
   const { page, setPage, pageCount, pageItems: pagedContractors, pageSize, totalItems } = usePagination(filteredContractors);
 
+  // Selection persists across pages/filters (by id, not by row) so picking
+  // a few contractors, then searching for more to add to the same send,
+  // doesn't lose what's already checked.
+  const allOnPageSelected = pagedContractors.length > 0 && pagedContractors.every((c) => selectedIds.has(c.id));
+  function toggleSelectAllOnPage() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allOnPageSelected) pagedContractors.forEach((c) => next.delete(c.id));
+      else pagedContractors.forEach((c) => next.add(c.id));
+      return next;
+    });
+  }
+  function toggleSelect(id) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  const selectedContractors = contractors.filter((c) => selectedIds.has(c.id));
+
   function openAdd() {
     setEditingContractor(null);
     setModalOpen(true);
@@ -92,15 +117,27 @@ export default function ContractorsPage() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-2xl font-bold text-slate-800">Contractors</h2>
-        <button
-          type="button"
-          onClick={openAdd}
-          disabled={!canEdit}
-          data-testid="contractors-add-button"
-          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          + Add Contractor
-        </button>
+        <div className="flex items-center gap-2">
+          {selectedIds.size > 0 && canEdit && (
+            <button
+              type="button"
+              onClick={() => setBulkEmailOpen(true)}
+              data-testid="contractors-bulk-email-button"
+              className="px-4 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
+            >
+              ✉️ Email Selected ({selectedIds.size})
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={openAdd}
+            disabled={!canEdit}
+            data-testid="contractors-add-button"
+            className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            + Add Contractor
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center gap-2 flex-wrap mb-4">
@@ -147,6 +184,18 @@ export default function ContractorsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <th className="px-4 py-3 w-10">
+                  {canEdit && (
+                    <input
+                      type="checkbox"
+                      checked={allOnPageSelected}
+                      onChange={toggleSelectAllOnPage}
+                      data-testid="contractors-select-all-checkbox"
+                      aria-label="Select all contractors on this page"
+                      className="rounded border-slate-300"
+                    />
+                  )}
+                </th>
                 <th className="px-4 py-3">Full Name</th>
                 <th className="hidden sm:table-cell px-4 py-3">Email</th>
                 <th className="hidden sm:table-cell px-4 py-3">Phone</th>
@@ -161,7 +210,7 @@ export default function ContractorsPage() {
             <tbody>
               {filteredContractors.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-slate-400">
+                  <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
                     {contractors.length === 0
                       ? 'No contractors yet. Add your first contractor to build your vendor roster.'
                       : 'No contractors match your search or filters.'}
@@ -170,6 +219,18 @@ export default function ContractorsPage() {
               )}
               {pagedContractors.map((c) => (
                 <tr key={c.id} data-testid="contractor-row" className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                  <td className="px-4 py-3">
+                    {canEdit && (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(c.id)}
+                        onChange={() => toggleSelect(c.id)}
+                        data-testid="contractor-row-select-checkbox"
+                        aria-label={`Select ${c.firstName} ${c.lastName}`}
+                        className="rounded border-slate-300"
+                      />
+                    )}
+                  </td>
                   <td className="px-4 py-3 font-medium text-slate-800">
                     {canEdit ? (
                       <button
@@ -276,6 +337,12 @@ export default function ContractorsPage() {
         title="Delete contractor?"
         description={`This will remove ${deleteTarget?.firstName} ${deleteTarget?.lastName} from your roster and from any events they're booked on.`}
         confirmText={deleteTarget ? `${deleteTarget.firstName} ${deleteTarget.lastName}` : undefined}
+      />
+
+      <BulkEmailModal
+        open={bulkEmailOpen}
+        onClose={() => { setBulkEmailOpen(false); setSelectedIds(new Set()); }}
+        contractors={selectedContractors}
       />
     </div>
   );
