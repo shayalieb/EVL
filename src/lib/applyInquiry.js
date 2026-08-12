@@ -138,6 +138,13 @@ export async function applyInquiryResponse(response, { clients, venues, addClien
       ...emptyVenue(),
       ...resolveVenue(r, venues || []),
     },
+    // emptyForm()'s '' default is only safe for a controlled input's initial
+    // render — BookingFormPage's own save handler coerces it to null before
+    // ever sending to the server (the column is Float?, and Prisma rejects
+    // an empty string for it outright). This path calls addBooking directly
+    // and skips that coercion, so it has to redo it here — the inquiry form
+    // never collects a deposit amount anyway, so null is always correct.
+    depositAmount: null,
   });
 
   return { client, booking };
