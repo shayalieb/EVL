@@ -1234,6 +1234,16 @@ export default function EventFormPage() {
           <h2 className="text-2xl font-bold text-slate-800 truncate">{isEditing ? event.name : 'Add Event'}</h2>
         </div>
         <div className="flex gap-2 shrink-0">
+          {isEditing && sourceBooking && (
+            <button
+              type="button"
+              onClick={() => navigate(`/bookings/${sourceBooking.id}`)}
+              data-testid="event-form-view-booking-button"
+              className="px-4 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
+            >
+              View Booking →
+            </button>
+          )}
           {isEditing && currentUser.activeVerticals?.includes('band_orchestra') && (
             <button
               type="button"
@@ -1290,6 +1300,20 @@ export default function EventFormPage() {
           </button>
         </div>
       </div>
+
+      {isEditing && sourceBooking && (
+        <div data-testid="event-form-source-booking-banner" className="flex items-center justify-between gap-3 text-sm bg-blue-50 border border-blue-100 text-blue-700 rounded-lg px-3 py-2 mb-6">
+          <span>Created from a booking.</span>
+          <button
+            type="button"
+            onClick={() => navigate(`/bookings/${sourceBooking.id}`)}
+            data-testid="event-form-source-booking-view-button"
+            className="font-semibold hover:underline shrink-0"
+          >
+            View Booking →
+          </button>
+        </div>
+      )}
 
       <div className="flex overflow-x-auto border-b border-slate-200 mb-6">
         <button
