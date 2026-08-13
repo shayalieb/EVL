@@ -9,7 +9,6 @@ import { DEFAULT_ACCENT_COLOR } from './colorTheme';
 const REQUESTS_LABELS = {
   photography: { title: 'Equipment Checklist', addLabel: '+ Add Item', emptyLabel: 'No equipment requests added yet.' },
   party_planning: { title: 'Vendor & Rental Checklist', addLabel: '+ Add Item', emptyLabel: 'No vendor or rental items added yet.' },
-  band_orchestra: { title: 'Gear & Tech Requests', addLabel: '+ Add Item', emptyLabel: 'No gear or tech requests added yet.' },
 };
 export function requestsLabels(vertical) {
   return REQUESTS_LABELS[vertical] || { title: 'Requests', addLabel: '+ Add Request', emptyLabel: 'No requests added yet.' };
