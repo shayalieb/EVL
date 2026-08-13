@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import Badge from '../components/ui/Badge';
 import { formatCurrency } from '../lib/format';
 import { listInvoices } from '../lib/invoices';
-import { CalendarIcon, ClockIcon, DollarIcon, UsersIcon, WrenchIcon, AlertIcon } from '../components/ui/icons';
+import { CalendarIcon, ClockIcon, DollarIcon, UsersIcon, WrenchIcon, AlertIcon, ClipboardIcon } from '../components/ui/icons';
 
 import Skeleton from '../components/ui/Skeleton';
 
@@ -53,12 +54,40 @@ function StatTile({ label, value, color = '#64748b', icon, testId }) {
   );
 }
 
+function WelcomeStep({ icon, title, description, actionLabel, onClick, testId }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={testId}
+      className="text-left bg-white rounded-xl border border-slate-200 p-5 hover:border-indigo-300 hover:shadow-md transition-all duration-200"
+    >
+      <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-indigo-50 text-indigo-600 mb-3">
+        {icon}
+      </div>
+      <div className="text-sm font-bold text-slate-800 mb-1">{title}</div>
+      <p className="text-sm text-slate-500 mb-3">{description}</p>
+      <span className="text-sm font-semibold text-indigo-600">{actionLabel} →</span>
+    </button>
+  );
+}
+
 export default function HomePage() {
   const {
     events, bookings, clients, contractors, eventStatuses,
     computeEventTotalCost, computeVendorStatus, computeClientEventCounts, getContractorById,
   } = useData();
+  const { currentUser } = useAuth();
   const navigate = useNavigate();
+
+  // Contractors don't count toward "fresh" — a handful of sample ones are
+  // seeded into every new account regardless of vertical (see
+  // src/lib/seed.js) precisely so the roster isn't empty on day one, but
+  // that alone doesn't mean the business has actually started using the
+  // app. Once any real booking, event, or client exists, this is false for
+  // good — the normal dashboard below takes over permanently, even if
+  // everything gets deleted again later.
+  const isFreshAccount = bookings.length === 0 && events.length === 0 && clients.length === 0;
 
   const [invoices, setInvoices] = useState([]);
   const [invoicesLoading, setInvoicesLoading] = useState(true);
@@ -172,6 +201,46 @@ export default function HomePage() {
     <div>
       <h2 className="text-2xl font-bold text-slate-800 mb-4">Home</h2>
 
+      {isFreshAccount ? (
+        <div data-testid="home-welcome-panel">
+          <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+            <h3 className="text-lg font-bold text-slate-800 mb-1">
+              Welcome{currentUser?.firstName ? `, ${currentUser.firstName}` : ''}
+              {currentUser?.businessInfo?.name ? ` — let's get ${currentUser.businessInfo.name} set up` : ''}
+            </h3>
+            <p className="text-sm text-slate-500">
+              This dashboard fills in once you're tracking real bookings — here's where to start.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <WelcomeStep
+              icon={<ClipboardIcon className="w-4 h-4" />}
+              title="Add your business details"
+              description="Your name and logo show up on every invoice, contract, and client-facing form — right now they'd just say “Your Business.”"
+              actionLabel="Go to Settings"
+              onClick={() => navigate('/settings')}
+              testId="home-welcome-step-business-info"
+            />
+            <WelcomeStep
+              icon={<WrenchIcon className="w-4 h-4" />}
+              title={`Check your contractor roster (${contractors.length} added)`}
+              description="A few sample contractors are already in there so you can see how it looks — edit them or add your own."
+              actionLabel="View Contractors"
+              onClick={() => navigate('/contractors')}
+              testId="home-welcome-step-contractors"
+            />
+            <WelcomeStep
+              icon={<CalendarIcon className="w-4 h-4" />}
+              title="Create your first booking"
+              description="Start tracking a real inquiry, or send a client a link to fill in their own event details."
+              actionLabel="Add a Booking"
+              onClick={() => navigate('/bookings/new')}
+              testId="home-welcome-step-booking"
+            />
+          </div>
+        </div>
+      ) : (
+      <>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
         <StatTile label="Total Events" value={stats.totalEvents} color="#64748b" icon={<CalendarIcon />} testId="home-stat-total-events" />
         <StatTile label="Upcoming Events" value={stats.upcomingCount} color="#2563eb" icon={<ClockIcon />} testId="home-stat-upcoming-events" />
@@ -386,6 +455,8 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }
