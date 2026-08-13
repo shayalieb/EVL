@@ -15,7 +15,7 @@ import { useToast } from '../components/ui/Toast';
 import { formatCurrency as currency, formatEventDate } from '../lib/format';
 import { matchesSearch } from '../lib/search';
 import { usePagination } from '../lib/usePagination';
-import { listInquiryLinks } from '../lib/inquiryLinks';
+import { listInquiryLinks, deleteInquiryLink } from '../lib/inquiryLinks';
 import { listContracts } from '../lib/contracts';
 import { listInvoices } from '../lib/invoices';
 import { pipelineSteps, currentPipelineStep } from '../lib/bookingPipeline';
@@ -76,6 +76,13 @@ export default function BookingsPage() {
   const [sendInquiryModalOpen, setSendInquiryModalOpen] = useState(false);
   const [pendingInquiries, setPendingInquiries] = useState([]);
   const [reviewingInquiry, setReviewingInquiry] = useState(null);
+  // Sent (status 'open') inquiry links awaiting a response — the reusable
+  // account-wide link is excluded, it's managed from Settings instead and
+  // stays 'open' forever by design (see InquiryLink.isReusable). Unused ones
+  // also age out automatically after 48h (inquiryLinkPurger.js); this list
+  // is the manual "delete it now" equivalent.
+  const [sentInquiries, setSentInquiries] = useState([]);
+  const [deleteInquiryTarget, setDeleteInquiryTarget] = useState(null);
   // Account-wide, fetched once — same lightweight local-fetch pattern
   // HomePage.jsx already uses for its own invoices (not routed through
   // DataContext, since neither is read anywhere else on this page). Feeds
@@ -88,6 +95,7 @@ export default function BookingsPage() {
   useEffect(() => {
     let cancelled = false;
     listInquiryLinks({ status: 'submitted' }).then((links) => { if (!cancelled) setPendingInquiries(links); }).catch(() => {});
+    listInquiryLinks({ status: 'open' }).then((links) => { if (!cancelled) setSentInquiries(links.filter((l) => !l.isReusable)); }).catch(() => {});
     listContracts().then((list) => { if (!cancelled) setContracts(list); }).catch(() => {});
     listInvoices().then((list) => { if (!cancelled) setInvoices(list); }).catch(() => {});
     return () => { cancelled = true; };
@@ -95,6 +103,18 @@ export default function BookingsPage() {
 
   function handleInquiryApplied(linkId) {
     setPendingInquiries((prev) => prev.filter((l) => l.id !== linkId));
+  }
+
+  async function handleDeleteInquiryLink() {
+    const target = deleteInquiryTarget;
+    setDeleteInquiryTarget(null);
+    try {
+      await deleteInquiryLink(target.id);
+      setSentInquiries((prev) => prev.filter((l) => l.id !== target.id));
+      showToast('Inquiry link deleted');
+    } catch (err) {
+      showToast(err.message || 'Failed to delete inquiry link', 'error');
+    }
   }
 
   function depositStatus(b) {
@@ -222,6 +242,35 @@ export default function BookingsPage() {
                   className="text-indigo-600 font-semibold hover:underline"
                 >
                   Review
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {sentInquiries.length > 0 && (
+        <div data-testid="bookings-sent-inquiries-banner" className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="text-sm font-semibold text-slate-600 mb-2">
+            {sentInquiries.length} inquiry link{sentInquiries.length > 1 ? 's' : ''} awaiting a response
+          </div>
+          <div className="space-y-1">
+            {sentInquiries.map((link) => (
+              <div key={link.id} data-testid="bookings-sent-inquiry-row" className="flex items-center justify-between text-sm">
+                <span className="text-slate-600">
+                  {link.recipientEmail
+                    ? `Emailed to ${link.recipientName || link.recipientEmail}`
+                    : 'Link copied (not emailed)'}
+                  {' — sent '}{formatEventDate((link.sentAt || link.createdAt).slice(0, 10))}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setDeleteInquiryTarget(link)}
+                  data-testid="bookings-delete-sent-inquiry-button"
+                  className="text-slate-400 hover:text-red-600 font-semibold"
+                  aria-label="Delete inquiry link"
+                >
+                  🗑
                 </button>
               </div>
             ))}
@@ -498,6 +547,14 @@ export default function BookingsPage() {
         link={reviewingInquiry}
         onClose={() => setReviewingInquiry(null)}
         onApplied={handleInquiryApplied}
+      />
+
+      <ConfirmDialog
+        open={!!deleteInquiryTarget}
+        onClose={() => setDeleteInquiryTarget(null)}
+        onConfirm={handleDeleteInquiryLink}
+        title="Delete inquiry link?"
+        description={`This permanently deletes the link${deleteInquiryTarget?.recipientEmail ? ` sent to ${deleteInquiryTarget.recipientName || deleteInquiryTarget.recipientEmail}` : ''} — it'll stop working immediately.`}
       />
     </div>
   );

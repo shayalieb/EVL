@@ -22,6 +22,7 @@ function serializeForOwner(link) {
   return {
     id: link.id,
     status: link.status,
+    isReusable: link.isReusable,
     expiresAt: link.expiresAt,
     bookingId: link.bookingId,
     recipientEmail: link.recipientEmail,
@@ -207,6 +208,26 @@ router.post('/:id/apply', asyncHandler(async (req, res) => {
     },
   });
   res.json({ link: serializeForOwner(updated) });
+}));
+
+// Hard delete, not soft — an inquiry link is a lightweight invite/response
+// record, not a business record like Booking/Event, so there's no 30-day
+// recoverability window here. The reusable "paste on your website" link is
+// excluded: deleting it would break a URL the business has published
+// externally, so that one only ever gets its token swapped via Regenerate.
+// See inquiryLinkPurger.js for the automatic 48-hour equivalent (unused
+// links only — this manual route allows deleting a submitted/applied one
+// too, since that's a deliberate choice the owner is making).
+router.delete('/:id', asyncHandler(async (req, res) => {
+  const link = await prisma.inquiryLink.findUnique({ where: { id: req.params.id } });
+  if (!link || link.accountId !== req.membership.accountId) {
+    return res.status(404).json({ error: 'Inquiry link not found.' });
+  }
+  if (link.isReusable) {
+    return res.status(400).json({ error: "The reusable inquiry link can't be deleted — use Regenerate instead." });
+  }
+  await prisma.inquiryLink.delete({ where: { id: link.id } });
+  res.json({ ok: true });
 }));
 
 // ---- Public (unauthenticated, token-based) ----

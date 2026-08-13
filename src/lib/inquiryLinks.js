@@ -24,6 +24,14 @@ export async function regenerateInquiryLink(id) {
   return apiFetch(`/inquiry-links/${id}/regenerate`, { method: 'POST' });
 }
 
+// Hard delete — unused links also age out automatically after 48 hours
+// (see server/src/lib/inquiryLinkPurger.js); this is the manual equivalent,
+// available regardless of status (open/submitted/applied). The reusable
+// account-wide link can't be deleted this way — see getGeneralInquiryLink.
+export async function deleteInquiryLink(id) {
+  return apiFetch(`/inquiry-links/${id}`, { method: 'DELETE' });
+}
+
 export async function applyInquiryLink(id, { bookingId, clientId }) {
   const data = await apiFetch(`/inquiry-links/${id}/apply`, {
     method: 'POST',
