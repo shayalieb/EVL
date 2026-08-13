@@ -257,13 +257,23 @@ export default function EventFormPage() {
     if (event) {
       if (hydratedEventIdRef.current === event.id) return;
       hydratedEventIdRef.current = event.id;
-      // Older saved events predate categoryTabs — derive an initial set from
-      // whichever categories are already booked so nothing disappears.
-      const categoryTabs = event.categoryTabs || Array.from(new Set(
+      // Older saved events predate categoryTabs/prepGroups — derive an initial
+      // set for each from whichever categories are already booked so nothing
+      // disappears. Checked by length, not truthiness: [] is truthy in JS,
+      // and [] is exactly what the server defaults both fields to on every
+      // new event — so a plain `event.categoryTabs || derive(...)` would
+      // never derive anything for a brand-new event whose contractors were
+      // assigned by some path other than this page's own "+ Add Contractor"/
+      // "+ Add" group buttons (e.g. seeded/imported data, or a future
+      // integration), leaving them booked and billed but invisible on both
+      // the Contractors tab and the Prep Sheet's Crew list.
+      const bookedCategories = () => Array.from(new Set(
         event.contractorBookings
           .map((b) => contractors.find((c) => c.id === b.contractorId)?.contractorType1)
           .filter(Boolean)
       ));
+      const categoryTabs = event.categoryTabs?.length ? event.categoryTabs : bookedCategories();
+      const prepGroups = event.prepGroups?.length ? event.prepGroups : bookedCategories();
       setForm({
         id: event.id,
         name: event.name, eventType: event.eventType, eventDate: event.eventDate,
@@ -282,7 +292,7 @@ export default function EventFormPage() {
         contractorBookings: [...event.contractorBookings],
         categoryTabs,
         schedule: event.schedule || [emptyScheduleItem()],
-        prepGroups: event.prepGroups || [],
+        prepGroups,
         prepNotes: event.prepNotes || '',
         requests: event.requests || [emptyRequestItem()],
         shotList: event.shotList || [],

@@ -160,7 +160,7 @@ export default function ContractorPickerRow({
                 title={disabled ? `No "${b.label}" inquiry status configured in Settings` : b.label}
                 data-testid={`contractor-picker-row-bucket-${b.value}-button`}
                 className={bucketButtonClass}
-                style={active ? { color: status.color, borderColor: `${status.color}55`, backgroundColor: `${status.color}11` } : undefined}
+                style={active && status ? { color: status.color, borderColor: `${status.color}55`, backgroundColor: `${status.color}11` } : undefined}
               >
                 {b.label}
               </button>
