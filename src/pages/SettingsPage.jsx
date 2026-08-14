@@ -10,6 +10,7 @@ import TemplatesTab from './settings/TemplatesTab';
 import BookingLinkTab from './settings/BookingLinkTab';
 import EmailDomainTab from './settings/EmailDomainTab';
 import { resizeImageToDataUrl } from '../lib/resizeImage';
+import { formatPhoneNumber } from '../lib/format';
 import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
 import { DOCUMENT_LAYOUTS, TEXT_SCALE_STEPS, DEFAULT_LAYOUT_ID, DEFAULT_TEXT_SCALE } from '../lib/documentLayouts';
 
@@ -123,7 +124,7 @@ function UserInfoTab() {
         </div>
         <div>
           <label className={labelClass}>Phone</label>
-          <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} data-testid="settings-user-phone-input" className={inputClass} />
+          <input type="tel" value={phone} onChange={(e) => setPhone(formatPhoneNumber(e.target.value))} data-testid="settings-user-phone-input" className={inputClass} />
         </div>
         <button type="submit" data-testid="settings-user-save-profile-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
           Save Profile
@@ -215,7 +216,7 @@ function BusinessInfoTab() {
       </div>
       <div>
         <label className={labelClass}>Business Phone</label>
-        <input type="tel" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} data-testid="settings-business-phone-input" className={inputClass} />
+        <input type="tel" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: formatPhoneNumber(e.target.value) }))} data-testid="settings-business-phone-input" className={inputClass} />
       </div>
       <div>
         <label className={labelClass}>Business Email</label>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import Modal from './ui/Modal';
 import { useData } from '../context/DataContext';
-import { formatEmailInput } from '../lib/format';
+import { formatEmailInput, formatPhoneNumber } from '../lib/format';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -102,7 +102,7 @@ export default function VenueModal({ open, onClose, venue, onSaved }) {
           <div className="flex gap-2">
             <div className="flex-1">
               <label className={labelClass}>Contact Phone</label>
-              <input type="tel" value={form.contactPhone} onChange={(e) => update('contactPhone', e.target.value)} data-testid="venue-modal-contactphone-input" className={inputClass} />
+              <input type="tel" value={form.contactPhone} onChange={(e) => update('contactPhone', formatPhoneNumber(e.target.value))} data-testid="venue-modal-contactphone-input" className={inputClass} />
             </div>
             <div className="w-20">
               <label className={labelClass}>Ext.</label>

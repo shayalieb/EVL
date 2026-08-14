@@ -26,7 +26,7 @@ import { listInvoices, createInvoice, updateInvoice, sendInvoice, markInvoicePay
 import { generateContractPdf, getContractPdfDataUrl } from '../lib/contractPdf';
 import { generateInvoicePdf } from '../lib/invoicePdf';
 import { sendEmail } from '../lib/email/send';
-import { formatCurrency as currency, formatEventDate, formatVenueLine, formatEventTime, formatEmailInput } from '../lib/format';
+import { formatCurrency as currency, formatEventDate, formatVenueLine, formatEventTime, formatEmailInput, formatPhoneNumber } from '../lib/format';
 import { FileIcon } from '../components/ui/icons';
 import SignatureCanvas from '../components/SignatureCanvas';
 import MoneyInput from '../components/ui/MoneyInput';
@@ -1877,7 +1877,7 @@ export default function BookingFormPage() {
                 <div className="flex gap-2">
                   <div className="flex-1">
                     <label className={labelClass}>Venue Contact Phone</label>
-                    <input type="tel" value={form.venue.contactPhone} onChange={(e) => updateVenue('contactPhone', e.target.value)} data-testid="booking-form-venue-contactphone-input" className={inputClass} />
+                    <input type="tel" value={form.venue.contactPhone} onChange={(e) => updateVenue('contactPhone', formatPhoneNumber(e.target.value))} data-testid="booking-form-venue-contactphone-input" className={inputClass} />
                   </div>
                   <div className="w-20">
                     <label className={labelClass}>Ext.</label>

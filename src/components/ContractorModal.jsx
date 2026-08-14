@@ -5,6 +5,7 @@ import CurrencyInput from './ui/CurrencyInput';
 import { useData } from '../context/DataContext';
 import { uid } from '../lib/storage';
 import { getPricingTiers } from '../lib/pricingTiers';
+import { formatPhoneNumber } from '../lib/format';
 import { getContractorCalendarLink, regenerateContractorCalendarLink, updateContractorCalendarLinkVisibility, emailContractorCalendarLink } from '../lib/contractors';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -208,7 +209,7 @@ export default function ContractorModal({ open, onClose, contractor }) {
           </div>
           <div>
             <label className={labelClass}>Phone Number</label>
-            <input type="tel" value={form.phone} onChange={(e) => update('phone', e.target.value)} data-testid="contractor-modal-phone-input" className={inputClass} />
+            <input type="tel" value={form.phone} onChange={(e) => update('phone', formatPhoneNumber(e.target.value))} data-testid="contractor-modal-phone-input" className={inputClass} />
           </div>
         </div>
 

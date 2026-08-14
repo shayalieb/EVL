@@ -19,7 +19,7 @@ import { getThreadSummaries, getThread, sendThreadedEmail } from '../lib/email/t
 import { renderEmailTemplate } from '../lib/mergeFields';
 import { uid } from '../lib/storage';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
-import { formatCurrency as currency, formatEventDate, formatEventTime } from '../lib/format';
+import { formatCurrency as currency, formatEventDate, formatEventTime, formatPhoneNumber } from '../lib/format';
 import { getPricingTiers, getPricingTier, getTierPrice, getBookingTotal, getOvertimeHours, getOvertimeAmount } from '../lib/pricingTiers';
 import { getPrepContractors, renderPrepSheetEmail, requestsLabels } from '../lib/prepSheet';
 import { generatePrepSheetPdf, generatePrepSheetPdfAttachment } from '../lib/prepSheetPdf';
@@ -1494,7 +1494,7 @@ export default function EventFormPage() {
                 <div className="flex gap-2">
                   <div className="flex-1">
                     <label className={labelClass}>Contact Phone</label>
-                    <input type="tel" value={form.contactPhone} onChange={(e) => update('contactPhone', e.target.value)} data-testid="event-form-contact-phone-input" className={inputClass} />
+                    <input type="tel" value={form.contactPhone} onChange={(e) => update('contactPhone', formatPhoneNumber(e.target.value))} data-testid="event-form-contact-phone-input" className={inputClass} />
                   </div>
                   <div className="w-20">
                     <label className={labelClass}>Ext.</label>
@@ -1582,7 +1582,7 @@ export default function EventFormPage() {
                 <div className="flex gap-2">
                   <div className="flex-1">
                     <label className={labelClass}>Venue Contact Phone</label>
-                    <input type="tel" value={form.venue.contactPhone} onChange={(e) => updateVenue('contactPhone', e.target.value)} data-testid="event-form-venue-contactphone-input" className={inputClass} />
+                    <input type="tel" value={form.venue.contactPhone} onChange={(e) => updateVenue('contactPhone', formatPhoneNumber(e.target.value))} data-testid="event-form-venue-contactphone-input" className={inputClass} />
                   </div>
                   <div className="w-20">
                     <label className={labelClass}>Ext.</label>
@@ -1924,7 +1924,7 @@ export default function EventFormPage() {
                       type="tel"
                       placeholder="Phone (optional)"
                       value={g.phone || ''}
-                      onChange={(e) => updateGuestLocal(g.id, { phone: e.target.value })}
+                      onChange={(e) => updateGuestLocal(g.id, { phone: formatPhoneNumber(e.target.value) })}
                       onBlur={() => handleCommitGuest(g.id, { phone: g.phone })}
                       data-testid="event-form-guest-phone-input"
                       className={inputClass}
