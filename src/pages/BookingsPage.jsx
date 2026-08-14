@@ -4,6 +4,7 @@ import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { PRIORITIES } from './BookingFormPage';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import ScrollShadow from '../components/ui/ScrollShadow';
 import MarkCompleteModal from '../components/MarkCompleteModal';
 import Badge from '../components/ui/Badge';
 import Tabs from '../components/ui/Tabs';
@@ -329,7 +330,7 @@ export default function BookingsPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
+        <ScrollShadow>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
@@ -519,7 +520,7 @@ export default function BookingsPage() {
               })}
             </tbody>
           </table>
-        </div>
+        </ScrollShadow>
         <Pagination page={page} pageCount={pageCount} onChange={setPage} totalItems={totalItems} pageSize={pageSize} testId="bookings-pagination" />
       </div>
 

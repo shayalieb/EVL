@@ -3,6 +3,7 @@ import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import ClientModal from '../components/ClientModal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import ScrollShadow from '../components/ui/ScrollShadow';
 import Tooltip from '../components/ui/Tooltip';
 import SearchInput from '../components/ui/SearchInput';
 import FilterSelect from '../components/ui/FilterSelect';
@@ -93,7 +94,7 @@ export default function ClientsPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
+        <ScrollShadow>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
@@ -180,7 +181,7 @@ export default function ClientsPage() {
               })}
             </tbody>
           </table>
-        </div>
+        </ScrollShadow>
         <Pagination page={page} pageCount={pageCount} onChange={setPage} totalItems={totalItems} pageSize={pageSize} testId="clients-pagination" />
       </div>
 
