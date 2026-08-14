@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Logo from '../components/ui/Logo';
 import SubmitButton from '../components/ui/SubmitButton';
+import { FileIcon, UsersIcon, ClipboardIcon } from '../components/ui/icons';
 import { joinWaitlist, sendContactMessage } from '../lib/landing';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -37,24 +38,73 @@ const PAIN_POINTS = [
 const FEATURE_GROUPS = [
   {
     title: 'For your clients',
-    icon: '🤝',
+    Icon: FileIcon,
     items: ['Inquiry-to-booking pipeline', 'Proposals with e-signature', 'Contracts with e-signature', 'Invoicing with built-in payments'],
   },
   {
     title: 'For your roster',
-    icon: '🧰',
+    Icon: UsersIcon,
     items: ['Contractor roster & availability', 'Per-event confirm/decline tracking', 'A home-screen link every contractor can check themselves'],
   },
   {
     title: 'For the day of',
-    icon: '🎵',
+    Icon: ClipboardIcon,
     items: ['Stage plots', 'Set lists with email + PDF export', 'Floor plans', 'Prep sheets & crew schedules'],
   },
+];
+
+const NAV_LINKS = [
+  { href: '#story', label: 'Story' },
+  { href: '#features', label: 'Features' },
 ];
 
 function FieldError({ children }) {
   if (!children) return null;
   return <p className="text-xs text-red-600">{children}</p>;
+}
+
+// Fades a section up into place the first time it scrolls into view — skips
+// straight to visible (no observer, no motion) for anyone with reduced
+// motion set, rather than just running the animation anyway.
+function useReveal() {
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return undefined;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setVisible(true);
+      return undefined;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.15 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  return [ref, visible];
+}
+
+function Reveal({ as: Tag = 'div', delay = 0, className = '', children, ...rest }) {
+  const [ref, visible] = useReveal();
+  return (
+    <Tag
+      ref={ref}
+      className={`transition-all duration-700 ease-out ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5'} ${className}`}
+      style={{ transitionDelay: visible ? `${delay}ms` : '0ms' }}
+      {...rest}
+    >
+      {children}
+    </Tag>
+  );
 }
 
 export default function LandingPage() {
@@ -67,6 +117,15 @@ export default function LandingPage() {
   const [contactSubmitting, setContactSubmitting] = useState(false);
   const [contactError, setContactError] = useState('');
   const [contactDone, setContactDone] = useState(false);
+
+  // Scoped to this page only (not a global app-wide CSS change) — added on
+  // mount, removed on unmount, so an in-page "#waitlist" jump glides instead
+  // of cutting, without affecting scroll behavior anywhere else in the app.
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    document.documentElement.classList.add('scroll-smooth');
+    return () => document.documentElement.classList.remove('scroll-smooth');
+  }, []);
 
   async function handleWaitlistSubmit(e) {
     e.preventDefault();
@@ -106,55 +165,76 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      <header className="border-b border-slate-100">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-100">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Logo className="h-8 w-auto" />
-          <Link to="/auth" data-testid="landing-login-link" className="text-sm font-semibold text-slate-500 hover:text-slate-700">
-            Log In
-          </Link>
+          <nav className="hidden sm:flex items-center gap-6">
+            {NAV_LINKS.map((l) => (
+              <a key={l.href} href={l.href} className="text-sm font-medium text-slate-500 hover:text-slate-800">
+                {l.label}
+              </a>
+            ))}
+          </nav>
+          <div className="flex items-center gap-4">
+            <Link to="/auth" data-testid="landing-login-link" className="text-sm font-semibold text-slate-500 hover:text-slate-700">
+              Log In
+            </Link>
+            <a href="#waitlist" data-testid="landing-nav-waitlist-link" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
+              Get Waitlisted
+            </a>
+          </div>
         </div>
       </header>
 
       {/* Hero */}
-      <section className="max-w-5xl mx-auto px-4 sm:px-6 pt-16 pb-14 text-center">
-        <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-4">
-          For bands, DJs &amp; orchestras booking out a roster
-        </p>
-        <h1 className="text-3xl sm:text-5xl font-bold text-slate-900 leading-tight max-w-3xl mx-auto">
-          Built by a musician who spent 20 years chasing confirmations instead of chasing gigs.
-        </h1>
-        <p className="mt-5 text-lg text-slate-500 max-w-2xl mx-auto">
-          GigWorks is the business software for entertainment agencies and bandleaders who book out multiple
-          musicians — proposals, contracts, and invoicing for your clients, plus the day-of details (stage plots,
-          set lists, floor plans) connected to who's actually on the gig.
-        </p>
-        <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
-          <a href="#waitlist" data-testid="landing-hero-waitlist-link" className="px-6 py-3 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
-            Get Waitlisted
-          </a>
-          <a href="#contact" data-testid="landing-hero-contact-link" className="px-6 py-3 rounded-lg border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50">
-            Get in Touch
-          </a>
+      <section className="relative overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
+          <div className="absolute left-1/2 top-[-12rem] w-[42rem] h-[42rem] -translate-x-1/2 rounded-full bg-indigo-200/40 blur-3xl" />
+          <div className="absolute right-[-8rem] top-[6rem] w-[26rem] h-[26rem] rounded-full bg-indigo-100/60 blur-3xl" />
+        </div>
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-16 pb-14 text-center">
+          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-4">
+            For bands, DJs &amp; orchestras booking out a roster
+          </p>
+          <h1 className="text-3xl sm:text-5xl font-bold text-slate-900 leading-tight max-w-3xl mx-auto">
+            Built by a musician who spent 20 years chasing confirmations instead of chasing gigs.
+          </h1>
+          <p className="mt-5 text-lg text-slate-500 max-w-2xl mx-auto">
+            GigWorks is the business software for entertainment agencies and bandleaders who book out multiple
+            musicians — proposals, contracts, and invoicing for your clients, plus the day-of details (stage plots,
+            set lists, floor plans) connected to who's actually on the gig.
+          </p>
+          <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
+            <a href="#waitlist" data-testid="landing-hero-waitlist-link" className="px-6 py-3 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
+              Get Waitlisted
+            </a>
+            <a href="#contact" data-testid="landing-hero-contact-link" className="px-6 py-3 rounded-lg border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50">
+              Get in Touch
+            </a>
+          </div>
         </div>
       </section>
 
       {/* Founder story */}
-      <section className="bg-slate-50 border-y border-slate-100">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-14">
+      <section id="story" className="bg-slate-50 border-y border-slate-100 scroll-mt-16">
+        <Reveal className="max-w-3xl mx-auto px-4 sm:px-6 py-14">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-4">Built from the gig, not a guess</h2>
-          <p className="text-lg text-slate-700 leading-relaxed">
-            I've been a gigging musician for over 20 years — playing my own gigs, working for other bandleaders and
-            offices, and staffing musicians out to weddings and events booked through agencies. I've been on every
-            side of this business: the player waiting to hear if a gig is actually confirmed, the bandleader chasing
-            five people for a stage plot two days before a wedding, and the office trying to keep a whole roster
-            straight through a busy season.
-          </p>
-          <p className="mt-4 text-lg text-slate-700 leading-relaxed">
-            GigWorks is what I wished existed the entire time. Every feature in it came from a real pain point I've
-            personally run into over two decades of doing this work — not a guess at what musicians need from someone
-            who's never had to load in at 4pm and be ready by 6.
-          </p>
-        </div>
+          <div className="relative pl-6 sm:pl-8">
+            <span className="absolute left-0 top-0 text-5xl sm:text-6xl leading-none text-indigo-200 font-serif select-none" aria-hidden="true">&ldquo;</span>
+            <p className="text-lg text-slate-700 leading-relaxed">
+              I've been a gigging musician for over 20 years — playing my own gigs, working for other bandleaders and
+              offices, and staffing musicians out to weddings and events booked through agencies. I've been on every
+              side of this business: the player waiting to hear if a gig is actually confirmed, the bandleader chasing
+              five people for a stage plot two days before a wedding, and the office trying to keep a whole roster
+              straight through a busy season.
+            </p>
+            <p className="mt-4 text-lg text-slate-700 leading-relaxed">
+              GigWorks is what I wished existed the entire time. Every feature in it came from a real pain point I've
+              personally run into over two decades of doing this work — not a guess at what musicians need from
+              someone who's never had to load in at 4pm and be ready by 6.
+            </p>
+          </div>
+        </Reveal>
       </section>
 
       {/* Pain points */}
@@ -165,27 +245,29 @@ export default function LandingPage() {
           without the right tools.
         </p>
         <div className="space-y-4">
-          {PAIN_POINTS.map((p) => (
-            <div key={p.title} data-testid="landing-pain-point" className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-sm">
+          {PAIN_POINTS.map((p, i) => (
+            <Reveal key={p.title} delay={i * 60} data-testid="landing-pain-point" className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-sm">
               <h3 className="font-semibold text-slate-800 text-base">{p.title}</h3>
               <p className="text-sm text-slate-500 mt-1">{p.problem}</p>
               <div className="mt-3 flex items-start gap-2 text-sm text-indigo-700 bg-indigo-50 rounded-lg px-3 py-2">
                 <span aria-hidden="true">→</span>
                 <span>{p.fix}</span>
               </div>
-            </div>
+            </Reveal>
           ))}
         </div>
       </section>
 
       {/* Feature groups */}
-      <section className="bg-slate-50 border-y border-slate-100">
+      <section id="features" className="bg-slate-50 border-y border-slate-100 scroll-mt-16">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16">
           <h2 className="text-2xl font-bold text-slate-900 text-center mb-10">One place for the whole gig</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            {FEATURE_GROUPS.map((g) => (
-              <div key={g.title} data-testid="landing-feature-group" className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-                <div className="text-2xl mb-2">{g.icon}</div>
+            {FEATURE_GROUPS.map((g, i) => (
+              <Reveal key={g.title} delay={i * 90} data-testid="landing-feature-group" className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
+                  <g.Icon className="w-5 h-5" />
+                </div>
                 <h3 className="font-semibold text-slate-800 mb-3">{g.title}</h3>
                 <ul className="space-y-1.5 text-sm text-slate-500">
                   {g.items.map((item) => (
@@ -195,7 +277,7 @@ export default function LandingPage() {
                     </li>
                   ))}
                 </ul>
-              </div>
+              </Reveal>
             ))}
           </div>
         </div>
@@ -204,7 +286,7 @@ export default function LandingPage() {
       {/* Waitlist + Contact */}
       <section className="max-w-5xl mx-auto px-4 sm:px-6 py-16">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-          <div id="waitlist" className="bg-white border border-slate-200 rounded-xl p-6 sm:p-7 shadow-sm scroll-mt-6">
+          <div id="waitlist" className="bg-white border border-slate-200 rounded-xl p-6 sm:p-7 shadow-sm scroll-mt-20">
             <h2 className="text-xl font-bold text-slate-900">Get Waitlisted</h2>
             <p className="text-sm text-slate-500 mt-1 mb-5">
               GigWorks is currently onboarding a small first group of agencies and bandleaders directly. Join the
@@ -239,7 +321,7 @@ export default function LandingPage() {
             )}
           </div>
 
-          <div id="contact" className="bg-white border border-slate-200 rounded-xl p-6 sm:p-7 shadow-sm scroll-mt-6">
+          <div id="contact" className="bg-white border border-slate-200 rounded-xl p-6 sm:p-7 shadow-sm scroll-mt-20">
             <h2 className="text-xl font-bold text-slate-900">Get in Touch</h2>
             <p className="text-sm text-slate-500 mt-1 mb-5">
               Have a question, or want to talk through whether this fits how your business runs? Send a message
