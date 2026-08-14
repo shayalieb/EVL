@@ -54,12 +54,55 @@ const WRITABLE_FIELDS = [
   'secondShooters', 'otherExpenses', 'history',
 ];
 
+// The list view (table rendering, Home's dashboard aggregates, the vendor-
+// status/contractor-count filters) reads contractorBookings and venue, but
+// never touches categoryTabs/schedule/prepGroups/requests/shotList/
+// secondShooters/otherExpenses/history — those are edit-form-only content
+// (see EventFormPage.jsx) that grows unboundedly with an account's history.
+// The list route ships this lighter shape and the form fetches the full
+// record by id instead.
+function serializeEventLite(e) {
+  return {
+    id: e.id,
+    name: e.name,
+    eventType: e.eventType,
+    eventDate: e.eventDate,
+    eventDayOfTheWeek: e.eventDayOfTheWeek,
+    clientId: e.clientId,
+    brideName: e.brideName,
+    groomName: e.groomName,
+    guestCount: e.guestCount,
+    contactPhone: e.contactPhone,
+    contactPhoneExt: e.contactPhoneExt,
+    contactEmail: e.contactEmail,
+    startTime: e.startTime,
+    endTime: e.endTime,
+    eventNote: e.eventNote,
+    prepNotes: e.prepNotes,
+    eventStatus: e.eventStatus,
+    deletedAt: e.deletedAt,
+    completedAt: e.completedAt,
+    venue: e.venue,
+    contractorBookings: e.contractorBookings,
+    createdAt: e.createdAt,
+    updatedAt: e.updatedAt,
+  };
+}
+
 router.get('/', asyncHandler(async (req, res) => {
   const events = await prisma.event.findMany({
     where: { accountId: req.membership.accountId, deletedAt: null },
     orderBy: { createdAt: 'asc' },
   });
-  res.json({ events: events.map(serializeEvent) });
+  res.json({ events: events.map(serializeEventLite) });
+}));
+
+router.get('/:id', asyncHandler(async (req, res) => {
+  const event = await prisma.event.findUnique({ where: { id: req.params.id } });
+  if (!event || event.accountId !== req.membership.accountId) {
+    return res.status(404).json({ error: 'Event not found.' });
+  }
+  res.json({ event: serializeEvent(event) });
 }));
 
 router.post('/', asyncHandler(async (req, res) => {

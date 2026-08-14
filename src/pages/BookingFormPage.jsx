@@ -18,6 +18,7 @@ import { useToast } from '../components/ui/Toast';
 import { uid } from '../lib/storage';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
 import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, bookingDocumentDownloadUrl } from '../lib/bookingDocuments';
+import { getBooking } from '../lib/bookings';
 import { generateProposalPdf, generateProposalPdfAttachment, getProposalPdfDataUrl } from '../lib/proposalPdf';
 import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms, addContractLogNote, regenerateClientSignLink } from '../lib/contracts';
 import { listInquiryLinks } from '../lib/inquiryLinks';
@@ -435,7 +436,25 @@ export default function BookingFormPage() {
   }, [can, navigate]);
 
   const isEditing = !!bookingId;
-  const booking = isEditing ? bookings.find((b) => b.id === bookingId) : null;
+  // The list-lite record from context (see server/src/routes/bookings.js) —
+  // enough to confirm the id exists, but missing schedule/activityLog/the
+  // full proposal. The form itself hydrates from `booking` below, which
+  // waits for the full-detail fetch.
+  const bookingLite = isEditing ? bookings.find((b) => b.id === bookingId) : null;
+  const [fullBooking, setFullBooking] = useState(null);
+  const [bookingDetailLoaded, setBookingDetailLoaded] = useState(false);
+  const booking = isEditing ? fullBooking : null;
+
+  useEffect(() => {
+    if (!bookingLite) { setFullBooking(null); setBookingDetailLoaded(false); return; }
+    let cancelled = false;
+    setBookingDetailLoaded(false);
+    getBooking(bookingLite.id)
+      .then((full) => { if (!cancelled) setFullBooking(full); })
+      .catch(() => { if (!cancelled) setFullBooking(null); })
+      .finally(() => { if (!cancelled) setBookingDetailLoaded(true); });
+    return () => { cancelled = true; };
+  }, [bookingLite?.id]);
 
   const [form, setForm] = useState(emptyForm());
   const [error, setError] = useState('');
@@ -569,13 +588,19 @@ export default function BookingFormPage() {
         activityLog: booking.activityLog || [],
         proposal: booking.proposal || null,
       });
-    } else {
+    } else if (!isEditing) {
       // bookingId is undefined for the whole time you're drafting a brand-new
       // booking — guard on it (not just truthiness of `booking`) so a
       // background refresh doesn't wipe that in-progress, not-yet-saved draft.
       if (hydratedBookingIdRef.current === bookingId) return;
       hydratedBookingIdRef.current = bookingId;
       setForm(loadDraft(NEW_BOOKING_DRAFT_KEY) || emptyForm());
+    } else {
+      // isEditing but `booking` (the full-detail fetch) hasn't resolved yet —
+      // nothing to hydrate from. Do NOT touch hydratedBookingIdRef here, or
+      // the real hydration above would see it already "done" once the fetch
+      // lands and skip populating the form entirely.
+      return;
     }
     setError('');
     setAddingType(false);
@@ -591,9 +616,9 @@ export default function BookingFormPage() {
   // sessionStorage on every change, so a discarded/reloaded tab can recover
   // it — see lib/draftStorage.js.
   useEffect(() => {
-    if (booking) return;
+    if (booking || isEditing) return;
     saveDraft(NEW_BOOKING_DRAFT_KEY, form);
-  }, [form, booking]);
+  }, [form, booking, isEditing]);
 
   // Auto-saves an existing booking shortly after any field changes — no
   // explicit "Save Changes" click needed. Only for bookings that already
@@ -1561,6 +1586,13 @@ export default function BookingFormPage() {
   const canConvert = booking && !booking.convertedEventId;
 
   if (isEditing && !booking) {
+    if (!bookingDetailLoaded) {
+      return (
+        <div className="max-w-2xl mx-auto text-center py-16">
+          <span className="inline-block w-6 h-6 rounded-full border-2 border-slate-300 border-t-indigo-600 animate-spin" />
+        </div>
+      );
+    }
     return (
       <div className="max-w-2xl mx-auto text-center py-16">
         <p className="text-slate-500 mb-4">This booking couldn't be found.</p>

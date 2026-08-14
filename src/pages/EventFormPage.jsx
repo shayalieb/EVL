@@ -24,6 +24,7 @@ import { getPricingTiers, getPricingTier, getTierPrice, getBookingTotal, getOver
 import { getPrepContractors, renderPrepSheetEmail, requestsLabels } from '../lib/prepSheet';
 import { generatePrepSheetPdf, generatePrepSheetPdfAttachment } from '../lib/prepSheetPdf';
 import { listDocuments, uploadDocument, deleteDocument, documentDownloadUrl } from '../lib/documents';
+import { getEvent } from '../lib/events';
 import { listInvoices } from '../lib/invoices';
 import { listGuests, createGuest, updateGuest, deleteGuest, getRsvpLink } from '../lib/guests';
 import { InfoIcon, MapPinIcon, ClockIcon, UsersIcon, ClipboardIcon, NoteIcon, FileIcon } from '../components/ui/icons';
@@ -195,7 +196,27 @@ export default function EventFormPage() {
   }, [can, navigate]);
 
   const isEditing = !!eventId;
-  const event = isEditing ? events.find((e) => e.id === eventId) : null;
+  // The list-lite record from context (see server/src/routes/events.js) —
+  // enough to confirm the id exists, but missing categoryTabs/schedule/
+  // prepGroups/requests/shotList/secondShooters/otherExpenses/history. The
+  // form itself hydrates from `event` below, which waits for the
+  // full-detail fetch.
+  const eventLite = isEditing ? events.find((e) => e.id === eventId) : null;
+  const [fullEvent, setFullEvent] = useState(null);
+  const [eventDetailLoaded, setEventDetailLoaded] = useState(false);
+  const event = isEditing ? fullEvent : null;
+
+  useEffect(() => {
+    if (!eventLite) { setFullEvent(null); setEventDetailLoaded(false); return; }
+    let cancelled = false;
+    setEventDetailLoaded(false);
+    getEvent(eventLite.id)
+      .then((full) => { if (!cancelled) setFullEvent(full); })
+      .catch(() => { if (!cancelled) setFullEvent(null); })
+      .finally(() => { if (!cancelled) setEventDetailLoaded(true); });
+    return () => { cancelled = true; };
+  }, [eventLite?.id]);
+
   // Profit/loss is sensitive financial data — same owner/admin-only gate
   // already used for Settings -> Users/Billing.
   const isAdminOrOwner = role === 'owner' || role === 'admin';
@@ -299,13 +320,19 @@ export default function EventFormPage() {
         secondShooters: event.secondShooters || [],
         otherExpenses: event.otherExpenses || [],
       });
-    } else {
+    } else if (!isEditing) {
       // eventId is undefined for the whole time you're drafting a brand-new
       // event — guard on it (not just truthiness of `event`) so a background
       // refresh doesn't wipe that in-progress, not-yet-saved draft.
       if (hydratedEventIdRef.current === eventId) return;
       hydratedEventIdRef.current = eventId;
       setForm(loadDraft(NEW_EVENT_DRAFT_KEY) || emptyForm());
+    } else {
+      // isEditing but `event` (the full-detail fetch) hasn't resolved yet —
+      // nothing to hydrate from. Do NOT touch hydratedEventIdRef here, or the
+      // real hydration above would see it already "done" once the fetch
+      // lands and skip populating the form entirely.
+      return;
     }
     setError('');
     setAddingType(false);
@@ -317,9 +344,9 @@ export default function EventFormPage() {
   // sessionStorage on every change, so a discarded/reloaded tab can recover
   // it — see lib/draftStorage.js.
   useEffect(() => {
-    if (event) return;
+    if (event || isEditing) return;
     saveDraft(NEW_EVENT_DRAFT_KEY, form);
-  }, [form, event]);
+  }, [form, event, isEditing]);
 
   // Auto-saves an existing event shortly after any field changes — no
   // explicit "Save Changes" click needed, mirroring BookingFormPage's same
@@ -1175,6 +1202,13 @@ export default function EventFormPage() {
   }
 
   if (isEditing && !event) {
+    if (!eventDetailLoaded) {
+      return (
+        <div className="max-w-2xl mx-auto text-center py-16">
+          <span className="inline-block w-6 h-6 rounded-full border-2 border-slate-300 border-t-indigo-600 animate-spin" />
+        </div>
+      );
+    }
     return (
       <div className="max-w-2xl mx-auto text-center py-16">
         <p className="text-slate-500 mb-4">This event couldn't be found.</p>

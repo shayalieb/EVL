@@ -6,7 +6,7 @@ import { statusBucket } from '../lib/inquiryStatusBucket';
 import { formatEventDate, formatCurrency } from '../lib/format';
 import { listContractors, createContractor as createContractorApi, updateContractorApi, deleteContractorApi } from '../lib/contractors';
 import { listClients, createClient as createClientApi, updateClientApi, deleteClientApi } from '../lib/clients';
-import { listBookings, createBooking as createBookingApi, updateBookingApi } from '../lib/bookings';
+import { listBookings, getBooking, createBooking as createBookingApi, updateBookingApi } from '../lib/bookings';
 import { listEvents, createEvent as createEventApi, updateEventApi } from '../lib/events';
 
 function statusLabel(statuses, id) {
@@ -363,6 +363,10 @@ export function DataProvider({ children }) {
     const client = clients.find((c) => c.id === booking.clientId);
     const name = booking.eventName || [client ? `${client.firstName} ${client.lastName}` : '', booking.eventType]
       .filter(Boolean).join(' ') || 'New Event';
+    // `booking` here is the list-lite record (no schedule field, see
+    // server/src/routes/bookings.js) — fetch the full record so a booking's
+    // schedule actually carries over to the event it converts into.
+    const fullBooking = await getBooking(bookingId);
     const event = await addEvent({
       id: uid('evt'),
       name,
@@ -380,7 +384,7 @@ export function DataProvider({ children }) {
         contactName: '', contactEmail: '',
         ...booking.venue,
       },
-      schedule: booking.schedule || [],
+      schedule: fullBooking.schedule || [],
     });
     const convertedStatus = (currentUser?.bookingStatuses || []).find((s) => s.label.toLowerCase() === 'converted');
     await updateBooking(bookingId, {

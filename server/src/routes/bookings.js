@@ -52,12 +52,57 @@ const WRITABLE_FIELDS = [
   'venue', 'schedule', 'activityLog', 'proposal', 'history',
 ];
 
+// The list view (and every dashboard/table computation fed by it) never
+// reads schedule/activityLog/history, and only ever reads proposal.sentAt
+// (BookingsPage's pipeline-stage column, via lib/bookingPipeline.js) — not
+// its sections/lineItems/offerings/log. Those are edit-form-only content
+// that grows unboundedly with an account's history, so the list route ships
+// this lighter shape and the form fetches the full record by id instead.
+function serializeBookingLite(b) {
+  return {
+    id: b.id,
+    eventName: b.eventName,
+    clientId: b.clientId,
+    eventDate: b.eventDate,
+    eventType: b.eventType,
+    brideName: b.brideName,
+    groomName: b.groomName,
+    guestCount: b.guestCount,
+    depositAmount: b.depositAmount,
+    depositDueDate: b.depositDueDate,
+    depositPaid: b.depositPaid,
+    depositType: b.depositType,
+    depositPercent: b.depositPercent,
+    bookingStatus: b.bookingStatus,
+    priority: b.priority,
+    nextFollowUpDate: b.nextFollowUpDate,
+    contractSignedDate: b.contractSignedDate,
+    referralSource: b.referralSource,
+    notes: b.notes,
+    convertedEventId: b.convertedEventId,
+    deletedAt: b.deletedAt,
+    completedAt: b.completedAt,
+    venue: b.venue,
+    proposal: b.proposal?.sentAt ? { sentAt: b.proposal.sentAt } : null,
+    createdAt: b.createdAt,
+    updatedAt: b.updatedAt,
+  };
+}
+
 router.get('/', asyncHandler(async (req, res) => {
   const bookings = await prisma.booking.findMany({
     where: { accountId: req.membership.accountId, deletedAt: null },
     orderBy: { createdAt: 'asc' },
   });
-  res.json({ bookings: bookings.map(serializeBooking) });
+  res.json({ bookings: bookings.map(serializeBookingLite) });
+}));
+
+router.get('/:id', asyncHandler(async (req, res) => {
+  const booking = await prisma.booking.findUnique({ where: { id: req.params.id } });
+  if (!booking || booking.accountId !== req.membership.accountId) {
+    return res.status(404).json({ error: 'Booking not found.' });
+  }
+  res.json({ booking: serializeBooking(booking) });
 }));
 
 router.post('/', asyncHandler(async (req, res) => {
