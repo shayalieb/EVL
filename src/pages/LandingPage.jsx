@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Logo from '../components/ui/Logo';
 import SubmitButton from '../components/ui/SubmitButton';
+import LandingDashboardPreview from '../components/LandingDashboardPreview';
 import { FileIcon, UsersIcon, ClipboardIcon } from '../components/ui/icons';
 import { joinWaitlist, sendContactMessage } from '../lib/landing';
 
@@ -118,6 +119,8 @@ export default function LandingPage() {
   const [contactError, setContactError] = useState('');
   const [contactDone, setContactDone] = useState(false);
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   // Scoped to this page only (not a global app-wide CSS change) — added on
   // mount, removed on unmount, so an in-page "#waitlist" jump glides instead
   // of cutting, without affecting scroll behavior anywhere else in the app.
@@ -168,14 +171,17 @@ export default function LandingPage() {
       <header className="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-100">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Logo className="h-8 w-auto" />
-          <nav className="hidden sm:flex items-center gap-6">
+          <nav className="hidden sm:flex items-center gap-1">
             {NAV_LINKS.map((l) => (
-              <a key={l.href} href={l.href} className="text-sm font-medium text-slate-500 hover:text-slate-800">
+              <a
+                key={l.href} href={l.href}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-indigo-700 hover:bg-indigo-50 transition-colors"
+              >
                 {l.label}
               </a>
             ))}
           </nav>
-          <div className="flex items-center gap-4">
+          <div className="hidden sm:flex items-center gap-4">
             <Link to="/auth" data-testid="landing-login-link" className="text-sm font-semibold text-slate-500 hover:text-slate-700">
               Log In
             </Link>
@@ -183,34 +189,71 @@ export default function LandingPage() {
               Get Waitlisted
             </a>
           </div>
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((v) => !v)}
+            data-testid="landing-mobile-menu-button"
+            aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={mobileMenuOpen}
+            className="sm:hidden w-9 h-9 flex items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-5 h-5">
+              {mobileMenuOpen ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
+            </svg>
+          </button>
         </div>
+        {mobileMenuOpen && (
+          <div className="sm:hidden border-t border-slate-100 px-4 py-3 space-y-1 bg-white">
+            {NAV_LINKS.map((l) => (
+              <a
+                key={l.href} href={l.href} onClick={() => setMobileMenuOpen(false)}
+                className="block px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50"
+              >
+                {l.label}
+              </a>
+            ))}
+            <Link to="/auth" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50">
+              Log In
+            </Link>
+            <a
+              href="#waitlist" onClick={() => setMobileMenuOpen(false)}
+              className="block text-center mt-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold"
+            >
+              Get Waitlisted
+            </a>
+          </div>
+        )}
       </header>
 
       {/* Hero */}
-      <section className="relative overflow-hidden">
+      <section className="relative overflow-hidden bg-gradient-to-b from-indigo-950 via-indigo-900 to-white">
         <div className="pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
-          <div className="absolute left-1/2 top-[-12rem] w-[42rem] h-[42rem] -translate-x-1/2 rounded-full bg-indigo-200/40 blur-3xl" />
-          <div className="absolute right-[-8rem] top-[6rem] w-[26rem] h-[26rem] rounded-full bg-indigo-100/60 blur-3xl" />
+          <div className="absolute left-1/2 top-[-8rem] w-[46rem] h-[46rem] -translate-x-1/2 rounded-full bg-indigo-500/30 blur-3xl" />
+          <div className="absolute right-[-10rem] top-[2rem] w-[28rem] h-[28rem] rounded-full bg-fuchsia-400/10 blur-3xl" />
+          <div className="absolute left-[-8rem] top-[10rem] w-[24rem] h-[24rem] rounded-full bg-indigo-300/10 blur-3xl" />
         </div>
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-16 pb-14 text-center">
-          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-4">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-16 pb-0 text-center">
+          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-300 mb-4">
             For bands, DJs &amp; orchestras booking out a roster
           </p>
-          <h1 className="text-3xl sm:text-5xl font-bold text-slate-900 leading-tight max-w-3xl mx-auto">
+          <h1 className="text-3xl sm:text-5xl font-bold text-white leading-tight max-w-3xl mx-auto">
             Built by a musician who spent 20 years chasing confirmations instead of chasing gigs.
           </h1>
-          <p className="mt-5 text-lg text-slate-500 max-w-2xl mx-auto">
+          <p className="mt-5 text-lg text-indigo-200 max-w-2xl mx-auto">
             GigWorks is the business software for entertainment agencies and bandleaders who book out multiple
             musicians — proposals, contracts, and invoicing for your clients, plus the day-of details (stage plots,
             set lists, floor plans) connected to who's actually on the gig.
           </p>
           <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
-            <a href="#waitlist" data-testid="landing-hero-waitlist-link" className="px-6 py-3 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
+            <a href="#waitlist" data-testid="landing-hero-waitlist-link" className="px-6 py-3 rounded-lg bg-white text-indigo-700 text-sm font-semibold hover:bg-indigo-50">
               Get Waitlisted
             </a>
-            <a href="#contact" data-testid="landing-hero-contact-link" className="px-6 py-3 rounded-lg border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50">
+            <a href="#contact" data-testid="landing-hero-contact-link" className="px-6 py-3 rounded-lg border border-white/30 text-white text-sm font-semibold hover:bg-white/10">
               Get in Touch
             </a>
+          </div>
+          <div className="mt-14 max-w-2xl mx-auto pb-16 sm:pb-24">
+            <LandingDashboardPreview />
           </div>
         </div>
       </section>
