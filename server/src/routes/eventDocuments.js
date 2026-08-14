@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import multer from 'multer';
+import { rateLimit } from 'express-rate-limit';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
 import { uploadFile, getSignedDownloadUrl, getSignedPreviewUrl, deleteFile, copyFile } from '../lib/fileStorage.js';
+import { generateToken } from '../lib/resetToken.js';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FILE_SIZE } });
@@ -49,8 +51,13 @@ router.post('/', (req, res, next) => {
       contentType,
       size: req.file.size,
       storageKey,
+      // Every document gets one, not just Set List songs — cheap, and keeps
+      // this route from needing to know why it's being uploaded. Only Set
+      // List songs ever surface it in a UI (see schema.prisma's
+      // EventDocument.shareToken doc comment).
+      shareToken: generateToken(),
     },
-    select: { id: true, filename: true, contentType: true, size: true, createdAt: true },
+    select: { id: true, filename: true, contentType: true, size: true, createdAt: true, shareToken: true },
   });
   res.status(201).json({ document });
 }));
@@ -106,8 +113,12 @@ router.post('/:id/copy', asyncHandler(async (req, res) => {
       contentType: source.contentType,
       size: source.size,
       storageKey,
+      // A fresh token, not the source's — the copy is a fully independent
+      // document (see the doc comment above), so its public link shouldn't
+      // ride on the original's lifecycle either.
+      shareToken: generateToken(),
     },
-    select: { id: true, filename: true, contentType: true, size: true, createdAt: true },
+    select: { id: true, filename: true, contentType: true, size: true, createdAt: true, shareToken: true },
   });
   res.status(201).json({ document });
 }));
@@ -120,6 +131,35 @@ router.delete('/:id', asyncHandler(async (req, res) => {
   if (document.storageKey) await deleteFile(document.storageKey);
   await prisma.eventDocument.delete({ where: { id: document.id } });
   res.json({ ok: true });
+}));
+
+// Public (unauthenticated, token-based) — mounted separately in index.js,
+// same separation as publicRsvpRouter/publicContractorCalendarRouter. Lets a
+// Set List song's PDF be downloaded by a band member from an emailed link
+// without an app login, the same way it already rides along as a real email
+// attachment (see lib/setList.js) — this just makes that same file openable
+// on its own too. shareToken (not `id`) is the lookup key, so a leaked
+// document `id` alone (used elsewhere as an authenticated lookup key) can't
+// be turned into a public download.
+export const publicSongSheetsRouter = Router();
+
+const songSheetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please try again shortly.' },
+});
+
+publicSongSheetsRouter.get('/:token/download', songSheetLimiter, asyncHandler(async (req, res) => {
+  const document = await prisma.eventDocument.findUnique({ where: { shareToken: req.params.token } });
+  if (!document) return res.status(404).json({ error: 'This link is invalid.' });
+  if (document.storageKey) {
+    return res.redirect(302, await getSignedDownloadUrl(document.storageKey, document.filename));
+  }
+  res.setHeader('Content-Type', document.contentType);
+  res.setHeader('Content-Disposition', `attachment; filename="${document.filename.replace(/"/g, '')}"`);
+  res.send(document.data);
 }));
 
 export default router;

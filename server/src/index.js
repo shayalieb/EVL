@@ -11,7 +11,7 @@ import accountDataRouter from './routes/accountData.js';
 import emailRouter from './routes/email.js';
 import emailThreadsRouter from './routes/emailThreads.js';
 import emailWebhooksRouter from './routes/emailWebhooks.js';
-import eventDocumentsRouter from './routes/eventDocuments.js';
+import eventDocumentsRouter, { publicSongSheetsRouter } from './routes/eventDocuments.js';
 import bookingDocumentsRouter from './routes/bookingDocuments.js';
 import contractsRouter, { publicContractsRouter } from './routes/contracts.js';
 import billingRouter from './routes/billing.js';
@@ -141,6 +141,9 @@ app.use('/api/account-data', accountDataRouter);
 app.use('/api/email/threads', emailThreadsRouter);
 app.use('/api/email', emailRouter);
 app.use('/api/documents', eventDocumentsRouter);
+// Public/unauthenticated — a band member clicks this from an emailed Set
+// List, not while logged into the app. See routes/eventDocuments.js.
+app.use('/api/public/song-sheets', publicSongSheetsRouter);
 app.use('/api/booking-documents', bookingDocumentsRouter);
 app.use('/api/contracts', contractsRouter);
 // Public/unauthenticated — recipients click this link from an email, not

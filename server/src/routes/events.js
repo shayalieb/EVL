@@ -39,6 +39,7 @@ function serializeEvent(e) {
     secondShooters: e.secondShooters,
     otherExpenses: e.otherExpenses,
     history: e.history,
+    setLists: e.setLists,
     createdAt: e.createdAt,
     updatedAt: e.updatedAt,
   };
@@ -51,7 +52,7 @@ const WRITABLE_FIELDS = [
   'contactPhone', 'contactPhoneExt', 'contactEmail', 'startTime', 'endTime', 'eventNote', 'prepNotes',
   'eventStatus', 'deletedAt', 'completedAt',
   'venue', 'contractorBookings', 'categoryTabs', 'schedule', 'prepGroups', 'requests', 'shotList',
-  'secondShooters', 'otherExpenses', 'history',
+  'secondShooters', 'otherExpenses', 'history', 'setLists',
 ];
 
 // The list view (table rendering, Home's dashboard aggregates, the vendor-
@@ -129,6 +130,7 @@ router.post('/', asyncHandler(async (req, res) => {
   if (data.secondShooters === undefined) data.secondShooters = [];
   if (data.otherExpenses === undefined) data.otherExpenses = [];
   if (data.history === undefined) data.history = [];
+  if (data.setLists === undefined) data.setLists = [];
 
   const event = await createWithPreservedId(prisma.event, data, req.membership.accountId);
   res.status(201).json({ event: serializeEvent(event) });

@@ -326,6 +326,17 @@ model EventDocument {
   // stand in for the other depending on which a given row has.
   data        Bytes?
   storageKey  String?
+  // Unguessable, stable public identifier for this file — generated for
+  // every document at upload/copy time (server/src/routes/eventDocuments.js)
+  // and never regenerated, so a link built from it stays valid across every
+  // future email it's included in. Distinct from `id`: `id` is also usable
+  // as an authenticated lookup key elsewhere, so a separate token keeps the
+  // public download route (server/src/routes/eventDocuments.js's
+  // publicSongSheetsRouter) from doubling as a general-purpose-by-id public
+  // fetch for every document type — only Set List songs actually surface
+  // this token in a UI. Nullable so pre-migration rows (created before this
+  // field existed) simply have none.
+  shareToken String? @unique
 
   createdAt DateTime @default(now())
 
@@ -984,6 +995,7 @@ model Event {
   secondShooters     Json @default("[]")
   otherExpenses      Json @default("[]")
   history            Json @default("[]")
+  setLists           Json @default("[]")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

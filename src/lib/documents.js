@@ -42,6 +42,13 @@ export function documentDownloadUrl(id) {
   return `${API_BASE}/documents/${id}/download`;
 }
 
+// Public/unauthenticated — safe to embed in an emailed Set List, unlike
+// documentDownloadUrl above which requires an app session. See
+// server/src/routes/eventDocuments.js's publicSongSheetsRouter.
+export function songSheetPublicDownloadUrl(shareToken) {
+  return `${API_BASE}/public/song-sheets/${shareToken}/download`;
+}
+
 // Renders inline (no forced download) — for an <iframe>/<img> preview, not
 // a save-to-disk link. See server/src/routes/eventDocuments.js's /preview
 // route for why this needs its own endpoint rather than reusing download.

@@ -5,9 +5,9 @@ import { useData } from '../context/DataContext';
 import { useToast } from '../components/ui/Toast';
 import { uid } from '../lib/storage';
 import { uploadDocument, deleteDocument, copyDocument } from '../lib/documents';
-import { generateSetListPdf, generateSetListPdfAttachment } from '../lib/setListPdf';
-import { renderSetListEmail } from '../lib/setList';
-import { sendThreadedEmail } from '../lib/email/threads';
+import { getEvent } from '../lib/events';
+import { generateSetListPdf } from '../lib/setListPdf';
+import { renderSetListEmail, sendSetListEmail } from '../lib/setList';
 import DocumentPreviewModal from '../components/DocumentPreviewModal';
 import SetListEmailModal from '../components/SetListEmailModal';
 import Modal from '../components/ui/Modal';
@@ -19,7 +19,7 @@ function emptySetList(name) {
 }
 
 function emptySetListItem() {
-  return { id: uid('song'), songTitle: '', description: '', link: '', documentId: null, documentName: null, documentContentType: null };
+  return { id: uid('song'), songTitle: '', description: '', link: '', documentId: null, documentName: null, documentContentType: null, documentShareToken: null };
 }
 
 // Event.setLists lives in the same low-write-frequency JSON-blob convention
@@ -35,7 +35,18 @@ export default function SetListsEditorPage() {
   const { currentUser } = useAuth();
   const { events, updateEvent, contractors, setListLibrary } = useData();
   const { showToast } = useToast();
-  const event = events.find((e) => e.id === eventId);
+  // events (from context) is the list-lite shape — setLists is edit-only
+  // content excluded from it (see server/src/routes/events.js), so this
+  // page fetches its own full record, same pattern as EventFormPage.jsx.
+  const eventLite = events.find((e) => e.id === eventId);
+  const [event, setEvent] = useState(null);
+
+  useEffect(() => {
+    if (!eventLite) { setEvent(null); return; }
+    let cancelled = false;
+    getEvent(eventLite.id).then((full) => { if (!cancelled) setEvent(full); }).catch(() => { if (!cancelled) setEvent(null); });
+    return () => { cancelled = true; };
+  }, [eventLite?.id]);
 
   const [setLists, setSetLists] = useState([]);
   const [activeSetListId, setActiveSetListId] = useState(null);
@@ -86,11 +97,11 @@ export default function SetListsEditorPage() {
     setPullingLibraryId(libraryEntry.id);
     try {
       const items = await Promise.all(libraryEntry.items.map(async (it) => {
-        let doc = { documentId: null, documentName: null, documentContentType: null };
+        let doc = { documentId: null, documentName: null, documentContentType: null, documentShareToken: null };
         if (it.documentId) {
           try {
             const copied = await copyDocument(it.documentId, eventId);
-            doc = { documentId: copied.id, documentName: copied.filename, documentContentType: copied.contentType };
+            doc = { documentId: copied.id, documentName: copied.filename, documentContentType: copied.contentType, documentShareToken: copied.shareToken };
           } catch {
             // Copy failed (e.g. a pre-storage-migration document with no
             // storageKey) — pull the song in without its attachment rather
@@ -167,7 +178,7 @@ export default function SetListsEditorPage() {
       const item = activeSetList.items.find((it) => it.id === itemId);
       if (item?.documentId) await deleteDocument(item.documentId).catch(() => {});
       const doc = await uploadDocument(eventId, file);
-      updateItem(itemId, { documentId: doc.id, documentName: doc.filename, documentContentType: doc.contentType });
+      updateItem(itemId, { documentId: doc.id, documentName: doc.filename, documentContentType: doc.contentType, documentShareToken: doc.shareToken });
     } catch (err) {
       showToast(err.message || 'Failed to upload sheet music', 'error');
     } finally {
@@ -177,16 +188,19 @@ export default function SetListsEditorPage() {
 
   function handleRemoveSheetMusic(itemId) {
     const item = activeSetList.items.find((it) => it.id === itemId);
-    updateItem(itemId, { documentId: null, documentName: null, documentContentType: null });
+    updateItem(itemId, { documentId: null, documentName: null, documentContentType: null, documentShareToken: null });
     if (item?.documentId) deleteDocument(item.documentId).catch(() => {});
   }
 
   async function handleSave() {
     setSaving(true);
     try {
-      // `dirty` re-derives from the updated `events` state on the next
-      // render once this resolves, no manual re-sync needed here.
       await updateEvent(eventId, { setLists });
+      // `event` here is this page's own full-detail fetch (see the effect
+      // above), not the live context array — it won't pick up the save on
+      // its own, so `dirty` (which compares against event.setLists) would
+      // otherwise stay true forever after a successful save.
+      setEvent((prev) => (prev ? { ...prev, setLists } : prev));
       showToast('Set lists saved');
     } catch (err) {
       showToast(err.message || 'Failed to save set lists', 'error');
@@ -196,40 +210,24 @@ export default function SetListsEditorPage() {
   }
 
   async function handleExportPdf() {
-    await generateSetListPdf({ eventName: event?.name, setLists, businessInfo: currentUser?.businessInfo });
+    await generateSetListPdf({ eventName: event?.name, eventDate: event?.eventDate, setLists, businessInfo: currentUser?.businessInfo });
   }
 
   async function handleSendEmail({ subject, body, recipientIds }) {
     setSendingEmail(true);
     try {
       const fromName = currentUser.businessInfo?.name || `${currentUser.firstName} ${currentUser.lastName}`;
-      // Sheet music attached to this set list's songs rides along
-      // automatically — same "no extra checkbox" pattern Requests already
-      // uses for its per-item attachments.
-      const documentIds = activeSetList.items.map((it) => it.documentId).filter(Boolean);
       // Scoped to just the active set list, not the whole book — same
       // reasoning as why Email is a per-set-list action while Download PDF
       // exports every set list at once.
-      const pdfAttachment = await generateSetListPdfAttachment({ eventName: event?.name, setLists: [activeSetList], businessInfo: currentUser?.businessInfo });
-      let successCount = 0;
-      for (const contractorId of recipientIds) {
-        const contractor = contractors.find((c) => c.id === contractorId);
-        if (!contractor?.email) continue;
-        try {
-          // eslint-disable-next-line no-await-in-loop
-          await sendThreadedEmail({
-            eventId, contractorId, contractorEmail: contractor.email,
-            subject, body, fromName, documentIds, pdfAttachment,
-          });
-          successCount++;
-        } catch {
-          // keep going — failures reflected in the summary toast below
-        }
-      }
-      if (successCount === recipientIds.length) {
+      const { successCount, total } = await sendSetListEmail({
+        eventId, eventName: event?.name, eventDate: event?.eventDate, setList: activeSetList,
+        recipientIds, contractors, subject, body, fromName, businessInfo: currentUser?.businessInfo,
+      });
+      if (successCount === total) {
         showToast(`Sent to ${successCount} band member${successCount === 1 ? '' : 's'}`);
       } else {
-        showToast(`Sent ${successCount} of ${recipientIds.length} emails — some failed`, 'error');
+        showToast(`Sent ${successCount} of ${total} emails — some failed`, 'error');
       }
       setEmailModalOpen(false);
     } catch (err) {
@@ -241,7 +239,7 @@ export default function SetListsEditorPage() {
 
   if (!event) return <div className="p-6 text-sm text-slate-500">Loading…</div>;
 
-  const emailDraft = activeSetList ? renderSetListEmail(event.name, activeSetList, currentUser?.businessInfo) : null;
+  const emailDraft = activeSetList ? renderSetListEmail(event.name, event.eventDate, activeSetList, currentUser?.businessInfo) : null;
 
   return (
     <div className="p-6 max-w-[1100px] mx-auto">
