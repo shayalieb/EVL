@@ -1,6 +1,7 @@
 import { DEFAULT_ACCENT_COLOR } from './colorTheme';
 import { songSheetPublicDownloadUrl } from './documents';
 import { formatEventDate } from './format';
+import { escapeHtml } from './htmlEscape';
 import { generateSetListPdfAttachment } from './setListPdf';
 import { sendThreadedEmail } from './email/threads';
 
@@ -11,7 +12,10 @@ import { sendThreadedEmail } from './email/threads';
 // "Open Link" (the song's own YouTube/Spotify/etc. link) when set. The PDF
 // export (setListPdf.js) deliberately omits both link columns — a URL
 // printed on paper isn't clickable — so this table is the one place both
-// actually show up.
+// actually show up. Every user-entered value gets escapeHtml'd — an
+// ordinary "Rock & Roll" or "Nina's Song <3" would otherwise be
+// misinterpreted as markup by the recipient's email client, not just a
+// theoretical injection concern.
 export function renderSetListEmail(eventName, eventDate, setList, businessInfo) {
   const accentColor = businessInfo?.accentColor || DEFAULT_ACCENT_COLOR;
 
@@ -19,14 +23,14 @@ export function renderSetListEmail(eventName, eventDate, setList, businessInfo) 
     .filter((item) => item.songTitle)
     .map((item) => {
       const downloadCell = item.documentShareToken
-        ? `<a href="${songSheetPublicDownloadUrl(item.documentShareToken)}" style="color:${accentColor};">Download PDF</a>`
+        ? `<a href="${escapeHtml(songSheetPublicDownloadUrl(item.documentShareToken))}" style="color:${accentColor};">Download PDF</a>`
         : '';
       const openLinkCell = item.link
-        ? `<a href="${item.link}" style="color:${accentColor};">Open Link</a>`
+        ? `<a href="${escapeHtml(item.link)}" style="color:${accentColor};">Open Link</a>`
         : '';
       return `<tr>
-        <td style="padding:6px 12px 6px 0;font-weight:600;vertical-align:top;">${item.songTitle}</td>
-        <td style="padding:6px 12px 6px 0;color:#475569;vertical-align:top;">${item.description || ''}</td>
+        <td style="padding:6px 12px 6px 0;font-weight:600;vertical-align:top;">${escapeHtml(item.songTitle)}</td>
+        <td style="padding:6px 12px 6px 0;color:#475569;vertical-align:top;">${escapeHtml(item.description)}</td>
         <td style="padding:6px 12px 6px 0;vertical-align:top;">${downloadCell}</td>
         <td style="padding:6px 0;vertical-align:top;">${openLinkCell}</td>
       </tr>`;
@@ -37,8 +41,8 @@ export function renderSetListEmail(eventName, eventDate, setList, businessInfo) 
 
   const body = `
     <div style="font-family:sans-serif;color:#1e293b;max-width:640px;">
-      <h2 style="margin:0 0 4px;">${setList?.name || 'Set List'}</h2>
-      ${eventLine ? `<p style="margin:0 0 16px;color:#475569;">${eventLine}</p>` : ''}
+      <h2 style="margin:0 0 4px;">${escapeHtml(setList?.name || 'Set List')}</h2>
+      ${eventLine ? `<p style="margin:0 0 16px;color:#475569;">${escapeHtml(eventLine)}</p>` : ''}
       <table style="border-collapse:collapse;font-size:14px;width:100%;">
         <thead>
           <tr style="text-align:left;color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:0.03em;">
