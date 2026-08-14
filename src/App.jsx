@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
 import { PortalAuthProvider, usePortalAuth } from './context/PortalAuthContext';
@@ -38,11 +38,21 @@ import StagePlotEditorPage from './pages/StagePlotEditorPage';
 import FloorPlanEditorPage from './pages/FloorPlanEditorPage';
 import SetListsEditorPage from './pages/SetListsEditorPage';
 import SetListLibraryPage from './pages/SetListLibraryPage';
+import LandingPage from './pages/LandingPage';
 
+// The marketing site lives at the exact root path, which otherwise sits
+// inside this same route tree (see AppRoutes' `path="/"` below) — checking
+// location here, rather than adding a sibling route, means every other
+// path under `/` (`/contractors`, `/settings`, etc.) keeps its existing
+// "redirect to /auth when logged out" behavior unchanged.
 function ProtectedArea() {
   const { currentUser, authLoading } = useAuth();
+  const location = useLocation();
   if (authLoading) return null;
-  if (!currentUser) return <Navigate to="/auth" replace />;
+  if (!currentUser) {
+    if (location.pathname === '/') return <LandingPage />;
+    return <Navigate to="/auth" replace />;
+  }
   if (!currentUser.accountId) return <NoAccountAccessPage />;
   return (
     <DataProvider>

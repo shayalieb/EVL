@@ -20,6 +20,7 @@ import inquiryLinksRouter, { publicInquiryLinksRouter } from './routes/inquiryLi
 import stripeWebhooksRouter from './routes/stripeWebhooks.js';
 import calendarRouter from './routes/calendar.js';
 import supportRouter from './routes/support.js';
+import { publicLandingRouter } from './routes/landing.js';
 import adminRouter from './routes/admin.js';
 import remindersRouter from './routes/reminders.js';
 import emailDomainsRouter from './routes/emailDomains.js';
@@ -157,6 +158,9 @@ app.use('/api/inquiry-links', inquiryLinksRouter);
 // Public/unauthenticated — same reasoning as /api/contract-sign above.
 app.use('/api/inquiry', publicInquiryLinksRouter);
 app.use('/api/support', supportRouter);
+// Public/unauthenticated — submissions from the marketing site, from
+// someone who doesn't have an account yet. See routes/landing.js.
+app.use('/api/landing', publicLandingRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/reminders', remindersRouter);
 app.use('/api/email-domains', emailDomainsRouter);

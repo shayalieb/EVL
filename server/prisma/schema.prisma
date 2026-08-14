@@ -1055,3 +1055,21 @@ model ContractorCalendarLink {
 
   @@unique([accountId, contractorId])
 }
+
+// Submissions from the public marketing site (gigworks.io) — someone who
+// doesn't have an account yet, so this is deliberately NOT scoped to an
+// Account like everything else in this file. Two shapes share one table
+// (`type` distinguishes them) since they're the same "who reached out and
+// why" record either way; splitting into two models would just be two
+// near-identical tables with no behavioral difference.
+model WaitlistEntry {
+  id          String   @id @default(cuid())
+  type        String // 'waitlist' | 'contact'
+  name        String
+  email       String
+  businessName String?
+  message     String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  @@index([type, createdAt])
+}
