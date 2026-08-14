@@ -5,6 +5,7 @@ import EventCombobox from './EventCombobox';
 import { useData } from '../context/DataContext';
 import { useToast } from './ui/Toast';
 import { uid } from '../lib/storage';
+import { normalizeUrl } from '../lib/format';
 import { uploadDocument, deleteDocument } from '../lib/documents';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -29,7 +30,7 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [items, setItems] = useState([]);
-  const [eventId, setEventId] = useState('');
+  const [eventIds, setEventIds] = useState([]);
   const [error, setError] = useState('');
   const [uploadingItemId, setUploadingItemId] = useState(null);
   const [previewDocument, setPreviewDocument] = useState(null);
@@ -41,12 +42,23 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
       setName(setList?.name || '');
       setDescription(setList?.description || '');
       setItems(setList?.items?.length ? setList.items : [emptySong()]);
-      setEventId(setList?.eventId || '');
+      // eventId (singular) is the pre-multi-link shape — read it as a
+      // one-item list so a set list saved before this change still shows
+      // its existing link instead of appearing unlinked.
+      setEventIds(setList?.eventIds || (setList?.eventId ? [setList.eventId] : []));
       setError('');
     }
   }, [open, setList]);
 
-  const selectedEvent = eventId ? events.find((e) => e.id === eventId) : null;
+  const selectedEvents = eventIds.map((id) => events.find((e) => e.id === id)).filter(Boolean);
+
+  function addEvent(event) {
+    setEventIds((prev) => (prev.includes(event.id) ? prev : [...prev, event.id]));
+  }
+
+  function removeEvent(eventId) {
+    setEventIds((prev) => prev.filter((id) => id !== eventId));
+  }
 
   function updateItem(id, patch) {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
@@ -108,7 +120,10 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
     // saved without ever filling it in) gets silently dropped below — clean
     // up its upload too, or it orphans in storage with nothing referencing it.
     droppedItems.forEach((it) => { if (it.documentId) deleteDocument(it.documentId).catch(() => {}); });
-    const payload = { name: name.trim(), description: description.trim(), items: keptItems, eventId: eventId || null };
+    // eventId: undefined explicitly drops the old single-event field (if
+    // this record predates multi-event linking) once JSON-serialized, so it
+    // doesn't linger stale alongside the new eventIds array.
+    const payload = { name: name.trim(), description: description.trim(), items: keptItems, eventIds, eventId: undefined };
     const record = setList ? { ...setList, ...payload } : addSetListLibraryItem(payload);
     if (setList) updateSetListLibraryItem(setList.id, payload);
     onSaved?.(record);
@@ -138,16 +153,16 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
         </div>
 
         <div>
-          <label className={labelClass}>Event</label>
+          <label className={labelClass}>Events</label>
           <EventCombobox
             events={events}
-            selectedEvent={selectedEvent}
-            onSelect={(e) => setEventId(e.id)}
-            onClear={() => setEventId('')}
+            selectedEvents={selectedEvents}
+            onAdd={addEvent}
+            onRemove={removeEvent}
             testId="setlist-library-modal-event-picker"
           />
           <p className="text-xs text-slate-400 mt-1">
-            Linking this set list to an event unlocks Email/Download PDF for it from the Set Lists page, and includes the event's name and date on both.
+            Linking this set list to one or more events unlocks Email/Download PDF for it from the Set Lists page. Sending or exporting always targets one event at a time — you'll be asked which one if more than one is linked.
           </p>
         </div>
 
@@ -184,6 +199,7 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
                   placeholder="Link"
                   value={item.link}
                   onChange={(e) => updateItem(item.id, { link: e.target.value })}
+                  onBlur={(e) => updateItem(item.id, { link: normalizeUrl(e.target.value) })}
                   data-testid="setlist-library-modal-item-link-input"
                   className={`${inputClass} flex-1 min-w-0`}
                 />

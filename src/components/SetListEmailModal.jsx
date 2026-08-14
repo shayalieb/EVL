@@ -14,7 +14,7 @@ const bodyEditableClass = 'w-full min-h-[220px] max-h-[420px] overflow-y-auto px
 // separate document picker: sheet music already attached to this set
 // list's songs rides along automatically, same "no extra checkbox" pattern
 // EventFormPage's Requests-attached documents already use.
-export default function SetListEmailModal({ open, onClose, bandMembers, initialSubject, initialBody, sending, onConfirm }) {
+export default function SetListEmailModal({ open, onClose, bandMembers, excludedCount = 0, initialSubject, initialBody, sending, onConfirm }) {
   const [subject, setSubject] = useState('');
   const [hasBody, setHasBody] = useState(false);
   const bodyRef = useRef(null);
@@ -70,6 +70,11 @@ export default function SetListEmailModal({ open, onClose, bandMembers, initialS
                 </label>
               ))}
             </div>
+          )}
+          {excludedCount > 0 && (
+            <p data-testid="setlist-email-excluded-hint" className="text-xs text-amber-600 mt-2">
+              +{excludedCount} more booked on this event, not shown here — no email on file. Add one from Contractors to include {excludedCount === 1 ? 'them' : 'them all'}.
+            </p>
           )}
         </div>
 

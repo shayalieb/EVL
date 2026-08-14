@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { useToast } from '../components/ui/Toast';
 import { uid } from '../lib/storage';
+import { normalizeUrl, formatEventDate } from '../lib/format';
 import { uploadDocument, deleteDocument, copyDocument } from '../lib/documents';
 import { getEvent } from '../lib/events';
 import { generateSetListPdf } from '../lib/setListPdf';
@@ -11,6 +12,7 @@ import { renderSetListEmail, sendSetListEmail } from '../lib/setList';
 import DocumentPreviewModal from '../components/DocumentPreviewModal';
 import SetListEmailModal from '../components/SetListEmailModal';
 import Modal from '../components/ui/Modal';
+import Tooltip from '../components/ui/Tooltip';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -75,9 +77,12 @@ export default function SetListsEditorPage() {
   // Whoever's booked on this event, not just prep-group members (unlike
   // PrepEmailModal's recipient pool) — a set list is relevant to whoever's
   // playing, regardless of which prep groups they were added under.
-  const bandMembers = (event?.contractorBookings || [])
+  const allBooked = (event?.contractorBookings || [])
     .map((b) => contractors.find((c) => c.id === b.contractorId))
-    .filter((c) => c?.email);
+    .filter(Boolean);
+  const bandMembers = allBooked.filter((c) => c?.email);
+  const excludedCount = allBooked.length - bandMembers.length;
+  const hasSongs = !!activeSetList?.items?.some((it) => it.songTitle?.trim());
 
   function addSetList() {
     const list = emptySetList(`Set List ${setLists.length + 1}`);
@@ -229,6 +234,17 @@ export default function SetListsEditorPage() {
       } else {
         showToast(`Sent ${successCount} of ${total} emails — some failed`, 'error');
       }
+      // Persists whatever's currently in the form (same content the email
+      // was just built from), plus a "last sent" marker on this one set
+      // list — so a send never leaves the page claiming "Unsaved changes"
+      // for content that's already gone out, and the next visit can show
+      // when this was last emailed.
+      const updatedLists = setLists.map((s) => (
+        s.id === activeSetList.id ? { ...s, lastSentAt: new Date().toISOString(), lastSentCount: successCount } : s
+      ));
+      setSetLists(updatedLists);
+      await updateEvent(eventId, { setLists: updatedLists });
+      setEvent((prev) => (prev ? { ...prev, setLists: updatedLists } : prev));
       setEmailModalOpen(false);
     } catch (err) {
       showToast(err.message || 'Failed to send set list email', 'error');
@@ -240,6 +256,12 @@ export default function SetListsEditorPage() {
   if (!event) return <div className="p-6 text-sm text-slate-500">Loading…</div>;
 
   const emailDraft = activeSetList ? renderSetListEmail(event.name, event.eventDate, activeSetList, currentUser?.businessInfo) : null;
+  // Download PDF exports every set list in the book at once (unlike Email,
+  // scoped to just the active one) — gated on any of them having a song,
+  // not just the active tab.
+  const anySongsAnywhere = setLists.some((s) => s.items.some((it) => it.songTitle?.trim()));
+  const pdfDisabledReason = !anySongsAnywhere ? 'Add at least one song before exporting a PDF' : null;
+  const emailDisabledReason = !activeSetList ? null : !hasSongs ? 'Add at least one song before emailing this set list' : null;
 
   return (
     <div className="p-6 max-w-[1100px] mx-auto">
@@ -250,18 +272,34 @@ export default function SetListsEditorPage() {
         </div>
         <div className="flex items-center gap-2">
           <span data-testid="setlist-save-status" className="text-xs text-slate-400">{dirty ? 'Unsaved changes' : 'Saved'}</span>
-          <button type="button" onClick={handleExportPdf} data-testid="setlist-export-pdf-button" className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold">
-            Download PDF
-          </button>
-          <button
-            type="button"
-            onClick={() => setEmailModalOpen(true)}
-            disabled={!activeSetList}
-            data-testid="setlist-email-button"
-            className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold disabled:opacity-50"
-          >
-            Email Set List
-          </button>
+          {pdfDisabledReason ? (
+            <Tooltip content={pdfDisabledReason}>
+              <span className="px-4 py-2 rounded-lg border border-slate-200 text-sm font-semibold text-slate-300 cursor-default">
+                Download PDF
+              </span>
+            </Tooltip>
+          ) : (
+            <button type="button" onClick={handleExportPdf} data-testid="setlist-export-pdf-button" className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold">
+              Download PDF
+            </button>
+          )}
+          {emailDisabledReason ? (
+            <Tooltip content={emailDisabledReason}>
+              <span className="px-4 py-2 rounded-lg border border-slate-200 text-sm font-semibold text-slate-300 cursor-default">
+                Email Set List
+              </span>
+            </Tooltip>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEmailModalOpen(true)}
+              disabled={!activeSetList}
+              data-testid="setlist-email-button"
+              className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold disabled:opacity-50"
+            >
+              Email Set List
+            </button>
+          )}
           <button
             type="button"
             onClick={handleSave}
@@ -273,6 +311,11 @@ export default function SetListsEditorPage() {
           </button>
         </div>
       </div>
+      {activeSetList?.lastSentAt && (
+        <p data-testid="setlist-last-sent" className="text-xs text-slate-400 -mt-2 mb-4 text-right">
+          Last sent {formatEventDate(activeSetList.lastSentAt.slice(0, 10))} to {activeSetList.lastSentCount} band member{activeSetList.lastSentCount === 1 ? '' : 's'}
+        </p>
+      )}
 
       <div className="flex items-center gap-1 mb-4 border-b border-slate-200 flex-wrap">
         {setLists.map((s) => (
@@ -352,6 +395,7 @@ export default function SetListsEditorPage() {
                     placeholder="Link"
                     value={item.link}
                     onChange={(e) => updateItem(item.id, { link: e.target.value })}
+                    onBlur={(e) => updateItem(item.id, { link: normalizeUrl(e.target.value) })}
                     data-testid="setlist-item-link-input"
                     className={`${inputClass} flex-1 min-w-0`}
                   />
@@ -449,6 +493,7 @@ export default function SetListsEditorPage() {
         open={emailModalOpen}
         onClose={() => setEmailModalOpen(false)}
         bandMembers={bandMembers}
+        excludedCount={excludedCount}
         initialSubject={emailDraft?.subject}
         initialBody={emailDraft?.body}
         sending={sendingEmail}

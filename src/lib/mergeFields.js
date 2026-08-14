@@ -1,27 +1,35 @@
 import { formatCurrency, formatEventDate as formatDate, formatEventTime as formatTime } from './format';
 import { getTierPrice } from './pricingTiers';
+import { escapeHtml } from './htmlEscape';
 
 // Field names here must match the {{Token}} names shown in the Email
-// Templates "Insert Fields" reference panel.
+// Templates "Insert Fields" reference panel. Every leaf value pulled from a
+// free-text field (contractor/venue/event names, notes, phone numbers) is
+// escapeHtml'd before being folded into an HTML fragment — the fragments
+// themselves (the <ul>/<li>/<a> markup below) are deliberately real HTML,
+// substituted as-is into the business's own template (see substitute()
+// below), so only the leaf text needs escaping, not the wrapper tags.
 function buildFieldMap({ event, contractor, booking, contractors, pricingTierId }) {
   const eventDate = formatDate(event.eventDate);
   const venue = event.venue || {};
   const cityStateZip = venue.city && venue.state ? `${venue.city}, ${venue.state}${venue.zip ? ` ${venue.zip}` : ''}` : '';
-  const venueFullAddress = [venue.name, venue.address1, venue.address2, cityStateZip].filter(Boolean).join('<br>');
+  const venueFullAddress = [venue.name, venue.address1, venue.address2, cityStateZip].filter(Boolean).map(escapeHtml).join('<br>');
   // A ready-to-send location block: the address as a normal postal address,
   // a Google Maps / Waze link built from that address, then the location
   // note and load-in info as their own lines — but only when set, so a venue
-  // without either doesn't leave blank lines in the email.
+  // without either doesn't leave blank lines in the email. The href itself
+  // is already URL-safe via encodeURIComponent; the link text is hardcoded,
+  // not user content, so neither needs escapeHtml.
   const addressQuery = [venue.address1, venue.address2, cityStateZip].filter(Boolean).join(', ');
   const mapsLinks = addressQuery
     ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressQuery)}">Open in Google Maps</a> · <a href="https://waze.com/ul?q=${encodeURIComponent(addressQuery)}&navigate=yes">Open in Waze</a>`
     : '';
   const locationExtras = [
-    venue.locationNote,
-    venue.loadInInfo ? `Load-in: ${venue.loadInInfo}` : '',
+    venue.locationNote ? escapeHtml(venue.locationNote) : '',
+    venue.loadInInfo ? `Load-in: ${escapeHtml(venue.loadInInfo)}` : '',
   ].filter(Boolean);
-  const locationBlock = [venue.name, venue.address1, venue.address2, cityStateZip, mapsLinks, ...locationExtras]
-    .filter(Boolean)
+  const locationBlock = [venue.name, venue.address1, venue.address2, cityStateZip].filter(Boolean).map(escapeHtml)
+    .concat([mapsLinks, ...locationExtras].filter(Boolean))
     .join('<br>');
   // Every other contractor booked to the event in the same category as this
   // email's recipient (e.g. a musician's email lists the rest of the band,
@@ -29,7 +37,7 @@ function buildFieldMap({ event, contractor, booking, contractors, pricingTierId 
   const crewRows = (event.contractorBookings || [])
     .map((b) => (contractors || []).find((c) => c.id === b.contractorId))
     .filter((c) => c && c.contractorType1 === contractor.contractorType1)
-    .map((c) => `<li>${c.contractorType2 || c.contractorType1} - ${c.firstName} ${c.lastName}</li>`)
+    .map((c) => `<li>${escapeHtml(c.contractorType2 || c.contractorType1)} - ${escapeHtml(`${c.firstName} ${c.lastName}`)}</li>`)
     .join('');
   // list-style is set inline (not left to the browser default) because this
   // HTML also gets rendered inside the app itself (template preview, send
@@ -69,37 +77,37 @@ function buildFieldMap({ event, contractor, booking, contractors, pricingTierId 
     addToCalendar = `<a href="${import.meta.env.VITE_API_BASE}/calendar/invite.ics?${params.toString()}">Add to Calendar</a>`;
   }
   return {
-    ContractorFirstName: contractor.firstName || '',
-    ContractorLastName: contractor.lastName || '',
-    ContractorEmail: contractor.email || '',
-    ContractorPhone: contractor.phone || '',
-    ContractorType1: contractor.contractorType1 || '',
-    ContractorType2: contractor.contractorType2 || '',
+    ContractorFirstName: escapeHtml(contractor.firstName),
+    ContractorLastName: escapeHtml(contractor.lastName),
+    ContractorEmail: escapeHtml(contractor.email),
+    ContractorPhone: escapeHtml(contractor.phone),
+    ContractorType1: escapeHtml(contractor.contractorType1),
+    ContractorType2: escapeHtml(contractor.contractorType2),
     ContractorPrice: formatCurrency(getTierPrice(contractor, pricingTierId)),
-    ContractorPriceNotes: contractor.priceNotes || '',
-    EventName: event.name || '',
-    EventType: event.eventType || '',
+    ContractorPriceNotes: escapeHtml(contractor.priceNotes),
+    EventName: escapeHtml(event.name),
+    EventType: escapeHtml(event.eventType),
     EventDate: eventDate,
-    EventDayOfTheWeek: event.eventDayOfTheWeek || '',
+    EventDayOfTheWeek: escapeHtml(event.eventDayOfTheWeek),
     GigDate: eventDate,
     EventStartTime: formatTime(event.startTime),
     EventEndTime: formatTime(event.endTime),
     ContractorStartTime: formatTime(booking?.startTime || event.startTime),
     ContractorEndTime: formatTime(booking?.endTime || event.endTime),
-    EventNote: event.eventNote || '',
-    VenueName: event.venue?.name || '',
-    VenueAddress1: event.venue?.address1 || '',
-    VenueAddress2: event.venue?.address2 || '',
-    VenueCity: event.venue?.city || '',
-    VenueState: event.venue?.state || '',
-    VenueZip: event.venue?.zip || '',
+    EventNote: escapeHtml(event.eventNote),
+    VenueName: escapeHtml(event.venue?.name),
+    VenueAddress1: escapeHtml(event.venue?.address1),
+    VenueAddress2: escapeHtml(event.venue?.address2),
+    VenueCity: escapeHtml(event.venue?.city),
+    VenueState: escapeHtml(event.venue?.state),
+    VenueZip: escapeHtml(event.venue?.zip),
     VenueFullAddress: venueFullAddress,
     LocationBlock: locationBlock,
-    LocationNote: event.venue?.locationNote || '',
-    LoadInInfo: event.venue?.loadInInfo || '',
-    ContactPhone: event.contactPhone || '',
-    ContactPhoneExt: event.contactPhoneExt || '',
-    ContactEmail: event.contactEmail || '',
+    LocationNote: escapeHtml(event.venue?.locationNote),
+    LoadInInfo: escapeHtml(event.venue?.loadInInfo),
+    ContactPhone: escapeHtml(event.contactPhone),
+    ContactPhoneExt: escapeHtml(event.contactPhoneExt),
+    ContactEmail: escapeHtml(event.contactEmail),
     CrewList: crewList,
     AddToCalendar: addToCalendar,
   };

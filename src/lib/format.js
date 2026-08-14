@@ -15,6 +15,17 @@ export function formatZip(value) {
   return value.replace(/\D/g, '').slice(0, 5);
 }
 
+// A pasted YouTube/Spotify/etc. share link is often missing its scheme
+// (copied from an address bar that hides "https://", or typed by hand) —
+// without it, the browser treats the href as a same-site relative path
+// instead of an external link. Leaves anything that already has a scheme
+// (including non-http ones, e.g. a deliberate `mailto:`) untouched.
+export function normalizeUrl(value) {
+  const trimmed = value.trim();
+  if (!trimmed || /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
 export function formatCurrency(n, { maximumFractionDigits } = {}) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',

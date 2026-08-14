@@ -1,5 +1,6 @@
 import { formatEventDate as formatDate, formatEventTime as formatTime } from './format';
 import { DEFAULT_ACCENT_COLOR } from './colorTheme';
+import { escapeHtml } from './htmlEscape';
 
 // Shared by EventFormPage.jsx's on-screen Prep tab, the emailed prep sheet
 // (renderPrepSheetEmail below), and the downloaded PDF (prepSheetPdf.js) —
@@ -42,30 +43,30 @@ export function renderPrepSheetEmail(form, prepContractors, requests = [], attac
   const eventDate = formatDate(form.eventDate);
   const venue = form.venue || {};
   const address = [venue.address1, venue.address2, venue.city && venue.state ? `${venue.city}, ${venue.state} ${venue.zip || ''}` : '']
-    .filter(Boolean).join('<br>');
+    .filter(Boolean).map(escapeHtml).join('<br>');
 
   const scheduleRows = (form.schedule || [])
     .filter((s) => s.time || s.name || s.details)
-    .map((s) => `<tr><td style="padding:4px 12px 4px 0;white-space:nowrap;color:#475569;">${formatTime(s.time)}</td><td style="padding:4px 12px 4px 0;font-weight:600;">${s.name || ''}</td><td style="padding:4px 0;color:#475569;">${s.details || ''}</td></tr>`)
+    .map((s) => `<tr><td style="padding:4px 12px 4px 0;white-space:nowrap;color:#475569;">${formatTime(s.time)}</td><td style="padding:4px 12px 4px 0;font-weight:600;">${escapeHtml(s.name)}</td><td style="padding:4px 0;color:#475569;">${escapeHtml(s.details)}</td></tr>`)
     .join('');
 
   const contractorRows = prepContractors
-    .map((c) => `<tr><td style="padding:4px 12px 4px 0;font-weight:600;">${c.name}</td><td style="padding:4px 12px 4px 0;color:#475569;">${c.role}</td><td style="padding:4px 12px 4px 0;color:#475569;white-space:nowrap;">${c.phone || ''}</td><td style="padding:4px 0;color:#475569;white-space:nowrap;">${formatTime(c.startTime)} – ${formatTime(c.endTime)}</td></tr>`)
+    .map((c) => `<tr><td style="padding:4px 12px 4px 0;font-weight:600;">${escapeHtml(c.name)}</td><td style="padding:4px 12px 4px 0;color:#475569;">${escapeHtml(c.role)}</td><td style="padding:4px 12px 4px 0;color:#475569;white-space:nowrap;">${escapeHtml(c.phone)}</td><td style="padding:4px 0;color:#475569;white-space:nowrap;">${formatTime(c.startTime)} – ${formatTime(c.endTime)}</td></tr>`)
     .join('');
 
   const requestRows = (requests || [])
     .filter((r) => r.name || r.details || r.link || r.documentName)
     .map((r) => {
       const extras = [];
-      if (r.link) extras.push(`<a href="${r.link}" style="color:${accentColor};">${r.link}</a>`);
-      if (r.documentName) extras.push(`Attached: ${r.documentName}`);
-      return `<tr><td style="padding:4px 12px 4px 0;font-weight:600;vertical-align:top;">${r.name || ''}</td><td style="padding:4px 12px 4px 0;color:#475569;vertical-align:top;">${r.details || ''}</td><td style="padding:4px 0;color:#475569;vertical-align:top;">${extras.join('<br>')}</td></tr>`;
+      if (r.link) extras.push(`<a href="${escapeHtml(r.link)}" style="color:${accentColor};">${escapeHtml(r.link)}</a>`);
+      if (r.documentName) extras.push(`Attached: ${escapeHtml(r.documentName)}`);
+      return `<tr><td style="padding:4px 12px 4px 0;font-weight:600;vertical-align:top;">${escapeHtml(r.name)}</td><td style="padding:4px 12px 4px 0;color:#475569;vertical-align:top;">${escapeHtml(r.details)}</td><td style="padding:4px 0;color:#475569;vertical-align:top;">${extras.join('<br>')}</td></tr>`;
     })
     .join('');
 
   const shotRows = (form.shotList || [])
     .filter((s) => s.label)
-    .map((s) => `<tr><td style="padding:4px 12px 4px 0;font-weight:600;">${s.label}${s.mustHave ? ' ★' : ''}</td><td style="padding:4px 12px 4px 0;color:#475569;">${s.category || ''}</td><td style="padding:4px 0;color:#475569;">${s.notes || ''}</td></tr>`)
+    .map((s) => `<tr><td style="padding:4px 12px 4px 0;font-weight:600;">${escapeHtml(s.label)}${s.mustHave ? ' ★' : ''}</td><td style="padding:4px 12px 4px 0;color:#475569;">${escapeHtml(s.category)}</td><td style="padding:4px 0;color:#475569;">${escapeHtml(s.notes)}</td></tr>`)
     .join('');
 
   const secondShooterRows = (form.secondShooters || [])
@@ -73,20 +74,20 @@ export function renderPrepSheetEmail(form, prepContractors, requests = [], attac
     .map((s) => {
       const contractor = contractors.find((c) => c.id === s.contractorId);
       const name = contractor ? `${contractor.firstName} ${contractor.lastName}` : 'Unassigned';
-      return `<tr><td style="padding:4px 12px 4px 0;font-weight:600;">${name}</td><td style="padding:4px 12px 4px 0;color:#475569;">${s.role || ''}</td><td style="padding:4px 0;color:#475569;">${s.notes || ''}</td></tr>`;
+      return `<tr><td style="padding:4px 12px 4px 0;font-weight:600;">${escapeHtml(name)}</td><td style="padding:4px 12px 4px 0;color:#475569;">${escapeHtml(s.role)}</td><td style="padding:4px 0;color:#475569;">${escapeHtml(s.notes)}</td></tr>`;
     })
     .join('');
 
   const body = `
     <div style="font-family:sans-serif;color:#1e293b;max-width:600px;">
-      <h2 style="margin:0 0 4px;">${form.name || 'Event'}</h2>
-      <p style="margin:0 0 16px;color:#475569;">${eventDate}${form.eventDayOfTheWeek ? ` (${form.eventDayOfTheWeek})` : ''} · ${formatTime(form.startTime)} – ${formatTime(form.endTime)}</p>
+      <h2 style="margin:0 0 4px;">${escapeHtml(form.name || 'Event')}</h2>
+      <p style="margin:0 0 16px;color:#475569;">${eventDate}${form.eventDayOfTheWeek ? ` (${escapeHtml(form.eventDayOfTheWeek)})` : ''} · ${formatTime(form.startTime)} – ${formatTime(form.endTime)}</p>
 
       ${venue.name || address ? `
       <h3 style="margin:16px 0 4px;font-size:14px;text-transform:uppercase;letter-spacing:0.03em;color:#64748b;">Location</h3>
-      <p style="margin:0;">${venue.name ? `<strong>${venue.name}</strong><br>` : ''}${address}</p>
-      ${venue.locationNote ? `<p style="margin:8px 0 0;color:#475569;">${venue.locationNote}</p>` : ''}
-      ${venue.loadInInfo ? `<p style="margin:4px 0 0;color:#475569;"><em>Load-in:</em> ${venue.loadInInfo}</p>` : ''}
+      <p style="margin:0;">${venue.name ? `<strong>${escapeHtml(venue.name)}</strong><br>` : ''}${address}</p>
+      ${venue.locationNote ? `<p style="margin:8px 0 0;color:#475569;">${escapeHtml(venue.locationNote)}</p>` : ''}
+      ${venue.loadInInfo ? `<p style="margin:4px 0 0;color:#475569;"><em>Load-in:</em> ${escapeHtml(venue.loadInInfo)}</p>` : ''}
       ` : ''}
 
       ${scheduleRows ? `
@@ -116,10 +117,10 @@ export function renderPrepSheetEmail(form, prepContractors, requests = [], attac
 
       ${form.prepNotes ? `
       <h3 style="margin:16px 0 4px;font-size:14px;text-transform:uppercase;letter-spacing:0.03em;color:#64748b;">Notes</h3>
-      <p style="margin:0;white-space:pre-wrap;">${form.prepNotes}</p>
+      <p style="margin:0;white-space:pre-wrap;">${escapeHtml(form.prepNotes)}</p>
       ` : ''}
 
-      ${attachedDocs.length ? `<p style="margin:16px 0 0;color:#64748b;font-size:13px;">Attached: ${attachedDocs.map((d) => d.filename).join(', ')}</p>` : ''}
+      ${attachedDocs.length ? `<p style="margin:16px 0 0;color:#64748b;font-size:13px;">Attached: ${attachedDocs.map((d) => escapeHtml(d.filename)).join(', ')}</p>` : ''}
     </div>
   `.trim();
 

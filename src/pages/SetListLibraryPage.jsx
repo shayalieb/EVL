@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import SetListLibraryModal from '../components/SetListLibraryModal';
 import SetListEmailModal from '../components/SetListEmailModal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import Modal from '../components/ui/Modal';
 import SearchInput from '../components/ui/SearchInput';
 import Tooltip from '../components/ui/Tooltip';
 import { useToast } from '../components/ui/Toast';
@@ -18,7 +19,7 @@ import { renderSetListEmail, sendSetListEmail } from '../lib/setList';
 // one here never touches copies already pulled into a specific event — see
 // SetListsEditorPage.jsx, which deep-clones on pull.
 export default function SetListLibraryPage() {
-  const { setListLibrary, deleteSetListLibraryItem, events, contractors } = useData();
+  const { setListLibrary, updateSetListLibraryItem, deleteSetListLibraryItem, events, contractors } = useData();
   const { can, currentUser } = useAuth();
   const { showToast } = useToast();
   const canEdit = can('manageEvents');
@@ -26,9 +27,14 @@ export default function SetListLibraryPage() {
   const [editingSetList, setEditingSetList] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [search, setSearch] = useState('');
-  const [emailTarget, setEmailTarget] = useState(null); // the setList currently open in SetListEmailModal
+  const [emailTarget, setEmailTarget] = useState(null); // { setList, event } currently open in SetListEmailModal
   const [sendingEmail, setSendingEmail] = useState(false);
   const [exportingId, setExportingId] = useState(null);
+  // { setList, action: 'email' | 'pdf' } — set when a set list is linked to
+  // more than one event and the specific action needs to know which one to
+  // act on (recipients + header name/date are always scoped to one event at
+  // a time, never a blended "several events" view).
+  const [chooseEventFor, setChooseEventFor] = useState(null);
 
   const filteredSetLists = setListLibrary.filter((s) => matchesSearch(search, [s.name]));
 
@@ -52,26 +58,34 @@ export default function SetListLibraryPage() {
     setDeleteTarget(null);
   }
 
-  function linkedEventFor(setList) {
-    return setList.eventId ? events.find((e) => e.id === setList.eventId) || null : null;
+  // eventId (singular) is the pre-multi-link shape — a set list saved
+  // before that change still resolves to its one existing link.
+  function linkedEventsFor(setList) {
+    const ids = setList.eventIds || (setList.eventId ? [setList.eventId] : []);
+    return ids.map((id) => events.find((e) => e.id === id)).filter(Boolean);
   }
 
-  // Whoever's booked on the linked event, same pool SetListsEditorPage.jsx
-  // draws from — there's no recipient pool at all for a set list that isn't
-  // linked to an event yet, which is why Email stays disabled until then.
-  function bandMembersFor(linkedEvent) {
-    return (linkedEvent?.contractorBookings || [])
+  function hasSongs(setList) {
+    return setList.items.some((it) => it.songTitle?.trim());
+  }
+
+  // Whoever's booked on the given event, same pool SetListsEditorPage.jsx
+  // draws from.
+  function allBookedFor(event) {
+    return (event?.contractorBookings || [])
       .map((b) => contractors.find((c) => c.id === b.contractorId))
-      .filter((c) => c?.email);
+      .filter(Boolean);
+  }
+  function bandMembersFor(event) {
+    return allBookedFor(event).filter((c) => c?.email);
   }
 
-  async function handleExportPdf(setList) {
+  async function handleExportPdf(setList, event) {
     setExportingId(setList.id);
     try {
-      const linkedEvent = linkedEventFor(setList);
       await generateSetListPdf({
-        eventName: linkedEvent?.name || setList.name,
-        eventDate: linkedEvent?.eventDate,
+        eventName: event?.name || setList.name,
+        eventDate: event?.eventDate,
         setLists: [setList],
         businessInfo: currentUser?.businessInfo,
       });
@@ -82,14 +96,32 @@ export default function SetListLibraryPage() {
     }
   }
 
+  function startExportPdf(setList) {
+    const linked = linkedEventsFor(setList);
+    if (linked.length > 1) { setChooseEventFor({ setList, action: 'pdf' }); return; }
+    handleExportPdf(setList, linked[0] || null);
+  }
+
+  function startEmail(setList) {
+    const linked = linkedEventsFor(setList);
+    if (linked.length > 1) { setChooseEventFor({ setList, action: 'email' }); return; }
+    if (linked[0]) setEmailTarget({ setList, event: linked[0] });
+  }
+
+  function handleChooseEvent(event) {
+    const { setList, action } = chooseEventFor;
+    setChooseEventFor(null);
+    if (action === 'email') setEmailTarget({ setList, event });
+    else handleExportPdf(setList, event);
+  }
+
   async function handleSendEmail({ subject, body, recipientIds }) {
-    const setList = emailTarget;
-    const linkedEvent = linkedEventFor(setList);
+    const { setList, event } = emailTarget;
     setSendingEmail(true);
     try {
       const fromName = currentUser.businessInfo?.name || `${currentUser.firstName} ${currentUser.lastName}`;
       const { successCount, total } = await sendSetListEmail({
-        eventId: linkedEvent.id, eventName: linkedEvent.name, eventDate: linkedEvent.eventDate, setList,
+        eventId: event.id, eventName: event.name, eventDate: event.eventDate, setList,
         recipientIds, contractors, subject, body, fromName, businessInfo: currentUser?.businessInfo,
       });
       if (successCount === total) {
@@ -97,6 +129,7 @@ export default function SetListLibraryPage() {
       } else {
         showToast(`Sent ${successCount} of ${total} emails — some failed`, 'error');
       }
+      updateSetListLibraryItem(setList.id, { lastSentAt: new Date().toISOString(), lastSentCount: successCount });
       setEmailTarget(null);
     } catch (err) {
       showToast(err.message || 'Failed to send set list email', 'error');
@@ -105,10 +138,12 @@ export default function SetListLibraryPage() {
     }
   }
 
-  const emailLinkedEvent = emailTarget ? linkedEventFor(emailTarget) : null;
-  const emailDraft = emailTarget && emailLinkedEvent
-    ? renderSetListEmail(emailLinkedEvent.name, emailLinkedEvent.eventDate, emailTarget, currentUser?.businessInfo)
+  const emailDraft = emailTarget
+    ? renderSetListEmail(emailTarget.event.name, emailTarget.event.eventDate, emailTarget.setList, currentUser?.businessInfo)
     : null;
+  const emailBandMembers = emailTarget ? bandMembersFor(emailTarget.event) : [];
+  const emailExcludedCount = emailTarget ? allBookedFor(emailTarget.event).length - emailBandMembers.length : 0;
+  const chooseEventOptions = chooseEventFor ? linkedEventsFor(chooseEventFor.setList) : [];
 
   return (
     <div>
@@ -139,7 +174,7 @@ export default function SetListLibraryPage() {
               <tr className="border-b border-slate-100 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Description</th>
-                <th className="px-4 py-3">Linked Event</th>
+                <th className="px-4 py-3">Linked Events</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -154,13 +189,16 @@ export default function SetListLibraryPage() {
                 </tr>
               )}
               {filteredSetLists.map((s) => {
-                const linkedEvent = linkedEventFor(s);
-                const bandMembers = bandMembersFor(linkedEvent);
-                const emailDisabledReason = !linkedEvent
-                  ? 'Link this set list to an event to email it'
-                  : bandMembers.length === 0
-                    ? 'No band members with an email are booked on the linked event yet'
-                    : null;
+                const linked = linkedEventsFor(s);
+                const songsPresent = hasSongs(s);
+                const pdfDisabledReason = !songsPresent ? 'Add at least one song before exporting a PDF' : null;
+                const emailDisabledReason = !songsPresent
+                  ? 'Add at least one song before emailing this set list'
+                  : linked.length === 0
+                    ? 'Link this set list to an event to email it'
+                    : linked.length === 1 && bandMembersFor(linked[0]).length === 0
+                      ? 'No band members with an email are booked on the linked event yet'
+                      : null;
                 return (
                   <tr key={s.id} data-testid="setlist-library-row" className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                     <td className="px-4 py-3 font-medium text-slate-800">
@@ -174,26 +212,46 @@ export default function SetListLibraryPage() {
                     </td>
                     <td className="px-4 py-3 text-slate-500 max-w-md truncate">{s.description || '—'}</td>
                     <td className="px-4 py-3 text-slate-600">
-                      {linkedEvent ? (
+                      {linked.length === 0 ? (
+                        <span className="text-slate-300">—</span>
+                      ) : linked.length === 1 ? (
                         <span data-testid="setlist-library-row-linked-event">
-                          {linkedEvent.name || '(untitled event)'}
-                          {linkedEvent.eventDate && <span className="text-slate-400"> — {formatEventDate(linkedEvent.eventDate)}</span>}
+                          {linked[0].name || '(untitled event)'}
+                          {linked[0].eventDate && <span className="text-slate-400"> — {formatEventDate(linked[0].eventDate)}</span>}
                         </span>
                       ) : (
-                        <span className="text-slate-300">—</span>
+                        <Tooltip content={
+                          <div className="space-y-1">
+                            {linked.map((e) => (
+                              <div key={e.id}>{e.name || '(untitled event)'}{e.eventDate && ` — ${formatEventDate(e.eventDate)}`}</div>
+                            ))}
+                          </div>
+                        }>
+                          <span data-testid="setlist-library-row-linked-event" className="underline decoration-dotted cursor-default">
+                            {linked.length} events
+                          </span>
+                        </Tooltip>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleExportPdf(s)}
-                          disabled={exportingId === s.id}
-                          data-testid="setlist-library-row-export-pdf-button"
-                          className="px-2 py-1 rounded-lg text-xs font-semibold text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 whitespace-nowrap"
-                        >
-                          {exportingId === s.id ? 'Exporting…' : 'Download PDF'}
-                        </button>
+                        {pdfDisabledReason ? (
+                          <Tooltip content={pdfDisabledReason}>
+                            <span className="px-2 py-1 rounded-lg text-xs font-semibold text-slate-300 whitespace-nowrap cursor-default">
+                              Download PDF
+                            </span>
+                          </Tooltip>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => startExportPdf(s)}
+                            disabled={exportingId === s.id}
+                            data-testid="setlist-library-row-export-pdf-button"
+                            className="px-2 py-1 rounded-lg text-xs font-semibold text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 whitespace-nowrap"
+                          >
+                            {exportingId === s.id ? 'Exporting…' : 'Download PDF'}
+                          </button>
+                        )}
                         {emailDisabledReason ? (
                           <Tooltip content={emailDisabledReason}>
                             <span className="px-2 py-1 rounded-lg text-xs font-semibold text-slate-300 whitespace-nowrap cursor-default">
@@ -203,7 +261,7 @@ export default function SetListLibraryPage() {
                         ) : (
                           <button
                             type="button"
-                            onClick={() => setEmailTarget(s)}
+                            onClick={() => startEmail(s)}
                             data-testid="setlist-library-row-email-button"
                             className="px-2 py-1 rounded-lg text-xs font-semibold text-indigo-600 hover:bg-indigo-50 whitespace-nowrap"
                           >
@@ -233,6 +291,11 @@ export default function SetListLibraryPage() {
                           </>
                         )}
                       </div>
+                      {s.lastSentAt && (
+                        <p data-testid="setlist-library-row-last-sent" className="text-[11px] text-slate-400 text-right mt-1">
+                          Sent {formatEventDate(s.lastSentAt.slice(0, 10))} to {s.lastSentCount} band member{s.lastSentCount === 1 ? '' : 's'}
+                        </p>
+                      )}
                     </td>
                   </tr>
                 );
@@ -250,10 +313,27 @@ export default function SetListLibraryPage() {
         title="Delete set list?"
         description={`This removes "${deleteTarget?.name}" from your reusable set lists. Copies already pulled into a gig are unaffected.`}
       />
+      <Modal open={!!chooseEventFor} onClose={() => setChooseEventFor(null)} title="Which event is this for?">
+        <div className="space-y-1.5">
+          {chooseEventOptions.map((e) => (
+            <button
+              key={e.id}
+              type="button"
+              onClick={() => handleChooseEvent(e)}
+              data-testid="setlist-library-choose-event-option"
+              className="w-full text-left px-3 py-2 rounded-lg border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 flex items-center justify-between"
+            >
+              <span className="font-medium text-slate-700">{e.name || '(untitled event)'}</span>
+              {e.eventDate && <span className="text-xs text-slate-400 shrink-0 ml-2">{formatEventDate(e.eventDate)}</span>}
+            </button>
+          ))}
+        </div>
+      </Modal>
       <SetListEmailModal
         open={!!emailTarget}
         onClose={() => setEmailTarget(null)}
-        bandMembers={emailLinkedEvent ? bandMembersFor(emailLinkedEvent) : []}
+        bandMembers={emailBandMembers}
+        excludedCount={emailExcludedCount}
         initialSubject={emailDraft?.subject}
         initialBody={emailDraft?.body}
         sending={sendingEmail}
