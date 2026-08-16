@@ -9,6 +9,9 @@ const NOTE_WIDTH = 140;
 const NOTE_HEIGHT = 60;
 const TEXT_LABEL_WIDTH = 160;
 const TEXT_LABEL_HEIGHT = 32;
+// Every 15° — matches the toolbar's ⟲/⟳ step buttons (StagePlotPageEditor.jsx),
+// so the drag-handle and the buttons land on the same angles.
+const ROTATION_SNAPS = Array.from({ length: 24 }, (_, i) => i * 15);
 
 // Renders a placed element as its real hand-authored icon (see
 // iconRegistry.js/stagePlotIcons.js/floorPlanIcons.js) when the scene's
@@ -194,6 +197,7 @@ export default function CanvasStage({
   elementNumbers,
   elementContent,
   onUpdateElementContent,
+  onElementAdded,
 }) {
   const internalStageRef = useRef(null);
   const trRef = useRef(null);
@@ -210,6 +214,7 @@ export default function CanvasStage({
   const [editingElementRect, setEditingElementRect] = useState(null);
   const [draftName, setDraftName] = useState('');
   const [draftDescriptionHtml, setDraftDescriptionHtml] = useState('');
+  const [liveRotation, setLiveRotation] = useState(null);
 
   // Decode every registered icon once up front rather than lazily on first
   // placement — without this, the *first* time any given icon type is
@@ -311,14 +316,13 @@ export default function CanvasStage({
     if (!iconId) return;
     const { x, y } = toSceneCoords(e.clientX, e.clientY);
     const label = iconRegistry?.[iconId]?.label || iconId;
-    onMutate((s) => ({
-      ...s,
-      elements: [...s.elements, {
-        id: `el_${Date.now().toString(36)}_${Math.round(Math.random() * 1e6)}`,
-        layerId: s.layers.find((l) => !l.locked)?.id || s.layers[0]?.id,
-        iconId, x, y, rotation: 0, scaleX: 1, scaleY: 1, label,
-      }],
-    }));
+    const element = {
+      id: `el_${Date.now().toString(36)}_${Math.round(Math.random() * 1e6)}`,
+      layerId: scene.layers.find((l) => !l.locked)?.id || scene.layers[0]?.id,
+      iconId, x, y, rotation: 0, scaleX: 1, scaleY: 1, label,
+    };
+    onMutate((s) => ({ ...s, elements: [...s.elements, element] }));
+    onElementAdded?.(element);
   }
 
   function startEditingAnnotation(annotation) {
@@ -464,6 +468,7 @@ export default function CanvasStage({
   const grid = showGrid ? gridLinePositions(width * 3, height * 3, scene.scalePxPerUnit, scene.gridSpacing) : { vertical: [], horizontal: [] };
   const visibleLayerIds = new Set(scene.layers.filter((l) => l.visible).map((l) => l.id));
   const editingAnnotation = editingAnnotationId ? scene.annotations.find((a) => a.id === editingAnnotationId) : null;
+  const selectedElement = selectedElementId ? scene.elements.find((e) => e.id === selectedElementId) : null;
 
   return (
     <div
@@ -556,11 +561,38 @@ export default function CanvasStage({
             />
           ))}
 
+          {liveRotation != null && selectedElement && (
+            <Group x={selectedElement.x} y={selectedElement.y - ICON_SIZE / 2 - 26} listening={false}>
+              <Rect width={44} height={20} offsetX={22} offsetY={10} fill="#1e293b" cornerRadius={4} />
+              <Text
+                text={`${liveRotation}°`}
+                fontSize={12}
+                fill="#fff"
+                width={44}
+                height={20}
+                offsetX={22}
+                offsetY={10}
+                align="center"
+                verticalAlign="middle"
+              />
+            </Group>
+          )}
+
           <Transformer
             ref={trRef}
             rotateEnabled
+            rotationSnaps={ROTATION_SNAPS}
+            onTransform={() => {
+              // Only the rotate handle gets a live readout — resize-handle
+              // drags fire onTransform too, and would otherwise flash a
+              // stale/misleading angle label during a plain resize.
+              if (trRef.current?.getActiveAnchor() !== 'rotater') return;
+              const node = selectedElementId ? shapeRefs.current[selectedElementId] : null;
+              if (node) setLiveRotation(Math.round(node.rotation()));
+            }}
             onTransformEnd={() => {
               const node = selectedElementId ? shapeRefs.current[selectedElementId] : null;
+              setLiveRotation(null);
               if (!node) return;
               onMutate((s) => ({
                 ...s,

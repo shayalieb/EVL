@@ -1,16 +1,36 @@
+import { useState } from 'react';
+
 // Shared drag-source palette for canvas tools (Stage Plot today; Floor Plan
 // could reuse this too) — groups icons by their `category` field with
 // section headers, since a flat grid stopped being scannable once the
 // stage-plot icon set grew past ~15 entries. Each icon tile is the actual
 // drag source (native HTML5 DnD, read by CanvasStage.jsx's onDrop).
+//
+// The category dropdown narrows the scroll list to one category at a time —
+// added once Stage Plot's icon set grew past 60 entries across 14
+// categories, at which point even the grouped/scrollable list got long
+// enough that jumping straight to "Brass & Woodwind" beat scrolling past
+// everything before it. Defaults to "All", so nothing changes for anyone
+// who never touches it.
 export default function CanvasIconPalette({ icons, title, testIdPrefix }) {
   const categories = [...new Set(icons.map((i) => i.category))];
+  const [activeCategory, setActiveCategory] = useState('All');
+  const visibleCategories = activeCategory === 'All' ? categories : [activeCategory];
 
   return (
     <div>
       <div className="text-xs font-semibold text-slate-500 mb-2">{title}</div>
+      <select
+        value={activeCategory}
+        onChange={(e) => setActiveCategory(e.target.value)}
+        data-testid={`${testIdPrefix}-category-select`}
+        className="w-full mb-2 px-2 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-600 bg-white"
+      >
+        <option value="All">All Categories</option>
+        {categories.map((category) => <option key={category} value={category}>{category}</option>)}
+      </select>
       <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
-        {categories.map((category) => (
+        {visibleCategories.map((category) => (
           <div key={category}>
             <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">{category}</div>
             <div className="grid grid-cols-2 gap-1.5">

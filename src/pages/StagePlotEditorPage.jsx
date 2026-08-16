@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
-import { getOrCreateStagePlot, addStagePlotPage, deleteStagePlotPage, updateStagePlotChannel, addStagePlotChannel } from '../lib/stagePlots';
+import { getOrCreateStagePlot, addStagePlotPage, deleteStagePlotPage, updateStagePlotChannel, addStagePlotChannel, deleteStagePlotChannel } from '../lib/stagePlots';
 import { generateStagePlotPdf } from '../lib/stagePlotPdf';
 import StagePlotPageEditor from '../components/StagePlotPageEditor';
 import StagePlotChannelList from '../components/StagePlotChannelList';
@@ -43,14 +43,27 @@ export default function StagePlotEditorPage({ onClose } = {}) {
     setPlot((prev) => (prev ? { ...prev, pages: prev.pages.map((pg) => (pg.id === pageId ? { ...pg, ...patch } : pg)) } : prev));
   }
 
-  // Deleting a canvas icon shouldn't delete its linked I/O channel row (a
-  // channel is independently maintained data, per StagePlotChannelList.jsx)
-  // — just unlink it so it stops pointing at an icon that no longer exists.
+  // The I/O List is now auto-generated from what's actually placed on the
+  // canvas (see handleElementAdded below) — so removing an icon removes its
+  // row too, keeping the list a live mirror of the plot instead of
+  // accumulating orphaned "New Channel" rows every time someone deletes a
+  // placed instrument. Manually-added rows (never linked to an icon) are
+  // untouched, since this only ever finds a channel by elementId.
   async function handleElementDeleted(elementId) {
     const channel = plot.channels.find((c) => c.elementId === elementId);
     if (!channel) return;
-    const updated = await updateStagePlotChannel(eventId, channel.id, { elementId: null });
-    setPlot((prev) => ({ ...prev, channels: prev.channels.map((c) => (c.id === updated.id ? updated : c)) }));
+    await deleteStagePlotChannel(eventId, channel.id);
+    setPlot((prev) => ({ ...prev, channels: prev.channels.filter((c) => c.id !== channel.id) }));
+  }
+
+  // Fired the moment an icon is dropped onto the canvas (CanvasStage.jsx's
+  // handleDrop) — auto-creates its linked I/O/backline row immediately,
+  // rather than waiting for someone to open the icon's notes popup or click
+  // "+ Add Channel for Selected Icon". `source` starts as the icon's default
+  // label (e.g. "Vocal Mic"); still freely editable afterward.
+  async function handleElementAdded(element) {
+    const created = await addStagePlotChannel(eventId, { source: element.label, elementId: element.id });
+    setPlot((prev) => ({ ...prev, channels: [...prev.channels, created] }));
   }
 
   // Backs the canvas double-click popup (CanvasStage.jsx) — "Name" and
@@ -179,6 +192,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
             selectedElementId={selectedElementId}
             onSelectElement={setSelectedElementId}
             onElementDeleted={handleElementDeleted}
+            onElementAdded={handleElementAdded}
             elementNumbers={elementNumbers}
             elementContent={elementContent}
             onUpdateElementContent={handleUpdateElementContent}

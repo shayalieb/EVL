@@ -13,7 +13,7 @@ const toolbarButtonClass = 'px-3 py-1.5 rounded-lg border border-slate-300 text-
 // autosave, and the toolbar/palette/canvas around it. Mounted fresh (via
 // `key={page.id}` in StagePlotEditorPage) on every page switch so each
 // page gets its own isolated undo/redo stack, never a shared/bleeding one.
-export default function StagePlotPageEditor({ eventId, page, onSaved, selectedElementId, onSelectElement, onElementDeleted, elementNumbers, elementContent, onUpdateElementContent }) {
+export default function StagePlotPageEditor({ eventId, page, onSaved, selectedElementId, onSelectElement, onElementDeleted, onElementAdded, elementNumbers, elementContent, onUpdateElementContent }) {
   const initialScene = page.scene && Object.keys(page.scene).length > 0 ? page.scene : createEmptyScene();
   const { scene, apply, replaceCurrent, undo, redo, canUndo, canRedo } = useUndoRedo(initialScene);
   const [mode, setMode] = useState('select');
@@ -152,10 +152,12 @@ export default function StagePlotPageEditor({ eventId, page, onSaved, selectedEl
           stageRef={stageRef}
           width={820}
           height={580}
+          showGrid={false}
           iconRegistry={STAGE_PLOT_ICONS}
           elementNumbers={elementNumbers}
           elementContent={elementContent}
           onUpdateElementContent={onUpdateElementContent}
+          onElementAdded={onElementAdded}
         />
       </div>
     </div>
