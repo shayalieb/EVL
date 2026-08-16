@@ -4,7 +4,7 @@ import { gridLinePositions, snapPointToGrid } from './measurement';
 import { useSvgImage, preloadIconRegistry } from './useSvgImage';
 import RichTextToolbar from '../../components/ui/RichTextToolbar';
 
-const ICON_SIZE = 44;
+const ICON_SIZE = 56;
 const NOTE_WIDTH = 140;
 const NOTE_HEIGHT = 60;
 const TEXT_LABEL_WIDTH = 160;
@@ -12,6 +12,19 @@ const TEXT_LABEL_HEIGHT = 32;
 // Every 15° — matches the toolbar's ⟲/⟳ step buttons (StagePlotPageEditor.jsx),
 // so the drag-handle and the buttons land on the same angles.
 const ROTATION_SNAPS = Array.from({ length: 24 }, (_, i) => i * 15);
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 4;
+
+// Rotates an (x,y) offset by `deg` degrees around the origin — used to keep
+// a rotated icon's label/number badge at a fixed position and orientation
+// relative to the icon regardless of how the icon itself is rotated (see
+// ElementShape's counter-rotated inner Groups below).
+function rotateOffset(x, y, deg) {
+  const rad = (deg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return { x: x * cos - y * sin, y: x * sin + y * cos };
+}
 
 // Renders a placed element as its real hand-authored icon (see
 // iconRegistry.js/stagePlotIcons.js/floorPlanIcons.js) when the scene's
@@ -32,6 +45,16 @@ function ElementShape({ element, icon, number, isSelected, onSelect, onEdit, onD
   const baseLabel = element.label || icon?.label || element.iconId || '';
   const labelText = element.seats ? `${baseLabel} (${element.seats})` : baseLabel;
   const labelY = icon ? ICON_SIZE / 2 + 12 : 24;
+  // The label and number badge live inside the same rotatable Group as the
+  // icon (see the file-level comment below) so they track drags correctly,
+  // but readers shouldn't have to tilt their head to read a rotated icon's
+  // name — counter-rotating these two inner Groups by the icon's own
+  // rotation cancels the parent's spin, and rotating their *offset* by the
+  // same amount keeps them anchored at the same fixed spot next to the
+  // icon (below, and top-right) instead of orbiting around it as it turns.
+  const counterRotation = -element.rotation;
+  const labelAnchor = rotateOffset(0, labelY, counterRotation);
+  const numberAnchor = rotateOffset(16, -24, counterRotation);
 
   return (
     <Group
@@ -71,18 +94,19 @@ function ElementShape({ element, icon, number, isSelected, onSelect, onEdit, onD
           cornerRadius={4}
         />
       )}
-      <Text
-        x={-34}
-        y={labelY}
-        text={labelText}
-        fontSize={10}
-        fill="#334155"
-        width={68}
-        align="center"
-        listening={false}
-      />
+      <Group x={labelAnchor.x} y={labelAnchor.y} rotation={counterRotation} listening={false}>
+        <Text
+          x={-34}
+          y={0}
+          text={labelText}
+          fontSize={10}
+          fill="#334155"
+          width={68}
+          align="center"
+        />
+      </Group>
       {number != null && (
-        <Group x={16} y={-24} listening={false}>
+        <Group x={numberAnchor.x} y={numberAnchor.y} rotation={counterRotation} listening={false}>
           <Circle radius={9} fill="#4f46e5" stroke="#fff" strokeWidth={1.5} />
           <Text
             text={String(number)}
@@ -276,16 +300,33 @@ export default function CanvasStage({
     }
   }, [selectedElementId, scene.elements, scene.layers]);
 
+  // Zooms toward a specific screen point (`anchor`) without that point
+  // visually jumping — shared by the scroll-wheel handler (anchored at the
+  // pointer) and the toolbar zoom buttons (anchored at the canvas center).
+  function zoomToward(newScaleRaw, anchor) {
+    const newScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newScaleRaw));
+    const scenePoint = { x: (anchor.x - stagePos.x) / zoom, y: (anchor.y - stagePos.y) / zoom };
+    setZoom(newScale);
+    setStagePos({ x: anchor.x - scenePoint.x * newScale, y: anchor.y - scenePoint.y * newScale });
+  }
+
   function handleWheel(e) {
     e.evt.preventDefault();
-    const stage = internalStageRef.current;
-    const oldScale = zoom;
-    const pointer = stage.getPointerPosition();
-    const mousePointTo = { x: (pointer.x - stagePos.x) / oldScale, y: (pointer.y - stagePos.y) / oldScale };
+    const pointer = internalStageRef.current.getPointerPosition();
     const direction = e.evt.deltaY > 0 ? -1 : 1;
-    const newScale = Math.max(0.25, Math.min(4, direction > 0 ? oldScale * 1.1 : oldScale / 1.1));
-    setZoom(newScale);
-    setStagePos({ x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale });
+    zoomToward(direction > 0 ? zoom * 1.1 : zoom / 1.1, pointer);
+  }
+
+  // Toolbar zoom controls — scroll-to-zoom alone isn't discoverable, so
+  // these give zooming an obvious, clickable affordance plus a percentage
+  // readout of the current level.
+  function handleZoomButton(factor) {
+    zoomToward(zoom * factor, { x: width / 2, y: height / 2 });
+  }
+
+  function handleResetZoom() {
+    setZoom(1);
+    setStagePos({ x: 0, y: 0 });
   }
 
   // Scene coordinates from a point already in Konva's own pointer-position
@@ -604,6 +645,36 @@ export default function CanvasStage({
           />
         </Layer>
       </Stage>
+
+      <div className="absolute bottom-2 right-2 flex items-center gap-0.5 bg-white/95 backdrop-blur rounded-lg border border-slate-200 shadow-sm px-1 py-1">
+        <button
+          type="button"
+          onClick={() => handleZoomButton(1 / 1.25)}
+          data-testid="canvas-zoom-out-button"
+          title="Zoom out"
+          className="w-6 h-6 flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 text-base leading-none"
+        >
+          −
+        </button>
+        <button
+          type="button"
+          onClick={handleResetZoom}
+          data-testid="canvas-zoom-reset-button"
+          title="Reset zoom to 100%"
+          className="w-12 text-center text-xs text-slate-500 hover:text-indigo-600 tabular-nums"
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+        <button
+          type="button"
+          onClick={() => handleZoomButton(1.25)}
+          data-testid="canvas-zoom-in-button"
+          title="Zoom in"
+          className="w-6 h-6 flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 text-base leading-none"
+        >
+          +
+        </button>
+      </div>
 
       {editingAnnotation && (
         <textarea
