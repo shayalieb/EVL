@@ -90,10 +90,16 @@ function serializeEventLite(e) {
   };
 }
 
+// Hard ceiling, not real pagination — no account is anywhere near this today,
+// it just stops a single request from pulling an unbounded row count into
+// memory (concurrent requests against a huge account can OOM the process).
+const MAX_LIST_ROWS = 10000;
+
 router.get('/', asyncHandler(async (req, res) => {
   const events = await prisma.event.findMany({
     where: { accountId: req.membership.accountId, deletedAt: null },
     orderBy: { createdAt: 'asc' },
+    take: MAX_LIST_ROWS,
   });
   res.json({ events: events.map(serializeEventLite) });
 }));

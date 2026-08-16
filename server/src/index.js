@@ -209,8 +209,15 @@ app.use((err, req, res, next) => {
 });
 
 const port = process.env.PORT || 4000;
-app.listen(port, () => console.log(`Server listening on ${port}`));
-startReminderScheduler();
-startReminderRuleEngine();
-startDeletedRecordPurger();
-startInquiryLinkPurger();
+// Background jobs only start once listen actually succeeds. Previously these
+// ran unconditionally right after the call — but a port-bind failure surfaces
+// as an async 'error' event, not a synchronous throw, so a crashed watch-mode
+// process (e.g. EADDRINUSE) would silently keep running its own copies of all
+// four intervals against the same database forever.
+app.listen(port, () => {
+  console.log(`Server listening on ${port}`);
+  startReminderScheduler();
+  startReminderRuleEngine();
+  startDeletedRecordPurger();
+  startInquiryLinkPurger();
+});

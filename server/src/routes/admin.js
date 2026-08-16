@@ -58,7 +58,18 @@ const emptyDataSummary = { contractors: 0, clients: 0, events: 0, bookings: 0 };
 // directly in the blob — silently wrong, always 0, ever since Contractor/
 // Client moved to their own tables, since neither key exists in the blob
 // anymore. Booking/Event would have hit the exact same bug if left as-is.)
+// GROUP BY accountId can't use any single-tenant index, so this always scans
+// every row on all four tables platform-wide — cost scales with total
+// platform volume, not per-account. A short TTL cache keeps repeated admin
+// page loads cheap without needing to invalidate on every write elsewhere;
+// counts being up to a minute stale is fine for an internal dashboard.
+const DATA_SUMMARY_CACHE_TTL_MS = 60 * 1000;
+let dataSummaryCache = null; // { byAccountId, expiresAt }
+
 async function fetchDataSummaries() {
+  if (dataSummaryCache && dataSummaryCache.expiresAt > Date.now()) {
+    return dataSummaryCache.byAccountId;
+  }
   const [contractorCounts, clientCounts, bookingCounts, eventCounts] = await Promise.all([
     prisma.contractor.groupBy({ by: ['accountId'], _count: { _all: true } }),
     prisma.client.groupBy({ by: ['accountId'], _count: { _all: true } }),
@@ -77,6 +88,7 @@ async function fetchDataSummaries() {
   apply(clientCounts, 'clients');
   apply(bookingCounts, 'bookings');
   apply(eventCounts, 'events');
+  dataSummaryCache = { byAccountId, expiresAt: Date.now() + DATA_SUMMARY_CACHE_TTL_MS };
   return byAccountId;
 }
 
