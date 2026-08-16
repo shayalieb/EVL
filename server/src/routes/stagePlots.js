@@ -105,14 +105,36 @@ router.post('/:eventId/pages', asyncHandler(async (req, res) => {
 
 // A stage plot always keeps at least one page — deleting the last one would
 // leave the editor with nothing to show and no way back in through the UI.
+//
+// elementId on StagePlotChannel is a loose reference into this page's scene
+// JSON (no foreign key — see the schema comment), so nothing at the DB
+// level cleans it up. Without this, deleting a page leaves every channel
+// linked to an icon on it permanently orphaned: a dead elementId that will
+// never match anything again, sitting forever in the I/O list. Deleting
+// (not unlinking) those channels here matches the "list mirrors what's
+// actually on stage" behavior an icon's own delete already has.
 router.delete('/:eventId/pages/:pageId', asyncHandler(async (req, res) => {
   const plot = await loadOwnedPlot(req.membership.accountId, req.params.eventId);
   if (!plot) return res.status(404).json({ error: 'Stage plot not found.' });
   if (plot.pages.length <= 1) return res.status(400).json({ error: 'A stage plot needs at least one page.' });
   const page = plot.pages.find((p) => p.id === req.params.pageId);
   if (!page) return res.status(404).json({ error: 'Page not found.' });
+
+  const elementIds = (page.scene?.elements || []).map((e) => e.id).filter(Boolean);
+  let deletedChannelIds = [];
+  if (elementIds.length) {
+    const orphaned = await prisma.stagePlotChannel.findMany({
+      where: { stagePlotId: plot.id, elementId: { in: elementIds } },
+      select: { id: true },
+    });
+    deletedChannelIds = orphaned.map((c) => c.id);
+    if (deletedChannelIds.length) {
+      await prisma.stagePlotChannel.deleteMany({ where: { id: { in: deletedChannelIds } } });
+    }
+  }
+
   await prisma.stagePlotPage.delete({ where: { id: page.id } });
-  res.json({ ok: true });
+  res.json({ ok: true, deletedChannelIds });
 }));
 
 // Channel number is server-assigned (next available), not client-chosen —
@@ -127,19 +149,33 @@ router.post('/:eventId/channels', asyncHandler(async (req, res) => {
   const { source, micOrDi, standType, phantomPower, monitorNotes, elementId } = req.body || {};
   if (!source?.trim()) return res.status(400).json({ error: 'source is required.' });
 
-  const nextChannelNumber = plot.channels.reduce((max, c) => Math.max(max, c.channelNumber), 0) + 1;
-  const channel = await prisma.stagePlotChannel.create({
-    data: {
-      stagePlotId: plot.id,
-      channelNumber: nextChannelNumber,
-      source: source.trim(),
-      micOrDi: micOrDi || null,
-      standType: standType || null,
-      phantomPower: !!phantomPower,
-      monitorNotes: monitorNotes || null,
-      elementId: elementId || null,
-    },
-  });
+  // "Next available" is read-then-write, not atomic — two requests close
+  // enough together (e.g. duplicating several icons at once) can both read
+  // the same max and collide on @@unique([stagePlotId, channelNumber]).
+  // Retrying with a fresh max on that specific conflict is safe (channel
+  // numbers have no meaning beyond "next"), and caps out fast since it only
+  // ever re-fires on an actual collision, not on every request.
+  const data = {
+    stagePlotId: plot.id,
+    source: source.trim(),
+    micOrDi: micOrDi || null,
+    standType: standType || null,
+    phantomPower: !!phantomPower,
+    monitorNotes: monitorNotes || null,
+    elementId: elementId || null,
+  };
+  let channel;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const existing = await prisma.stagePlotChannel.findMany({ where: { stagePlotId: plot.id }, select: { channelNumber: true } });
+    const nextChannelNumber = existing.reduce((max, c) => Math.max(max, c.channelNumber), 0) + 1;
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      channel = await prisma.stagePlotChannel.create({ data: { ...data, channelNumber: nextChannelNumber } });
+      break;
+    } catch (err) {
+      if (err.code !== 'P2002' || attempt === 4) throw err;
+    }
+  }
   res.status(201).json({ channel });
 }));
 

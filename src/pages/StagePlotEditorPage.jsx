@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
@@ -22,6 +22,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   const [activePageId, setActivePageId] = useState(null);
   const [exporting, setExporting] = useState(false);
   const [selectedElementId, setSelectedElementId] = useState(null);
+  const pageEditorRef = useRef(null);
 
   useEffect(() => {
     getOrCreateStagePlot(eventId)
@@ -92,8 +93,24 @@ export default function StagePlotEditorPage({ onClose } = {}) {
 
   async function handleDeletePage(pageId) {
     if (!plot || plot.pages.length <= 1) return;
-    await deleteStagePlotPage(eventId, pageId);
-    setPlot((prev) => ({ ...prev, pages: prev.pages.filter((p) => p.id !== pageId) }));
+    // The server's orphaned-channel cleanup (stagePlots.js) reads this
+    // page's *saved* scene — flush any pending debounced autosave first, or
+    // an icon placed just before hitting "Delete Page" could still be
+    // unsaved server-side and get missed, leaving its channel orphaned.
+    if (pageId === activePageId) {
+      await pageEditorRef.current?.flush();
+    }
+    // The server also deletes any I/O channels linked to icons that only
+    // existed on this page (see stagePlots.js's DELETE /pages/:pageId) —
+    // deletedChannelIds lets local state drop them too, instead of the I/O
+    // List showing rows for a page that no longer exists.
+    const { deletedChannelIds } = await deleteStagePlotPage(eventId, pageId);
+    const removed = new Set(deletedChannelIds || []);
+    setPlot((prev) => ({
+      ...prev,
+      pages: prev.pages.filter((p) => p.id !== pageId),
+      channels: prev.channels.filter((c) => !removed.has(c.id)),
+    }));
     setActivePageId((prev) => (prev === pageId ? plot.pages.find((p) => p.id !== pageId)?.id || null : prev));
   }
 
@@ -153,7 +170,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
         </div>
       </div>
 
-      <div className="flex items-center gap-1 mb-3 border-b border-slate-200">
+      <div className="flex items-center gap-1 mb-3 border-b border-slate-200 overflow-x-auto">
         {sortedPages.map((p) => (
           <button
             key={p.id}
@@ -185,6 +202,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
       <div className="flex flex-wrap gap-4 items-start">
         {activePage && (
           <StagePlotPageEditor
+            ref={pageEditorRef}
             key={activePage.id}
             eventId={eventId}
             page={activePage}

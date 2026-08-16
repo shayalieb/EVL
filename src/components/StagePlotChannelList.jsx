@@ -46,7 +46,7 @@ export default function StagePlotChannelList({ eventId, channels, onChannelsChan
   }
 
   return (
-    <div className="w-[36rem] shrink-0">
+    <div className="w-full max-w-[36rem] shrink-0">
       <div className="flex items-center justify-between mb-2">
         <div className="text-xs font-semibold text-slate-500">I/O List</div>
         <div className="flex items-center gap-3">
@@ -63,8 +63,8 @@ export default function StagePlotChannelList({ eventId, channels, onChannelsChan
           <button type="button" onClick={handleAdd} data-testid="stageplot-add-channel-button" className="text-xs font-semibold text-indigo-600">+ Add Channel</button>
         </div>
       </div>
-      <div className="border border-slate-200 rounded-lg overflow-hidden">
-        <table className="w-full text-xs">
+      <div className="border border-slate-200 rounded-lg overflow-x-auto">
+        <table className="w-full text-xs min-w-[34rem]">
           <thead className="bg-slate-50 text-slate-400">
             <tr>
               <th className="px-2 py-1.5 text-left w-8">#</th>

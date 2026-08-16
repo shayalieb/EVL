@@ -32,7 +32,7 @@ function rotateOffset(x, y, deg) {
 // labeled box for anything unregistered (e.g. the internal canvas-engine
 // demo page's placeholder icon set), so this component works whether or
 // not a real icon set is wired up.
-function ElementShape({ element, icon, number, isSelected, onSelect, onEdit, onDragEnd, shapeRef }) {
+function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSelect, onEdit, onDragEnd, shapeRef }) {
   const image = useSvgImage(icon?.svg);
   // Icon, label, and number badge all live inside one draggable/transformable
   // Group instead of as separate top-level siblings — Konva moves/transforms
@@ -71,6 +71,19 @@ function ElementShape({ element, icon, number, isSelected, onSelect, onEdit, onD
       onDblTap={onEdit}
       onDragEnd={(e) => onDragEnd(element.id, { x: e.target.x(), y: e.target.y() })}
     >
+      {isMultiSelected && (
+        <Rect
+          width={ICON_SIZE + 10}
+          height={ICON_SIZE + 10}
+          offsetX={(ICON_SIZE + 10) / 2}
+          offsetY={(ICON_SIZE + 10) / 2}
+          stroke="#4f46e5"
+          strokeWidth={1.5}
+          dash={[4, 3]}
+          cornerRadius={6}
+          listening={false}
+        />
+      )}
       {icon && image ? (
         <KonvaImage
           image={image}
@@ -208,10 +221,11 @@ export default function CanvasStage({
   height = 600,
   showGrid = true,
   snapEnabled = true,
-  mode = 'select', // 'select' | 'draw' | 'note' | 'text' | 'arrow'
+  mode = 'select', // 'select' | 'draw' | 'note' | 'text' | 'arrow' | 'place-icon' | 'calibrate'
   strokeColor = '#1e293b',
   selectedElementId,
   onSelectElement,
+  multiSelectedIds,
   selectedAnnotationId,
   onSelectAnnotation,
   selectedStrokeId,
@@ -222,6 +236,8 @@ export default function CanvasStage({
   elementContent,
   onUpdateElementContent,
   onElementAdded,
+  pendingIconId,
+  onCalibrate,
 }) {
   const internalStageRef = useRef(null);
   const trRef = useRef(null);
@@ -239,6 +255,8 @@ export default function CanvasStage({
   const [draftName, setDraftName] = useState('');
   const [draftDescriptionHtml, setDraftDescriptionHtml] = useState('');
   const [liveRotation, setLiveRotation] = useState(null);
+  const [calibrationPoints, setCalibrationPoints] = useState(null);
+  const [calibrationDistance, setCalibrationDistance] = useState('');
 
   // Decode every registered icon once up front rather than lazily on first
   // placement — without this, the *first* time any given icon type is
@@ -436,7 +454,27 @@ export default function CanvasStage({
       return;
     }
 
-    if (mode === 'arrow') {
+    // Click-to-place — the touch-friendly alternative to dragging from the
+    // palette (native HTML5 drag-and-drop doesn't exist on touch devices at
+    // all). Tapping a palette icon arms `pendingIconId`; every tap on the
+    // canvas after that places a copy, same as a drop would, and stays
+    // armed so placing several of the same icon doesn't mean re-tapping the
+    // palette each time — mirrors how the Note/Text/Arrow tools already work.
+    if (mode === 'place-icon') {
+      if (!clickedEmptyCanvas || !pendingIconId) return;
+      const { x, y } = stagePointToScene(internalStageRef.current.getPointerPosition());
+      const label = iconRegistry?.[pendingIconId]?.label || pendingIconId;
+      const element = {
+        id: `el_${Date.now().toString(36)}_${Math.round(Math.random() * 1e6)}`,
+        layerId: scene.layers.find((l) => !l.locked)?.id || scene.layers[0]?.id,
+        iconId: pendingIconId, x, y, rotation: 0, scaleX: 1, scaleY: 1, label,
+      };
+      onMutate((s) => ({ ...s, elements: [...s.elements, element] }));
+      onElementAdded?.(element);
+      return;
+    }
+
+    if (mode === 'arrow' || mode === 'calibrate') {
       const { x, y } = stagePointToScene(internalStageRef.current.getPointerPosition());
       setDrawingPoints([x, y, x, y]);
       return;
@@ -458,7 +496,7 @@ export default function CanvasStage({
   function handleStageMouseMove() {
     if (!drawingPoints) return;
     const { x, y } = stagePointToScene(internalStageRef.current.getPointerPosition());
-    if (mode === 'arrow') {
+    if (mode === 'arrow' || mode === 'calibrate') {
       // Two points only (start, live end) — replaces the end point on every
       // move, unlike 'draw' below which appends every sampled point to
       // build up a freehand path.
@@ -467,6 +505,20 @@ export default function CanvasStage({
     }
     if (mode !== 'draw') return;
     setDrawingPoints((prev) => [...prev, x, y]);
+  }
+
+  function confirmCalibration() {
+    const distance = Number(calibrationDistance);
+    if (calibrationPoints && distance > 0) {
+      onCalibrate?.(calibrationPoints.a, calibrationPoints.b, distance);
+    }
+    setCalibrationPoints(null);
+    setCalibrationDistance('');
+  }
+
+  function cancelCalibration() {
+    setCalibrationPoints(null);
+    setCalibrationDistance('');
   }
 
   function handleStageMouseUp() {
@@ -485,6 +537,19 @@ export default function CanvasStage({
             kind: 'arrow',
           }],
         }));
+      }
+      setDrawingPoints(null);
+      return;
+    }
+    // "Set Scale": click two points a known real-world distance apart —
+    // finalizes into a floating distance-input popup (rendered below)
+    // rather than a permanent scene element, since a calibration measurement
+    // isn't part of the plot itself.
+    if (mode === 'calibrate') {
+      const isRealDrag = drawingPoints[0] !== drawingPoints[2] || drawingPoints[1] !== drawingPoints[3];
+      if (isRealDrag) {
+        setCalibrationPoints({ a: { x: drawingPoints[0], y: drawingPoints[1] }, b: { x: drawingPoints[2], y: drawingPoints[3] } });
+        setCalibrationDistance('');
       }
       setDrawingPoints(null);
       return;
@@ -514,7 +579,13 @@ export default function CanvasStage({
   return (
     <div
       className="relative shrink-0 border border-slate-200 rounded-lg overflow-hidden bg-white"
-      style={{ width, height, cursor: mode === 'note' || mode === 'text' ? 'copy' : mode === 'draw' || mode === 'arrow' ? 'crosshair' : 'default' }}
+      style={{
+        width,
+        height,
+        cursor: mode === 'note' || mode === 'text' || mode === 'place-icon' ? 'copy'
+          : mode === 'draw' || mode === 'arrow' || mode === 'calibrate' ? 'crosshair'
+          : 'default',
+      }}
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
     >
@@ -566,9 +637,21 @@ export default function CanvasStage({
           })}
           {drawingPoints && (mode === 'arrow' ? (
             <Arrow points={drawingPoints} stroke={strokeColor} fill={strokeColor} strokeWidth={2} lineCap="round" lineJoin="round" pointerLength={10} pointerWidth={10} />
+          ) : mode === 'calibrate' ? (
+            <Line points={drawingPoints} stroke="#4f46e5" strokeWidth={2} dash={[6, 4]} lineCap="round" />
           ) : (
             <Line points={drawingPoints} stroke={strokeColor} strokeWidth={2} lineCap="round" lineJoin="round" tension={0.4} />
           ))}
+          {calibrationPoints && (
+            <Line
+              points={[calibrationPoints.a.x, calibrationPoints.a.y, calibrationPoints.b.x, calibrationPoints.b.y]}
+              stroke="#4f46e5"
+              strokeWidth={2}
+              dash={[6, 4]}
+              lineCap="round"
+              listening={false}
+            />
+          )}
 
           {scene.elements.filter((el) => visibleLayerIds.has(el.layerId)).map((el) => (
             <ElementShape
@@ -577,7 +660,12 @@ export default function CanvasStage({
               icon={iconRegistry?.[el.iconId]}
               number={elementNumbers?.[el.id]}
               isSelected={el.id === selectedElementId}
-              onSelect={() => { onSelectElement?.(el.id); onSelectAnnotation?.(null); onSelectStroke?.(null); }}
+              isMultiSelected={!!multiSelectedIds?.has(el.id)}
+              onSelect={(e) => {
+                const shiftKey = !!e?.evt?.shiftKey;
+                onSelectElement?.(el.id, shiftKey);
+                if (!shiftKey) { onSelectAnnotation?.(null); onSelectStroke?.(null); }
+              }}
               onEdit={() => startEditingElement(el.id)}
               onDragEnd={(id, pos) => onMutate((s) => ({
                 ...s,
@@ -697,6 +785,44 @@ export default function CanvasStage({
             height: (editingAnnotation.style === 'text' ? TEXT_LABEL_HEIGHT : NOTE_HEIGHT) * zoom,
           }}
         />
+      )}
+
+      {calibrationPoints && (
+        <div
+          className="absolute z-10 bg-white rounded-lg border border-slate-300 shadow-lg p-3 w-64"
+          style={{
+            left: calibrationPoints.b.x * zoom + stagePos.x,
+            top: calibrationPoints.b.y * zoom + stagePos.y + 10,
+          }}
+          onKeyDown={(e) => { if (e.key === 'Escape') cancelCalibration(); }}
+        >
+          <div className="text-xs font-semibold text-slate-500 mb-2">Real-world distance between these two points</div>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min="0"
+              step="any"
+              autoFocus
+              value={calibrationDistance}
+              onChange={(e) => setCalibrationDistance(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') confirmCalibration(); }}
+              data-testid="canvas-calibration-distance-input"
+              className="w-16 px-2 py-1 rounded border border-slate-300 text-sm outline-none focus:border-indigo-400"
+            />
+            <span className="text-sm text-slate-500">{scene.unit}</span>
+            <button
+              type="button"
+              onClick={confirmCalibration}
+              data-testid="canvas-calibration-confirm-button"
+              className="ml-auto px-2 py-1 rounded bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700"
+            >
+              Set
+            </button>
+            <button type="button" onClick={cancelCalibration} className="px-2 py-1 rounded border border-slate-300 text-xs text-slate-500">
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
 
       {editingElementId && editingElementRect && (
