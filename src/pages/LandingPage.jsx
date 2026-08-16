@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import Logo from '../components/ui/Logo';
 import SubmitButton from '../components/ui/SubmitButton';
 import LandingDashboardPreview from '../components/LandingDashboardPreview';
+import { ClientsPipelinePreview, RosterConfirmPreview, DayOfPreview } from '../components/LandingFeaturePreviews';
 import { FileIcon, UsersIcon, ClipboardIcon } from '../components/ui/icons';
 import { joinWaitlist, sendContactMessage } from '../lib/landing';
 
@@ -40,16 +41,19 @@ const FEATURE_GROUPS = [
   {
     title: 'For your clients',
     Icon: FileIcon,
+    Preview: ClientsPipelinePreview,
     items: ['Inquiry-to-booking pipeline', 'Proposals with e-signature', 'Contracts with e-signature', 'Invoicing with built-in payments'],
   },
   {
     title: 'For your roster',
     Icon: UsersIcon,
+    Preview: RosterConfirmPreview,
     items: ['Contractor roster & availability', 'Per-event confirm/decline tracking', 'A home-screen link every contractor can check themselves'],
   },
   {
     title: 'For the day of',
     Icon: ClipboardIcon,
+    Preview: DayOfPreview,
     items: ['Stage plots', 'Set lists with email + PDF export', 'Floor plans', 'Prep sheets & crew schedules'],
   },
 ];
@@ -304,22 +308,30 @@ export default function LandingPage() {
       {/* Feature groups */}
       <section id="features" className="bg-slate-50 border-y border-slate-100 scroll-mt-16">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16">
-          <h2 className="text-2xl font-bold text-slate-900 text-center mb-10">One place for the whole gig</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+          <h2 className="text-2xl font-bold text-slate-900 text-center mb-16">One place for the whole gig</h2>
+          <div className="space-y-20">
             {FEATURE_GROUPS.map((g, i) => (
-              <Reveal key={g.title} delay={i * 90} data-testid="landing-feature-group" className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-                <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
-                  <g.Icon className="w-5 h-5" />
+              <Reveal
+                key={g.title} delay={i * 90} data-testid="landing-feature-group"
+                className={`flex flex-col ${i % 2 === 1 ? 'sm:flex-row-reverse' : 'sm:flex-row'} items-center gap-8 sm:gap-12`}
+              >
+                <div className="flex-1 w-full max-w-sm">
+                  <g.Preview />
                 </div>
-                <h3 className="font-semibold text-slate-800 mb-3">{g.title}</h3>
-                <ul className="space-y-1.5 text-sm text-slate-500">
-                  {g.items.map((item) => (
-                    <li key={item} className="flex items-start gap-2">
-                      <span className="text-indigo-500 mt-0.5" aria-hidden="true">✓</span>
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
+                <div className="flex-1 w-full max-w-sm">
+                  <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
+                    <g.Icon className="w-5 h-5" />
+                  </div>
+                  <h3 className="font-semibold text-slate-800 text-lg mb-3">{g.title}</h3>
+                  <ul className="space-y-1.5 text-sm text-slate-500">
+                    {g.items.map((item) => (
+                      <li key={item} className="flex items-start gap-2">
+                        <span className="text-indigo-500 mt-0.5" aria-hidden="true">✓</span>
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </Reveal>
             ))}
           </div>
