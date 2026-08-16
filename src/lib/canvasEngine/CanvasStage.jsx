@@ -257,6 +257,7 @@ export default function CanvasStage({
   const [liveRotation, setLiveRotation] = useState(null);
   const [calibrationPoints, setCalibrationPoints] = useState(null);
   const [calibrationDistance, setCalibrationDistance] = useState('');
+  const [isPanning, setIsPanning] = useState(false);
 
   // Decode every registered icon once up front rather than lazily on first
   // placement — without this, the *first* time any given icon type is
@@ -342,9 +343,47 @@ export default function CanvasStage({
     zoomToward(zoom * factor, { x: width / 2, y: height / 2 });
   }
 
-  function handleResetZoom() {
-    setZoom(1);
-    setStagePos({ x: 0, y: 0 });
+  // The zoom "reset" used to just snap back to a fixed 100%/origin — no
+  // help if the plot is naturally wider than the canvas even at 100%, and
+  // no way back to "I can see everything" once zoomed into a corner with
+  // no panning available. Computes the real bounding box of everything
+  // placed (elements, notes/text, freehand strokes) and fits it in view
+  // instead — the actual "I'm lost, show me the whole plot" escape hatch.
+  // Never zooms IN past 100% for a small scene (e.g. one lone icon) — only
+  // zooms out as far as needed for a large one.
+  function handleFitToContent() {
+    const points = [];
+    for (const el of scene.elements) {
+      points.push({ x: el.x - ICON_SIZE, y: el.y - ICON_SIZE }, { x: el.x + ICON_SIZE, y: el.y + ICON_SIZE });
+    }
+    for (const a of scene.annotations) {
+      const w = a.style === 'text' ? TEXT_LABEL_WIDTH : NOTE_WIDTH;
+      const h = a.style === 'text' ? TEXT_LABEL_HEIGHT : NOTE_HEIGHT;
+      points.push({ x: a.x, y: a.y }, { x: a.x + w, y: a.y + h });
+    }
+    for (const s of scene.strokes) {
+      for (let i = 0; i < s.points.length; i += 2) points.push({ x: s.points[i], y: s.points[i + 1] });
+    }
+
+    if (!points.length) {
+      setZoom(1);
+      setStagePos({ x: 0, y: 0 });
+      return;
+    }
+
+    const minX = Math.min(...points.map((p) => p.x));
+    const maxX = Math.max(...points.map((p) => p.x));
+    const minY = Math.min(...points.map((p) => p.y));
+    const maxY = Math.max(...points.map((p) => p.y));
+    const FIT_PADDING = 40;
+    const newZoom = Math.max(MIN_ZOOM, Math.min(1, Math.min(
+      (width - FIT_PADDING * 2) / Math.max(maxX - minX, 1),
+      (height - FIT_PADDING * 2) / Math.max(maxY - minY, 1),
+    )));
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    setZoom(newZoom);
+    setStagePos({ x: width / 2 - centerX * newZoom, y: height / 2 - centerY * newZoom });
   }
 
   // Scene coordinates from a point already in Konva's own pointer-position
@@ -584,6 +623,7 @@ export default function CanvasStage({
         height,
         cursor: mode === 'note' || mode === 'text' || mode === 'place-icon' ? 'copy'
           : mode === 'draw' || mode === 'arrow' || mode === 'calibrate' ? 'crosshair'
+          : mode === 'select' ? (isPanning ? 'grabbing' : 'grab')
           : 'default',
       }}
       onDragOver={(e) => e.preventDefault()}
@@ -597,6 +637,18 @@ export default function CanvasStage({
         scaleY={zoom}
         x={stagePos.x}
         y={stagePos.y}
+        // Only draggable in select mode — Konva targets whatever node the
+        // drag actually started on, so this only pans when the gesture
+        // starts on empty canvas; starting on a placed icon still drags
+        // that icon (its own Group is separately draggable). Synced back
+        // into stagePos on every move, not just at the end — a controlled
+        // x/y prop that only updates on dragend can otherwise get yanked
+        // back mid-drag by an unrelated re-render, fighting Konva's own
+        // internal position.
+        draggable={mode === 'select'}
+        onDragStart={() => setIsPanning(true)}
+        onDragMove={(e) => setStagePos({ x: e.target.x(), y: e.target.y() })}
+        onDragEnd={(e) => { setStagePos({ x: e.target.x(), y: e.target.y() }); setIsPanning(false); }}
         onWheel={handleWheel}
         onMouseDown={handleStageMouseDown}
         onMouseMove={handleStageMouseMove}
@@ -746,9 +798,9 @@ export default function CanvasStage({
         </button>
         <button
           type="button"
-          onClick={handleResetZoom}
+          onClick={handleFitToContent}
           data-testid="canvas-zoom-reset-button"
-          title="Reset zoom to 100%"
+          title="Fit everything in view"
           className="w-12 text-center text-xs text-slate-500 hover:text-indigo-600 tabular-nums"
         >
           {Math.round(zoom * 100)}%
