@@ -5,7 +5,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { allPermissions, getMembershipWithAccount, serializeMembership } from '../lib/membership.js';
-import { sendMail, buildFromHeader } from '../lib/mailer.js';
+import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { MIN_PASSWORD_LENGTH, passwordTooWeak } from '../lib/password.js';
 import { SIGNUP_VERTICALS } from '../lib/verticals.js';
@@ -41,6 +41,27 @@ function sanitize(user, membership) {
   return { ...safe, ...serializeMembership(membership) };
 }
 
+// A new self-signup starts unapproved (Account.approvedAt is left null —
+// see the transaction below) and nothing else surfaces that fact, so
+// without this the account would just sit there until someone happened to
+// check the admin panel. Best-effort, same shape as support.js's
+// notifyAdmin — the signup itself already succeeded regardless of whether
+// this send does.
+async function notifyPendingSignup(user) {
+  const to = process.env.SUPPORT_NOTIFICATION_EMAIL || 'shayalieberman@gmail.com';
+  const adminUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/admin/accounts`;
+  try {
+    await sendMail({
+      from: buildFromHeader(),
+      to,
+      subject: `[New Signup] ${user.firstName} ${user.lastName}`,
+      html: `<p>${escapeHtml(user.firstName)} ${escapeHtml(user.lastName)} (${escapeHtml(user.email)}) just signed up and is awaiting approval.</p><p><a href="${adminUrl}">Review in the admin panel</a></p>`,
+    });
+  } catch {
+    // best effort
+  }
+}
+
 router.post('/signup', credentialsLimiter, asyncHandler(async (req, res) => {
   const { firstName, lastName, email, phone, password, vertical } = req.body || {};
   if (!firstName?.trim() || !lastName?.trim() || !email?.trim() || !password) {
@@ -70,6 +91,7 @@ router.post('/signup', credentialsLimiter, asyncHandler(async (req, res) => {
       return { user, membership, account };
     });
     req.session.userId = user.id;
+    await notifyPendingSignup(user);
     res.status(201).json({ user: sanitize(user, { ...membership, account }) });
   } catch (err) {
     if (err.code === 'P2002') {

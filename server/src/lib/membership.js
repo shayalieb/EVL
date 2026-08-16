@@ -46,7 +46,10 @@ export async function getMembershipWithAccount(userId) {
 
   try {
     return await prisma.$transaction(async (tx) => {
-      const account = await tx.account.create({ data: {} });
+      // approvedAt set immediately — this is a legacy pre-Account user being
+      // auto-provisioned, not a cold public self-signup, so it never needed
+      // review (see schema.prisma's Account.approvedAt).
+      const account = await tx.account.create({ data: { approvedAt: new Date() } });
       return tx.membership.create({
         data: { userId, accountId: account.id, role: 'owner', permissions: allPermissions() },
         include: { account: true },
@@ -66,6 +69,7 @@ export function serializeMembership(membership) {
     return {
       accountId: null, role: null, permissions: emptyPermissions(),
       vertical: null, allVerticalsEnabled: false, activeVerticals: [],
+      accountApproved: false,
     };
   }
   return {
@@ -75,6 +79,12 @@ export function serializeMembership(membership) {
     vertical: membership.account.vertical,
     allVerticalsEnabled: membership.account.allVerticalsEnabled,
     activeVerticals: activeVerticals(membership.account),
+    // Drives the client-side pending-approval gate (App.jsx) — checked here
+    // rather than only in attachMembership below, since /auth/login and
+    // /auth/me don't route through that middleware, and the client needs to
+    // know this *before* it starts fetching account data, not after every
+    // fetch fails.
+    accountApproved: !!membership.account.approvedAt,
   };
 }
 
@@ -87,6 +97,12 @@ export async function attachMembership(req, res, next) {
   // it's enforced here rather than duplicated per route.
   if (membership.account.disabledAt) {
     return res.status(403).json({ error: 'This account has been disabled.' });
+  }
+  // Defense in depth — the client already gates on accountApproved (see
+  // serializeMembership) and shouldn't ever reach a data route in this
+  // state, but this is the real enforcement boundary regardless.
+  if (!membership.account.approvedAt) {
+    return res.status(403).json({ error: 'This account is pending approval.' });
   }
   req.membership = membership;
   next();

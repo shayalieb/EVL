@@ -83,7 +83,7 @@ async function fetchDataSummaries() {
 router.get('/accounts', asyncHandler(async (req, res) => {
   const [accounts, dataSummaries] = await Promise.all([
     prisma.account.findMany({
-      include: { memberships: { include: { user: true } }, disabledBy: true },
+      include: { memberships: { include: { user: true } }, disabledBy: true, approvedBy: true },
       orderBy: { createdAt: 'desc' },
     }),
     fetchDataSummaries(),
@@ -95,6 +95,8 @@ router.get('/accounts', asyncHandler(async (req, res) => {
       disabledAt: a.disabledAt,
       disabledReason: a.disabledReason,
       disabledBy: a.disabledBy ? { firstName: a.disabledBy.firstName, lastName: a.disabledBy.lastName } : null,
+      approvedAt: a.approvedAt,
+      approvedBy: a.approvedBy ? { firstName: a.approvedBy.firstName, lastName: a.approvedBy.lastName } : null,
       vertical: a.vertical,
       allVerticalsEnabled: a.allVerticalsEnabled,
       owner: ownerOf(a),
@@ -118,7 +120,7 @@ function sanitizeAdminPermissions(input) {
   return result;
 }
 
-async function createInvitedUser({ firstName, lastName, email }, { grantAdmin = false, permissions } = {}) {
+async function createInvitedUser({ firstName, lastName, email }, { grantAdmin = false, permissions, approvedById } = {}) {
   const normalizedEmail = email.trim().toLowerCase();
 
   let user;
@@ -134,7 +136,10 @@ async function createInvitedUser({ firstName, lastName, email }, { grantAdmin = 
           adminPermissions: grantAdmin ? sanitizeAdminPermissions(permissions) : {},
         },
       });
-      const account = await tx.account.create({ data: {} });
+      // approvedAt set immediately — an admin created this account directly,
+      // so it was never really "unreviewed" the way a cold public self-signup
+      // is (see schema.prisma's Account.approvedAt).
+      const account = await tx.account.create({ data: { approvedAt: new Date(), approvedById } });
       await tx.membership.create({
         data: { userId: newUser.id, accountId: account.id, role: 'owner', permissions: allPermissions() },
       });
@@ -172,7 +177,7 @@ router.post('/accounts', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'First name, last name, and email are required.' });
   }
   try {
-    await createInvitedUser({ firstName, lastName, email });
+    await createInvitedUser({ firstName, lastName, email }, { approvedById: req.user.id });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     throw err;
@@ -191,8 +196,16 @@ function requireManageAccountStatus(req, res) {
 
 router.patch('/accounts/:id', asyncHandler(async (req, res) => {
   if (!requireManageAccountStatus(req, res)) return;
-  const { disabled, reason, allVerticalsEnabled, vertical } = req.body || {};
+  const { disabled, reason, allVerticalsEnabled, vertical, approved } = req.body || {};
   const data = {};
+  // One-way — there's no "un-approve" here, revoking access after the fact
+  // is what disable is for. approved: false is accepted as a no-op rather
+  // than rejected, so a caller that always sends the field doesn't need to
+  // special-case the true/false split.
+  if (approved === true) {
+    data.approvedAt = new Date();
+    data.approvedById = req.user.id;
+  }
   if (disabled !== undefined) {
     if (typeof disabled !== 'boolean') {
       return res.status(400).json({ error: 'disabled must be a boolean.' });
@@ -220,12 +233,14 @@ router.patch('/accounts/:id', asyncHandler(async (req, res) => {
   if (Object.keys(data).length === 0) {
     return res.status(400).json({ error: 'Nothing to update.' });
   }
-  const account = await prisma.account.update({ where: { id: req.params.id }, data, include: { disabledBy: true } });
+  const account = await prisma.account.update({ where: { id: req.params.id }, data, include: { disabledBy: true, approvedBy: true } });
   res.json({
     ok: true,
     disabledAt: account.disabledAt,
     disabledReason: account.disabledReason,
     disabledBy: account.disabledBy ? { firstName: account.disabledBy.firstName, lastName: account.disabledBy.lastName } : null,
+    approvedAt: account.approvedAt,
+    approvedBy: account.approvedBy ? { firstName: account.approvedBy.firstName, lastName: account.approvedBy.lastName } : null,
     allVerticalsEnabled: account.allVerticalsEnabled,
     vertical: account.vertical,
   });
@@ -538,7 +553,7 @@ router.post('/platform-admins/invite', asyncHandler(async (req, res) => {
   }
   let user;
   try {
-    user = await createInvitedUser({ firstName, lastName, email }, { grantAdmin: true, permissions });
+    user = await createInvitedUser({ firstName, lastName, email }, { grantAdmin: true, permissions, approvedById: req.user.id });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     throw err;

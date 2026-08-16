@@ -224,7 +224,19 @@ export function AuthProvider({ children }) {
     (async () => {
       try {
         const data = await apiFetch('/auth/me');
-        await hydrate(data.user);
+        // A pending (not-yet-approved) account can log in fine, but every
+        // account-scoped route including /account-data 403s for it (see
+        // server/src/lib/membership.js's attachMembership) — hydrate() would
+        // throw on that fetch, and the catch below would then clear
+        // serverUser too, making the app think nobody's logged in at all
+        // instead of showing the pending-approval screen. Skip straight to
+        // setServerUser; currentUser below tolerates localBlob staying null
+        // in exactly this one case.
+        if (data.user.accountId && !data.user.accountApproved) {
+          setServerUser(data.user);
+        } else {
+          await hydrate(data.user);
+        }
       } catch {
         setServerUser(null);
         setLocalBlob(null);
@@ -249,7 +261,10 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('focus', onFocus);
   }, [serverUser]);
 
-  const currentUser = serverUser && localBlob
+  // localBlob is only ever null here in the pending-approval case above
+  // (every other path either hydrates it or clears serverUser too) — so
+  // tolerating a null localBlob doesn't mask any other failure mode.
+  const currentUser = serverUser && (localBlob || !serverUser.accountApproved)
     ? {
         ...localBlob,
         id: serverUser.id,
@@ -263,6 +278,7 @@ export function AuthProvider({ children }) {
         vertical: serverUser.vertical,
         allVerticalsEnabled: serverUser.allVerticalsEnabled,
         activeVerticals: serverUser.activeVerticals,
+        accountApproved: serverUser.accountApproved,
       }
     : null;
 
@@ -273,7 +289,16 @@ export function AuthProvider({ children }) {
         method: 'POST',
         body: JSON.stringify({ firstName, lastName, email: email.trim().toLowerCase(), phone, password, vertical }),
       });
-      await hydrate({ ...data.user, businessName });
+      // Pending accounts can't hydrate the account-data blob (see the
+      // session-init effect above for why) — go straight to serverUser so
+      // ProtectedArea's gate shows the pending-approval screen, instead of
+      // hydrate() throwing and this landing in the catch below as if signup
+      // itself had failed.
+      if (!data.user.accountApproved) {
+        setServerUser({ ...data.user, businessName });
+      } else {
+        await hydrate({ ...data.user, businessName });
+      }
       return true;
     } catch (err) {
       setAuthError(err.message);
@@ -288,7 +313,12 @@ export function AuthProvider({ children }) {
         method: 'POST',
         body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
       });
-      await hydrate(data.user);
+      // See signUp above — same reasoning.
+      if (!data.user.accountApproved) {
+        setServerUser(data.user);
+      } else {
+        await hydrate(data.user);
+      }
       return true;
     } catch (err) {
       setAuthError(err.message);

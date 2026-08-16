@@ -9,9 +9,17 @@ import Pagination from '../../components/ui/Pagination';
 import { matchesSearch } from '../../lib/search';
 import { usePagination } from '../../lib/usePagination';
 
+// 'invited' (admin created this account and the owner hasn't set a
+// password yet) and 'awaiting_approval' (a public self-signup nobody's
+// reviewed yet — see schema.prisma's Account.approvedAt) are mutually
+// exclusive in practice: every admin-created account is auto-approved at
+// creation (see admin.js's createInvitedUser), so only a cold self-signup
+// can ever be unapproved, and self-signup always sets a password
+// immediately. Still checked in a sensible order regardless.
 function accountStatus(a) {
   if (a.disabledAt) return 'disabled';
-  if (a.owner && !a.owner.hasPassword) return 'pending';
+  if (!a.approvedAt) return 'awaiting_approval';
+  if (a.owner && !a.owner.hasPassword) return 'invited';
   return 'active';
 }
 
@@ -42,6 +50,19 @@ export default function AdminAccountsPage() {
   }
 
   useEffect(load, []);
+
+  async function handleApprove(account) {
+    try {
+      const data = await apiFetch(`/admin/accounts/${account.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ approved: true }),
+      });
+      setAccounts((prev) => prev.map((a) => (a.id === account.id ? { ...a, approvedAt: data.approvedAt, approvedBy: data.approvedBy } : a)));
+      showToast('Account approved');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
 
   async function handleReEnable() {
     const account = disableTarget;
@@ -138,7 +159,8 @@ export default function AdminAccountsPage() {
           allLabel="All Statuses"
           options={[
             { value: 'active', label: 'Active' },
-            { value: 'pending', label: 'Pending' },
+            { value: 'awaiting_approval', label: 'Needs Approval' },
+            { value: 'invited', label: 'Invited' },
             { value: 'disabled', label: 'Disabled' },
           ]}
           testId="admin-accounts-status-filter"
@@ -227,8 +249,10 @@ export default function AdminAccountsPage() {
                         {new Date(a.disabledAt).toLocaleDateString()}
                       </div>
                     </div>
+                  ) : !a.approvedAt ? (
+                    <span data-testid="admin-account-row-status-awaiting-approval" className="text-xs font-semibold text-amber-600">Needs Approval</span>
                   ) : a.owner && !a.owner.hasPassword ? (
-                    <span className="text-xs font-semibold text-amber-600">Pending</span>
+                    <span className="text-xs font-semibold text-slate-500">Invited</span>
                   ) : (
                     <span className="text-xs font-semibold text-emerald-600">Active</span>
                   )}
@@ -236,6 +260,16 @@ export default function AdminAccountsPage() {
                 <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
                   {canManageStatus && (
                     <>
+                      {!a.approvedAt && !a.disabledAt && (
+                        <button
+                          type="button"
+                          onClick={() => handleApprove(a)}
+                          data-testid="admin-account-row-approve-button"
+                          className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                        >
+                          Approve
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => setDisableTarget(a)}

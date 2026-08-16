@@ -33,6 +33,7 @@ model User {
   supportNotes        SupportNote[]
   assignedThreads     SupportThread[]
   disabledAccounts    Account[]            @relation("AccountDisabledBy")
+  approvedAccounts    Account[]            @relation("AccountApprovedBy")
   reminders           Reminder[]
 }
 
@@ -46,6 +47,17 @@ model Account {
   disabledReason   String?           @db.Text
   disabledById     String?
   disabledBy       User?             @relation("AccountDisabledBy", fields: [disabledById], references: [id], onDelete: SetNull)
+  // Public self-signups (auth.js's POST /signup) require manual review
+  // during the current probationary period — null blocks account access
+  // the same way disabledAt does (see membership.js's attachMembership),
+  // just for a different reason ("never yet reviewed" vs. "explicitly
+  // disabled"), so admin/support UI can tell the two apart. Every other
+  // account-creation path (admin-created accounts, admin invites, the
+  // legacy pre-Account auto-provisioning path) sets this immediately —
+  // they were never really "unreviewed" the way a cold self-signup is.
+  approvedAt       DateTime?
+  approvedById     String?
+  approvedBy       User?             @relation("AccountApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
   memberships      Membership[]
   emailThreads     EmailThread[]
   eventDocuments   EventDocument[]

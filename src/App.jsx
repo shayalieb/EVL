@@ -17,6 +17,7 @@ import ContractorCalendarPage from './pages/ContractorCalendarPage';
 import AppLayout from './layouts/AppLayout';
 import HomePage from './pages/HomePage';
 import NoAccountAccessPage from './pages/NoAccountAccessPage';
+import PendingApprovalPage from './pages/PendingApprovalPage';
 import ContractorsPage from './pages/ContractorsPage';
 import ClientsPage from './pages/ClientsPage';
 import VenuesPage from './pages/VenuesPage';
@@ -54,6 +55,11 @@ function ProtectedArea() {
     return <Navigate to="/auth" replace />;
   }
   if (!currentUser.accountId) return <NoAccountAccessPage />;
+  // Gated here, before DataProvider ever mounts — a pending account can log
+  // in fine (auth.js's /login and /me don't run through attachMembership),
+  // so without this every DataContext fetch would 403 individually once the
+  // app tried to load, instead of showing one clear "you're pending" screen.
+  if (!currentUser.accountApproved) return <PendingApprovalPage />;
   return (
     <DataProvider>
       <AppLayout />
