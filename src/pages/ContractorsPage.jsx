@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import ContractorModal from '../components/ContractorModal';
-import ContractorGroupModal from '../components/ContractorGroupModal';
 import BulkEmailModal from '../components/BulkEmailModal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import ScrollShadow from '../components/ui/ScrollShadow';
@@ -30,16 +29,13 @@ function lastContactLabel(iso) {
 }
 
 export default function ContractorsPage() {
-  const { contractors, deleteContractor, contractorGroups, deleteContractorGroup } = useData();
+  const { contractors, deleteContractor } = useData();
   const { can } = useAuth();
   const canEdit = can('manageContractors');
   const { showToast } = useToast();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingContractor, setEditingContractor] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [groupModalOpen, setGroupModalOpen] = useState(false);
-  const [editingGroup, setEditingGroup] = useState(null);
-  const [deleteGroupTarget, setDeleteGroupTarget] = useState(null);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
@@ -116,22 +112,6 @@ export default function ContractorsPage() {
     deleteContractor(deleteTarget.id);
     showToast('Contractor deleted');
     setDeleteTarget(null);
-  }
-
-  function openAddGroup() {
-    setEditingGroup(null);
-    setGroupModalOpen(true);
-  }
-
-  function openEditGroup(group) {
-    setEditingGroup(group);
-    setGroupModalOpen(true);
-  }
-
-  function handleDeleteGroup() {
-    deleteContractorGroup(deleteGroupTarget.id);
-    showToast('Group deleted');
-    setDeleteGroupTarget(null);
   }
 
   return (
@@ -350,79 +330,7 @@ export default function ContractorsPage() {
         <Pagination page={page} pageCount={pageCount} onChange={setPage} totalItems={totalItems} pageSize={pageSize} testId="contractors-pagination" />
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-4 mt-6">
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <div>
-            <h3 className="text-base font-bold text-slate-800">Contractor Groups</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Save a reusable lineup — like "String Quartet" — to add everyone in one click from an event's roster.</p>
-          </div>
-          <button
-            type="button"
-            onClick={openAddGroup}
-            disabled={!canEdit}
-            data-testid="contractor-groups-add-button"
-            className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-          >
-            + Add Group
-          </button>
-        </div>
-        {contractorGroups.length === 0 ? (
-          <p className="text-sm text-slate-400 py-2">No groups yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {contractorGroups.map((g) => {
-              const members = g.contractorIds.map((id) => contractors.find((c) => c.id === id)).filter(Boolean);
-              return (
-                <div
-                  key={g.id}
-                  data-testid="contractor-group-row"
-                  className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-slate-100 hover:bg-slate-50/60"
-                >
-                  <div className="min-w-0">
-                    <div className="font-medium text-slate-800 text-sm">{g.name}</div>
-                    <div className="text-xs text-slate-400 mt-0.5 truncate">
-                      {members.length > 0 ? members.map((c) => `${c.firstName} ${c.lastName}`).join(', ') : 'No contractors'}
-                    </div>
-                  </div>
-                  {canEdit && (
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => openEditGroup(g)}
-                        data-testid="contractor-group-row-edit-button"
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
-                        aria-label="Edit group"
-                      >
-                        ✎
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeleteGroupTarget(g)}
-                        data-testid="contractor-group-row-delete-button"
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
-                        aria-label="Delete group"
-                      >
-                        🗑
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
       <ContractorModal open={modalOpen} onClose={() => setModalOpen(false)} contractor={editingContractor} />
-      <ContractorGroupModal open={groupModalOpen} onClose={() => setGroupModalOpen(false)} group={editingGroup} />
-      <ConfirmDialog
-        open={!!deleteGroupTarget}
-        onClose={() => setDeleteGroupTarget(null)}
-        onConfirm={handleDeleteGroup}
-        title="Delete group?"
-        description={`This removes "${deleteGroupTarget?.name}" from your saved groups. It won't affect events this group was already added to.`}
-        confirmText={deleteGroupTarget?.name}
-      />
       <ConfirmDialog
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}

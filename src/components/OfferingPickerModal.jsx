@@ -5,6 +5,7 @@ import MoneyInput from './ui/MoneyInput';
 import { useData } from '../context/DataContext';
 import { uid } from '../lib/storage';
 import { computeOfferingTotal } from '../lib/offerings';
+import { computeGroupPrice } from '../lib/contractorGroups';
 import { formatCurrency as currency } from '../lib/format';
 
 // Instrument-only, never names — a musician can be swapped for another
@@ -13,13 +14,17 @@ import { formatCurrency as currency } from '../lib/format';
 // all. Frozen at add-time (one string per member, in group order, not
 // deduped) same as every other "clone the template, then it's independent"
 // flow in this app — editing the saved group afterward never touches an
-// ensemble already added to a proposal/contract.
+// ensemble already added to a proposal/contract. The amount defaults to the
+// group's own package price if it has one, else the live sum of members'
+// rates (see computeGroupPrice) — either way it's just a starting point,
+// editable per-instance afterward like any other offering.
 function buildEnsembleOffering(group, contractors) {
   const instruments = group.contractorIds
     .map((id) => contractors.find((c) => c.id === id))
     .filter(Boolean)
     .map((c) => c.contractorType1 || 'Musician');
-  return { id: uid('offitem'), name: group.name, details: '', type: 'ensemble', amount: '', unitCount: '', ratePerUnit: '', instruments };
+  const amount = computeGroupPrice(group, contractors);
+  return { id: uid('offitem'), name: group.name, details: '', type: 'ensemble', amount: String(amount), unitCount: '', ratePerUnit: '', instruments };
 }
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -112,7 +117,7 @@ export default function OfferingPickerModal({ open, onClose, onSelect, allowEnse
             </div>
             {contractorGroups.length === 0 ? (
               <div className="text-sm text-slate-400 text-center py-4">
-                No saved contractor groups yet — add one from the Contractors page.
+                No saved ensembles yet — add one from the Offerings page.
               </div>
             ) : (
               <div className="max-h-64 overflow-y-auto space-y-1.5">
@@ -128,6 +133,7 @@ export default function OfferingPickerModal({ open, onClose, onSelect, allowEnse
                       <div className="text-sm font-semibold text-slate-800 truncate">{g.name}</div>
                       <div className="text-xs text-slate-400">{g.contractorIds.length} musician{g.contractorIds.length === 1 ? '' : 's'}</div>
                     </div>
+                    <div className="text-sm font-semibold text-slate-600 shrink-0">{currency(computeGroupPrice(g, contractors))}</div>
                   </button>
                 ))}
               </div>

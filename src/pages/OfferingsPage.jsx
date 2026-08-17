@@ -2,22 +2,29 @@ import { useState } from 'react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import OfferingModal from '../components/OfferingModal';
+import ContractorGroupModal from '../components/ContractorGroupModal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import SearchInput from '../components/ui/SearchInput';
 import FilterSelect from '../components/ui/FilterSelect';
+import { useToast } from '../components/ui/Toast';
 import { computeOfferingTotal } from '../lib/offerings';
+import { computeGroupPrice } from '../lib/contractorGroups';
 import { formatCurrency as currency } from '../lib/format';
 import { matchesSearch } from '../lib/search';
 
 export default function OfferingsPage() {
-  const { offerings, deleteOffering } = useData();
+  const { offerings, deleteOffering, contractors, contractorGroups, deleteContractorGroup } = useData();
   const { can } = useAuth();
   const canEdit = can('manageOfferings');
+  const { showToast } = useToast();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingOffering, setEditingOffering] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
+  const [editingGroup, setEditingGroup] = useState(null);
+  const [deleteGroupTarget, setDeleteGroupTarget] = useState(null);
 
   const hasFilters = !!(search || typeFilter);
   const filteredOfferings = offerings.filter((o) => {
@@ -38,6 +45,22 @@ export default function OfferingsPage() {
   function handleDelete() {
     deleteOffering(deleteTarget.id);
     setDeleteTarget(null);
+  }
+
+  function openAddGroup() {
+    setEditingGroup(null);
+    setGroupModalOpen(true);
+  }
+
+  function openEditGroup(group) {
+    setEditingGroup(group);
+    setGroupModalOpen(true);
+  }
+
+  function handleDeleteGroup() {
+    deleteContractorGroup(deleteGroupTarget.id);
+    showToast('Ensemble deleted');
+    setDeleteGroupTarget(null);
   }
 
   return (
@@ -147,7 +170,84 @@ export default function OfferingsPage() {
         </div>
       </div>
 
+      <div className="bg-white rounded-xl border border-slate-200 p-4 mt-6">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <h3 className="text-base font-bold text-slate-800">Ensembles</h3>
+            <p className="text-xs text-slate-500 mt-1">
+              A saved lineup — like "String Quartet" — you can add to a proposal or contract as a priced line item (shown as a bulleted list of instruments, never names), or bulk-add to an event's roster in one click.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={openAddGroup}
+            disabled={!canEdit}
+            data-testid="contractor-groups-add-button"
+            className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+          >
+            + Add Ensemble
+          </button>
+        </div>
+        {contractorGroups.length === 0 ? (
+          <p className="text-sm text-slate-400 py-2">No ensembles yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {contractorGroups.map((g) => {
+              const members = g.contractorIds.map((id) => contractors.find((c) => c.id === id)).filter(Boolean);
+              return (
+                <div
+                  key={g.id}
+                  data-testid="contractor-group-row"
+                  className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-slate-100 hover:bg-slate-50/60"
+                >
+                  <div className="min-w-0">
+                    <div className="font-medium text-slate-800 text-sm">{g.name}</div>
+                    <div className="text-xs text-slate-400 mt-0.5 truncate">
+                      {members.length > 0 ? members.map((c) => `${c.firstName} ${c.lastName}`).join(', ') : 'No contractors'}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-sm font-semibold text-slate-600">{currency(computeGroupPrice(g, contractors))}</span>
+                    {canEdit && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => openEditGroup(g)}
+                          data-testid="contractor-group-row-edit-button"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                          aria-label="Edit ensemble"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteGroupTarget(g)}
+                          data-testid="contractor-group-row-delete-button"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
+                          aria-label="Delete ensemble"
+                        >
+                          🗑
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       <OfferingModal open={modalOpen} onClose={() => setModalOpen(false)} offering={editingOffering} />
+      <ContractorGroupModal open={groupModalOpen} onClose={() => setGroupModalOpen(false)} group={editingGroup} />
+      <ConfirmDialog
+        open={!!deleteGroupTarget}
+        onClose={() => setDeleteGroupTarget(null)}
+        onConfirm={handleDeleteGroup}
+        title="Delete ensemble?"
+        description={`This removes "${deleteGroupTarget?.name}" from your saved ensembles. It won't affect events, proposals, or contracts it was already added to.`}
+        confirmText={deleteGroupTarget?.name}
+      />
       <ConfirmDialog
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
