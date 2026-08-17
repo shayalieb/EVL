@@ -18,6 +18,7 @@ import { matchesSearch } from '../lib/search';
 import { usePagination } from '../lib/usePagination';
 import { listInquiryLinks, deleteInquiryLink } from '../lib/inquiryLinks';
 import { listContracts } from '../lib/contracts';
+import { listProposalResponses } from '../lib/proposalResponses';
 import { listInvoices } from '../lib/invoices';
 import { pipelineSteps, currentPipelineStep } from '../lib/bookingPipeline';
 import SendInquiryLinkModal from '../components/SendInquiryLinkModal';
@@ -92,6 +93,7 @@ export default function BookingsPage() {
   // this list only ever showing the separate, manually-set status badge.
   const [contracts, setContracts] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [proposalResponses, setProposalResponses] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,8 +101,19 @@ export default function BookingsPage() {
     listInquiryLinks({ status: 'open' }).then((links) => { if (!cancelled) setSentInquiries(links.filter((l) => !l.isReusable)); }).catch(() => {});
     listContracts().then((list) => { if (!cancelled) setContracts(list); }).catch(() => {});
     listInvoices().then((list) => { if (!cancelled) setInvoices(list); }).catch(() => {});
+    listProposalResponses().then((list) => { if (!cancelled) setProposalResponses(list); }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
+
+  // Each booking's most recent proposal response only — a resend (e.g.
+  // after a revision request) creates a new row rather than overwriting
+  // the old one, same as Contract, so `proposalResponses` can hold more
+  // than one per booking.
+  const latestProposalResponseByBooking = new Map();
+  for (const pr of proposalResponses) {
+    if (!latestProposalResponseByBooking.has(pr.bookingId)) latestProposalResponseByBooking.set(pr.bookingId, pr);
+  }
+  const pendingRevisionRequests = [...latestProposalResponseByBooking.values()].filter((pr) => pr.status === 'revision_requested');
 
   function handleInquiryApplied(linkId) {
     setPendingInquiries((prev) => prev.filter((l) => l.id !== linkId));
@@ -279,6 +292,32 @@ export default function BookingsPage() {
         </div>
       )}
 
+      {pendingRevisionRequests.length > 0 && (
+        <div data-testid="bookings-revision-requests-banner" className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <div className="text-sm font-semibold text-red-800 mb-2">
+            {pendingRevisionRequests.length} proposal{pendingRevisionRequests.length > 1 ? 's' : ''} with requested changes
+          </div>
+          <div className="space-y-1">
+            {pendingRevisionRequests.map((pr) => (
+              <div key={pr.id} data-testid="bookings-revision-request-row" className="flex items-center justify-between text-sm gap-3">
+                <span className="text-red-700 truncate">
+                  <span className="font-semibold">{pr.recipientName || pr.recipientEmail}</span>
+                  {pr.responseNote ? ` — "${pr.responseNote}"` : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/bookings/${pr.bookingId}`)}
+                  data-testid="bookings-review-revision-request-button"
+                  className="text-red-700 font-semibold hover:underline shrink-0"
+                >
+                  Review
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="mb-4">
         <Tabs tabs={VIEW_TABS} activeTab={activeTab} onChange={setActiveTab} />
       </div>
@@ -368,8 +407,9 @@ export default function BookingsPage() {
                   .filter((c) => c.bookingId === b.id)
                   .sort((x, y) => new Date(y.createdAt) - new Date(x.createdAt))[0] || null;
                 const bookingInvoices = invoices.filter((inv) => inv.bookingId === b.id);
-                const stage = currentPipelineStep(pipelineSteps(b, b.proposal, contract, bookingInvoices));
+                const stage = currentPipelineStep(pipelineSteps(b, b.proposal, contract, bookingInvoices, latestProposalResponseByBooking.get(b.id)));
                 const stageMismatch = stageAheadOfStatus(stage, status);
+                const proposalRevisionRequested = latestProposalResponseByBooking.get(b.id)?.status === 'revision_requested';
 
                 return (
                   <tr key={b.id} data-testid="booking-row" className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
@@ -379,6 +419,11 @@ export default function BookingsPage() {
                         {stageMismatch && (
                           <Tooltip content={`Pipeline shows this is at "${stage.label}" already — status may be out of date.`}>
                             <span data-testid="booking-row-stage-mismatch-hint" className="text-amber-500 cursor-default" aria-label="Status may be out of date">⚠</span>
+                          </Tooltip>
+                        )}
+                        {proposalRevisionRequested && (
+                          <Tooltip content="The client requested changes to the proposal">
+                            <span data-testid="booking-row-revision-requested-hint" className="text-red-500 cursor-default" aria-label="Proposal revision requested">✎</span>
                           </Tooltip>
                         )}
                       </div>

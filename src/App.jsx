@@ -10,6 +10,7 @@ import PortalVerifyPage from './pages/portal/PortalVerifyPage';
 import PortalHomePage from './pages/portal/PortalHomePage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import ContractSignPage from './pages/ContractSignPage';
+import ProposalRespondPage from './pages/ProposalRespondPage';
 import InvoicePayPage from './pages/InvoicePayPage';
 import InquiryFormPage from './pages/InquiryFormPage';
 import RsvpPage from './pages/RsvpPage';
@@ -140,6 +141,7 @@ function AppRoutes() {
       <Route path="/auth" element={<AuthGate><AuthPage /></AuthGate>} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/sign/:token" element={<ContractSignPage />} />
+      <Route path="/proposal/:token" element={<ProposalRespondPage />} />
       <Route path="/invoice/:token" element={<InvoicePayPage />} />
       <Route path="/inquiry/:token" element={<InquiryFormPage />} />
       <Route path="/rsvp/:token" element={<RsvpPage />} />

@@ -20,7 +20,7 @@ async function sendReminderEmail(reminder) {
 
   const businessInfo = reminder.account?.accountData?.data?.businessInfo;
   const fromName = businessInfo?.name || 'GigWorks';
-  const RELATED_TYPE_LABELS = { client: 'Client', contractor: 'Contractor', event: 'Event', invoice: 'Invoice' };
+  const RELATED_TYPE_LABELS = { client: 'Client', contractor: 'Contractor', event: 'Event', invoice: 'Invoice', booking: 'Booking' };
   const relatedLine = reminder.relatedName
     ? `<p><strong>${escapeHtml(RELATED_TYPE_LABELS[reminder.relatedType] || 'Related')}:</strong> ${escapeHtml(reminder.relatedName)}</p>`
     : '';

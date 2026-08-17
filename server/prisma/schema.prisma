@@ -38,15 +38,15 @@ model User {
 }
 
 model Account {
-  id               String            @id @default(cuid())
-  createdAt        DateTime          @default(now())
-  disabledAt       DateTime? // set by a platform admin; blocks all account access when non-null
+  id                      String                   @id @default(cuid())
+  createdAt               DateTime                 @default(now())
+  disabledAt              DateTime? // set by a platform admin; blocks all account access when non-null
   // Auditability for the disable action above — who disabled it, and why.
   // All three (disabledAt/disabledReason/disabledById) are cleared together
   // when the account is re-enabled.
-  disabledReason   String?           @db.Text
-  disabledById     String?
-  disabledBy       User?             @relation("AccountDisabledBy", fields: [disabledById], references: [id], onDelete: SetNull)
+  disabledReason          String?                  @db.Text
+  disabledById            String?
+  disabledBy              User?                    @relation("AccountDisabledBy", fields: [disabledById], references: [id], onDelete: SetNull)
   // Public self-signups (auth.js's POST /signup) require manual review
   // during the current probationary period — null blocks account access
   // the same way disabledAt does (see membership.js's attachMembership),
@@ -55,29 +55,30 @@ model Account {
   // account-creation path (admin-created accounts, admin invites, the
   // legacy pre-Account auto-provisioning path) sets this immediately —
   // they were never really "unreviewed" the way a cold self-signup is.
-  approvedAt       DateTime?
-  approvedById     String?
-  approvedBy       User?             @relation("AccountApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-  memberships      Membership[]
-  emailThreads     EmailThread[]
-  eventDocuments   EventDocument[]
-  bookingDocuments BookingDocument[]
-  contracts        Contract[]
-  invoices         Invoice[]
-  inquiryLinks     InquiryLink[]
-  accountData      AccountData?
-  supportThreads   SupportThread[]
-  reminders        Reminder[]
-  emailDomain      EmailDomain?
-  stagePlots       StagePlot[]
-  floorPlans       FloorPlan[]
-  guests           Guest[]
-  eventRsvpLinks   EventRsvpLink[]
+  approvedAt              DateTime?
+  approvedById            String?
+  approvedBy              User?                    @relation("AccountApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  memberships             Membership[]
+  emailThreads            EmailThread[]
+  eventDocuments          EventDocument[]
+  bookingDocuments        BookingDocument[]
+  contracts               Contract[]
+  proposalResponses       ProposalResponse[]
+  invoices                Invoice[]
+  inquiryLinks            InquiryLink[]
+  accountData             AccountData?
+  supportThreads          SupportThread[]
+  reminders               Reminder[]
+  emailDomain             EmailDomain?
+  stagePlots              StagePlot[]
+  floorPlans              FloorPlan[]
+  guests                  Guest[]
+  eventRsvpLinks          EventRsvpLink[]
   contractorCalendarLinks ContractorCalendarLink[]
-  contractors      Contractor[]
-  clients          Client[]
-  bookings         Booking[]
-  events           Event[]
+  contractors             Contractor[]
+  clients                 Client[]
+  bookings                Booking[]
+  events                  Event[]
 
   // Stripe Connect (Express) — set once onboarding starts. The three
   // booleans are a local cache of the connected Account object, synced by
@@ -348,7 +349,7 @@ model EventDocument {
   // fetch for every document type — only Set List songs actually surface
   // this token in a UI. Nullable so pre-migration rows (created before this
   // field existed) simply have none.
-  shareToken String? @unique
+  shareToken  String? @unique
 
   createdAt DateTime @default(now())
 
@@ -424,6 +425,46 @@ model Contract {
   // is always a stamped string snapshot (same reasoning as ownerEmail above),
   // never a live User reference. Owner-only — never sent to the public,
   // token-based sign page.
+  log Json @default("[]")
+
+  @@index([accountId, bookingId])
+}
+
+// A client's response to a sent proposal — Accept (optionally with a note)
+// or Request Revision (with a mandatory note explaining what needs to
+// change). Simpler than Contract: one recipient, one token, no signature,
+// and status is a plain flow rather than Contract's either-party-first
+// derivation. snapshot is frozen at send time, same reasoning as
+// Contract.snapshot — a later edit to the booking/proposal shouldn't
+// retroactively change what the client is looking at or already responded
+// to. A resend (e.g. after a revision request) creates a new row rather
+// than overwriting this one, same as Contract.
+model ProposalResponse {
+  id        String  @id @default(cuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  bookingId String // opaque localStorage id, same non-FK pattern as Contract.bookingId
+
+  snapshot Json
+  status   String @default("sent") // 'sent' | 'accepted' | 'revision_requested'
+
+  recipientEmail String
+  recipientName  String?
+  ownerEmail     String
+
+  tokenHash String? @unique
+
+  respondedAt  DateTime?
+  responseNote String?   @db.Text // optional on accept, required on revision request
+
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Audit trail: { id, at, type, note, actorEmail }[] — 'sent' | 'manual_sent'
+  // | 'accepted' | 'revision_requested' | 'note'. Same shape/reasoning as
+  // Contract.log — owner-only, never sent to the public respond page.
   log Json @default("[]")
 
   @@index([accountId, bookingId])
@@ -1075,13 +1116,13 @@ model ContractorCalendarLink {
 // why" record either way; splitting into two models would just be two
 // near-identical tables with no behavioral difference.
 model WaitlistEntry {
-  id          String   @id @default(cuid())
-  type        String // 'waitlist' | 'contact'
-  name        String
-  email       String
+  id           String   @id @default(cuid())
+  type         String // 'waitlist' | 'contact'
+  name         String
+  email        String
   businessName String?
-  message     String?  @db.Text
-  createdAt   DateTime @default(now())
+  message      String?  @db.Text
+  createdAt    DateTime @default(now())
 
   @@index([type, createdAt])
 }

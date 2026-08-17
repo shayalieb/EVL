@@ -14,6 +14,7 @@ import emailWebhooksRouter from './routes/emailWebhooks.js';
 import eventDocumentsRouter, { publicSongSheetsRouter } from './routes/eventDocuments.js';
 import bookingDocumentsRouter from './routes/bookingDocuments.js';
 import contractsRouter, { publicContractsRouter } from './routes/contracts.js';
+import proposalResponsesRouter, { publicProposalResponsesRouter } from './routes/proposalResponses.js';
 import billingRouter from './routes/billing.js';
 import invoicesRouter, { publicInvoicesRouter } from './routes/invoices.js';
 import inquiryLinksRouter, { publicInquiryLinksRouter } from './routes/inquiryLinks.js';
@@ -150,6 +151,9 @@ app.use('/api/contracts', contractsRouter);
 // Public/unauthenticated — recipients click this link from an email, not
 // while logged into the app (same reasoning as calendar.js below).
 app.use('/api/contract-sign', publicContractsRouter);
+app.use('/api/proposal-responses', proposalResponsesRouter);
+// Public/unauthenticated — same reasoning as /api/contract-sign above.
+app.use('/api/proposal-respond', publicProposalResponsesRouter);
 app.use('/api/billing', billingRouter);
 app.use('/api/invoices', invoicesRouter);
 // Public/unauthenticated — same reasoning as /api/contract-sign above.

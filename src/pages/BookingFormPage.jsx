@@ -21,6 +21,7 @@ import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, boo
 import { getBooking } from '../lib/bookings';
 import { generateProposalPdf, generateProposalPdfAttachment, getProposalPdfDataUrl } from '../lib/proposalPdf';
 import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms, addContractLogNote, regenerateClientSignLink } from '../lib/contracts';
+import { getProposalResponseForBooking, sendProposalResponseLink } from '../lib/proposalResponses';
 import { listInquiryLinks } from '../lib/inquiryLinks';
 import { buildBookingMergePatch, resolveClientForMerge } from '../lib/applyInquiry';
 import { listInvoices, createInvoice, updateInvoice, sendInvoice, markInvoicePayment, sendReceipt, voidInvoice, getNextInvoiceInfo } from '../lib/invoices';
@@ -187,6 +188,8 @@ function appendLogEntry(log, entry) {
 const PROPOSAL_LOG_LABELS = {
   sent: 'Proposal sent',
   manual_sent: 'Manually marked as sent',
+  accepted: 'Client accepted',
+  revision_requested: 'Client requested changes',
   note: 'Note',
 };
 
@@ -475,6 +478,7 @@ export default function BookingFormPage() {
   const [docPendingDelete, setDocPendingDelete] = useState(null);
   const [sendingProposal, setSendingProposal] = useState(false);
   const [contract, setContract] = useState(null);
+  const [proposalResponse, setProposalResponse] = useState(null);
   const [contractRecipientEmail, setContractRecipientEmail] = useState('');
   const [contractRecipientName, setContractRecipientName] = useState('');
   const [contractHours, setContractHours] = useState('');
@@ -671,6 +675,13 @@ export default function BookingFormPage() {
     if (!booking) { setContract(null); return; }
     let cancelled = false;
     getContractForBooking(booking.id).then((c) => { if (!cancelled) setContract(c); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [booking?.id]);
+
+  useEffect(() => {
+    if (!booking) { setProposalResponse(null); return; }
+    let cancelled = false;
+    getProposalResponseForBooking(booking.id).then((pr) => { if (!cancelled) setProposalResponse(pr); }).catch(() => {});
     return () => { cancelled = true; };
   }, [booking?.id]);
 
@@ -1001,6 +1012,30 @@ export default function BookingFormPage() {
     }
   }
 
+  // Frozen at send time, same reasoning as Contract.snapshot — a later edit
+  // to the booking/proposal shouldn't retroactively change what the client
+  // is looking at on the public respond page, or already responded to.
+  function buildProposalSnapshot(patch) {
+    return {
+      businessInfo: currentUser.businessInfo || {},
+      client: client ? { firstName: client.firstName, lastName: client.lastName, email: client.email, phone: client.phone } : null,
+      booking: {
+        eventType: patch.eventType,
+        eventDate: patch.eventDate,
+        venue: patch.venue,
+        notes: patch.notes,
+        depositAmount: patch.depositAmount,
+        depositDueDate: patch.depositDueDate,
+      },
+      proposal: {
+        hours: patch.proposal?.hours,
+        lineItems: patch.proposal?.lineItems || [],
+        offerings: patch.proposal?.offerings || [],
+        sections: patch.proposal?.sections || [],
+      },
+    };
+  }
+
   async function handleSendProposal() {
     if (!client?.email) {
       showToast("This client doesn't have an email address on file", 'error');
@@ -1012,11 +1047,22 @@ export default function BookingFormPage() {
       promise.catch((err) => showToast(err.message || 'Failed to save changes.', 'error'));
       const businessInfo = currentUser.businessInfo || {};
       const fromName = businessInfo.name || `${currentUser.firstName} ${currentUser.lastName}`;
+      const recipientName = `${client.firstName} ${client.lastName}`.trim();
+      // Created before the email goes out — the respond link only exists
+      // here and in the email about to be sent below (same reasoning as
+      // Contract's sign token: only the hash is ever persisted).
+      const { proposalResponse: createdResponse, respondLink } = await sendProposalResponseLink({
+        bookingId: booking.id,
+        recipientEmail: client.email,
+        recipientName,
+        snapshot: buildProposalSnapshot(patch),
+      });
+      setProposalResponse(createdResponse);
       const pdfAttachment = await generateProposalPdfAttachment({ booking: patch, client, businessInfo });
       await sendEmail({
         to: client.email,
         subject: `Proposal from ${fromName}`,
-        body: `<p>Hi ${client.firstName},</p><p>Please find attached our proposal for your event. Let us know if you have any questions!</p><p>${fromName}</p>`,
+        body: `<p>Hi ${client.firstName},</p><p>Please find attached our proposal for your event.</p><p><a href="${respondLink}">Click here to review and respond to the proposal</a></p><p>Let us know if you have any questions!</p><p>${fromName}</p>`,
         fromName,
         pdfAttachment,
       });
@@ -1039,8 +1085,26 @@ export default function BookingFormPage() {
   // Records that a proposal was delivered outside the app's own send flow
   // (printed, texted, signed in person, etc.) — same "it's been sent" end
   // state as handleSendProposal, minus the email, plus a required reason
-  // so there's a real audit trail for why it's marked sent without one.
-  function handleMarkProposalSentManually(reason) {
+  // so there's a real audit trail for why it's marked sent without one. A
+  // respond link is still generated (skipping only the email itself) in
+  // case it's useful to share by hand, same as Contract's manual-sent path.
+  async function handleMarkProposalSentManually(reason) {
+    try {
+      const { patch } = persistBooking();
+      if (client?.email) {
+        const { proposalResponse: createdResponse } = await sendProposalResponseLink({
+          bookingId: booking.id,
+          recipientEmail: client.email,
+          recipientName: `${client.firstName} ${client.lastName}`.trim(),
+          snapshot: buildProposalSnapshot(patch),
+          manual: true,
+          reason,
+        });
+        setProposalResponse(createdResponse);
+      }
+    } catch (err) {
+      showToast(err.message || 'Failed to record the manual send.', 'error');
+    }
     const sentProposal = {
       ...form.proposal,
       sentAt: new Date().toISOString(),
@@ -1685,10 +1749,10 @@ export default function BookingFormPage() {
         </div>
       )}
 
-      <PipelineStepper steps={pipelineSteps(booking, form.proposal, contract, invoices)} />
+      <PipelineStepper steps={pipelineSteps(booking, form.proposal, contract, invoices, proposalResponse)} />
 
       <div className="flex items-center gap-2 mb-5 flex-wrap">
-        <Badge color={proposalStatusInfo(form.proposal).color}>Proposal: {proposalStatusInfo(form.proposal).label}</Badge>
+        <Badge color={proposalStatusInfo(form.proposal, proposalResponse).color}>Proposal: {proposalStatusInfo(form.proposal, proposalResponse).label}</Badge>
         <Badge color={contractStatusInfo(contract).color}>Contract: {contractStatusInfo(contract).label}</Badge>
       </div>
 
@@ -2298,6 +2362,18 @@ export default function BookingFormPage() {
                     </button>
                   </div>
                 </div>
+                {proposalResponse?.status === 'revision_requested' && (
+                  <div data-testid="booking-form-proposal-revision-banner" className="mt-4 text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2.5">
+                    <div className="font-semibold">{proposalResponse.recipientName || proposalResponse.recipientEmail} requested changes</div>
+                    {proposalResponse.responseNote && <div className="mt-1">"{proposalResponse.responseNote}"</div>}
+                  </div>
+                )}
+                {proposalResponse?.status === 'accepted' && (
+                  <div data-testid="booking-form-proposal-accepted-banner" className="mt-4 text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2.5">
+                    <div className="font-semibold">{proposalResponse.recipientName || proposalResponse.recipientEmail} accepted this proposal</div>
+                    {proposalResponse.responseNote && <div className="mt-1">"{proposalResponse.responseNote}"</div>}
+                  </div>
+                )}
                 {markingProposalSentManually && (
                   <div className="mt-4 pt-4 border-t border-slate-100">
                     <label className={labelClass}>Why was this marked as sent manually?</label>
@@ -2346,7 +2422,7 @@ export default function BookingFormPage() {
               <div className={cardClass}>
                 <h3 className={cardTitleClass}>Proposal Log</h3>
                 <EventLogPanel
-                  entries={form.proposal.log || []}
+                  entries={[...(form.proposal.log || []), ...(proposalResponse?.log || [])].sort((a, b) => new Date(a.at) - new Date(b.at))}
                   labelForType={(entry) => PROPOSAL_LOG_LABELS[entry.type] || entry.type}
                   onAddNote={handleAddProposalLogNote}
                   testIdPrefix="booking-form-proposal-log"

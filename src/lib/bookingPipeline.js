@@ -7,8 +7,12 @@
 // with nothing keeping the two in sync. Extracted here so every view that
 // wants to show "where is this booking really at" derives it the same way,
 // rather than each screen inventing its own notion of status.
-export function pipelineSteps(booking, proposal, contract, invoices) {
-  const proposalSent = !!proposal?.sentAt;
+export function pipelineSteps(booking, proposal, contract, invoices, proposalResponse) {
+  // Same reasoning as proposalStatusInfo below: a proposalResponse record
+  // existing is authoritative for "sent", independent of whether
+  // proposal.sentAt made it onto the local blob (which only happens after
+  // the client email succeeds).
+  const proposalSent = !!proposalResponse || !!proposal?.sentAt;
   const contractSent = !!contract;
   const fullySigned = contract?.status === 'fully_signed';
   const hasEvent = !!booking?.convertedEventId;
@@ -36,10 +40,22 @@ export function currentPipelineStep(steps) {
 // alongside PipelineStepper — same underlying data (proposal.sentAt,
 // contract.status) as the stepper and each tab's own status banner, just
 // surfaced where a stakeholder can see it without clicking into either tab.
-export function proposalStatusInfo(proposal) {
+// `proposalResponse` is the client's Accept/Request-Revision response (see
+// server/src/routes/proposalResponses.js) — optional since older bookings
+// (or ones sent before this existed) never have one.
+//
+// proposalResponse's existence, not proposal.sentAt, is what actually means
+// "sent" here — the response record (and its respond link) get created
+// server-side before the client email goes out, so a failed/bounced send
+// (Resend hiccup, bad address, etc.) shouldn't make this read as "Draft"
+// when a real, working link already exists and might even have been
+// responded to.
+export function proposalStatusInfo(proposal, proposalResponse) {
+  if (proposalResponse?.status === 'accepted') return { label: 'Accepted', color: '#22c55e' };
+  if (proposalResponse?.status === 'revision_requested') return { label: 'Revision Requested', color: '#ef4444' };
+  if (proposalResponse || proposal?.sentAt) return { label: 'Sent', color: '#22c55e' };
   if (!proposal) return { label: 'Not Started', color: '#94a3b8' };
-  if (!proposal.sentAt) return { label: 'Draft', color: '#94a3b8' };
-  return { label: 'Sent', color: '#22c55e' };
+  return { label: 'Draft', color: '#94a3b8' };
 }
 
 export function contractStatusInfo(contract) {
