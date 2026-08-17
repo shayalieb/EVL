@@ -7,6 +7,21 @@ import { uid } from '../lib/storage';
 import { computeOfferingTotal } from '../lib/offerings';
 import { formatCurrency as currency } from '../lib/format';
 
+// Instrument-only, never names — a musician can be swapped for another
+// playing the same part without misrepresenting who's contracted to
+// perform, and it sidesteps naming a specific person in a legal document at
+// all. Frozen at add-time (one string per member, in group order, not
+// deduped) same as every other "clone the template, then it's independent"
+// flow in this app — editing the saved group afterward never touches an
+// ensemble already added to a proposal/contract.
+function buildEnsembleOffering(group, contractors) {
+  const instruments = group.contractorIds
+    .map((id) => contractors.find((c) => c.id === id))
+    .filter(Boolean)
+    .map((c) => c.contractorType1 || 'Musician');
+  return { id: uid('offitem'), name: group.name, details: '', type: 'ensemble', amount: '', unitCount: '', ratePerUnit: '', instruments };
+}
+
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const moneyInputClass = 'w-full py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -41,11 +56,12 @@ function QuickItemForm({ onAdd, onCancel }) {
   );
 }
 
-export default function OfferingPickerModal({ open, onClose, onSelect }) {
-  const { offerings } = useData();
+export default function OfferingPickerModal({ open, onClose, onSelect, allowEnsemble = false }) {
+  const { offerings, contractorGroups, contractors } = useData();
   const [query, setQuery] = useState('');
   const [addingQuickItem, setAddingQuickItem] = useState(false);
   const [creatingOffering, setCreatingOffering] = useState(false);
+  const [pickingEnsemble, setPickingEnsemble] = useState(false);
   const filtered = offerings.filter((o) => o.name.toLowerCase().includes(query.trim().toLowerCase()));
 
   function handleSelect(offering) {
@@ -56,6 +72,7 @@ export default function OfferingPickerModal({ open, onClose, onSelect }) {
   function handleClose() {
     setQuery('');
     setAddingQuickItem(false);
+    setPickingEnsemble(false);
     onClose();
   }
 
@@ -80,21 +97,67 @@ export default function OfferingPickerModal({ open, onClose, onSelect }) {
             onAdd={(item) => { setAddingQuickItem(false); handleSelect(item); }}
             onCancel={() => setAddingQuickItem(false)}
           />
+        ) : pickingEnsemble ? (
+          <div className="border border-dashed border-slate-300 rounded-lg p-3 space-y-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-semibold text-slate-500">Choose a saved group</span>
+              <button
+                type="button"
+                onClick={() => setPickingEnsemble(false)}
+                data-testid="offering-picker-ensemble-cancel-button"
+                className="text-xs font-semibold text-slate-400 hover:text-slate-600"
+              >
+                Cancel
+              </button>
+            </div>
+            {contractorGroups.length === 0 ? (
+              <div className="text-sm text-slate-400 text-center py-4">
+                No saved contractor groups yet — add one from the Contractors page.
+              </div>
+            ) : (
+              <div className="max-h-64 overflow-y-auto space-y-1.5">
+                {contractorGroups.map((g) => (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => { setPickingEnsemble(false); handleSelect(buildEnsembleOffering(g, contractors)); }}
+                    data-testid="offering-picker-ensemble-option"
+                    className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 text-left"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-slate-800 truncate">{g.name}</div>
+                      <div className="text-xs text-slate-400">{g.contractorIds.length} musician{g.contractorIds.length === 1 ? '' : 's'}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         ) : (
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <button
               type="button"
               onClick={() => setAddingQuickItem(true)}
               data-testid="offering-picker-modal-quick-item-button"
-              className="flex-1 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
+              className="flex-1 min-w-[140px] px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
             >
               + One-time item
             </button>
+            {allowEnsemble && (
+              <button
+                type="button"
+                onClick={() => setPickingEnsemble(true)}
+                data-testid="offering-picker-modal-ensemble-button"
+                className="flex-1 min-w-[140px] px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
+              >
+                + Add Ensemble
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setCreatingOffering(true)}
               data-testid="offering-picker-modal-create-offering-button"
-              className="flex-1 px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
+              className="flex-1 min-w-[140px] px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
             >
               + Create new offering
             </button>

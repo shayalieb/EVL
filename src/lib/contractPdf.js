@@ -139,7 +139,12 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
       const valueLine = o.type === 'perUnit'
         ? `${o.unitCount || 0} × ${currency(o.ratePerUnit || 0)} = ${currency(total)}`
         : currency(total);
-      return [o.name || 'Offering', o.details ? `${valueLine}\n${o.details}` : valueLine];
+      // Ensemble: instrument-only, one bullet per musician — never names,
+      // see buildEnsembleOffering in OfferingPickerModal.jsx for why.
+      const detailsText = o.type === 'ensemble' && o.instruments?.length
+        ? o.instruments.map((inst) => `• ${inst}`).join('\n')
+        : o.details;
+      return [o.name || 'Offering', detailsText ? `${valueLine}\n${detailsText}` : valueLine];
     });
     autoTable(doc, {
       startY: y,

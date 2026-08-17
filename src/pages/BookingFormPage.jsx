@@ -244,15 +244,24 @@ function OfferingsEditor({ offerings, onChange, onAddClick }) {
                   data-testid="booking-form-offering-name-input"
                   className={`${inputClass} font-semibold flex-1 min-w-0`}
                 />
-                <select
-                  value={o.type}
-                  onChange={(e) => handleUpdate(o.id, { type: e.target.value })}
-                  data-testid="booking-form-offering-type-select"
-                  className="px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 w-32 shrink-0"
-                >
-                  <option value="general">General</option>
-                  <option value="perUnit">Per Unit</option>
-                </select>
+                {o.type === 'ensemble' ? (
+                  <span
+                    data-testid="booking-form-offering-ensemble-badge"
+                    className="px-3.5 py-2.5 rounded-lg bg-indigo-50 text-indigo-600 text-xs font-semibold w-32 shrink-0 text-center"
+                  >
+                    Ensemble
+                  </span>
+                ) : (
+                  <select
+                    value={o.type}
+                    onChange={(e) => handleUpdate(o.id, { type: e.target.value })}
+                    data-testid="booking-form-offering-type-select"
+                    className="px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 w-32 shrink-0"
+                  >
+                    <option value="general">General</option>
+                    <option value="perUnit">Per Unit</option>
+                  </select>
+                )}
                 <button
                   type="button"
                   onClick={() => handleRemove(o.id)}
@@ -263,14 +272,43 @@ function OfferingsEditor({ offerings, onChange, onAddClick }) {
                   ✕
                 </button>
               </div>
-              <textarea
-                rows={2}
-                value={o.details}
-                onChange={(e) => handleUpdate(o.id, { details: e.target.value })}
-                placeholder="Details (optional)"
-                data-testid="booking-form-offering-details-textarea"
-                className={`${inputClass} mb-2`}
-              />
+              {o.type === 'ensemble' ? (
+                <div className="mb-2">
+                  {(o.instruments || []).length === 0 ? (
+                    <div className="text-xs text-slate-400 italic">No musicians in this ensemble.</div>
+                  ) : (
+                    <ul className="space-y-1">
+                      {o.instruments.map((inst, idx) => (
+                        <li
+                          key={idx}
+                          data-testid="booking-form-offering-instrument-row"
+                          className="flex items-center justify-between gap-2 text-sm text-slate-600 bg-slate-50 rounded-lg px-3 py-1.5"
+                        >
+                          <span>• {inst}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdate(o.id, { instruments: o.instruments.filter((_, i) => i !== idx) })}
+                            data-testid="booking-form-offering-instrument-remove-button"
+                            className="shrink-0 text-slate-300 hover:text-red-600"
+                            aria-label={`Remove ${inst}`}
+                          >
+                            ✕
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : (
+                <textarea
+                  rows={2}
+                  value={o.details}
+                  onChange={(e) => handleUpdate(o.id, { details: e.target.value })}
+                  placeholder="Details (optional)"
+                  data-testid="booking-form-offering-details-textarea"
+                  className={`${inputClass} mb-2`}
+                />
+              )}
               {o.type === 'perUnit' ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
@@ -3516,6 +3554,7 @@ export default function BookingFormPage() {
       <OfferingPickerModal
         open={proposalOfferingPickerOpen}
         onClose={() => setProposalOfferingPickerOpen(false)}
+        allowEnsemble
         onSelect={(template) => {
           const instance = { ...template, id: uid('offitem') };
           update('proposal', { ...form.proposal, offerings: [...(form.proposal?.offerings || []), instance] });
@@ -3524,6 +3563,7 @@ export default function BookingFormPage() {
       <OfferingPickerModal
         open={contractOfferingPickerOpen}
         onClose={() => setContractOfferingPickerOpen(false)}
+        allowEnsemble
         onSelect={(template) => {
           const instance = { ...template, id: uid('offitem') };
           setContractOfferings((prev) => [...prev, instance]);

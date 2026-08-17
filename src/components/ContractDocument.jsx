@@ -210,7 +210,13 @@ export default function ContractDocument({ snapshot, terms, clientSignature, own
                     <span className="text-slate-500">{o.name || 'Offering'}</span>
                     <span className="text-slate-800 font-medium text-right">{valueLine}</span>
                   </div>
-                  {o.details && <div className="text-[0.75em] text-slate-400 mt-0.5">{o.details}</div>}
+                  {o.type === 'ensemble' && o.instruments?.length > 0 ? (
+                    <ul className="mt-1 ml-3 list-disc text-[0.75em] text-slate-500 space-y-0.5">
+                      {o.instruments.map((inst, idx) => <li key={idx}>{inst}</li>)}
+                    </ul>
+                  ) : (
+                    o.details && <div className="text-[0.75em] text-slate-400 mt-0.5">{o.details}</div>
+                  )}
                 </div>
               );
             })}

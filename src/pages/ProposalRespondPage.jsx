@@ -156,12 +156,19 @@ export default function ProposalRespondPage() {
               {offeringsList.map((o, i) => {
                 const total = computeOfferingTotal(o);
                 return (
-                  <div key={`o${i}`} className="flex justify-between">
-                    <span className="text-slate-600">
-                      {o.name || 'Offering'}
-                      {o.type === 'perUnit' && <span className="text-slate-400"> ({o.unitCount || 0} × {currency(o.ratePerUnit || 0)})</span>}
-                    </span>
-                    <span className="text-slate-800">{currency(total)}</span>
+                  <div key={`o${i}`}>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">
+                        {o.name || 'Offering'}
+                        {o.type === 'perUnit' && <span className="text-slate-400"> ({o.unitCount || 0} × {currency(o.ratePerUnit || 0)})</span>}
+                      </span>
+                      <span className="text-slate-800">{currency(total)}</span>
+                    </div>
+                    {o.type === 'ensemble' && o.instruments?.length > 0 && (
+                      <ul className="mt-0.5 ml-3 list-disc text-xs text-slate-400 space-y-0.5">
+                        {o.instruments.map((inst, idx) => <li key={idx}>{inst}</li>)}
+                      </ul>
+                    )}
                   </div>
                 );
               })}
