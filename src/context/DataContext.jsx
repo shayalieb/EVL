@@ -86,6 +86,7 @@ const LIST_FIELDS = {
   proposalTemplates: 'proposalTemplates',
   contractTemplates: 'contractTemplates',
   setListLibrary: 'setListLibrary',
+  contractorGroups: 'contractorGroups',
 };
 
 export function DataProvider({ children }) {
@@ -631,6 +632,29 @@ export function DataProvider({ children }) {
     patchList(LIST_FIELDS.setListLibrary, (currentUser.setListLibrary || []).filter((s) => s.id !== id));
   }, [currentUser, patchList]);
 
+  // ---- Contractor Groups (saved ensembles/lineups — "+ Add Ensemble" on
+  // EventFormPage.jsx's roster clones a group's contractorIds into that
+  // event's own contractorBookings, same "pick a template, clone it, the
+  // copy is independent from then on" contract as Set List Library above.
+  // Just { id, name, contractorIds }, no per-slot roles — a saved group is
+  // a specific set of people, not a staffing template. ) ----
+  const addContractorGroup = useCallback((group) => {
+    if (!currentUser) return;
+    const record = { id: uid('cgroup'), createdAt: new Date().toISOString(), ...group };
+    patchList(LIST_FIELDS.contractorGroups, [...(currentUser.contractorGroups || []), record]);
+    return record;
+  }, [currentUser, patchList]);
+
+  const updateContractorGroup = useCallback((id, patch) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.contractorGroups, (currentUser.contractorGroups || []).map((g) => (g.id === id ? { ...g, ...patch } : g)));
+  }, [currentUser, patchList]);
+
+  const deleteContractorGroup = useCallback((id) => {
+    if (!currentUser) return;
+    patchList(LIST_FIELDS.contractorGroups, (currentUser.contractorGroups || []).filter((g) => g.id !== id));
+  }, [currentUser, patchList]);
+
   // ---- Derived helpers ----
   const getContractorById = useCallback((id) => contractors.find((c) => c.id === id), [contractors]);
 
@@ -698,6 +722,7 @@ export function DataProvider({ children }) {
     proposalTemplates: currentUser?.proposalTemplates || [],
     contractTemplates: currentUser?.contractTemplates || [],
     setListLibrary: currentUser?.setListLibrary || [],
+    contractorGroups: currentUser?.contractorGroups || [],
     addContractor,
     updateContractor,
     deleteContractor,
@@ -742,6 +767,9 @@ export function DataProvider({ children }) {
     addSetListLibraryItem,
     updateSetListLibraryItem,
     deleteSetListLibraryItem,
+    addContractorGroup,
+    updateContractorGroup,
+    deleteContractorGroup,
     addEvent,
     updateEvent,
     deleteEvent,
@@ -767,6 +795,7 @@ export function DataProvider({ children }) {
     addContractTemplate, updateContractTemplate, removeContractTemplate,
     addOffering, updateOffering, deleteOffering,
     addSetListLibraryItem, updateSetListLibraryItem, deleteSetListLibraryItem,
+    addContractorGroup, updateContractorGroup, deleteContractorGroup,
     addEvent, updateEvent, deleteEvent, completeEvent, restoreEvent,
     getContractorById, computeDurationHours, computeEventTotalCost, computeVendorStatus,
   ]);

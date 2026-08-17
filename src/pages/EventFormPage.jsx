@@ -186,7 +186,7 @@ export default function EventFormPage() {
   const {
     events, eventTypes, addEventType, eventStatuses, inquiryStatuses, addInquiryStatus, emailTemplates,
     contractors, contractorTypes, clients, venues, addEvent, updateEvent, computeDurationHours,
-    bookings, updateBooking, computeEventTotalCost,
+    bookings, updateBooking, computeEventTotalCost, contractorGroups,
   } = useData();
   const { can, currentUser, role } = useAuth();
   const { showToast } = useToast();
@@ -228,6 +228,7 @@ export default function EventFormPage() {
   const [emailHistoryEntries, setEmailHistoryEntries] = useState([]);
   const [newTypeLabel, setNewTypeLabel] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [ensemblePickerOpen, setEnsemblePickerOpen] = useState(false);
   const [tierPickerContractor, setTierPickerContractor] = useState(null);
   const [editingContractor, setEditingContractor] = useState(null);
   const [bulkTemplateId, setBulkTemplateId] = useState('');
@@ -790,6 +791,33 @@ export default function EventFormPage() {
     setForm((f) => ({ ...f, contractorBookings: f.contractorBookings.filter((b) => b.contractorId !== contractorId) }));
   }
 
+  // "+ Add Ensemble" — clones a saved Contractor Group's members onto the
+  // roster in one shot, defaulting each to their first (cheapest) pricing
+  // tier rather than popping N sequential tier-picker dialogs; tiers are
+  // editable per-row afterward same as any other roster entry. Already-added
+  // contractors are skipped (no duplicates) and group members who no longer
+  // exist (contractor deleted since the group was saved) are silently
+  // dropped — same "clone, then independent" contract as Set List Library.
+  function addContractorGroupToEvent(group) {
+    const addedStatus = getOrCreateInquiryStatus('Added', '#94a3b8');
+    setForm((f) => {
+      const existingIds = new Set(f.contractorBookings.map((b) => b.contractorId));
+      const newBookings = group.contractorIds
+        .filter((id) => !existingIds.has(id))
+        .map((id) => contractors.find((c) => c.id === id))
+        .filter(Boolean)
+        .map((c) => ({
+          contractorId: c.id,
+          inquiryStatusId: addedStatus?.id,
+          pricingTierId: getPricingTiers(c)[0]?.id,
+          startTime: f.startTime,
+          endTime: f.endTime,
+        }));
+      return { ...f, contractorBookings: [...f.contractorBookings, ...newBookings] };
+    });
+    setEnsemblePickerOpen(false);
+  }
+
   function changeBookingStatus(contractorId, inquiryStatusId) {
     setForm((f) => ({
       ...f,
@@ -1254,6 +1282,42 @@ export default function EventFormPage() {
               >
                 <div className="font-medium text-slate-700">{c.firstName} {c.lastName}</div>
                 <div className="text-xs text-slate-400">{c.contractorType1}{c.contractorType2 ? ` · ${c.contractorType2}` : ''}</div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+  const addEnsembleButton = (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setEnsemblePickerOpen((v) => !v)}
+        data-testid="event-form-add-ensemble-button"
+        className="px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50"
+      >
+        + Add Ensemble
+      </button>
+      {ensemblePickerOpen && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setEnsemblePickerOpen(false)} />
+          <div className="absolute right-0 mt-1 w-72 max-h-64 overflow-y-auto bg-white rounded-lg shadow-lg border border-slate-100 z-20">
+            {contractorGroups.length === 0 && (
+              <div className="px-3 py-3 text-xs text-slate-400">
+                No saved groups yet — add one from the Contractors page.
+              </div>
+            )}
+            {contractorGroups.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => addContractorGroupToEvent(g)}
+                data-testid="event-form-add-ensemble-option-button"
+                className="block w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                <div className="font-medium text-slate-700">{g.name}</div>
+                <div className="text-xs text-slate-400">{g.contractorIds.length} contractor{g.contractorIds.length === 1 ? '' : 's'}</div>
               </button>
             ))}
           </div>
@@ -1762,7 +1826,12 @@ export default function EventFormPage() {
         <div className={activeTab === 'contractors' ? cardClass : 'hidden'}>
           <div className="flex items-center justify-between mb-5">
             <h3 className={`${cardTitleClass} mb-0`}>Contractors</h3>
-            {!showBulkRow && canAddContractor && addContractorButton}
+            {!showBulkRow && canAddContractor && (
+              <div className="flex items-center gap-2">
+                {addContractorButton}
+                {addEnsembleButton}
+              </div>
+            )}
           </div>
 
           {hasCategories && (
@@ -1809,6 +1878,7 @@ export default function EventFormPage() {
               <div className="hidden sm:block w-20 shrink-0" aria-hidden="true" />
               <div className="hidden sm:block shrink-0 w-6" aria-hidden="true" />
               {canAddContractor && addContractorButton}
+              {canAddContractor && addEnsembleButton}
             </div>
           )}
 
