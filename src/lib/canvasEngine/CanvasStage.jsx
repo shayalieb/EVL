@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Stage, Layer, Rect, Text, Line, Arrow, Group, Image as KonvaImage, Transformer, Circle } from 'react-konva';
 import { gridLinePositions, snapPointToGrid } from './measurement';
 import { useSvgImage, preloadIconRegistry } from './useSvgImage';
@@ -213,7 +213,13 @@ function AnnotationNote({ annotation, isSelected, isEditing, onSelect, onEdit, o
 // current scene (routes to history.apply — pushes an undo step).
 // `onAdjust(mutatorFn)` is the same but for in-place, non-undo-worthy tweaks
 // (routes to history.replaceCurrent).
-export default function CanvasStage({
+//
+// forwardRef exposes `{ fitToContent }` — separate from the `stageRef` prop
+// below (which hands the caller the raw Konva Stage node for things like
+// thumbnail capture). This ref is for the React component's own actions, so
+// a real toolbar button in the parent (not just the small zoom-control
+// widget in the corner here) can trigger the same "show me everything" fit.
+const CanvasStage = forwardRef(function CanvasStage({
   scene,
   onMutate,
   onAdjust,
@@ -238,7 +244,7 @@ export default function CanvasStage({
   onElementAdded,
   pendingIconId,
   onCalibrate,
-}) {
+}, ref) {
   const internalStageRef = useRef(null);
   const trRef = useRef(null);
   const shapeRefs = useRef({});
@@ -319,9 +325,12 @@ export default function CanvasStage({
     }
   }, [selectedElementId, scene.elements, scene.layers]);
 
-  // Zooms toward a specific screen point (`anchor`) without that point
-  // visually jumping — shared by the scroll-wheel handler (anchored at the
-  // pointer) and the toolbar zoom buttons (anchored at the canvas center).
+  // Zooms toward a specific screen point (`anchor`, the canvas center) so
+  // that point doesn't visually jump — used only by the toolbar zoom
+  // buttons below. Deliberately no scroll-wheel/trackpad zoom binding: it
+  // was reported as accidental and hard to control, hijacking normal page
+  // scroll the moment the pointer happened to be over the canvas. Buttons
+  // are the only way to zoom now.
   function zoomToward(newScaleRaw, anchor) {
     const newScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newScaleRaw));
     const scenePoint = { x: (anchor.x - stagePos.x) / zoom, y: (anchor.y - stagePos.y) / zoom };
@@ -329,16 +338,6 @@ export default function CanvasStage({
     setStagePos({ x: anchor.x - scenePoint.x * newScale, y: anchor.y - scenePoint.y * newScale });
   }
 
-  function handleWheel(e) {
-    e.evt.preventDefault();
-    const pointer = internalStageRef.current.getPointerPosition();
-    const direction = e.evt.deltaY > 0 ? -1 : 1;
-    zoomToward(direction > 0 ? zoom * 1.1 : zoom / 1.1, pointer);
-  }
-
-  // Toolbar zoom controls — scroll-to-zoom alone isn't discoverable, so
-  // these give zooming an obvious, clickable affordance plus a percentage
-  // readout of the current level.
   function handleZoomButton(factor) {
     zoomToward(zoom * factor, { x: width / 2, y: height / 2 });
   }
@@ -385,6 +384,8 @@ export default function CanvasStage({
     setZoom(newZoom);
     setStagePos({ x: width / 2 - centerX * newZoom, y: height / 2 - centerY * newZoom });
   }
+
+  useImperativeHandle(ref, () => ({ fitToContent: handleFitToContent }));
 
   // Scene coordinates from a point already in Konva's own pointer-position
   // space (container-relative CSS pixels, pre-pan/zoom) — used for every
@@ -649,7 +650,14 @@ export default function CanvasStage({
         onDragStart={() => setIsPanning(true)}
         onDragMove={(e) => setStagePos({ x: e.target.x(), y: e.target.y() })}
         onDragEnd={(e) => { setStagePos({ x: e.target.x(), y: e.target.y() }); setIsPanning(false); }}
-        onWheel={handleWheel}
+        // No zoom logic here anymore (buttons only, per feedback that
+        // scroll-to-zoom was hard to control) — but still swallowing the
+        // event, not removing the handler outright. Without this, a wheel
+        // gesture over the canvas falls through to the browser's default
+        // behavior and scrolls the *page*, not the canvas — which silently
+        // moves the canvas out from under itself and desyncs anything
+        // relying on its on-screen position.
+        onWheel={(e) => e.evt.preventDefault()}
         onMouseDown={handleStageMouseDown}
         onMouseMove={handleStageMouseMove}
         onMouseUp={handleStageMouseUp}
@@ -920,4 +928,6 @@ export default function CanvasStage({
       )}
     </div>
   );
-}
+});
+
+export default CanvasStage;

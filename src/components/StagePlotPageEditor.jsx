@@ -58,6 +58,7 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, p
   const [pendingIconId, setPendingIconId] = useState(null);
   const [saveStatus, setSaveStatus] = useState('saved');
   const stageRef = useRef(null);
+  const canvasApiRef = useRef(null);
   const saveTimer = useRef(null);
   const sceneRef = useRef(scene);
   sceneRef.current = scene;
@@ -265,6 +266,15 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, p
       <div className="flex flex-wrap items-center gap-2 mb-3 overflow-x-auto">
         <button type="button" onClick={undo} disabled={!canUndo} data-testid="stageplot-undo-button" className={toolbarButtonClass}>Undo</button>
         <button type="button" onClick={redo} disabled={!canRedo} data-testid="stageplot-redo-button" className={toolbarButtonClass}>Redo</button>
+        <button
+          type="button"
+          onClick={() => canvasApiRef.current?.fitToContent()}
+          data-testid="stageplot-center-all-button"
+          title="Zoom and pan to fit everything on the page in view"
+          className={toolbarButtonClass}
+        >
+          Center All
+        </button>
         <div className="w-px h-6 bg-slate-200 mx-1" />
         <button type="button" onClick={() => setMode('select')} className={`${toolbarButtonClass} ${mode === 'select' ? 'bg-indigo-600 text-white border-indigo-600' : ''}`}>Select</button>
         <button type="button" onClick={() => setMode('draw')} className={`${toolbarButtonClass} ${mode === 'draw' ? 'bg-indigo-600 text-white border-indigo-600' : ''}`}>Draw</button>
@@ -329,6 +339,7 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, p
 
         <div className="overflow-x-auto max-w-full">
           <CanvasStage
+            ref={canvasApiRef}
             scene={scene}
             onMutate={apply}
             onAdjust={replaceCurrent}
