@@ -5,10 +5,10 @@ import MoneyInput from './ui/MoneyInput';
 import { useData } from '../context/DataContext';
 import { uid } from '../lib/storage';
 import { computeOfferingTotal } from '../lib/offerings';
-import { computeGroupPrice } from '../lib/contractorGroups';
+import { computeGroupPrice, formatInstrumentLine } from '../lib/contractorGroups';
 import { formatCurrency as currency } from '../lib/format';
 
-// Instrument-only, never names — a musician can be swapped for another
+// Instrument + role, never names — a musician can be swapped for another
 // playing the same part without misrepresenting who's contracted to
 // perform, and it sidesteps naming a specific person in a legal document at
 // all. Frozen at add-time (one string per member, in group order, not
@@ -22,7 +22,7 @@ function buildEnsembleOffering(group, contractors) {
   const instruments = group.contractorIds
     .map((id) => contractors.find((c) => c.id === id))
     .filter(Boolean)
-    .map((c) => c.contractorType1 || 'Musician');
+    .map((c) => formatInstrumentLine(c));
   const amount = computeGroupPrice(group, contractors);
   return { id: uid('offitem'), name: group.name, details: '', type: 'ensemble', amount: String(amount), unitCount: '', ratePerUnit: '', instruments };
 }

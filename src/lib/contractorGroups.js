@@ -1,5 +1,16 @@
 import { getPricingTiers } from './pricingTiers';
 
+// Instrument (Category) plus Role, e.g. "Violin — Principal" — still no
+// name, just what they play and their role in the lineup. Falls back to
+// whichever of the two is actually set, and only to the generic "Musician"
+// when a contractor has neither on file.
+export function formatInstrumentLine(contractor) {
+  const instrument = contractor?.contractorType1?.trim();
+  const role = contractor?.contractorType2?.trim();
+  if (instrument && role) return `${instrument} — ${role}`;
+  return instrument || role || 'Musician';
+}
+
 // Live sum of each current member's own rate (their first/cheapest pricing
 // tier) — the same default-tier convention used when bulk-adding a group to
 // an event roster. This is a suggestion, not a snapshot: it moves as
