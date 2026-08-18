@@ -22,6 +22,7 @@ const CATEGORY_COLORS = {
   Basses: { fill: '#60a5fa', stroke: '#1d4ed8' }, // blue
   Strings: { fill: '#e879f9', stroke: '#a21caf' }, // fuchsia
   'Brass & Woodwind': { fill: '#fbbf24', stroke: '#b45309' }, // amber
+  'PA & AV': { fill: '#2dd4bf', stroke: '#0f766e' }, // teal — front-of-house sound + video, distinct from Amps' on-stage backline
   'DJ & Electronic': { fill: '#818cf8', stroke: '#4338ca' }, // indigo — ties to the app's own brand accent
   Lighting: { fill: '#fde047', stroke: '#a16207' }, // yellow
   Staging: { fill: '#cbd5e1', stroke: '#475569' }, // neutral slate — not a literal instrument
@@ -99,22 +100,70 @@ export const STAGE_PLOT_ICON_LIST = [
     svg: svgFor('Amps', '<polygon points="14,50 50,50 42,20 22,20"/>'),
   },
   {
-    id: 'pa-speaker',
-    label: 'PA Speaker',
-    category: 'Amps',
-    svg: svgFor('Amps', '<rect x="24" y="8" width="16" height="48" rx="2"/><circle cx="32" cy="20" r="5"/><circle cx="32" cy="38" r="6"/>'),
-  },
-  {
-    id: 'subwoofer',
-    label: 'Subwoofer',
-    category: 'Amps',
-    svg: svgFor('Amps', '<rect x="12" y="12" width="40" height="40" rx="3"/><circle cx="32" cy="32" r="14"/><circle cx="32" cy="32" r="4"/>'),
-  },
-  {
     id: 'iem-pack',
     label: 'IEM Pack',
     category: 'Amps',
     svg: svgFor('Amps', '<rect x="22" y="24" width="20" height="28" rx="3"/><line x1="32" y1="24" x2="32" y2="10" stroke-width="2.5"/><circle cx="32" cy="8" r="2"/>'),
+  },
+  {
+    id: 'pa-speaker',
+    label: 'PA Speaker',
+    category: 'PA & AV',
+    svg: svgFor('PA & AV', '<rect x="24" y="8" width="16" height="48" rx="2"/><circle cx="32" cy="20" r="5"/><circle cx="32" cy="38" r="6"/>'),
+  },
+  {
+    id: 'subwoofer',
+    label: 'Subwoofer',
+    category: 'PA & AV',
+    svg: svgFor('PA & AV', '<rect x="12" y="12" width="40" height="40" rx="3"/><circle cx="32" cy="32" r="14"/><circle cx="32" cy="32" r="4"/>'),
+  },
+  {
+    id: 'line-array',
+    label: 'Line Array',
+    category: 'PA & AV',
+    // A flown cluster of line-array boxes reads as nothing meaningful in
+    // strict top-down projection (same reasoning as Mic Stand/Truss below),
+    // so this uses the same simplified-silhouette convention: stacked
+    // trapezoids narrowing toward the bottom, hung from a single rigging
+    // point — the shape every real stage-plot symbol set uses for it.
+    svg: svgFor('PA & AV', '<line x1="32" y1="4" x2="32" y2="10" stroke-width="3"/><polygon points="20,10 44,10 42,20 22,20"/><polygon points="21,21 43,21 41,31 23,31"/><polygon points="22,32 42,32 40,42 24,42"/><polygon points="23,43 41,43 39,53 25,53"/>'),
+  },
+  {
+    id: 'speaker-stack',
+    label: 'Speaker Stack',
+    category: 'PA & AV',
+    // Ground-stacked PA — a top box on a pole mount over a subwoofer base —
+    // the alternative to Line Array's flown rig, distinct from the single
+    // tall PA Speaker column and the plain Subwoofer box above.
+    svg: svgFor('PA & AV', '<rect x="12" y="40" width="40" height="16" rx="2"/><circle cx="22" cy="48" r="4"/><circle cx="42" cy="48" r="4"/><line x1="32" y1="40" x2="32" y2="20" stroke-width="3"/><rect x="20" y="8" width="24" height="14" rx="2"/><circle cx="32" cy="15" r="3"/>'),
+  },
+  {
+    id: 'mixing-board',
+    label: 'Mixing Board (FOH)',
+    category: 'PA & AV',
+    // The front-of-house console — wider and with more channel strips than
+    // DJ & Electronic's Mixer (a compact 2-deck DJ mixer, a genuinely
+    // different piece of gear) plus a trim-knob row for the visual weight a
+    // full-size console has on a real plot.
+    svg: svgFor('PA & AV', '<rect x="4" y="18" width="56" height="30" rx="2"/><circle cx="12" cy="14" r="2"/><circle cx="28" cy="14" r="2"/><circle cx="44" cy="14" r="2"/><line x1="12" y1="24" x2="12" y2="42"/><line x1="20" y1="24" x2="20" y2="42"/><line x1="28" y1="24" x2="28" y2="42"/><line x1="36" y1="24" x2="36" y2="42"/><line x1="44" y1="24" x2="44" y2="42"/><line x1="52" y1="24" x2="52" y2="42"/>'),
+  },
+  {
+    id: 'amp-rack',
+    label: 'Amp Rack',
+    category: 'PA & AV',
+    svg: svgFor('PA & AV', '<rect x="16" y="6" width="32" height="52" rx="2"/><line x1="16" y1="18" x2="48" y2="18"/><line x1="16" y1="30" x2="48" y2="30"/><line x1="16" y1="42" x2="48" y2="42"/><circle cx="22" cy="12" r="1.5"/><circle cx="42" cy="12" r="1.5"/>'),
+  },
+  {
+    id: 'led-wall',
+    label: 'LED Wall / Video Screen',
+    category: 'PA & AV',
+    svg: svgFor('PA & AV', '<rect x="6" y="12" width="52" height="34" rx="1"/><rect x="12" y="18" width="40" height="22" rx="1"/><line x1="6" y1="46" x2="10" y2="56"/><line x1="58" y1="46" x2="54" y2="56"/>'),
+  },
+  {
+    id: 'projector',
+    label: 'Projector',
+    category: 'PA & AV',
+    svg: svgFor('PA & AV', '<rect x="10" y="22" width="30" height="20" rx="3"/><rect x="16" y="16" width="8" height="6" rx="1"/><circle cx="46" cy="32" r="8"/><circle cx="46" cy="32" r="3"/>'),
   },
   {
     id: 'drum-kit',
