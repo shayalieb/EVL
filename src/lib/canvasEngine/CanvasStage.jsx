@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Stage, Layer, Rect, Text, Line, Arrow, Group, Image as KonvaImage, Transformer, Circle } from 'react-konva';
 import { gridLinePositions, snapPointToGrid } from './measurement';
+import { computeDragSnap, SNAP_THRESHOLD_PX } from './alignment';
 import { useSvgImage, preloadIconRegistry } from './useSvgImage';
 import RichTextToolbar from '../../components/ui/RichTextToolbar';
 
@@ -14,6 +15,10 @@ const TEXT_LABEL_HEIGHT = 32;
 const ROTATION_SNAPS = Array.from({ length: 24 }, (_, i) => i * 15);
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 4;
+// Comfortably beyond any realistic pan/zoom so a guide line never visibly
+// runs out mid-canvas — Konva clips to the viewport anyway, so drawing this
+// long costs nothing.
+const GUIDE_LINE_EXTENT = 4000;
 
 // Rotates an (x,y) offset by `deg` degrees around the origin — used to keep
 // a rotated icon's label/number badge at a fixed position and orientation
@@ -32,7 +37,7 @@ function rotateOffset(x, y, deg) {
 // labeled box for anything unregistered (e.g. the internal canvas-engine
 // demo page's placeholder icon set), so this component works whether or
 // not a real icon set is wired up.
-function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSelect, onEdit, onDragEnd, shapeRef }) {
+function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSelect, onEdit, onDragEnd, onDragMove, dragBoundFunc, shapeRef }) {
   const image = useSvgImage(icon?.svg);
   // Icon, label, and number badge all live inside one draggable/transformable
   // Group instead of as separate top-level siblings — Konva moves/transforms
@@ -65,10 +70,12 @@ function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSe
       scaleX={element.scaleX}
       scaleY={element.scaleY}
       draggable
+      dragBoundFunc={dragBoundFunc}
       onClick={onSelect}
       onTap={onSelect}
       onDblClick={onEdit}
       onDblTap={onEdit}
+      onDragMove={onDragMove}
       onDragEnd={(e) => onDragEnd(element.id, { x: e.target.x(), y: e.target.y() })}
     >
       {isMultiSelected && (
@@ -253,8 +260,11 @@ const CanvasStage = forwardRef(function CanvasStage({
   const descriptionEditRef = useRef(null);
   const panRafRef = useRef(null);
   const pendingStagePosRef = useRef(null);
+  const guideRafRef = useRef(null);
+  const pendingGuidesRef = useRef(null);
   const [zoom, setZoom] = useState(1);
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
+  const [activeGuides, setActiveGuides] = useState({ vertical: null, horizontal: null });
   const [drawingPoints, setDrawingPoints] = useState(null);
   const [editingAnnotationId, setEditingAnnotationId] = useState(null);
   const [draftText, setDraftText] = useState('');
@@ -327,7 +337,10 @@ const CanvasStage = forwardRef(function CanvasStage({
     }
   }, [selectedElementId, scene.elements, scene.layers]);
 
-  useEffect(() => () => { if (panRafRef.current) cancelAnimationFrame(panRafRef.current); }, []);
+  useEffect(() => () => {
+    if (panRafRef.current) cancelAnimationFrame(panRafRef.current);
+    if (guideRafRef.current) cancelAnimationFrame(guideRafRef.current);
+  }, []);
 
   // Konva already drags the Stage itself smoothly on every native pointer
   // event, entirely outside React — syncing that into stagePos state is
@@ -361,6 +374,48 @@ const CanvasStage = forwardRef(function CanvasStage({
     pendingStagePosRef.current = null;
     setStagePos({ x: e.target.x(), y: e.target.y() });
     setIsPanning(false);
+  }
+
+  // Live "smart guide" snapping while dragging a placed icon — dropped near
+  // the stage's true center (or lined up with another icon already on the
+  // page), it snaps exactly onto it and shows a guide line; dropped further
+  // away, nothing snaps and it lands wherever it was actually placed.
+  // dragBoundFunc is Konva's own mechanism for redirecting a node's
+  // position *during* its native drag (runs on Konva's smooth internal
+  // loop, no React involved) — pos arrives in absolute/screen coordinates
+  // (Konva's convention for this callback), so it's converted to scene
+  // units, snapped, and converted back. onDragMove below only drives the
+  // *visible* guide line, throttled to one state update per animation
+  // frame for the same reason the stage's own pan is (see
+  // handleStageDragMove above) — with many icons on a page, updating that
+  // on every native pointermove would reintroduce the exact re-render
+  // storm just fixed there.
+  function makeElementDragBoundFunc(elementId) {
+    return (absPos) => {
+      const scenePos = { x: (absPos.x - stagePos.x) / zoom, y: (absPos.y - stagePos.y) / zoom };
+      const others = scene.elements.filter((e) => e.id !== elementId);
+      const stageCenter = { x: width / 2, y: height / 2 };
+      const { pos, guides } = computeDragSnap(scenePos, others, stageCenter, SNAP_THRESHOLD_PX / zoom);
+      pendingGuidesRef.current = guides;
+      return { x: pos.x * zoom + stagePos.x, y: pos.y * zoom + stagePos.y };
+    };
+  }
+
+  function handleElementDragMove() {
+    if (guideRafRef.current) return;
+    guideRafRef.current = requestAnimationFrame(() => {
+      guideRafRef.current = null;
+      setActiveGuides(pendingGuidesRef.current || { vertical: null, horizontal: null });
+    });
+  }
+
+  function clearGuides() {
+    if (guideRafRef.current) {
+      cancelAnimationFrame(guideRafRef.current);
+      guideRafRef.current = null;
+    }
+    pendingGuidesRef.current = null;
+    setActiveGuides({ vertical: null, horizontal: null });
   }
 
   // Zooms toward a specific screen point (`anchor`, the canvas center) so
@@ -767,10 +822,20 @@ const CanvasStage = forwardRef(function CanvasStage({
                 if (!shiftKey) { onSelectAnnotation?.(null); onSelectStroke?.(null); }
               }}
               onEdit={() => startEditingElement(el.id)}
-              onDragEnd={(id, pos) => onMutate((s) => ({
-                ...s,
-                elements: s.elements.map((e) => (e.id === id ? { ...e, ...(snapEnabled ? snapPointToGrid(pos, s.scalePxPerUnit, s.gridSpacing) : pos) } : e)),
-              }))}
+              dragBoundFunc={makeElementDragBoundFunc(el.id)}
+              onDragMove={handleElementDragMove}
+              onDragEnd={(id, pos) => {
+                // A smart-guide snap already placed this exactly where it
+                // belongs (see makeElementDragBoundFunc above) — the grid
+                // snap below is only the fallback for a drop that didn't
+                // land on a guide, same as it's always been.
+                const guidedSnap = !!(pendingGuidesRef.current?.vertical != null || pendingGuidesRef.current?.horizontal != null);
+                clearGuides();
+                onMutate((s) => ({
+                  ...s,
+                  elements: s.elements.map((e) => (e.id === id ? { ...e, ...(snapEnabled && !guidedSnap ? snapPointToGrid(pos, s.scalePxPerUnit, s.gridSpacing) : pos) } : e)),
+                }));
+              }}
               shapeRef={(node) => { if (node) shapeRefs.current[el.id] = node; else delete shapeRefs.current[el.id]; }}
             />
           ))}
@@ -805,6 +870,26 @@ const CanvasStage = forwardRef(function CanvasStage({
                 verticalAlign="middle"
               />
             </Group>
+          )}
+
+          {/* Live smart-guide lines — see makeElementDragBoundFunc/handleElementDragMove above. Stroke width and dash scaled by 1/zoom so they read as a constant on-screen thickness regardless of zoom level. */}
+          {activeGuides.vertical != null && (
+            <Line
+              points={[activeGuides.vertical, -GUIDE_LINE_EXTENT, activeGuides.vertical, GUIDE_LINE_EXTENT]}
+              stroke="#ec4899"
+              strokeWidth={1 / zoom}
+              dash={[4 / zoom, 4 / zoom]}
+              listening={false}
+            />
+          )}
+          {activeGuides.horizontal != null && (
+            <Line
+              points={[-GUIDE_LINE_EXTENT, activeGuides.horizontal, GUIDE_LINE_EXTENT, activeGuides.horizontal]}
+              stroke="#ec4899"
+              strokeWidth={1 / zoom}
+              dash={[4 / zoom, 4 / zoom]}
+              listening={false}
+            />
           )}
 
           <Transformer

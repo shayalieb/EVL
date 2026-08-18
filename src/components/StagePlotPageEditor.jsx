@@ -3,12 +3,16 @@ import CanvasStage from '../lib/canvasEngine/CanvasStage';
 import { useUndoRedo } from '../lib/canvasEngine/history';
 import { createEmptyScene, deleteElement, deleteAnnotation, deleteStroke, addLayer, updateLayer } from '../lib/canvasEngine/sceneModel';
 import { scaleFromCalibration } from '../lib/canvasEngine/measurement';
+import { alignElementsCenter, distributeElements, centerElementsOnStage } from '../lib/canvasEngine/alignment';
 import { STAGE_PLOT_ICON_LIST, STAGE_PLOT_ICONS } from '../lib/canvasEngine/stagePlotIcons';
 import { saveStagePlotPage } from '../lib/stagePlots';
 import CanvasIconPalette from './CanvasIconPalette';
 
 const AUTOSAVE_DELAY_MS = 2000;
+const STAGE_WIDTH = 820;
+const STAGE_HEIGHT = 580;
 const toolbarButtonClass = 'px-3 py-1.5 rounded-lg border border-slate-300 text-sm disabled:opacity-40';
+const alignActionClass = 'w-full text-left px-3 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed';
 
 // The saved thumbnail (shown on the page tab AND embedded in the exported
 // PDF) has to be the whole stage plot, not whatever's in the viewport when
@@ -57,6 +61,7 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, p
   const [multiSelectedIds, setMultiSelectedIds] = useState(() => new Set());
   const [pendingIconId, setPendingIconId] = useState(null);
   const [saveStatus, setSaveStatus] = useState('saved');
+  const [alignPopoverOpen, setAlignPopoverOpen] = useState(false);
   const stageRef = useRef(null);
   const canvasApiRef = useRef(null);
   const saveTimer = useRef(null);
@@ -157,6 +162,27 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, p
     apply((s) => ({
       ...s,
       elements: s.elements.map((e) => (idSet.has(e.id) ? { ...e, rotation: (e.rotation + delta + 360) % 360 } : e)),
+    }));
+  }
+
+  // Same "manual cleanup" tool as the live smart-guides that snap while
+  // dragging (CanvasStage.jsx) — center-to-center, not true edge alignment,
+  // since every icon shares the same fixed on-screen size (see
+  // alignment.js's own comment on this). Popover stays open after an
+  // action so several can be chained (e.g. align center, then distribute)
+  // without reopening it each time.
+  function handleAlign(action) {
+    const ids = multiSelectedIds.size > 0 ? [...multiSelectedIds] : selectedElementId ? [selectedElementId] : [];
+    if (!ids.length) return;
+    const stageCenter = { x: STAGE_WIDTH / 2, y: STAGE_HEIGHT / 2 };
+    apply((s) => ({
+      ...s,
+      elements: action === 'align-center' ? alignElementsCenter(s.elements, ids, 'x')
+        : action === 'align-middle' ? alignElementsCenter(s.elements, ids, 'y')
+        : action === 'distribute-horizontal' ? distributeElements(s.elements, ids, 'x')
+        : action === 'distribute-vertical' ? distributeElements(s.elements, ids, 'y')
+        : action === 'center-on-stage' ? centerElementsOnStage(s.elements, ids, stageCenter)
+        : s.elements,
     }));
   }
 
@@ -286,6 +312,75 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, p
         <button type="button" onClick={() => rotateSelected(-15)} disabled={!selectedElementId && multiSelectedIds.size === 0} data-testid="stageplot-rotate-left-button" className={toolbarButtonClass} title="Rotate left 15°">⟲</button>
         <button type="button" onClick={() => rotateSelected(15)} disabled={!selectedElementId && multiSelectedIds.size === 0} data-testid="stageplot-rotate-right-button" className={toolbarButtonClass} title="Rotate right 15°">⟳</button>
         <button type="button" onClick={handleDuplicateSelected} disabled={!selectedElementId && multiSelectedIds.size === 0} data-testid="stageplot-duplicate-button" className={toolbarButtonClass} title="Duplicate selected (Cmd/Ctrl+Z to undo)">Duplicate</button>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setAlignPopoverOpen((v) => !v)}
+            disabled={!selectedElementId && multiSelectedIds.size === 0}
+            data-testid="stageplot-align-button"
+            className={toolbarButtonClass}
+            title="Align, distribute, or center the selected icon(s)"
+          >
+            Align
+          </button>
+          {alignPopoverOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setAlignPopoverOpen(false)} />
+              <div className="absolute left-0 top-full mt-1 w-56 bg-white rounded-lg border border-slate-200 shadow-lg z-20 p-1.5 space-y-0.5">
+                <button
+                  type="button"
+                  onClick={() => handleAlign('align-center')}
+                  disabled={multiSelectedIds.size < 2}
+                  data-testid="stageplot-align-center-button"
+                  className={alignActionClass}
+                  title="Line up on the same vertical axis"
+                >
+                  Align Center
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAlign('align-middle')}
+                  disabled={multiSelectedIds.size < 2}
+                  data-testid="stageplot-align-middle-button"
+                  className={alignActionClass}
+                  title="Line up on the same horizontal axis"
+                >
+                  Align Middle
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAlign('distribute-horizontal')}
+                  disabled={multiSelectedIds.size < 3}
+                  data-testid="stageplot-distribute-horizontal-button"
+                  className={alignActionClass}
+                  title="Space evenly left to right (3+ icons)"
+                >
+                  Distribute Horizontally
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAlign('distribute-vertical')}
+                  disabled={multiSelectedIds.size < 3}
+                  data-testid="stageplot-distribute-vertical-button"
+                  className={alignActionClass}
+                  title="Space evenly top to bottom (3+ icons)"
+                >
+                  Distribute Vertically
+                </button>
+                <div className="h-px bg-slate-100 my-1" />
+                <button
+                  type="button"
+                  onClick={() => handleAlign('center-on-stage')}
+                  data-testid="stageplot-center-on-stage-button"
+                  className={alignActionClass}
+                  title="Move the selection to the center of the stage"
+                >
+                  Center on Stage
+                </button>
+              </div>
+            </>
+          )}
+        </div>
         <div className="w-px h-6 bg-slate-200 mx-1" />
         <button
           type="button"
@@ -352,8 +447,8 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, p
             selectedStrokeId={selectedStrokeId}
             onSelectStroke={setSelectedStrokeId}
             stageRef={stageRef}
-            width={820}
-            height={580}
+            width={STAGE_WIDTH}
+            height={STAGE_HEIGHT}
             showGrid={false}
             iconRegistry={STAGE_PLOT_ICONS}
             elementNumbers={elementNumbers}
