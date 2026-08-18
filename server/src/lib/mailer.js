@@ -104,7 +104,7 @@ export function buildActionEmailHtml({ businessInfo, heading, bodyHtml, buttonTe
       attachments.push({
         filename: `logo.${ext}`,
         content: Buffer.from(base64Data, 'base64'),
-        content_id: 'business-logo',
+        inlineContentId: 'business-logo',
       });
       logoSrc = 'cid:business-logo';
     }
@@ -134,6 +134,24 @@ export function buildActionEmailHtml({ businessInfo, heading, bodyHtml, buttonTe
   const result = new String(htmlString);
   result.attachments = attachments;
   return result;
+}
+
+// Turns client-supplied { contentId, filename, base64 } entries (e.g. a
+// stage plot page thumbnail) into Resend inline attachments — the sending
+// route's HTML can then reference `cid:<contentId>` directly, same
+// inlineContentId mechanism buildActionEmailHtml uses for the business
+// logo above, just for images the client provides rather than one baked
+// into the template.
+export function buildInlineImageAttachments(inlineImages) {
+  if (!Array.isArray(inlineImages)) return [];
+  return inlineImages
+    .filter((img) => img?.base64 && img?.contentId)
+    .map((img) => ({
+      content: img.base64,
+      filename: img.filename || `${img.contentId}.png`,
+      contentType: img.contentType || 'image/png',
+      inlineContentId: img.contentId,
+    }));
 }
 
 // Throws if RESEND_API_KEY isn't configured — callers catch and respond 503,

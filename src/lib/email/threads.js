@@ -22,10 +22,10 @@ export async function markThreadRead(threadId) {
   return apiFetch(`/email/threads/${threadId}/read`, { method: 'PATCH' });
 }
 
-export async function sendThreadedEmail({ eventId, contractorId, contractorEmail, subject, body, templateId, fromName, documentIds, pdfAttachment }) {
+export async function sendThreadedEmail({ eventId, contractorId, contractorEmail, subject, body, templateId, fromName, documentIds, pdfAttachment, inlineImages }) {
   return apiFetch('/email/threads/send', {
     method: 'POST',
-    body: JSON.stringify({ eventId, contractorId, contractorEmail, subject, body, templateId, fromName, documentIds, pdfAttachment }),
+    body: JSON.stringify({ eventId, contractorId, contractorEmail, subject, body, templateId, fromName, documentIds, pdfAttachment, inlineImages }),
   });
 }
 

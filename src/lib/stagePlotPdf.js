@@ -11,9 +11,14 @@ function plainText(html) {
   return html ? html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : '';
 }
 
+const DEFAULT_INCLUDE = { pages: true, channels: true, backlineItems: true };
+
 // jsPDF pulls in html2canvas/DOMPurify (~450KB) even though we only use its
 // plain drawing API — lazy-load it so that weight isn't in the main bundle.
-async function buildStagePlotDoc({ eventId, eventName, stagePlot, businessInfo }) {
+// `include` lets a caller (the Stage Plot email composer) build a PDF with
+// only the sections a user checked off, rather than always everything —
+// defaults to the full document for the existing "Download PDF" button.
+async function buildStagePlotDoc({ eventId, eventName, stagePlot, businessInfo, include = DEFAULT_INCLUDE }) {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable'),
@@ -26,33 +31,36 @@ async function buildStagePlotDoc({ eventId, eventName, stagePlot, businessInfo }
   const tableStyle = getAutoTableStyle(layout, scale, accentRgb);
 
   const sortedPages = stagePlot.pages.slice().sort((a, b) => a.order - b.order);
+  let startedDoc = false;
 
-  let firstPage = true;
-  for (const page of sortedPages) {
-    if (!firstPage) doc.addPage();
-    firstPage = false;
+  if (include.pages) {
+    for (const page of sortedPages) {
+      if (startedDoc) doc.addPage();
+      startedDoc = true;
 
-    let y = 16;
-    y = await drawLetterhead(doc, { businessInfo, layout, scale, marginX, pageWidth, y, fallbackName: 'Stage Plot' });
-    y = drawHeaderRule(doc, { layout, accentRgb, marginX, pageWidth, y });
+      let y = 16;
+      y = await drawLetterhead(doc, { businessInfo, layout, scale, marginX, pageWidth, y, fallbackName: 'Stage Plot' });
+      y = drawHeaderRule(doc, { layout, accentRgb, marginX, pageWidth, y });
 
-    doc.setFontSize(13);
-    doc.setTextColor(30);
-    doc.text(`${eventName || 'Event'} — ${page.name}`, marginX, y);
-    y += 6;
+      doc.setFontSize(13);
+      doc.setTextColor(30);
+      doc.text(`${eventName || 'Event'} — ${page.name}`, marginX, y);
+      y += 6;
 
-    const thumbnail = page.hasThumbnail ? await fetchStagePlotPageThumbnail(eventId, page.id) : null;
-    if (thumbnail) {
-      await drawImageBlock(doc, { dataUrl: thumbnail, x: marginX, y, maxWidth: pageWidth - marginX * 2, maxHeight: pageHeight - y - 14 });
-    } else {
-      doc.setFontSize(10);
-      doc.setTextColor(140);
-      doc.text('(This page has not been saved yet.)', marginX, y + 10);
+      const thumbnail = page.hasThumbnail ? await fetchStagePlotPageThumbnail(eventId, page.id) : null;
+      if (thumbnail) {
+        await drawImageBlock(doc, { dataUrl: thumbnail, x: marginX, y, maxWidth: pageWidth - marginX * 2, maxHeight: pageHeight - y - 14 });
+      } else {
+        doc.setFontSize(10);
+        doc.setTextColor(140);
+        doc.text('(This page has not been saved yet.)', marginX, y + 10);
+      }
     }
   }
 
-  if (stagePlot.channels.length) {
-    doc.addPage();
+  if (include.channels && stagePlot.channels.length) {
+    if (startedDoc) doc.addPage();
+    startedDoc = true;
     let y = 16;
     y = await drawLetterhead(doc, { businessInfo, layout, scale, marginX, pageWidth, y, fallbackName: 'Stage Plot' });
     y = drawHeaderRule(doc, { layout, accentRgb, marginX, pageWidth, y });
@@ -74,8 +82,9 @@ async function buildStagePlotDoc({ eventId, eventName, stagePlot, businessInfo }
     });
   }
 
-  if (stagePlot.backlineItems?.length) {
-    doc.addPage();
+  if (include.backlineItems && stagePlot.backlineItems?.length) {
+    if (startedDoc) doc.addPage();
+    startedDoc = true;
     let y = 16;
     y = await drawLetterhead(doc, { businessInfo, layout, scale, marginX, pageWidth, y, fallbackName: 'Stage Plot' });
     y = drawHeaderRule(doc, { layout, accentRgb, marginX, pageWidth, y });
@@ -105,9 +114,10 @@ export async function generateStagePlotPdf({ eventId, eventName, stagePlot, busi
 
 // Returns the same PDF as a base64 string so it can be sent as an email
 // attachment without a round-trip through document storage — same shape as
-// generatePrepSheetPdfAttachment in prepSheetPdf.js.
-export async function generateStagePlotPdfAttachment({ eventId, eventName, stagePlot, businessInfo }) {
-  const { doc, filename } = await buildStagePlotDoc({ eventId, eventName, stagePlot, businessInfo });
+// generatePrepSheetPdfAttachment in prepSheetPdf.js. `include` is passed
+// straight through to buildStagePlotDoc (see its comment).
+export async function generateStagePlotPdfAttachment({ eventId, eventName, stagePlot, businessInfo, include }) {
+  const { doc, filename } = await buildStagePlotDoc({ eventId, eventName, stagePlot, businessInfo, include });
   const dataUri = doc.output('datauristring', filename);
   const base64 = dataUri.slice(dataUri.indexOf(',') + 1);
   return { filename, contentType: 'application/pdf', base64 };

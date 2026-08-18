@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
-import { resolveFromHeader, sendMail, buildActionEmailHtml } from '../lib/mailer.js';
+import { resolveFromHeader, sendMail, buildActionEmailHtml, buildInlineImageAttachments } from '../lib/mailer.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -25,18 +25,19 @@ router.post('/send', sendLimiter, asyncHandler(async (req, res) => {
   if (!effectivePermissions(req.membership).manageBookings) {
     return res.status(403).json({ error: 'Not authorized.' });
   }
-  const { to, subject, body, fromName, replyTo, pdfAttachment } = req.body || {};
+  const { to, subject, body, fromName, replyTo, pdfAttachment, inlineImages } = req.body || {};
   if (!to?.trim() || !subject?.trim() || !body?.trim()) {
     return res.status(400).json({ error: 'Recipient, subject, and body are required.' });
   }
 
   // Ad hoc attachment (e.g. a freshly generated proposal PDF) sent as base64
   // straight from the client — same shape as emailThreads.js's pdfAttachment.
-  const attachments = pdfAttachment?.base64 ? [{
+  let attachments = pdfAttachment?.base64 ? [{
     content: pdfAttachment.base64,
     filename: pdfAttachment.filename || 'attachment.pdf',
     contentType: pdfAttachment.contentType || 'application/pdf',
-  }] : undefined;
+  }] : [];
+  attachments = [...attachments, ...buildInlineImageAttachments(inlineImages)];
 
   let data, error;
   try {

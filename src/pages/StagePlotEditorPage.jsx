@@ -1,12 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { getOrCreateStagePlot, addStagePlotPage, deleteStagePlotPage, updateStagePlotChannel, addStagePlotChannel, deleteStagePlotChannel } from '../lib/stagePlots';
 import { generateStagePlotPdf } from '../lib/stagePlotPdf';
+import { getThreadSummaries } from '../lib/email/threads';
 import StagePlotPageEditor from '../components/StagePlotPageEditor';
 import StagePlotChannelList from '../components/StagePlotChannelList';
 import StagePlotBacklineList from '../components/StagePlotBacklineList';
+import StagePlotEmailModal from '../components/StagePlotEmailModal';
+import EmailThreadModal from '../components/EmailThreadModal';
+
+function formatTimeAgo(iso) {
+  if (!iso) return '';
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return `${days}d ago`;
+}
 
 // onClose is only passed when this is rendered inside EventFormPage's
 // "Stage Plot" popup (see EventFormPage.jsx) rather than at its own route —
@@ -16,14 +27,29 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   const { eventId } = useParams();
   const isModal = !!onClose;
   const { currentUser } = useAuth();
-  const { events } = useData();
+  const { events, contractors } = useData();
   const event = events.find((e) => e.id === eventId);
   const [plot, setPlot] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [activePageId, setActivePageId] = useState(null);
   const [exporting, setExporting] = useState(false);
   const [selectedElementId, setSelectedElementId] = useState(null);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [threadSummaries, setThreadSummaries] = useState({});
+  const [activeThreadContractorId, setActiveThreadContractorId] = useState(null);
   const pageEditorRef = useRef(null);
+
+  // Same "own by contractor, event-scoped" thread system used everywhere
+  // else contractor email lives (see EventFormPage.jsx) — a Stage Plot
+  // email and a prep-sheet email to the same contractor about the same
+  // event land in one shared conversation, not separate silos.
+  const refreshThreadSummaries = useCallback(async () => {
+    try {
+      setThreadSummaries(await getThreadSummaries(eventId));
+    } catch {
+      // best-effort — the ledger just shows nothing if this fails
+    }
+  }, [eventId]);
 
   useEffect(() => {
     getOrCreateStagePlot(eventId)
@@ -32,7 +58,8 @@ export default function StagePlotEditorPage({ onClose } = {}) {
         setActivePageId(p.pages[0]?.id || null);
       })
       .catch((err) => setLoadError(err.message));
-  }, [eventId]);
+    refreshThreadSummaries();
+  }, [eventId, refreshThreadSummaries]);
 
   // A selected icon only means something on the page it was selected on —
   // clear it whenever the active page changes instead of leaving a stale
@@ -136,6 +163,12 @@ export default function StagePlotEditorPage({ onClose } = {}) {
     plot.channels.filter((c) => c.elementId).map((c) => [c.elementId, { name: c.source, description: c.monitorNotes }])
   );
   const selectedElement = selectedElementId ? activePage?.scene?.elements?.find((e) => e.id === selectedElementId) : null;
+  const rosterContractors = (event?.contractorBookings || [])
+    .map((b) => contractors.find((c) => c.id === b.contractorId))
+    .filter((c) => c?.email);
+  const fromName = currentUser.businessInfo?.name || `${currentUser.firstName} ${currentUser.lastName}`;
+  const contractorsWithThreads = rosterContractors.filter((c) => threadSummaries[c.id]?.hasThread);
+  const activeThreadContractor = activeThreadContractorId ? contractors.find((c) => c.id === activeThreadContractorId) : null;
 
   return (
     <div className={isModal ? '' : 'p-6 max-w-[1500px] mx-auto'}>
@@ -149,6 +182,14 @@ export default function StagePlotEditorPage({ onClose } = {}) {
           </div>
         )}
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setEmailModalOpen(true)}
+            data-testid="stageplot-email-button"
+            className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold"
+          >
+            Email
+          </button>
           <button
             type="button"
             onClick={handleExportPdf}
@@ -231,8 +272,66 @@ export default function StagePlotEditorPage({ onClose } = {}) {
             items={plot.backlineItems}
             onItemsChange={(backlineItems) => setPlot((prev) => ({ ...prev, backlineItems }))}
           />
+
+          <div className="w-full max-w-[36rem] shrink-0 mt-4">
+            <div className="text-xs font-semibold text-slate-500 mb-2">Sent Emails</div>
+            {contractorsWithThreads.length === 0 ? (
+              <p className="text-sm text-slate-400">No emails sent from here yet.</p>
+            ) : (
+              <div className="border border-slate-200 rounded-lg divide-y divide-slate-100">
+                {contractorsWithThreads.map((c) => {
+                  const summary = threadSummaries[c.id];
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setActiveThreadContractorId(c.id)}
+                      data-testid="stageplot-email-ledger-row"
+                      className="w-full flex items-center justify-between gap-3 px-3 py-2 text-left hover:bg-slate-50"
+                    >
+                      <span className="text-sm font-medium text-slate-700">{c.firstName} {c.lastName}</span>
+                      <span className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs text-slate-400">{formatTimeAgo(summary.lastMessageAt)}</span>
+                        {summary.unreadCount > 0 && (
+                          <span
+                            data-testid="stageplot-email-ledger-unread-badge"
+                            className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold"
+                          >
+                            {summary.unreadCount}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      <StagePlotEmailModal
+        open={emailModalOpen}
+        onClose={() => setEmailModalOpen(false)}
+        eventId={eventId}
+        eventName={event?.name}
+        eventDate={event?.eventDate}
+        stagePlot={plot}
+        rosterContractors={rosterContractors}
+        businessInfo={currentUser?.businessInfo}
+        fromName={fromName}
+        onSent={refreshThreadSummaries}
+      />
+      <EmailThreadModal
+        open={!!activeThreadContractorId}
+        onClose={() => setActiveThreadContractorId(null)}
+        eventId={eventId}
+        contractorId={activeThreadContractorId}
+        contractorEmail={activeThreadContractor?.email}
+        contractorLabel={activeThreadContractor ? `${activeThreadContractor.firstName} ${activeThreadContractor.lastName}` : ''}
+        fromName={fromName}
+        onChanged={refreshThreadSummaries}
+      />
     </div>
   );
 }

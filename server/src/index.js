@@ -81,6 +81,17 @@ app.use(cors({
 app.use('/api/webhooks', express.raw({ type: '*/*' }), emailWebhooksRouter);
 app.use('/api/webhooks', express.raw({ type: '*/*' }), stripeWebhooksRouter);
 
+// Also mounted ahead of the global express.json() below, same reasoning —
+// once a body-parsing middleware has consumed the request and set req.body,
+// body-parser's json() no-ops rather than re-parsing, so the global 100kb
+// limit never applies to these two paths. Sending an email carries a full
+// PDF (and, since the Stage Plot composer, page thumbnail PNGs) as base64
+// in the JSON body — routinely well past 100kb — while every other route
+// keeps the smaller default, including accountData.js's own blob-size
+// warning, which deliberately assumes that limit for its own math.
+app.use('/api/email/threads', express.json({ limit: '20mb' }));
+app.use('/api/email', express.json({ limit: '20mb' }));
+
 app.use(express.json());
 
 // Deliberately a *separate* PrismaSessionStore instance per session()

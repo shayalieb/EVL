@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
-import { resolveFromHeader, resolveReplyDomain, sendMail, buildActionEmailHtml } from '../lib/mailer.js';
+import { resolveFromHeader, resolveReplyDomain, sendMail, buildActionEmailHtml, buildInlineImageAttachments } from '../lib/mailer.js';
 import { downloadFileBuffer } from '../lib/fileStorage.js';
 
 const router = Router();
@@ -26,7 +26,7 @@ function serializeMessage(m) {
 }
 
 router.post('/send', asyncHandler(async (req, res) => {
-  const { eventId, contractorId, contractorEmail, subject, body, templateId, fromName, documentIds, pdfAttachment } = req.body || {};
+  const { eventId, contractorId, contractorEmail, subject, body, templateId, fromName, documentIds, pdfAttachment, inlineImages } = req.body || {};
   if (!eventId?.trim() || !contractorId?.trim() || !contractorEmail?.trim() || !subject?.trim() || !body?.trim()) {
     return res.status(400).json({ error: 'eventId, contractorId, contractorEmail, subject, and body are required.' });
   }
@@ -51,6 +51,9 @@ router.post('/send', asyncHandler(async (req, res) => {
       contentType: pdfAttachment.contentType || 'application/pdf',
     }];
   }
+  // Inline images (e.g. a stage plot page thumbnail) the client's own HTML
+  // body already references via cid: — see buildInlineImageAttachments.
+  attachments = [...(attachments || []), ...buildInlineImageAttachments(inlineImages)];
   let thread = await prisma.emailThread.upsert({
     where: { accountId_eventId_contractorId: { accountId, eventId, contractorId } },
     update: { contractorEmail },
