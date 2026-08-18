@@ -251,6 +251,8 @@ const CanvasStage = forwardRef(function CanvasStage({
   const editTextareaRef = useRef(null);
   const nameInputRef = useRef(null);
   const descriptionEditRef = useRef(null);
+  const panRafRef = useRef(null);
+  const pendingStagePosRef = useRef(null);
   const [zoom, setZoom] = useState(1);
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
   const [drawingPoints, setDrawingPoints] = useState(null);
@@ -324,6 +326,42 @@ const CanvasStage = forwardRef(function CanvasStage({
       trRef.current.getLayer()?.batchDraw();
     }
   }, [selectedElementId, scene.elements, scene.layers]);
+
+  useEffect(() => () => { if (panRafRef.current) cancelAnimationFrame(panRafRef.current); }, []);
+
+  // Konva already drags the Stage itself smoothly on every native pointer
+  // event, entirely outside React — syncing that into stagePos state is
+  // only so the HTML overlays below (icon-notes popup, note textarea,
+  // calibration labels) that are computed FROM stagePos stay glued to the
+  // canvas while panning. Calling setStagePos straight from onDragMove
+  // re-renders this whole scene (every icon, connector, annotation) on
+  // every single pointermove — which can fire faster than the screen's own
+  // refresh rate — and was the "dragging the page becomes unstable"
+  // (janky/stuttering pan) bug reported against this. Coalescing to at
+  // most one state update per animation frame keeps the overlays synced
+  // just as smoothly while capping re-renders to what can actually get
+  // painted. Still updates continuously through the whole gesture (not
+  // just at dragend) — a controlled x/y that only committed at dragend
+  // previously fought Konva's own live position on an unrelated mid-drag
+  // re-render; this preserves that same continuous sync, just throttled.
+  function handleStageDragMove(e) {
+    pendingStagePosRef.current = { x: e.target.x(), y: e.target.y() };
+    if (panRafRef.current) return;
+    panRafRef.current = requestAnimationFrame(() => {
+      panRafRef.current = null;
+      if (pendingStagePosRef.current) setStagePos(pendingStagePosRef.current);
+    });
+  }
+
+  function handleStageDragEnd(e) {
+    if (panRafRef.current) {
+      cancelAnimationFrame(panRafRef.current);
+      panRafRef.current = null;
+    }
+    pendingStagePosRef.current = null;
+    setStagePos({ x: e.target.x(), y: e.target.y() });
+    setIsPanning(false);
+  }
 
   // Zooms toward a specific screen point (`anchor`, the canvas center) so
   // that point doesn't visually jump — used only by the toolbar zoom
@@ -642,14 +680,16 @@ const CanvasStage = forwardRef(function CanvasStage({
         // drag actually started on, so this only pans when the gesture
         // starts on empty canvas; starting on a placed icon still drags
         // that icon (its own Group is separately draggable). Synced back
-        // into stagePos on every move, not just at the end — a controlled
-        // x/y prop that only updates on dragend can otherwise get yanked
-        // back mid-drag by an unrelated re-render, fighting Konva's own
-        // internal position.
+        // into stagePos throughout the drag, not just at the end — a
+        // controlled x/y prop that only updates on dragend can otherwise
+        // get yanked back mid-drag by an unrelated re-render, fighting
+        // Konva's own internal position — but coalesced to one state
+        // update per animation frame (see handleStageDragMove above)
+        // rather than one per native pointermove event.
         draggable={mode === 'select'}
         onDragStart={() => setIsPanning(true)}
-        onDragMove={(e) => setStagePos({ x: e.target.x(), y: e.target.y() })}
-        onDragEnd={(e) => { setStagePos({ x: e.target.x(), y: e.target.y() }); setIsPanning(false); }}
+        onDragMove={handleStageDragMove}
+        onDragEnd={handleStageDragEnd}
         // No zoom logic here anymore (buttons only, per feedback that
         // scroll-to-zoom was hard to control) — but still swallowing the
         // event, not removing the handler outright. Without this, a wheel
