@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import RichTextToolbar from './ui/RichTextToolbar';
+import { useState } from 'react';
+import CanvasNotesPopover from './CanvasNotesPopover';
 import { addStagePlotBacklineItem, updateStagePlotBacklineItem, deleteStagePlotBacklineItem } from '../lib/stagePlots';
 
 const PROVIDED_BY_OPTIONS = ['', 'band', 'venue', 'rental'];
@@ -9,53 +9,6 @@ const cellInputClass = 'w-full px-1.5 py-1 rounded border border-transparent hov
 function plainTextPreview(html) {
   if (!html) return '';
   return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-// The rich-text popup itself — contentEditable isn't a controlled input, so
-// its content has to be set imperatively when it opens, same pattern as
-// CanvasStage.jsx's icon-notes popup and PrepEmailModal.jsx's body editor.
-// Only one of these is ever open at a time (the list tracks a single
-// openItemId), so there's no need for each row to carry its own editor ref.
-function BacklineNotesPopover({ initialHtml, onCommit, onClose }) {
-  const editorRef = useRef(null);
-
-  useEffect(() => {
-    if (editorRef.current) editorRef.current.innerHTML = initialHtml || '';
-    const raf = requestAnimationFrame(() => editorRef.current?.focus());
-    return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // RichTextToolbar requires onFormat but this popover has no live preview
-  // to refresh — commitAndClose reads editorRef directly when it matters.
-  function handleInput() {}
-
-  function commitAndClose() {
-    onCommit(editorRef.current?.innerHTML || '');
-    onClose();
-  }
-
-  return (
-    <div
-      className="absolute z-20 right-0 mt-1 bg-white rounded-lg border border-slate-300 shadow-lg p-3 w-72"
-      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) commitAndClose(); }}
-      onKeyDown={(e) => { if (e.key === 'Escape') commitAndClose(); }}
-    >
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-xs font-semibold text-slate-500">Notes</span>
-        <button type="button" onClick={commitAndClose} data-testid="backline-notes-popover-done-button" className="text-xs font-semibold text-indigo-600">Done</button>
-      </div>
-      <RichTextToolbar editorRef={editorRef} onFormat={handleInput} />
-      <div
-        ref={editorRef}
-        contentEditable
-        suppressContentEditableWarning
-        onInput={handleInput}
-        data-testid="backline-notes-popover-editor"
-        className="w-full min-h-[70px] max-h-40 overflow-y-auto px-2 py-1.5 rounded border border-slate-300 text-sm outline-none focus:border-indigo-400"
-      />
-    </div>
-  );
 }
 
 // Equipment the venue/production needs on hand (amps, drum kit, risers,
@@ -156,10 +109,11 @@ export default function StagePlotBacklineList({ eventId, items, onItemsChange })
                     {plainTextPreview(item.notesHtml) || 'Add notes…'}
                   </button>
                   {openItemId === item.id && (
-                    <BacklineNotesPopover
+                    <CanvasNotesPopover
                       initialHtml={item.notesHtml}
                       onCommit={(html) => handleFieldChange(item, { notesHtml: html })}
                       onClose={() => setOpenItemId(null)}
+                      testIdPrefix="backline-notes-popover"
                     />
                   )}
                 </td>

@@ -37,7 +37,7 @@ function rotateOffset(x, y, deg) {
 // labeled box for anything unregistered (e.g. the internal canvas-engine
 // demo page's placeholder icon set), so this component works whether or
 // not a real icon set is wired up.
-function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSelect, onEdit, onDragEnd, onDragMove, dragBoundFunc, shapeRef }) {
+function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSelect, onEdit, onDragStart, onDragEnd, dragBoundFunc, shapeRef }) {
   const image = useSvgImage(icon?.svg);
   // Icon, label, and number badge all live inside one draggable/transformable
   // Group instead of as separate top-level siblings — Konva moves/transforms
@@ -75,7 +75,7 @@ function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSe
       onTap={onSelect}
       onDblClick={onEdit}
       onDblTap={onEdit}
-      onDragMove={onDragMove}
+      onDragStart={onDragStart}
       onDragEnd={(e) => onDragEnd(element.id, { x: e.target.x(), y: e.target.y() })}
     >
       {isMultiSelected && (
@@ -258,13 +258,15 @@ const CanvasStage = forwardRef(function CanvasStage({
   const editTextareaRef = useRef(null);
   const nameInputRef = useRef(null);
   const descriptionEditRef = useRef(null);
-  const panRafRef = useRef(null);
-  const pendingStagePosRef = useRef(null);
-  const guideRafRef = useRef(null);
-  const pendingGuidesRef = useRef(null);
+  // Guide lines are plain Konva nodes updated imperatively (see
+  // makeElementDragBoundFunc below), never through React state — see that
+  // function's comment for why. lastGuidesRef carries the previous tick's
+  // snap result within one drag gesture, for computeDragSnap's hysteresis.
+  const verticalGuideRef = useRef(null);
+  const horizontalGuideRef = useRef(null);
+  const lastGuidesRef = useRef({ vertical: null, horizontal: null });
   const [zoom, setZoom] = useState(1);
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
-  const [activeGuides, setActiveGuides] = useState({ vertical: null, horizontal: null });
   const [drawingPoints, setDrawingPoints] = useState(null);
   const [editingAnnotationId, setEditingAnnotationId] = useState(null);
   const [draftText, setDraftText] = useState('');
@@ -337,41 +339,27 @@ const CanvasStage = forwardRef(function CanvasStage({
     }
   }, [selectedElementId, scene.elements, scene.layers]);
 
-  useEffect(() => () => {
-    if (panRafRef.current) cancelAnimationFrame(panRafRef.current);
-    if (guideRafRef.current) cancelAnimationFrame(guideRafRef.current);
-  }, []);
-
   // Konva already drags the Stage itself smoothly on every native pointer
-  // event, entirely outside React — syncing that into stagePos state is
-  // only so the HTML overlays below (icon-notes popup, note textarea,
-  // calibration labels) that are computed FROM stagePos stay glued to the
-  // canvas while panning. Calling setStagePos straight from onDragMove
-  // re-renders this whole scene (every icon, connector, annotation) on
-  // every single pointermove — which can fire faster than the screen's own
-  // refresh rate — and was the "dragging the page becomes unstable"
-  // (janky/stuttering pan) bug reported against this. Coalescing to at
-  // most one state update per animation frame keeps the overlays synced
-  // just as smoothly while capping re-renders to what can actually get
-  // painted. Still updates continuously through the whole gesture (not
-  // just at dragend) — a controlled x/y that only committed at dragend
-  // previously fought Konva's own live position on an unrelated mid-drag
-  // re-render; this preserves that same continuous sync, just throttled.
-  function handleStageDragMove(e) {
-    pendingStagePosRef.current = { x: e.target.x(), y: e.target.y() };
-    if (panRafRef.current) return;
-    panRafRef.current = requestAnimationFrame(() => {
-      panRafRef.current = null;
-      if (pendingStagePosRef.current) setStagePos(pendingStagePosRef.current);
-    });
-  }
-
+  // event, entirely outside React. There is deliberately NO onDragMove
+  // handler here syncing that into React state mid-drag — every HTML
+  // overlay that's computed FROM stagePos (icon-notes popup, note
+  // textarea, calibration labels) requires a different mode/selection that
+  // can only be entered by clicking on the canvas, which blurs/commits
+  // whatever overlay was open first; a plain background pan and a live
+  // overlay can never be on-screen at the same time. So nothing needs
+  // stagePos to be current *during* the gesture, only once it's over.
+  // Syncing on every pointermove (or even throttled to one state update
+  // per animation frame) forces React to re-render this whole scene —
+  // every icon, connector, annotation — while Konva is *also* moving the
+  // Stage on its own native loop; on the rare re-render that lands between
+  // two native drag ticks, React re-applies the (already slightly stale by
+  // then) x/y prop straight back onto the node, fighting Konva's own more
+  // current position for a frame. That's what was actually behind the
+  // "dragging the page is unstable/blinking" reports — not a missing
+  // throttle, but React touching drag-owned state at all while the drag is
+  // live. Committing only at dragend removes React from the hot path
+  // completely; Konva's own drag is untouched by anything React does.
   function handleStageDragEnd(e) {
-    if (panRafRef.current) {
-      cancelAnimationFrame(panRafRef.current);
-      panRafRef.current = null;
-    }
-    pendingStagePosRef.current = null;
     setStagePos({ x: e.target.x(), y: e.target.y() });
     setIsPanning(false);
   }
@@ -384,38 +372,55 @@ const CanvasStage = forwardRef(function CanvasStage({
   // position *during* its native drag (runs on Konva's smooth internal
   // loop, no React involved) — pos arrives in absolute/screen coordinates
   // (Konva's convention for this callback), so it's converted to scene
-  // units, snapped, and converted back. onDragMove below only drives the
-  // *visible* guide line, throttled to one state update per animation
-  // frame for the same reason the stage's own pan is (see
-  // handleStageDragMove above) — with many icons on a page, updating that
-  // on every native pointermove would reintroduce the exact re-render
-  // storm just fixed there.
+  // units, snapped, and converted back.
+  //
+  // The guide lines themselves are updated here too, imperatively via
+  // direct Konva node calls (verticalGuideRef/horizontalGuideRef) rather
+  // than through React state — same reasoning as dropping the pan's
+  // onDragMove sync above: touching React state on every native drag tick
+  // re-renders the whole scene while Konva is independently moving this
+  // same node, and a re-render landing mid-gesture re-applies this
+  // element's (unchanged-until-dragend) x/y prop over whatever Konva's own
+  // loop had already moved it to, producing a visible stutter/flicker.
+  // Driving the guide lines straight through Konva's own API keeps this
+  // entire interaction on Konva's side, untouched by React until dragend.
   function makeElementDragBoundFunc(elementId) {
     return (absPos) => {
       const scenePos = { x: (absPos.x - stagePos.x) / zoom, y: (absPos.y - stagePos.y) / zoom };
-      const others = scene.elements.filter((e) => e.id !== elementId);
+      // Layer-visibility-filtered, not the raw scene list — an icon on a
+      // hidden layer isn't drawn anywhere, so it shouldn't be a snap target
+      // either; snapping to something invisible with no guide explaining
+      // why is just confusing.
+      const others = scene.elements.filter((e) => e.id !== elementId && visibleLayerIds.has(e.layerId));
       const stageCenter = { x: width / 2, y: height / 2 };
-      const { pos, guides } = computeDragSnap(scenePos, others, stageCenter, SNAP_THRESHOLD_PX / zoom);
-      pendingGuidesRef.current = guides;
+      const { pos, guides } = computeDragSnap(scenePos, others, stageCenter, SNAP_THRESHOLD_PX / zoom, lastGuidesRef.current);
+      lastGuidesRef.current = guides;
+
+      if (verticalGuideRef.current) {
+        verticalGuideRef.current.visible(guides.vertical != null);
+        if (guides.vertical != null) verticalGuideRef.current.points([guides.vertical, -GUIDE_LINE_EXTENT, guides.vertical, GUIDE_LINE_EXTENT]);
+      }
+      if (horizontalGuideRef.current) {
+        horizontalGuideRef.current.visible(guides.horizontal != null);
+        if (guides.horizontal != null) horizontalGuideRef.current.points([-GUIDE_LINE_EXTENT, guides.horizontal, GUIDE_LINE_EXTENT, guides.horizontal]);
+      }
+      verticalGuideRef.current?.getLayer()?.batchDraw();
+
       return { x: pos.x * zoom + stagePos.x, y: pos.y * zoom + stagePos.y };
     };
   }
 
-  function handleElementDragMove() {
-    if (guideRafRef.current) return;
-    guideRafRef.current = requestAnimationFrame(() => {
-      guideRafRef.current = null;
-      setActiveGuides(pendingGuidesRef.current || { vertical: null, horizontal: null });
-    });
+  // Hysteresis (see alignment.js) only makes sense within one continuous
+  // drag — reset it at the start of each one so a guide engaged near the
+  // end of the *last* drag doesn't make this one artificially sticky.
+  function handleElementDragStart() {
+    lastGuidesRef.current = { vertical: null, horizontal: null };
   }
 
-  function clearGuides() {
-    if (guideRafRef.current) {
-      cancelAnimationFrame(guideRafRef.current);
-      guideRafRef.current = null;
-    }
-    pendingGuidesRef.current = null;
-    setActiveGuides({ vertical: null, horizontal: null });
+  function hideGuides() {
+    verticalGuideRef.current?.visible(false);
+    horizontalGuideRef.current?.visible(false);
+    verticalGuideRef.current?.getLayer()?.batchDraw();
   }
 
   // Zooms toward a specific screen point (`anchor`, the canvas center) so
@@ -734,16 +739,11 @@ const CanvasStage = forwardRef(function CanvasStage({
         // Only draggable in select mode — Konva targets whatever node the
         // drag actually started on, so this only pans when the gesture
         // starts on empty canvas; starting on a placed icon still drags
-        // that icon (its own Group is separately draggable). Synced back
-        // into stagePos throughout the drag, not just at the end — a
-        // controlled x/y prop that only updates on dragend can otherwise
-        // get yanked back mid-drag by an unrelated re-render, fighting
-        // Konva's own internal position — but coalesced to one state
-        // update per animation frame (see handleStageDragMove above)
-        // rather than one per native pointermove event.
+        // that icon (its own Group is separately draggable). No onDragMove
+        // here — see handleStageDragEnd's comment for why stagePos only
+        // needs to sync once, at the end.
         draggable={mode === 'select'}
         onDragStart={() => setIsPanning(true)}
-        onDragMove={handleStageDragMove}
         onDragEnd={handleStageDragEnd}
         // No zoom logic here anymore (buttons only, per feedback that
         // scroll-to-zoom was hard to control) — but still swallowing the
@@ -823,14 +823,15 @@ const CanvasStage = forwardRef(function CanvasStage({
               }}
               onEdit={() => startEditingElement(el.id)}
               dragBoundFunc={makeElementDragBoundFunc(el.id)}
-              onDragMove={handleElementDragMove}
+              onDragStart={handleElementDragStart}
               onDragEnd={(id, pos) => {
                 // A smart-guide snap already placed this exactly where it
                 // belongs (see makeElementDragBoundFunc above) — the grid
                 // snap below is only the fallback for a drop that didn't
                 // land on a guide, same as it's always been.
-                const guidedSnap = !!(pendingGuidesRef.current?.vertical != null || pendingGuidesRef.current?.horizontal != null);
-                clearGuides();
+                const guidedSnap = !!(lastGuidesRef.current.vertical != null || lastGuidesRef.current.horizontal != null);
+                hideGuides();
+                lastGuidesRef.current = { vertical: null, horizontal: null };
                 onMutate((s) => ({
                   ...s,
                   elements: s.elements.map((e) => (e.id === id ? { ...e, ...(snapEnabled && !guidedSnap ? snapPointToGrid(pos, s.scalePxPerUnit, s.gridSpacing) : pos) } : e)),
@@ -872,25 +873,16 @@ const CanvasStage = forwardRef(function CanvasStage({
             </Group>
           )}
 
-          {/* Live smart-guide lines — see makeElementDragBoundFunc/handleElementDragMove above. Stroke width and dash scaled by 1/zoom so they read as a constant on-screen thickness regardless of zoom level. */}
-          {activeGuides.vertical != null && (
-            <Line
-              points={[activeGuides.vertical, -GUIDE_LINE_EXTENT, activeGuides.vertical, GUIDE_LINE_EXTENT]}
-              stroke="#ec4899"
-              strokeWidth={1 / zoom}
-              dash={[4 / zoom, 4 / zoom]}
-              listening={false}
-            />
-          )}
-          {activeGuides.horizontal != null && (
-            <Line
-              points={[-GUIDE_LINE_EXTENT, activeGuides.horizontal, GUIDE_LINE_EXTENT, activeGuides.horizontal]}
-              stroke="#ec4899"
-              strokeWidth={1 / zoom}
-              dash={[4 / zoom, 4 / zoom]}
-              listening={false}
-            />
-          )}
+          {/* Live smart-guide lines — always present, hidden until a drag's
+              dragBoundFunc (makeElementDragBoundFunc above) shows/positions
+              them directly through these refs. Never driven by React state:
+              see that function's comment for why a re-render mid-drag is
+              exactly what causes visible stutter/flicker. Stroke width and
+              dash scaled by 1/zoom so they read as a constant on-screen
+              thickness regardless of zoom level (kept in sync on ordinary
+              re-renders, which is all this needs — zoom can't change mid-drag). */}
+          <Line ref={verticalGuideRef} visible={false} points={[0, -GUIDE_LINE_EXTENT, 0, GUIDE_LINE_EXTENT]} stroke="#ec4899" strokeWidth={1 / zoom} dash={[4 / zoom, 4 / zoom]} listening={false} />
+          <Line ref={horizontalGuideRef} visible={false} points={[-GUIDE_LINE_EXTENT, 0, GUIDE_LINE_EXTENT, 0]} stroke="#ec4899" strokeWidth={1 / zoom} dash={[4 / zoom, 4 / zoom]} listening={false} />
 
           <Transformer
             ref={trRef}

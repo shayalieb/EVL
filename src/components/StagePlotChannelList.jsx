@@ -1,8 +1,14 @@
 import { useState } from 'react';
+import CanvasNotesPopover from './CanvasNotesPopover';
 import { addStagePlotChannel, updateStagePlotChannel, deleteStagePlotChannel } from '../lib/stagePlots';
 
 const STAND_TYPES = ['', 'tall boom', 'short boom', 'straight', 'none'];
 const cellInputClass = 'w-full px-1.5 py-1 rounded border border-transparent hover:border-slate-200 focus:border-indigo-400 text-xs bg-transparent';
+
+function plainTextPreview(html) {
+  if (!html) return '';
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
 
 // The standard live-sound input list — kept as its own panel next to the
 // canvas (not drawn on it) since it's tabular data a business edits/sorts
@@ -10,6 +16,7 @@ const cellInputClass = 'w-full px-1.5 py-1 rounded border border-transparent hov
 // StagePlotChannel model.
 export default function StagePlotChannelList({ eventId, channels, onChannelsChange, selectedElementId, selectedElement, onSelectElement }) {
   const [busyId, setBusyId] = useState(null);
+  const [openChannelId, setOpenChannelId] = useState(null);
   const isLinked = (elementId) => channels.some((c) => c.elementId === elementId);
 
   async function handleAdd() {
@@ -120,21 +127,30 @@ export default function StagePlotChannelList({ eventId, channels, onChannelsChan
                     onChange={(e) => handleFieldChange(channel, { phantomPower: e.target.checked })}
                   />
                 </td>
-                <td className="px-1 py-1">
-                  {/* Optional per-line details — plain text, editable
-                      directly here for every row (not just icons linked on
-                      canvas). A linked icon's notes can also be opened via
-                      its double-click popup on the canvas (CanvasStage.jsx,
-                      which supports rich text); both write the same
-                      monitorNotes field, so either place works. */}
-                  <textarea
-                    value={channel.monitorNotes ? channel.monitorNotes.replace(/<[^>]*>/g, '') : ''}
-                    onChange={(e) => handleFieldChange(channel, { monitorNotes: e.target.value })}
-                    placeholder="Monitor mix, cues…"
-                    rows={1}
-                    data-testid="stageplot-channel-notes-input"
-                    className={`${cellInputClass} resize-y min-h-[1.5rem]`}
-                  />
+                <td className="px-1 py-1 relative">
+                  {/* Rich text — a linked icon's notes can also be opened via
+                      its double-click popup on the canvas (CanvasStage.jsx);
+                      both write the same monitorNotes field, so either place
+                      works. Uses the same safe popover as the Backline
+                      List's Notes column so formatting round-trips intact
+                      instead of being stripped on every edit. */}
+                  <button
+                    type="button"
+                    onClick={() => setOpenChannelId(channel.id)}
+                    data-testid="stageplot-channel-notes-button"
+                    className={`block w-full text-left truncate px-1.5 py-1 rounded hover:bg-slate-50 ${channel.monitorNotes ? 'text-slate-600' : 'text-slate-300'}`}
+                    title={plainTextPreview(channel.monitorNotes) || 'Add notes'}
+                  >
+                    {plainTextPreview(channel.monitorNotes) || 'Monitor mix, cues…'}
+                  </button>
+                  {openChannelId === channel.id && (
+                    <CanvasNotesPopover
+                      initialHtml={channel.monitorNotes}
+                      onCommit={(html) => handleFieldChange(channel, { monitorNotes: html })}
+                      onClose={() => setOpenChannelId(null)}
+                      testIdPrefix="stageplot-channel-notes-popover"
+                    />
+                  )}
                 </td>
                 <td className="px-1 py-1">
                   <div className="flex items-center justify-end gap-1.5">

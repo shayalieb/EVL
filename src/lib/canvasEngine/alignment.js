@@ -3,14 +3,25 @@
 // currently is.
 export const SNAP_THRESHOLD_PX = 8;
 
-function nearestWithin(value, candidates, threshold) {
+// Once engaged, a guide needs roughly twice the normal distance to let go —
+// without this, a raw mouse position that happens to hover exactly on a
+// threshold boundary (completely normal given real pointer input is never
+// perfectly still) flips the snap on and off every other frame, which reads
+// as the guide line (and the icon snapped to it) visibly flickering.
+// Engaging a *different* candidate than the one already active still uses
+// the normal threshold, so hysteresis only makes leaving harder, never
+// makes grabbing a new guide easier.
+const RELEASE_MULTIPLIER = 2;
+
+function nearestWithin(value, candidates, threshold, stickyCandidate) {
   let best = null;
   let bestDist = Infinity;
   for (const c of candidates) {
     const dist = Math.abs(value - c);
-    if (dist < bestDist) { bestDist = dist; best = c; }
+    const effectiveThreshold = stickyCandidate != null && c === stickyCandidate ? threshold * RELEASE_MULTIPLIER : threshold;
+    if (dist <= effectiveThreshold && dist < bestDist) { bestDist = dist; best = c; }
   }
-  return best !== null && bestDist <= threshold ? best : null;
+  return best;
 }
 
 // Where a dragged icon's center (already in scene units) should actually
@@ -18,12 +29,15 @@ function nearestWithin(value, candidates, threshold) {
 // per axis against the stage's own center and every other icon's center,
 // whichever candidate is nearest and within the threshold. An icon dropped
 // right next to center lands exactly on it; dropped further away, nothing
-// snaps and it stays wherever it was actually placed.
-export function computeDragSnap({ x, y }, otherElements, stageCenter, thresholdScene) {
+// snaps and it stays wherever it was actually placed. `previousGuides` (the
+// same shape this function returns, from the prior call in the same drag
+// gesture) is what the hysteresis above keys off of — pass
+// `{ vertical: null, horizontal: null }` for a fresh drag.
+export function computeDragSnap({ x, y }, otherElements, stageCenter, thresholdScene, previousGuides = { vertical: null, horizontal: null }) {
   const xCandidates = [stageCenter.x, ...otherElements.map((e) => e.x)];
   const yCandidates = [stageCenter.y, ...otherElements.map((e) => e.y)];
-  const snappedX = nearestWithin(x, xCandidates, thresholdScene);
-  const snappedY = nearestWithin(y, yCandidates, thresholdScene);
+  const snappedX = nearestWithin(x, xCandidates, thresholdScene, previousGuides.vertical);
+  const snappedY = nearestWithin(y, yCandidates, thresholdScene, previousGuides.horizontal);
   return {
     pos: { x: snappedX ?? x, y: snappedY ?? y },
     guides: { vertical: snappedX, horizontal: snappedY },

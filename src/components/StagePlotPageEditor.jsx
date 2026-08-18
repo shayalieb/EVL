@@ -108,6 +108,31 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, p
   // not on every persist() identity change (see persistRef comment above).
   useEffect(() => () => { clearTimeout(saveTimer.current); persistRef.current(); }, []);
 
+  // Undo/redo (history.js) only reverts the scene snapshot — it never
+  // touches selection state, which lives here in the parent. Without this,
+  // undoing past a delete (or redoing one) leaves a selection pointing at an
+  // element/annotation/stroke that no longer exists in the scene: "+ Add
+  // Channel for Selected Icon" stays enabled and would link a channel to a
+  // nonexistent elementId, and the toolbar's rotate/duplicate/delete buttons
+  // stay enabled against nothing.
+  useEffect(() => {
+    if (selectedElementId && !scene.elements.some((e) => e.id === selectedElementId)) {
+      onSelectElement(null);
+    }
+    setMultiSelectedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Set([...prev].filter((id) => scene.elements.some((e) => e.id === id)));
+      return next.size === prev.size ? prev : next;
+    });
+    if (selectedAnnotationId && !scene.annotations.some((a) => a.id === selectedAnnotationId)) {
+      setSelectedAnnotationId(null);
+    }
+    if (selectedStrokeId && !scene.strokes.some((s) => s.id === selectedStrokeId)) {
+      setSelectedStrokeId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scene]);
+
   // Wraps the raw onSelectElement prop with shift-click multi-select:
   // shift+click toggles an icon in/out of multiSelectedIds (also making it
   // the "primary" selection, so the single-node Transformer and the ⟲/⟳

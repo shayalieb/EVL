@@ -124,8 +124,16 @@ export default function StagePlotEmailModal({ open, onClose, eventId, eventName,
     }
   }
 
+  // Guards every way this modal can close (backdrop click, the X button,
+  // and Cancel below) — not just Cancel — since sends already dispatched
+  // keep running in the background regardless of whether the modal is still
+  // open, but closing mid-send makes it look like they were aborted.
+  function handleClose() {
+    if (!sending) onClose();
+  }
+
   return (
-    <Modal open={open} onClose={onClose} title="Email Stage Plot" widthClass="max-w-2xl">
+    <Modal open={open} onClose={handleClose} title="Email Stage Plot" widthClass="max-w-2xl">
       <div className="space-y-4">
         <div>
           <label className={labelClass}>Recipients</label>
@@ -227,7 +235,7 @@ export default function StagePlotEmailModal({ open, onClose, eventId, eventName,
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} data-testid="stageplot-email-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">
+          <button type="button" onClick={handleClose} disabled={sending} data-testid="stageplot-email-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-40">
             Cancel
           </button>
           <button

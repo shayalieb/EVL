@@ -167,7 +167,14 @@ export default function StagePlotEditorPage({ onClose } = {}) {
     .map((b) => contractors.find((c) => c.id === b.contractorId))
     .filter((c) => c?.email);
   const fromName = currentUser.businessInfo?.name || `${currentUser.firstName} ${currentUser.lastName}`;
-  const contractorsWithThreads = rosterContractors.filter((c) => threadSummaries[c.id]?.hasThread);
+  // Every thread for this event, not just current roster members — removing
+  // someone from the roster shouldn't erase their email history here, since
+  // getThreadSummaries (server/src/routes/stagePlots.js) already returns
+  // threads keyed by contractorId regardless of roster status.
+  const contractorsWithThreads = Object.keys(threadSummaries)
+    .filter((id) => threadSummaries[id]?.hasThread)
+    .map((id) => contractors.find((c) => c.id === id))
+    .filter(Boolean);
   const activeThreadContractor = activeThreadContractorId ? contractors.find((c) => c.id === activeThreadContractorId) : null;
 
   return (
