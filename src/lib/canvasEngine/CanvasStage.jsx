@@ -359,7 +359,18 @@ const CanvasStage = forwardRef(function CanvasStage({
   // throttle, but React touching drag-owned state at all while the drag is
   // live. Committing only at dragend removes React from the hot path
   // completely; Konva's own drag is untouched by anything React does.
+  // Konva's dragstart/dragend bubble by default (Node.startDrag's
+  // bubbleEvent defaults to true, and DragAndDrop._endDragAfter fires
+  // dragend with bubble=true too) — dragging a placed icon or annotation
+  // bubbles its own dragend up through the Layer to this Stage, still
+  // carrying the ORIGINAL node as e.target, not the Stage. Without this
+  // guard, that bubbled event's e.target.x()/y() (the icon's small
+  // scene-unit position) got written straight into stagePos — the camera's
+  // pixel offset — yanking the whole canvas so every icon appeared to jump
+  // whenever just one was dragged. Only an event that's actually the
+  // Stage's own drag (started on empty canvas) should move the camera.
   function handleStageDragEnd(e) {
+    if (e.target !== e.target.getStage()) return;
     setStagePos({ x: e.target.x(), y: e.target.y() });
     setIsPanning(false);
   }
@@ -743,7 +754,7 @@ const CanvasStage = forwardRef(function CanvasStage({
         // here — see handleStageDragEnd's comment for why stagePos only
         // needs to sync once, at the end.
         draggable={mode === 'select'}
-        onDragStart={() => setIsPanning(true)}
+        onDragStart={(e) => { if (e.target === e.target.getStage()) setIsPanning(true); }}
         onDragEnd={handleStageDragEnd}
         // No zoom logic here anymore (buttons only, per feedback that
         // scroll-to-zoom was hard to control) — but still swallowing the
