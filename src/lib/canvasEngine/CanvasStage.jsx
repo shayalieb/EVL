@@ -6,6 +6,17 @@ import { useSvgImage, preloadIconRegistry } from './useSvgImage';
 import RichTextToolbar from '../../components/ui/RichTextToolbar';
 
 const ICON_SIZE = 56;
+// Cable ramp / drape / truss runs are commonly 20-50+ ft on a real stage
+// plot — nothing like this engine's other icons, which are always drawn at
+// one fixed size. Stretching a *raster* icon that long would smear its
+// linework instead of just getting longer, so these three ("linearKind" in
+// stagePlotIcons.js) are drawn procedurally from the element's own `width`
+// instead — see LinearIconGraphic below.
+const LINEAR_HEIGHT = 18;
+const LINEAR_DEFAULT_WIDTH = 160;
+const LINEAR_MIN_WIDTH = 40;
+const LINEAR_STROKE = '#475569'; // matches CATEGORY_COLORS' neutral Staging/Utility slate
+const LINEAR_FILL = '#cbd5e1';
 const NOTE_WIDTH = 140;
 const NOTE_HEIGHT = 60;
 const TEXT_LABEL_WIDTH = 160;
@@ -31,6 +42,78 @@ function rotateOffset(x, y, deg) {
   return { x: x * cos - y * sin, y: x * sin + y * cos };
 }
 
+// Draws a cable ramp / drape / truss run at whatever length it's currently
+// stretched to, regenerating the repeating tick/fold/cross-brace pattern to
+// fit rather than scaling a fixed drawing — so a 6ft run and a 40ft run both
+// look like correctly-proportioned real objects instead of one being a
+// stretched-thin or squashed-fat version of the other. Drawn centered on
+// the parent Group's own origin (matching ElementShape's icon convention)
+// so rotation and the label/number anchors need no special-casing for it.
+function LinearIconGraphic({ linearKind, width, isSelected }) {
+  const w = Math.max(LINEAR_MIN_WIDTH, width);
+  const h = LINEAR_HEIGHT;
+  const strokeProps = { stroke: LINEAR_STROKE, strokeWidth: 2.5 };
+  const shadowProps = isSelected ? { shadowColor: '#4f46e5', shadowBlur: 8, shadowOpacity: 0.6 } : {};
+
+  if (linearKind === 'cable-ramp') {
+    const spacing = 14;
+    const inset = 8;
+    const tickCount = Math.max(2, Math.floor((w - inset * 2) / spacing));
+    const ticks = [];
+    for (let i = 0; i <= tickCount; i++) {
+      const tx = -w / 2 + inset + i * spacing;
+      ticks.push(<Line key={i} points={[tx, -h / 2, tx + 6, h / 2]} {...strokeProps} />);
+    }
+    return (
+      <>
+        <Rect x={-w / 2} y={-h / 2} width={w} height={h} cornerRadius={3} fill={LINEAR_FILL} {...strokeProps} {...shadowProps} />
+        {ticks}
+      </>
+    );
+  }
+
+  if (linearKind === 'truss') {
+    const segment = 16;
+    const segments = Math.max(2, Math.round(w / segment));
+    const zigzag = [];
+    for (let i = 0; i <= segments; i++) {
+      const x = -w / 2 + i * (w / segments);
+      zigzag.push(x, i % 2 === 0 ? -h / 2 : h / 2);
+    }
+    return (
+      <>
+        <Rect x={-w / 2} y={-h / 2} width={w} height={h} cornerRadius={1} fill={LINEAR_FILL} {...strokeProps} {...shadowProps} />
+        <Line points={zigzag} stroke={LINEAR_STROKE} strokeWidth={1.5} />
+      </>
+    );
+  }
+
+  // drape
+  const spacing = 12;
+  const inset = 10;
+  const foldCount = Math.max(1, Math.floor((w - inset * 2) / spacing));
+  const folds = [];
+  for (let i = 0; i <= foldCount; i++) {
+    const fx = -w / 2 + inset + i * spacing;
+    folds.push(
+      <Line
+        key={i}
+        points={[fx, -h / 2, fx + 2, -h / 6, fx - 2, h / 6, fx, h / 2]}
+        stroke={LINEAR_STROKE}
+        strokeWidth={1.2}
+        tension={0.5}
+        lineCap="round"
+      />
+    );
+  }
+  return (
+    <>
+      <Rect x={-w / 2} y={-h / 2} width={w} height={h} cornerRadius={1} fill={LINEAR_FILL} dash={[3, 3]} {...strokeProps} {...shadowProps} />
+      {folds}
+    </>
+  );
+}
+
 // Renders a placed element as its real hand-authored icon (see
 // iconRegistry.js/stagePlotIcons.js/floorPlanIcons.js) when the scene's
 // `iconRegistry` prop has an entry for it — falling back to a plain
@@ -49,7 +132,8 @@ function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSe
   // it). Children are positioned relative to the Group's own (0,0) origin.
   const baseLabel = element.label || icon?.label || element.iconId || '';
   const labelText = element.seats ? `${baseLabel} (${element.seats})` : baseLabel;
-  const labelY = icon ? ICON_SIZE / 2 + 12 : 24;
+  const linearWidth = icon?.linearKind ? Math.max(LINEAR_MIN_WIDTH, element.width || LINEAR_DEFAULT_WIDTH) : null;
+  const labelY = linearWidth != null ? LINEAR_HEIGHT / 2 + 10 : icon ? ICON_SIZE / 2 + 12 : 24;
   // The label and number badge live inside the same rotatable Group as the
   // icon (see the file-level comment below) so they track drags correctly,
   // but readers shouldn't have to tilt their head to read a rotated icon's
@@ -80,10 +164,10 @@ function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSe
     >
       {isMultiSelected && (
         <Rect
-          width={ICON_SIZE + 10}
-          height={ICON_SIZE + 10}
-          offsetX={(ICON_SIZE + 10) / 2}
-          offsetY={(ICON_SIZE + 10) / 2}
+          width={(linearWidth ?? ICON_SIZE) + 10}
+          height={(linearWidth != null ? LINEAR_HEIGHT : ICON_SIZE) + 10}
+          offsetX={((linearWidth ?? ICON_SIZE) + 10) / 2}
+          offsetY={((linearWidth != null ? LINEAR_HEIGHT : ICON_SIZE) + 10) / 2}
           stroke="#4f46e5"
           strokeWidth={1.5}
           dash={[4, 3]}
@@ -91,7 +175,9 @@ function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSe
           listening={false}
         />
       )}
-      {icon && image ? (
+      {linearWidth != null ? (
+        <LinearIconGraphic linearKind={icon.linearKind} width={linearWidth} isSelected={isSelected} />
+      ) : icon && image ? (
         <KonvaImage
           image={image}
           width={ICON_SIZE}
@@ -462,7 +548,8 @@ const CanvasStage = forwardRef(function CanvasStage({
   function handleFitToContent() {
     const points = [];
     for (const el of scene.elements) {
-      points.push({ x: el.x - ICON_SIZE, y: el.y - ICON_SIZE }, { x: el.x + ICON_SIZE, y: el.y + ICON_SIZE });
+      const half = iconRegistry?.[el.iconId]?.linearKind ? Math.max(LINEAR_MIN_WIDTH, el.width || LINEAR_DEFAULT_WIDTH) / 2 : ICON_SIZE;
+      points.push({ x: el.x - half, y: el.y - half }, { x: el.x + half, y: el.y + half });
     }
     for (const a of scene.annotations) {
       const w = a.style === 'text' ? TEXT_LABEL_WIDTH : NOTE_WIDTH;
@@ -528,6 +615,7 @@ const CanvasStage = forwardRef(function CanvasStage({
       id: `el_${Date.now().toString(36)}_${Math.round(Math.random() * 1e6)}`,
       layerId: scene.layers.find((l) => !l.locked)?.id || scene.layers[0]?.id,
       iconId, x, y, rotation: 0, scaleX: 1, scaleY: 1, label,
+      ...(iconRegistry?.[iconId]?.linearKind ? { width: LINEAR_DEFAULT_WIDTH } : {}),
     };
     onMutate((s) => ({ ...s, elements: [...s.elements, element] }));
     onElementAdded?.(element);
@@ -617,6 +705,7 @@ const CanvasStage = forwardRef(function CanvasStage({
         id: `el_${Date.now().toString(36)}_${Math.round(Math.random() * 1e6)}`,
         layerId: scene.layers.find((l) => !l.locked)?.id || scene.layers[0]?.id,
         iconId: pendingIconId, x, y, rotation: 0, scaleX: 1, scaleY: 1, label,
+        ...(iconRegistry?.[pendingIconId]?.linearKind ? { width: LINEAR_DEFAULT_WIDTH } : {}),
       };
       onMutate((s) => ({ ...s, elements: [...s.elements, element] }));
       onElementAdded?.(element);
@@ -724,6 +813,11 @@ const CanvasStage = forwardRef(function CanvasStage({
   const visibleLayerIds = new Set(scene.layers.filter((l) => l.visible).map((l) => l.id));
   const editingAnnotation = editingAnnotationId ? scene.annotations.find((a) => a.id === editingAnnotationId) : null;
   const selectedElement = selectedElementId ? scene.elements.find((e) => e.id === selectedElementId) : null;
+  // A linear icon (cable ramp/drape/truss) only ever gets longer or
+  // shorter along its own local x-axis — corner/top/bottom handles would
+  // just squash or fatten it out of proportion, so only the two
+  // length-changing handles are offered for one of these.
+  const selectedIsLinear = !!iconRegistry?.[selectedElement?.iconId]?.linearKind;
 
   return (
     <div
@@ -868,7 +962,7 @@ const CanvasStage = forwardRef(function CanvasStage({
           ))}
 
           {liveRotation != null && selectedElement && (
-            <Group x={selectedElement.x} y={selectedElement.y - ICON_SIZE / 2 - 26} listening={false}>
+            <Group x={selectedElement.x} y={selectedElement.y - (selectedIsLinear ? LINEAR_HEIGHT : ICON_SIZE) / 2 - 26} listening={false}>
               <Rect width={44} height={20} offsetX={22} offsetY={10} fill="#1e293b" cornerRadius={4} />
               <Text
                 text={`${liveRotation}°`}
@@ -899,6 +993,8 @@ const CanvasStage = forwardRef(function CanvasStage({
             ref={trRef}
             rotateEnabled
             rotationSnaps={ROTATION_SNAPS}
+            enabledAnchors={selectedIsLinear ? ['middle-left', 'middle-right'] : undefined}
+            boundBoxFunc={(oldBox, newBox) => (newBox.width < 20 || newBox.height < 10 ? oldBox : newBox)}
             onTransform={() => {
               // Only the rotate handle gets a live readout — resize-handle
               // drags fire onTransform too, and would otherwise flash a
@@ -911,6 +1007,25 @@ const CanvasStage = forwardRef(function CanvasStage({
               const node = selectedElementId ? shapeRefs.current[selectedElementId] : null;
               setLiveRotation(null);
               if (!node) return;
+              // A linear icon's length lives in its own `width` field, not
+              // Konva's scaleX — bake the gesture's scale into a new width
+              // and reset the node's scale to 1 so LinearIconGraphic
+              // redraws a crisp, correctly-proportioned pattern at the new
+              // length instead of a stretched one (see that component's
+              // comment for why raster-style scaling doesn't work here).
+              if (selectedIsLinear) {
+                const baseWidth = Math.max(LINEAR_MIN_WIDTH, selectedElement?.width || LINEAR_DEFAULT_WIDTH);
+                const newWidth = Math.max(LINEAR_MIN_WIDTH, baseWidth * node.scaleX());
+                node.scaleX(1);
+                node.scaleY(1);
+                onMutate((s) => ({
+                  ...s,
+                  elements: s.elements.map((e) => (e.id === selectedElementId
+                    ? { ...e, x: node.x(), y: node.y(), rotation: node.rotation(), scaleX: 1, scaleY: 1, width: newWidth }
+                    : e)),
+                }));
+                return;
+              }
               onMutate((s) => ({
                 ...s,
                 elements: s.elements.map((e) => (e.id === selectedElementId

@@ -493,12 +493,17 @@ export const STAGE_PLOT_ICON_LIST = [
     id: 'drape',
     label: 'Drape / Backdrop',
     category: 'Staging',
+    // Runs the length of a truss/pipe-and-drape line, not a fixed panel —
+    // see the `linearKind` comment on Cable Ramp below for why this gets a
+    // real on-canvas length instead of a fixed-size raster icon.
+    linearKind: 'drape',
     svg: svgFor('Staging', '<rect x="14" y="10" width="36" height="44" rx="1" stroke-dasharray="3,3"/><path d="M20 10 Q24 20 20 30 Q24 40 20 54" fill="none"/><path d="M32 10 Q36 20 32 30 Q36 40 32 54" fill="none"/><path d="M44 10 Q48 20 44 30 Q48 40 44 54" fill="none"/>'),
   },
   {
     id: 'truss',
     label: 'Truss',
     category: 'Staging',
+    linearKind: 'truss',
     svg: svgFor('Staging', '<rect x="12" y="26" width="40" height="12" rx="1"/><line x1="12" y1="26" x2="52" y2="38"/><line x1="12" y1="38" x2="52" y2="26"/>'),
   },
   {
@@ -531,6 +536,14 @@ export const STAGE_PLOT_ICON_LIST = [
     id: 'cable-ramp',
     label: 'Cable Ramp',
     category: 'Utility',
+    // Cable ramp, drape, and truss runs are frequently 20-50+ ft, nothing
+    // like this 64x64 symbol's own proportions — stretching the *raster*
+    // icon to match would smear/distort its linework instead of just
+    // getting longer. `linearKind` tells CanvasStage.jsx to render these
+    // three procedurally from the element's own `width` (regenerating the
+    // repeating tick/fold/cross-brace pattern to fit) instead of scaling
+    // this fixed thumbnail — this svg is still what the palette shows.
+    linearKind: 'cable-ramp',
     svg: svgFor('Utility', '<rect x="10" y="24" width="44" height="16" rx="2"/><line x1="16" y1="24" x2="22" y2="40"/><line x1="26" y1="24" x2="32" y2="40"/><line x1="36" y1="24" x2="42" y2="40"/><line x1="46" y1="24" x2="52" y2="40"/>'),
   },
 ];
