@@ -719,9 +719,10 @@ model StagePlot {
   account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
   eventId   String
 
-  name     String             @default("Stage Plot")
-  pages    StagePlotPage[]
-  channels StagePlotChannel[]
+  name          String                   @default("Stage Plot")
+  pages         StagePlotPage[]
+  channels      StagePlotChannel[]
+  backlineItems StagePlotBacklineItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -775,6 +776,32 @@ model StagePlotChannel {
   updatedAt DateTime @updatedAt
 
   @@unique([stagePlotId, channelNumber])
+  @@index([stagePlotId])
+}
+
+// Equipment the venue/production needs to have on hand (amps, drum kit,
+// risers, monitors) — kept as real rows next to the I/O list above, same
+// "tabular data a business edits independently of the visual plot"
+// reasoning. Not linked to a canvas element like a channel can be — backline
+// is about gear on the rider, not a specific icon placed on the plot.
+// notesHtml is rich text (bold/italic/underline/size via RichTextToolbar,
+// same contentEditable pattern as CanvasStage.jsx's icon popup and
+// PrepEmailModal.jsx) rather than plain text like StagePlotChannel's
+// monitorNotes — a backline note is often a whole spec ("Fender Twin or
+// equivalent, must have reverb") worth actually formatting.
+model StagePlotBacklineItem {
+  id          String    @id @default(cuid())
+  stagePlotId String
+  stagePlot   StagePlot @relation(fields: [stagePlotId], references: [id], onDelete: Cascade)
+
+  item       String
+  quantity   Int     @default(1)
+  providedBy String? // 'band' | 'venue' | 'rental' | null (TBD)
+  notesHtml  String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([stagePlotId])
 }
 

@@ -45,6 +45,26 @@ export async function deleteStagePlotChannel(eventId, channelId) {
   return apiFetch(`/stage-plots/${encodeURIComponent(eventId)}/channels/${channelId}`, { method: 'DELETE' });
 }
 
+export async function addStagePlotBacklineItem(eventId, item) {
+  const data = await apiFetch(`/stage-plots/${encodeURIComponent(eventId)}/backline-items`, {
+    method: 'POST',
+    body: JSON.stringify(item),
+  });
+  return data.item;
+}
+
+export async function updateStagePlotBacklineItem(eventId, itemId, patch) {
+  const data = await apiFetch(`/stage-plots/${encodeURIComponent(eventId)}/backline-items/${itemId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+  return data.item;
+}
+
+export async function deleteStagePlotBacklineItem(eventId, itemId) {
+  return apiFetch(`/stage-plots/${encodeURIComponent(eventId)}/backline-items/${itemId}`, { method: 'DELETE' });
+}
+
 // Not apiFetch — this redirects (302) to a signed Supabase Storage URL,
 // which fetch()'s default redirect:'follow' resolves transparently into
 // the actual PNG bytes. Used by stagePlotPdf.js to pull each page's

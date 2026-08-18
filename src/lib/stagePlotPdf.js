@@ -3,6 +3,13 @@ import { drawLetterhead, drawHeaderRule, drawImageBlock, getAutoTableStyle } fro
 import { fetchStagePlotPageThumbnail } from './stagePlots';
 
 const STAND_LABELS = { 'tall boom': 'Tall Boom', 'short boom': 'Short Boom', straight: 'Straight', none: 'None' };
+const PROVIDED_BY_LABELS = { band: 'Band', venue: 'Venue', rental: 'Rental' };
+
+// Notes are rich text (RichTextToolbar/contentEditable) — flatten to plain
+// text for the PDF table cell rather than printing raw HTML tags.
+function plainText(html) {
+  return html ? html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : '';
+}
 
 // jsPDF pulls in html2canvas/DOMPurify (~450KB) even though we only use its
 // plain drawing API — lazy-load it so that weight isn't in the main bundle.
@@ -62,7 +69,27 @@ async function buildStagePlotDoc({ eventId, eventName, stagePlot, businessInfo }
       body: stagePlot.channels
         .slice()
         .sort((a, b) => a.channelNumber - b.channelNumber)
-        .map((c) => [c.channelNumber, c.source, c.micOrDi || '', STAND_LABELS[c.standType] || '', c.phantomPower ? '✓' : '', c.monitorNotes || '']),
+        .map((c) => [c.channelNumber, c.source, c.micOrDi || '', STAND_LABELS[c.standType] || '', c.phantomPower ? '✓' : '', plainText(c.monitorNotes)]),
+      ...tableStyle,
+    });
+  }
+
+  if (stagePlot.backlineItems?.length) {
+    doc.addPage();
+    let y = 16;
+    y = await drawLetterhead(doc, { businessInfo, layout, scale, marginX, pageWidth, y, fallbackName: 'Stage Plot' });
+    y = drawHeaderRule(doc, { layout, accentRgb, marginX, pageWidth, y });
+
+    doc.setFontSize(13);
+    doc.setTextColor(30);
+    doc.text('Backline List', marginX, y);
+    y += 4;
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: marginX },
+      head: [['Item', 'Qty', 'Provided By', 'Notes']],
+      body: stagePlot.backlineItems.map((i) => [i.item, i.quantity, PROVIDED_BY_LABELS[i.providedBy] || 'TBD', plainText(i.notesHtml)]),
       ...tableStyle,
     });
   }

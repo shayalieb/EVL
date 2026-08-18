@@ -19,6 +19,7 @@ function serializePlot(plot) {
       .sort((a, b) => a.order - b.order)
       .map((p) => ({ id: p.id, order: p.order, name: p.name, scene: p.scene, hasThumbnail: !!p.thumbnailStorageKey })),
     channels: plot.channels.slice().sort((a, b) => a.channelNumber - b.channelNumber),
+    backlineItems: plot.backlineItems.slice().sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)),
   };
 }
 
@@ -31,7 +32,7 @@ router.get('/:eventId', asyncHandler(async (req, res) => {
 
   let plot = await prisma.stagePlot.findUnique({
     where: { accountId_eventId: { accountId, eventId } },
-    include: { pages: true, channels: true },
+    include: { pages: true, channels: true, backlineItems: true },
   });
 
   if (!plot) {
@@ -41,7 +42,7 @@ router.get('/:eventId', asyncHandler(async (req, res) => {
         eventId,
         pages: { create: [{ order: 0, name: 'Page 1' }] },
       },
-      include: { pages: true, channels: true },
+      include: { pages: true, channels: true, backlineItems: true },
     });
   }
 
@@ -212,6 +213,54 @@ router.delete('/:eventId/channels/:channelId', asyncHandler(async (req, res) => 
   const channel = await loadOwnedChannel(req.membership.accountId, req.params.eventId, req.params.channelId);
   if (!channel) return res.status(404).json({ error: 'Channel not found.' });
   await prisma.stagePlotChannel.delete({ where: { id: channel.id } });
+  res.json({ ok: true });
+}));
+
+// No server-assigned numbering like channels above — backline items don't
+// map to a numbered input, so there's no @@unique to retry against.
+router.post('/:eventId/backline-items', asyncHandler(async (req, res) => {
+  const plot = await loadOwnedPlot(req.membership.accountId, req.params.eventId);
+  if (!plot) return res.status(404).json({ error: 'Stage plot not found.' });
+  const { item, quantity, providedBy, notesHtml } = req.body || {};
+  if (!item?.trim()) return res.status(400).json({ error: 'item is required.' });
+
+  const created = await prisma.stagePlotBacklineItem.create({
+    data: {
+      stagePlotId: plot.id,
+      item: item.trim(),
+      quantity: Number.isFinite(Number(quantity)) && Number(quantity) > 0 ? Math.trunc(Number(quantity)) : 1,
+      providedBy: providedBy || null,
+      notesHtml: notesHtml || null,
+    },
+  });
+  res.status(201).json({ item: created });
+}));
+
+async function loadOwnedBacklineItem(accountId, eventId, itemId) {
+  const item = await prisma.stagePlotBacklineItem.findUnique({ where: { id: itemId }, include: { stagePlot: true } });
+  if (!item || item.stagePlot.accountId !== accountId || item.stagePlot.eventId !== eventId) return null;
+  return item;
+}
+
+router.patch('/:eventId/backline-items/:itemId', asyncHandler(async (req, res) => {
+  const item = await loadOwnedBacklineItem(req.membership.accountId, req.params.eventId, req.params.itemId);
+  if (!item) return res.status(404).json({ error: 'Backline item not found.' });
+
+  const { item: name, quantity, providedBy, notesHtml } = req.body || {};
+  const data = {};
+  if (name !== undefined) data.item = name;
+  if (quantity !== undefined) data.quantity = Number.isFinite(Number(quantity)) && Number(quantity) > 0 ? Math.trunc(Number(quantity)) : 1;
+  if (providedBy !== undefined) data.providedBy = providedBy || null;
+  if (notesHtml !== undefined) data.notesHtml = notesHtml || null;
+
+  const updated = await prisma.stagePlotBacklineItem.update({ where: { id: item.id }, data });
+  res.json({ item: updated });
+}));
+
+router.delete('/:eventId/backline-items/:itemId', asyncHandler(async (req, res) => {
+  const item = await loadOwnedBacklineItem(req.membership.accountId, req.params.eventId, req.params.itemId);
+  if (!item) return res.status(404).json({ error: 'Backline item not found.' });
+  await prisma.stagePlotBacklineItem.delete({ where: { id: item.id } });
   res.json({ ok: true });
 }));
 

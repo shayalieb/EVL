@@ -6,6 +6,7 @@ import { getOrCreateStagePlot, addStagePlotPage, deleteStagePlotPage, updateStag
 import { generateStagePlotPdf } from '../lib/stagePlotPdf';
 import StagePlotPageEditor from '../components/StagePlotPageEditor';
 import StagePlotChannelList from '../components/StagePlotChannelList';
+import StagePlotBacklineList from '../components/StagePlotBacklineList';
 
 // onClose is only passed when this is rendered inside EventFormPage's
 // "Stage Plot" popup (see EventFormPage.jsx) rather than at its own route —
@@ -216,14 +217,21 @@ export default function StagePlotEditorPage({ onClose } = {}) {
             onUpdateElementContent={handleUpdateElementContent}
           />
         )}
-        <StagePlotChannelList
-          eventId={eventId}
-          channels={plot.channels}
-          onChannelsChange={(channels) => setPlot((prev) => ({ ...prev, channels }))}
-          selectedElementId={selectedElementId}
-          selectedElement={selectedElement}
-          onSelectElement={setSelectedElementId}
-        />
+        <div className="flex flex-col">
+          <StagePlotChannelList
+            eventId={eventId}
+            channels={plot.channels}
+            onChannelsChange={(channels) => setPlot((prev) => ({ ...prev, channels }))}
+            selectedElementId={selectedElementId}
+            selectedElement={selectedElement}
+            onSelectElement={setSelectedElementId}
+          />
+          <StagePlotBacklineList
+            eventId={eventId}
+            items={plot.backlineItems}
+            onItemsChange={(backlineItems) => setPlot((prev) => ({ ...prev, backlineItems }))}
+          />
+        </div>
       </div>
     </div>
   );
