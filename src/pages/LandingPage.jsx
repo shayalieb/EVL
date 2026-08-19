@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom';
 import Logo from '../components/ui/Logo';
 import SubmitButton from '../components/ui/SubmitButton';
 import LandingDashboardPreview from '../components/LandingDashboardPreview';
-import { ClientsPipelinePreview, RosterConfirmPreview, DayOfPreview } from '../components/LandingFeaturePreviews';
-import { FileIcon, UsersIcon, ClipboardIcon } from '../components/ui/icons';
+import { ClientsPipelinePreview, RosterConfirmPreview, DayOfPreview, StayOnTopPreview } from '../components/LandingFeaturePreviews';
+import { FileIcon, UsersIcon, ClipboardIcon, BellIcon, ChevronDownIcon } from '../components/ui/icons';
 import { joinWaitlist, sendContactMessage } from '../lib/landing';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -33,7 +33,7 @@ const PAIN_POINTS = [
   {
     title: 'Deposits tracked in a notebook (or not at all).',
     problem: 'Proposals and contracts scattered across email threads, payments collected however works that week.',
-    fix: 'E-sign proposals and contracts, invoicing with real payment collection — all attached to the booking itself.',
+    fix: 'Clients accept proposals and e-sign contracts online, invoicing with real payment collection — all attached to the booking itself.',
   },
   {
     title: "No idea what's actually at risk until it's too late.",
@@ -47,7 +47,7 @@ const FEATURE_GROUPS = [
     title: 'For your clients',
     Icon: FileIcon,
     Preview: ClientsPipelinePreview,
-    items: ['Inquiry-to-booking pipeline', 'Proposals with e-signature', 'Contracts with e-signature', 'Invoicing with built-in payments'],
+    items: ['Inquiry-to-booking pipeline', 'Proposals your client accepts online', 'Contracts with e-signature', 'Invoicing with built-in Stripe payments'],
   },
   {
     title: 'For your roster',
@@ -61,16 +61,79 @@ const FEATURE_GROUPS = [
     Preview: DayOfPreview,
     items: ['Stage plots with a live drag-and-drop canvas', 'Set lists with email + PDF export', 'Backline & production lists', 'Prep sheets & crew schedules'],
   },
+  {
+    title: 'For staying on top of it',
+    Icon: BellIcon,
+    Preview: StayOnTopPreview,
+    items: ['A dashboard that surfaces what actually needs attention', 'Automatic alerts for at-risk events and overdue invoices', 'Email templates with merge fields for real event details', 'Manual reminders tied to any client or contractor'],
+  },
 ];
 
 const NAV_LINKS = [
   { href: '#story', label: 'Story' },
   { href: '#features', label: 'Features' },
+  { href: '#faq', label: 'FAQ' },
+];
+
+// Ordered most-critical-to-this-industry first: whether it's even for you,
+// then the day-to-day roster/money/legal questions a bandleader or agency
+// actually loses sleep over, ending with the least urgent (cost/access).
+const FAQS = [
+  {
+    q: 'Who is GigWorks actually built for?',
+    a: "Bands, DJs, orchestras, and the agencies or bandleaders who book them out — anyone staffing more than one musician against a calendar of gigs. If you're assembling a roster for each event rather than just showing up yourself, this is built around that specific problem.",
+  },
+  {
+    q: 'How do my musicians confirm or decline a gig without me chasing them down?',
+    a: "Every contractor gets their own gig calendar link — a bookmarkable page showing just their own upcoming gigs, no app account or login required. They can accept or decline right from their phone, and their status updates on your roster the moment they do.",
+  },
+  {
+    q: "What happens if I need to swap a musician after the contract's already signed?",
+    a: 'A signed contract lists an ensemble by instrumentation — "Sax, Drums, Keys" — never the specific musicians\' names. Swapping a player for a gig later never contradicts what the client actually agreed to.',
+  },
+  {
+    q: 'Is the client-facing proposal and contract actually legally binding?',
+    a: "The proposal is something a client reviews and accepts (or sends back with requested changes) — it's a decision, not a signature. The contract is the real e-signature step: both sides draw a signature and type a legal name, and an Electronic Signature Consent clause citing the U.S. E-SIGN Act is included automatically.",
+  },
+  {
+    q: 'How does getting paid actually work — does GigWorks touch the money?',
+    a: "Invoices are paid directly into your own bank account through Stripe Connect — GigWorks never touches the money. If a client pays outside the app instead (check, cash), you log that manually and it's tracked the same way.",
+  },
+  {
+    q: 'Do I have to run every gig through the full proposal-and-contract pipeline?',
+    a: "No. That pipeline is there for a formal booking with a paper trail, but you can also add an event directly for a one-off or word-of-mouth gig with no sales process attached at all.",
+  },
+  {
+    q: 'When can I start using it, and what does it cost?',
+    a: "GigWorks is currently in a private early-access phase, onboarding a small first group of agencies and bandleaders directly. Join the waitlist below and pricing will be part of that conversation.",
+  },
 ];
 
 function FieldError({ children }) {
   if (!children) return null;
   return <p className="text-xs text-red-600">{children}</p>;
+}
+
+function FAQItem({ q, a, open, onToggle }) {
+  return (
+    <div className="border-b border-slate-100 last:border-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        data-testid="landing-faq-question"
+        className="w-full flex items-center justify-between gap-4 py-4 text-left"
+      >
+        <span className="font-semibold text-slate-800 text-sm sm:text-base">{q}</span>
+        <ChevronDownIcon className={`w-4 h-4 shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <p data-testid="landing-faq-answer" className="text-sm text-slate-500 leading-relaxed pb-4 pr-8">
+          {a}
+        </p>
+      )}
+    </div>
+  );
 }
 
 // Fades a section up into place the first time it scrolls into view — skips
@@ -129,6 +192,7 @@ export default function LandingPage() {
   const [contactDone, setContactDone] = useState(false);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [openFaqIndex, setOpenFaqIndex] = useState(0);
 
   // Scoped to this page only (not a global app-wide CSS change) — added on
   // mount, removed on unmount, so an in-page "#waitlist" jump glides instead
@@ -341,6 +405,23 @@ export default function LandingPage() {
             ))}
           </div>
         </div>
+      </section>
+
+      {/* FAQ */}
+      <section id="faq" className="max-w-3xl mx-auto px-4 sm:px-6 py-16 scroll-mt-16">
+        <h2 className="text-2xl font-bold text-slate-900 text-center mb-2">Questions bandleaders actually ask</h2>
+        <p className="text-slate-500 text-center mb-10">Most critical first — scroll down for the smaller stuff.</p>
+        <Reveal className="bg-white border border-slate-200 rounded-xl px-5 sm:px-6 shadow-sm divide-y divide-slate-100">
+          {FAQS.map((item, i) => (
+            <FAQItem
+              key={item.q}
+              q={item.q}
+              a={item.a}
+              open={openFaqIndex === i}
+              onToggle={() => setOpenFaqIndex((prev) => (prev === i ? -1 : i))}
+            />
+          ))}
+        </Reveal>
       </section>
 
       {/* Waitlist + Contact */}

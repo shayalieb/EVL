@@ -32,7 +32,7 @@ export function ClientsPipelinePreview() {
       <div className="flex items-center gap-1 mb-4">
         {PIPELINE_STAGES.map((stage, i) => (
           <div key={stage} className="flex items-center flex-1">
-            <div className={`h-1.5 flex-1 rounded-full ${i <= 2 ? 'bg-indigo-500' : 'bg-slate-200'}`} />
+            <div className={`h-1.5 flex-1 rounded-full ${i <= 3 ? 'bg-indigo-500' : 'bg-slate-200'}`} />
             {i < PIPELINE_STAGES.length - 1 && <span className="w-1" />}
           </div>
         ))}
@@ -43,15 +43,15 @@ export function ClientsPipelinePreview() {
       <div className="rounded-lg border border-slate-200 divide-y divide-slate-100">
         <div className="flex items-center justify-between px-3 py-2 text-xs">
           <span className="text-slate-500">Proposal</span>
-          <span className="text-emerald-600 font-medium">e-signed Oct 2</span>
+          <span className="text-emerald-600 font-medium">accepted Oct 2</span>
+        </div>
+        <div className="flex items-center justify-between px-3 py-2 text-xs">
+          <span className="text-slate-500">Contract</span>
+          <span className="text-emerald-600 font-medium">e-signed Oct 3</span>
         </div>
         <div className="flex items-center justify-between px-3 py-2 text-xs">
           <span className="text-slate-500">Deposit invoice</span>
           <span className="text-emerald-600 font-medium">$500 paid</span>
-        </div>
-        <div className="flex items-center justify-between px-3 py-2 text-xs">
-          <span className="text-slate-500">Balance invoice</span>
-          <span className="text-amber-600 font-medium">$2,100 due Oct 15</span>
         </div>
       </div>
     </BrowserChrome>
@@ -129,6 +129,32 @@ export function DayOfPreview() {
         <li className="flex items-center gap-2"><span className="text-slate-300">2.</span> At Last</li>
         <li className="flex items-center gap-2 text-slate-400"><span className="text-slate-300">3.</span> Uptown Funk</li>
       </ol>
+    </BrowserChrome>
+  );
+}
+
+export function StayOnTopPreview() {
+  return (
+    <BrowserChrome label="app.gigworks.io/home">
+      <div className="text-sm font-semibold text-slate-800 mb-3">Home</div>
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
+          <div className="text-[10px] text-slate-400">Pipeline Value</div>
+          <div className="text-sm font-bold text-slate-800">$24,500</div>
+        </div>
+        <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
+          <div className="text-[10px] text-slate-400">Needs Confirmation</div>
+          <div className="text-sm font-bold text-amber-600">2</div>
+        </div>
+      </div>
+      <div className="rounded-lg bg-amber-50 border border-amber-100 px-3 py-2 flex items-start gap-2 mb-2">
+        <span aria-hidden="true">⚠️</span>
+        <span className="text-[11px] text-amber-800 leading-snug"><strong>At risk:</strong> Chen–Martinez Wedding — 1 contractor unconfirmed, in 2 days.</span>
+      </div>
+      <div className="rounded-lg bg-red-50 border border-red-100 px-3 py-2 flex items-start gap-2">
+        <span aria-hidden="true">💵</span>
+        <span className="text-[11px] text-red-700 leading-snug"><strong>Overdue:</strong> Invoice #14 — 4 days past due.</span>
+      </div>
     </BrowserChrome>
   );
 }
