@@ -46,6 +46,20 @@ export default function HelpArticleContent({ blocks }) {
                 <span>{block.text}</span>
               </div>
             );
+          case 'image':
+            return (
+              <figure key={i} className="!mt-5">
+                <img
+                  src={block.src}
+                  alt={block.alt}
+                  loading="lazy"
+                  className="w-full rounded-lg border border-slate-200 shadow-sm"
+                />
+                {block.caption && (
+                  <figcaption className="mt-1.5 text-xs text-slate-400 text-center">{block.caption}</figcaption>
+                )}
+              </figure>
+            );
           default:
             return null;
         }

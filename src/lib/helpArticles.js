@@ -12,6 +12,8 @@
 //   { type: 'tip', text }     — a positive callout (a shortcut, a good default)
 //   { type: 'note', text }    — a caveat/gate to be aware of (permissions,
 //                                what has to happen first, a limitation)
+//   { type: 'image', src, alt, caption? } — a real screenshot of the app,
+//                                served from public/help/ (see HelpArticleContent.jsx)
 
 export const HELP_CATEGORIES = [
   {
@@ -65,6 +67,7 @@ export const HELP_CATEGORIES = [
             'Manually, any time, via the "Create Event →" button on a Booking\'s row on the Bookings page.',
           ] },
           { type: 'p', text: 'Once a Booking has become an Event, its own page turns read-only-ish and shows a "This booking has been converted" banner with a "View Event" link — the Event is now where the real work happens.' },
+          { type: 'image', src: '/help/bookings-list-converted.png', alt: 'The Bookings list showing a booking with status "Converted" and a "View Event" link', caption: 'A converted booking on the Bookings list — Status reads "Converted," and the row links straight to its Event.' },
           { type: 'tip', text: 'Skipping the sales pipeline entirely is fine — "+ Add Event" on the Events page creates one with no Booking behind it at all, useful for a walk-in or word-of-mouth gig.' },
         ],
       },
@@ -80,12 +83,14 @@ export const HELP_CATEGORIES = [
         summary: 'Building out your musician roster with pricing tiers.',
         blocks: [
           { type: 'p', text: 'The Contractors page is your full roster — every musician, DJ, or vendor you book out, independent of any one event.' },
+          { type: 'image', src: '/help/contractors-list.png', alt: 'The Contractors list, showing name, email, category, role, last contact, and price columns for each roster member' },
           { type: 'steps', items: [
             'Go to Contractors and click "+ Add Contractor."',
             'Fill in their name, contact info, instrument/role, and category.',
             'Add one or more pricing tiers — a rate for each way you might book them (e.g. a standard rate and an overtime rate).',
           ] },
           { type: 'p', text: "A contractor with more than one pricing tier gets a tier-picker whenever you add them to something — an event's roster, or a proposal/contract line item — so the right rate always gets used." },
+          { type: 'image', src: '/help/contractor-modal.png', alt: 'The Add/Edit Contractor form, showing name/contact fields, the gig calendar link card, category, and pricing tiers' },
           { type: 'note', text: "Deleting a contractor doesn't touch anything already added to a past event, proposal, or contract — those keep whatever was true when they were added." },
         ],
       },
@@ -100,6 +105,7 @@ export const HELP_CATEGORIES = [
             'Name it, then add the specific contractors who make it up.',
             'Optionally set a Package Price. Leave it blank and it defaults to the sum of each member\'s own rate; set it and every use of this ensemble is priced at that flat rate instead.',
           ] },
+          { type: 'image', src: '/help/ensemble-modal.png', alt: 'The Add Ensemble form, showing a name, a picker with three contractors added as chips, and a package price field' },
           { type: 'h', text: 'Two different ways to use it' },
           { type: 'list', items: [
             "On an event's roster — the \"+ Add Ensemble\" button adds every member as their own roster row, each with their own confirm/decline status.",
@@ -121,6 +127,7 @@ export const HELP_CATEGORIES = [
             'An email-history icon (with an unread badge) and a template picker + "Send Email" button.',
             'A "Pay" button, once the row is in the Confirmed bucket, for logging what you paid that contractor — separate from client invoicing (see Deposits, Partial Payments & Manual Payments).',
           ] },
+          { type: 'image', src: '/help/event-roster.png', alt: 'An event roster grouped by category, showing one contractor Confirmed (green) and two Tentative (amber), each with status dropdown, bucket buttons, and price' },
           { type: 'note', text: 'The default statuses (Added, Not Contacted, Emailed, Called, Confirmed, Not Available, Declined) can be renamed, recolored, or added to under Settings → Custom Fields.' },
         ],
       },
@@ -135,6 +142,7 @@ export const HELP_CATEGORIES = [
             '"Copy Link" to hand it to them yourself, or "Email Link" to send it directly (only enabled if they have an email on file).',
             'Two checkboxes — "Confirmed gigs" and "Pending gigs" — control what shows up on their calendar; both are on by default.',
           ] },
+          { type: 'image', src: '/help/contractor-calendar-link.png', alt: 'The Gig calendar link card on a contractor\'s edit form, with Copy Link and Email Link buttons and two visibility checkboxes' },
           { type: 'p', text: "Gigs marked unavailable (declined, or marked Not Available) never show on their calendar, regardless of those two checkboxes." },
           { type: 'h', text: 'What the contractor can do' },
           { type: 'p', text: 'Their page shows each upcoming gig with call time, venue (with a map link), pay status, and notes. Anything still in the tentative bucket gets two buttons — "Accept Gig" and "Decline" — and tapping one is the only status change a contractor can make themselves; every other status stays under your control on the roster row.' },
@@ -155,6 +163,7 @@ export const HELP_CATEGORIES = [
         blocks: [
           { type: 'p', text: 'Clients and Venues work like Contractors — standalone lists you build out as you go, then reference from bookings and events rather than re-typing the same details every time.' },
           { type: 'p', text: 'You rarely need to add a client by hand, though — reviewing an inquiry (see Turn an Inquiry Into a Booking) creates one automatically, and matches to an existing client by email/phone instead of creating a duplicate.' },
+          { type: 'image', src: '/help/clients-page.png', alt: 'The Clients list page, showing a client that was auto-created from a reviewed inquiry' },
         ],
       },
       {
@@ -167,7 +176,9 @@ export const HELP_CATEGORIES = [
           { type: 'h', text: 'Option 2 — a per-recipient Send Inquiry Link' },
           { type: 'p', text: 'For a specific lead you\'re already talking to. Click "Send Inquiry Link" from the Bookings page (or from inside an already-open Booking), optionally enter their name/email, and click "Generate Link." If you gave an email it\'s sent automatically; either way you get a link with a "Copy" button, valid for 30 days.' },
           { type: 'note', text: 'Sending a per-recipient link from inside an already-open Booking merges their response into that Booking instead of creating a new one — useful for gathering more detail from someone you\'re already talking to.' },
+          { type: 'image', src: '/help/send-inquiry-link-modal.png', alt: 'The Send Inquiry Link modal, with a generated link, a Copy button, and an emailed confirmation' },
           { type: 'p', text: "The form itself asks for the client's info, event date/type, venue details, and an optional description — whichever they fill in shows up for you to review next." },
+          { type: 'image', src: '/help/public-inquiry-form.png', alt: 'The public inquiry form a prospective client fills out, with fields for their info, event date, and venue' },
         ],
       },
       {
@@ -181,6 +192,7 @@ export const HELP_CATEGORIES = [
             'If it matches an existing client by email or phone, you\'ll see a note that it\'ll link to that client instead of creating a duplicate.',
             'Click the action button — "Apply — Create Booking" for a new one, or "Apply — Update Booking" if this response came from a link sent out of an already-open booking.',
           ] },
+          { type: 'image', src: '/help/review-inquiry-modal.png', alt: 'The Inquiry Response modal, showing the client\'s submitted info read-only, with Dismiss and Apply — Create Booking buttons' },
         ],
       },
       {
@@ -196,6 +208,7 @@ export const HELP_CATEGORIES = [
             'A Pricing section — offerings/ensembles and a deposit (fixed $ or % of total).',
             'An Additional Sections editor for riders/policies, with template save/load.',
           ] },
+          { type: 'image', src: '/help/proposal-tab.png', alt: 'A Proposal tab showing an Ensemble line item priced at $850 (listing instruments, not names), a deposit section, and Additional Sections' },
           { type: 'steps', items: [
             'Use "Preview" to see it as the client will.',
             'Click "Send Proposal" — this emails the client a link to respond.',
@@ -217,10 +230,13 @@ export const HELP_CATEGORIES = [
             'Click "Send Contract for Signature."',
           ] },
           { type: 'p', text: 'This generates two separate one-time signing links — one for the client, one for you — so you can countersign from your phone without needing to be logged in. The Contract tab tracks status as it happens: Waiting on signatures → Client signed, your turn → Fully signed.' },
+          { type: 'image', src: '/help/contract-tab-sent.png', alt: 'A Contract tab right after sending, showing "Waiting on signatures," copyable Client and Your links, a Terms box, and an in-app Your Signature card' },
           { type: 'h', text: 'Signing' },
-          { type: 'p', text: 'Both sides sign on the same kind of page: type your full legal name, draw your signature, and click "Sign Contract." You (the owner) can also sign from right inside the app on the Contract tab once the client has signed, instead of using the emailed link.' },
+          { type: 'p', text: 'Both sides sign on the same kind of page: type your full legal name, draw your signature, and click "Sign Contract." You (the owner) can also sign right inside the app on the Contract tab itself — in either order, whether the client has signed yet or not — instead of using the emailed link.' },
+          { type: 'image', src: '/help/contract-sign-client-view.png', alt: 'The public contract signing page as the client sees it, with the full contract document and a Sign Here canvas' },
           { type: 'tip', text: 'An Electronic Signature Consent clause (citing the U.S. E-SIGN Act) is added to every new contract automatically — you don\'t need to write your own.' },
           { type: 'p', text: 'The moment both signatures are in, the Booking converts into an Event automatically, and the Contract tab shows a "View Event →" button plus a shortcut straight to invoicing.' },
+          { type: 'image', src: '/help/contract-fully-signed.png', alt: 'A Contract tab showing "Fully signed by both parties," both signatures side by side, and a "Continue to Invoicing" button' },
         ],
       },
     ],
@@ -240,6 +256,7 @@ export const HELP_CATEGORIES = [
             'General — a flat amount.',
             'Per Unit — a unit count × a rate per unit (e.g. hours, guests), with the total computed automatically as you type.',
           ] },
+          { type: 'image', src: '/help/offerings-page.png', alt: 'The Offerings page, listing saved General and Per Unit offerings with their values, plus the Ensembles section below' },
           { type: 'note', text: "Editing a saved Offering later never changes copies of it already sitting on a proposal, contract, or invoice — each copy is independent from the moment it's added." },
         ],
       },
@@ -275,6 +292,7 @@ export const HELP_CATEGORIES = [
             'Come back and the button will read "Finish Onboarding" if anything\'s left, or you can click "Edit Stripe Details" once fully connected.',
           ] },
           { type: 'note', text: 'You can\'t send invoices until the Billing tab shows Connected — a status of Onboarding Incomplete means Stripe still needs more information from you.' },
+          { type: 'image', src: '/help/settings-billing.png', alt: 'Settings → Billing, showing a Stripe Status badge reading "Not Connected" and a Connect Stripe button' },
         ],
       },
       {
@@ -290,6 +308,7 @@ export const HELP_CATEGORIES = [
             'Create Final Invoice — pre-fills whatever balance is left, once something\'s already been invoiced.',
           ] },
           { type: 'p', text: "Each one jumps you into the invoice composer: invoice number, recipient, due date, line items, a memo, and an \"Accept Payment\" checkbox. Leave that checked to let the client pay online via Stripe; turn it off if this invoice is being paid outside GigWorks, and it sends as a document only." },
+          { type: 'image', src: '/help/invoice-composer.png', alt: 'The invoice composer, pre-filled with an Ensemble line item, recipient info, and an Accept Payment checkbox' },
           { type: 'steps', items: [
             '"Save Draft" to keep working on it — the client can\'t see it yet.',
             '"Send Invoice" to lock it and email the client a payment link.',
@@ -310,6 +329,7 @@ export const HELP_CATEGORIES = [
             '"Void" — kills a sent/partial invoice without deleting the record.',
             '"Send Receipt" — appears once paid, for emailing the client a receipt.',
           ] },
+          { type: 'image', src: '/help/invoice-history.png', alt: 'An Invoice History card showing a Draft invoice for $850, with Edit, Send, Download, Mark Open, Mark Partial, and Mark Paid buttons' },
           { type: 'tip', text: "The same Accept Payment flow, retitled \"Pay Contractor,\" is what the roster row's \"Pay\" button uses — that's a separate, informal log of what you paid a contractor (Zelle, cash, check), with no Stripe involved at all." },
         ],
       },
@@ -326,6 +346,7 @@ export const HELP_CATEGORIES = [
         blocks: [
           { type: 'p', text: "On an Event's Contractors tab: \"+ Add Contractor\" opens everyone not already on the roster (a tier-picker appears first if they have more than one pricing tier); \"+ Add Ensemble\" clones an entire saved group onto the roster in one click, skipping anyone already there." },
           { type: 'p', text: "From there, use the status tools and \"Send Email\" per row — see Track Who's Confirmed for the full breakdown of statuses, buckets, and what each control does." },
+          { type: 'image', src: '/help/event-roster.png', alt: 'An event roster grouped by category, showing contractors with different confirm statuses and their rates' },
         ],
       },
       {
@@ -338,6 +359,7 @@ export const HELP_CATEGORIES = [
           { type: 'h', text: 'Merge fields' },
           { type: 'p', text: 'The left-hand "Insert Fields" panel lists tokens you can drop into the subject or body — things like {{ContractorFirstName}}, {{EventDate}}, {{VenueFullAddress}}, {{CrewList}} (a bulleted list of everyone on the same category), and {{AddToCalendar}} (a calendar link). Click one to copy it, then paste it where you want that detail to appear.' },
           { type: 'note', text: 'Sending is always manual right now — picking a template and clicking Send on a roster row. There\'s no automatic trigger tied to a status change yet.' },
+          { type: 'image', src: '/help/email-templates.png', alt: 'The Email Templates page, showing an expanded template with Subject/Body fields on the right and a searchable Insert Fields panel of merge tokens on the left' },
         ],
       },
       {
@@ -355,6 +377,7 @@ export const HELP_CATEGORIES = [
           { type: 'h', text: 'The Production List' },
           { type: 'p', text: "Placing an icon automatically adds a row to the Production List below the canvas — who's playing, their instrument, whether they need 48V phantom power or AC power, and notes. Click an icon to jump to its row, or the row's icon button to jump back to the canvas." },
           { type: 'p', text: 'There\'s also a Backline List for equipment the venue or band needs on hand (amps, risers, monitors) that isn\'t tied to a specific canvas icon.' },
+          { type: 'image', src: '/help/stage-plot-production-list.png', alt: 'A stage plot canvas with several icons placed (line array, vocal mic, PA speaker, keyboard, drum kit, mixing board, cable ramp), and the Production List below with musician names and instruments filled in' },
           { type: 'tip', text: "Use the Email button to send the stage plot, Production List, and Backline List straight to your sound engineer or venue — check whichever sections you want included, and it also attaches a PDF." },
         ],
       },
@@ -365,6 +388,7 @@ export const HELP_CATEGORIES = [
         blocks: [
           { type: 'p', text: "Set List Library (its own page) is where you build and save reusable songs/sets. On any event's Set Lists tab, click \"+ From Library\" to pull a saved set list straight in — it's copied in, not linked, so editing it on this event never touches the saved original." },
           { type: 'p', text: "From there you can reorder songs, and send the finished set list by email with a PDF and any downloadable sheet-music links attached." },
+          { type: 'image', src: '/help/setlist-editor.png', alt: 'A set list editor showing a "Reception" set list with three songs added' },
         ],
       },
       {
@@ -402,6 +426,7 @@ export const HELP_CATEGORIES = [
             'Invoice overdue — an invoice more than 3 days past due and still unpaid.',
           ] },
           { type: 'p', text: 'These auto-generated reminders always email the account owner and never duplicate, no matter how often the check re-runs.' },
+          { type: 'image', src: '/help/reminders-list.png', alt: 'The Reminders list, showing a pending reminder tied to a client, with its date/time, note, and a Mark Done button' },
         ],
       },
       {
@@ -409,7 +434,14 @@ export const HELP_CATEGORIES = [
         title: 'Your dashboard (Home)',
         summary: 'The at-a-glance view of where things stand.',
         blocks: [
-          { type: 'p', text: 'Home shows Total Events, Upcoming Events, Pipeline Value (the total value of everything still in your Booking pipeline), Total Clients, Total Contractors, and how many gigs still need confirmation — plus a list of your actual upcoming events.' },
+          { type: 'p', text: 'Home leads with six stat tiles: Total Events, Upcoming Events, Pipeline Value (the total value of everything still in your Booking pipeline), Total Clients, Total Contractors, and how many gigs Need Confirmation.' },
+          { type: 'list', items: [
+            'Overdue Invoices and At-Risk Events — the same two conditions Reminders watches for automatically, surfaced right on the dashboard too.',
+            'Upcoming Events — your actual next gigs, with each contractor status shown inline.',
+            'Top Contractors — who you book most, by number of bookings.',
+            'Clients Needing Follow-up — anyone with an open reminder against them.',
+          ] },
+          { type: 'image', src: '/help/home-dashboard.png', alt: 'The Home dashboard, showing stat tiles, Overdue Invoices, At-Risk Events, Upcoming Events, Top Contractors, and Clients Needing Follow-up' },
         ],
       },
     ],
