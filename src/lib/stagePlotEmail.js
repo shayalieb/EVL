@@ -2,7 +2,6 @@ import { formatEventDate } from './format';
 import { escapeHtml } from './htmlEscape';
 import { fetchStagePlotPageThumbnail } from './stagePlots';
 
-const STAND_LABELS = { 'tall boom': 'Tall Boom', 'short boom': 'Short Boom', straight: 'Straight', none: 'None' };
 const PROVIDED_BY_LABELS = { band: 'Band', venue: 'Venue', rental: 'Rental' };
 
 // Keys match generateStagePlotPdfAttachment's `include` shape (stagePlotPdf.js)
@@ -10,7 +9,7 @@ const PROVIDED_BY_LABELS = { band: 'Band', venue: 'Venue', rental: 'Rental' };
 // both the PDF and the email-body builders below.
 export const STAGE_PLOT_VIEW_OPTIONS = [
   { key: 'pages', label: 'Stage Plot' },
-  { key: 'channels', label: 'I/O List' },
+  { key: 'channels', label: 'Production List' },
   { key: 'backlineItems', label: 'Backline List' },
 ];
 
@@ -39,7 +38,7 @@ function tableHtml(headers, rows) {
 }
 
 // Renders whichever views are checked directly into the email body — the
-// I/O List and Backline List as plain HTML tables, and each Stage Plot page
+// Production List and Backline List as plain HTML tables, and each Stage Plot page
 // as an inline image referenced via cid: (see buildInlineImageAttachments
 // in server/src/lib/mailer.js), since data: URLs get stripped by most email
 // clients. Notes fields (monitorNotes/notesHtml) are already-composed rich
@@ -78,13 +77,13 @@ export async function buildStagePlotViewsHtml({ eventId, stagePlot, checked }) {
       .sort((a, b) => a.channelNumber - b.channelNumber)
       .map((c) => `<tr>
         <td style="${cellStyle}">${c.channelNumber}</td>
+        <td style="${cellStyle}">${escapeHtml(c.musicianName || '')}</td>
         <td style="${cellStyle}">${escapeHtml(c.source)}</td>
-        <td style="${cellStyle}">${escapeHtml(c.micOrDi || '')}</td>
-        <td style="${cellStyle}">${escapeHtml(STAND_LABELS[c.standType] || '')}</td>
         <td style="${cellStyle}">${c.phantomPower ? '✓' : ''}</td>
+        <td style="${cellStyle}">${c.powerNeeded ? '✓' : ''}</td>
         <td style="${cellStyle}">${c.monitorNotes || ''}</td>
       </tr>`);
-    sections.push(`<h3 style="${sectionHeadingStyle}">I/O List</h3>${tableHtml(['Ch', 'Source', 'Mic/DI', 'Stand', '48V', 'Notes'], rows)}`);
+    sections.push(`<h3 style="${sectionHeadingStyle}">Production List</h3>${tableHtml(['#', 'Musician', 'Instrument', '48V', 'Power', 'Notes'], rows)}`);
   }
 
   if (checked.backlineItems) {

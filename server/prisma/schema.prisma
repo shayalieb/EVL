@@ -765,10 +765,10 @@ model StagePlotChannel {
   stagePlot   StagePlot @relation(fields: [stagePlotId], references: [id], onDelete: Cascade)
 
   channelNumber Int
-  source        String
-  micOrDi       String?
-  standType     String?
-  phantomPower  Boolean @default(false)
+  source        String // instrument/role, e.g. "Lead Vocals" — see StagePlotChannelList.jsx's "Instrument" column
+  musicianName  String?
+  phantomPower  Boolean @default(false) // "48V" in the UI
+  powerNeeded   Boolean @default(false) // AC power at this position
   monitorNotes  String? @db.Text
   elementId     String?
 

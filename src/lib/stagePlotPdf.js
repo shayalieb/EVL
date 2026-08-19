@@ -2,7 +2,6 @@ import { getDocumentStyle } from './documentLayouts';
 import { drawLetterhead, drawHeaderRule, drawImageBlock, getAutoTableStyle } from './documentPdfKit';
 import { fetchStagePlotPageThumbnail } from './stagePlots';
 
-const STAND_LABELS = { 'tall boom': 'Tall Boom', 'short boom': 'Short Boom', straight: 'Straight', none: 'None' };
 const PROVIDED_BY_LABELS = { band: 'Band', venue: 'Venue', rental: 'Rental' };
 
 // Notes are rich text (RichTextToolbar/contentEditable) — flatten to plain
@@ -67,17 +66,17 @@ async function buildStagePlotDoc({ eventId, eventName, stagePlot, businessInfo, 
 
     doc.setFontSize(13);
     doc.setTextColor(30);
-    doc.text('I/O List', marginX, y);
+    doc.text('Production List', marginX, y);
     y += 4;
 
     autoTable(doc, {
       startY: y,
       margin: { left: marginX },
-      head: [['Ch', 'Source', 'Mic/DI', 'Stand', '48V', 'Notes']],
+      head: [['#', 'Musician', 'Instrument', '48V', 'Power', 'Notes']],
       body: stagePlot.channels
         .slice()
         .sort((a, b) => a.channelNumber - b.channelNumber)
-        .map((c) => [c.channelNumber, c.source, c.micOrDi || '', STAND_LABELS[c.standType] || '', c.phantomPower ? '✓' : '', plainText(c.monitorNotes)]),
+        .map((c) => [c.channelNumber, c.musicianName || '', c.source, c.phantomPower ? '✓' : '', c.powerNeeded ? '✓' : '', plainText(c.monitorNotes)]),
       ...tableStyle,
     });
   }

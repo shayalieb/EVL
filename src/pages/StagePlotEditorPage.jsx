@@ -72,7 +72,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
     setPlot((prev) => (prev ? { ...prev, pages: prev.pages.map((pg) => (pg.id === pageId ? { ...pg, ...patch } : pg)) } : prev));
   }
 
-  // The I/O List is now auto-generated from what's actually placed on the
+  // The Production List is now auto-generated from what's actually placed on the
   // canvas (see handleElementAdded below) — so removing an icon removes its
   // row too, keeping the list a live mirror of the plot instead of
   // accumulating orphaned "New Channel" rows every time someone deletes a
@@ -86,7 +86,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   }
 
   // Fired the moment an icon is dropped onto the canvas (CanvasStage.jsx's
-  // handleDrop) — auto-creates its linked I/O/backline row immediately,
+  // handleDrop) — auto-creates its linked production-list/backline row immediately,
   // rather than waiting for someone to open the icon's notes popup or click
   // "+ Add Channel for Selected Icon". `source` starts as the icon's default
   // label (e.g. "Vocal Mic"); still freely editable afterward.
@@ -96,12 +96,12 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   }
 
   // Backs the canvas double-click popup (CanvasStage.jsx) — "Name" and
-  // "Description" map onto the same source/monitorNotes fields the I/O
-  // List already edits, so both are just two views onto the same channel
+  // "Description" map onto the same source/monitorNotes fields the
+  // Production List already edits, so both are just two views onto the same channel
   // row. Creating a channel this way (an icon with no linked channel yet)
   // auto-assigns its channelNumber server-side, same as the list's own
   // "+ Add Channel for Selected Icon" button — using the popup is what
-  // makes an icon show up in the I/O List, not a separate step.
+  // makes an icon show up in the Production List, not a separate step.
   async function handleUpdateElementContent(elementId, { name, description }) {
     const channel = plot.channels.find((c) => c.elementId === elementId);
     if (channel) {
@@ -128,10 +128,10 @@ export default function StagePlotEditorPage({ onClose } = {}) {
     if (pageId === activePageId) {
       await pageEditorRef.current?.flush();
     }
-    // The server also deletes any I/O channels linked to icons that only
-    // existed on this page (see stagePlots.js's DELETE /pages/:pageId) —
-    // deletedChannelIds lets local state drop them too, instead of the I/O
-    // List showing rows for a page that no longer exists.
+    // The server also deletes any production-list channels linked to icons
+    // that only existed on this page (see stagePlots.js's DELETE
+    // /pages/:pageId) — deletedChannelIds lets local state drop them too,
+    // instead of the Production List showing rows for a page that no longer exists.
     const { deletedChannelIds } = await deleteStagePlotPage(eventId, pageId);
     const removed = new Set(deletedChannelIds || []);
     setPlot((prev) => ({

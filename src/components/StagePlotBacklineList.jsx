@@ -13,7 +13,7 @@ function plainTextPreview(html) {
 
 // Equipment the venue/production needs on hand (amps, drum kit, risers,
 // monitors) — same "own panel next to the canvas, not drawn on it" reasoning
-// as StagePlotChannelList's I/O List, per server/src/routes/stagePlots.js's
+// as StagePlotChannelList's Production List, per server/src/routes/stagePlots.js's
 // StagePlotBacklineItem model. Not linked to canvas icons like a channel can
 // be — backline is a rider list, not a specific placed instrument.
 export default function StagePlotBacklineList({ eventId, items, onItemsChange }) {

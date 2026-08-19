@@ -2,7 +2,6 @@ import { useState } from 'react';
 import CanvasNotesPopover from './CanvasNotesPopover';
 import { addStagePlotChannel, updateStagePlotChannel, deleteStagePlotChannel } from '../lib/stagePlots';
 
-const STAND_TYPES = ['', 'tall boom', 'short boom', 'straight', 'none'];
 const cellInputClass = 'w-full px-1.5 py-1 rounded border border-transparent hover:border-slate-200 focus:border-indigo-400 text-xs bg-transparent';
 
 function plainTextPreview(html) {
@@ -10,23 +9,27 @@ function plainTextPreview(html) {
   return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-// The standard live-sound input list — kept as its own panel next to the
-// canvas (not drawn on it) since it's tabular data a business edits/sorts
-// independently of the visual plot, per server/src/routes/stagePlots.js's
-// StagePlotChannel model.
+// Who's playing what, and what they need — kept as its own panel next to
+// the canvas (not drawn on it) since it's tabular data a business
+// edits/sorts independently of the visual plot, per
+// server/src/routes/stagePlots.js's StagePlotChannel model. Each row can
+// optionally link to a placed icon on the canvas (elementId), which is what
+// puts its running number badge on the plot — everything else about the
+// row (musician, instrument, power needs, notes) is general-purpose, not
+// tied to any one type of production.
 export default function StagePlotChannelList({ eventId, channels, onChannelsChange, selectedElementId, selectedElement, onSelectElement }) {
   const [busyId, setBusyId] = useState(null);
   const [openChannelId, setOpenChannelId] = useState(null);
   const isLinked = (elementId) => channels.some((c) => c.elementId === elementId);
 
   async function handleAdd() {
-    const channel = await addStagePlotChannel(eventId, { source: 'New Channel' });
+    const channel = await addStagePlotChannel(eventId, { source: 'New Item' });
     onChannelsChange([...channels, channel]);
   }
 
   async function handleAddForSelected() {
     const channel = await addStagePlotChannel(eventId, {
-      source: selectedElement?.label || selectedElement?.iconId || 'New Channel',
+      source: selectedElement?.label || selectedElement?.iconId || 'New Item',
       elementId: selectedElementId,
     });
     onChannelsChange([...channels, channel]);
@@ -55,7 +58,7 @@ export default function StagePlotChannelList({ eventId, channels, onChannelsChan
   return (
     <div className="w-full max-w-[36rem] shrink-0">
       <div className="flex items-center justify-between mb-2">
-        <div className="text-xs font-semibold text-slate-500">I/O List</div>
+        <div className="text-xs font-semibold text-slate-500">Production List</div>
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -63,22 +66,22 @@ export default function StagePlotChannelList({ eventId, channels, onChannelsChan
             disabled={!selectedElementId || isLinked(selectedElementId)}
             data-testid="stageplot-add-channel-for-selected-button"
             className="text-xs font-semibold text-indigo-600 disabled:opacity-40"
-            title={!selectedElementId ? 'Select an icon on the canvas first' : isLinked(selectedElementId) ? 'This icon is already linked to a channel' : 'Create a channel linked to the selected icon'}
+            title={!selectedElementId ? 'Select an icon on the canvas first' : isLinked(selectedElementId) ? 'This icon is already linked to an item' : 'Create an item linked to the selected icon'}
           >
-            + Add Channel for Selected Icon
+            + Add Item for Selected Icon
           </button>
-          <button type="button" onClick={handleAdd} data-testid="stageplot-add-channel-button" className="text-xs font-semibold text-indigo-600">+ Add Channel</button>
+          <button type="button" onClick={handleAdd} data-testid="stageplot-add-channel-button" className="text-xs font-semibold text-indigo-600">+ Add Item</button>
         </div>
       </div>
       <div className="border border-slate-200 rounded-lg overflow-x-auto">
-        <table className="w-full text-xs min-w-[34rem]">
+        <table className="w-full text-xs min-w-[40rem]">
           <thead className="bg-slate-50 text-slate-400">
             <tr>
               <th className="px-2 py-1.5 text-left w-8">#</th>
-              <th className="px-2 py-1.5 text-left w-28">Source</th>
-              <th className="px-2 py-1.5 text-left w-20">Mic/DI</th>
-              <th className="px-2 py-1.5 text-left w-24">Stand</th>
-              <th className="px-2 py-1.5 text-center w-10">48V</th>
+              <th className="px-2 py-1.5 text-left w-28">Musician</th>
+              <th className="px-2 py-1.5 text-left w-28">Instrument</th>
+              <th className="px-2 py-1.5 text-center w-10" title="Needs 48V phantom power">48V</th>
+              <th className="px-2 py-1.5 text-center w-10" title="Needs AC power at this position">Power</th>
               <th className="px-2 py-1.5 text-left">Notes</th>
               <th className="px-2 py-1.5 text-right w-16">Icon</th>
             </tr>
@@ -86,7 +89,7 @@ export default function StagePlotChannelList({ eventId, channels, onChannelsChan
           <tbody>
             {channels.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-2 py-4 text-center text-slate-400">No channels yet.</td>
+                <td colSpan={7} className="px-2 py-4 text-center text-slate-400">No items yet.</td>
               </tr>
             )}
             {channels.map((channel) => (
@@ -98,33 +101,35 @@ export default function StagePlotChannelList({ eventId, channels, onChannelsChan
                 <td className="px-2 py-1 text-slate-400">{channel.channelNumber}</td>
                 <td className="px-1 py-1">
                   <input
-                    value={channel.source}
-                    onChange={(e) => handleFieldChange(channel, { source: e.target.value })}
-                    data-testid="stageplot-channel-source-input"
+                    value={channel.musicianName || ''}
+                    onChange={(e) => handleFieldChange(channel, { musicianName: e.target.value })}
+                    placeholder="Who's playing"
+                    data-testid="stageplot-channel-musician-input"
                     className={cellInputClass}
                   />
                 </td>
                 <td className="px-1 py-1">
                   <input
-                    value={channel.micOrDi || ''}
-                    onChange={(e) => handleFieldChange(channel, { micOrDi: e.target.value })}
+                    value={channel.source}
+                    onChange={(e) => handleFieldChange(channel, { source: e.target.value })}
+                    data-testid="stageplot-channel-instrument-input"
                     className={cellInputClass}
                   />
-                </td>
-                <td className="px-1 py-1">
-                  <select
-                    value={channel.standType || ''}
-                    onChange={(e) => handleFieldChange(channel, { standType: e.target.value })}
-                    className={cellInputClass}
-                  >
-                    {STAND_TYPES.map((t) => <option key={t} value={t}>{t || '—'}</option>)}
-                  </select>
                 </td>
                 <td className="px-1 py-1 text-center">
                   <input
                     type="checkbox"
                     checked={channel.phantomPower}
                     onChange={(e) => handleFieldChange(channel, { phantomPower: e.target.checked })}
+                    data-testid="stageplot-channel-48v-checkbox"
+                  />
+                </td>
+                <td className="px-1 py-1 text-center">
+                  <input
+                    type="checkbox"
+                    checked={channel.powerNeeded}
+                    onChange={(e) => handleFieldChange(channel, { powerNeeded: e.target.checked })}
+                    data-testid="stageplot-channel-power-checkbox"
                   />
                 </td>
                 <td className="px-1 py-1 relative">
@@ -141,7 +146,7 @@ export default function StagePlotChannelList({ eventId, channels, onChannelsChan
                     className={`block w-full text-left truncate px-1.5 py-1 rounded hover:bg-slate-50 ${channel.monitorNotes ? 'text-slate-600' : 'text-slate-300'}`}
                     title={plainTextPreview(channel.monitorNotes) || 'Add notes'}
                   >
-                    {plainTextPreview(channel.monitorNotes) || 'Monitor mix, cues…'}
+                    {plainTextPreview(channel.monitorNotes) || 'DI, monitor mix, other needs…'}
                   </button>
                   {openChannelId === channel.id && (
                     <CanvasNotesPopover
@@ -180,7 +185,7 @@ export default function StagePlotChannelList({ eventId, channels, onChannelsChan
                         type="button"
                         onClick={() => handleFieldChange(channel, { elementId: selectedElementId })}
                         disabled={!selectedElementId}
-                        title={selectedElementId ? 'Link the selected icon to this channel' : 'Select an icon on the canvas first'}
+                        title={selectedElementId ? 'Link the selected icon to this item' : 'Select an icon on the canvas first'}
                         data-testid="stageplot-channel-link-button"
                         className="text-slate-300 hover:text-indigo-600 disabled:opacity-40"
                       >

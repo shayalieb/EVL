@@ -7,7 +7,7 @@ export const SEATABLE_TABLE_IDS = new Set(['round-table', 'rect-table', 'cocktai
 
 // Auto-generated breakdown of everything placed on the current page,
 // grouped by item type with seat totals for seating tables — for handing
-// to a caterer/vendor. Unlike Stage Plot's I/O channel list (a separately
+// to a caterer/vendor. Unlike Stage Plot's Production List (a separately
 // maintained, manually-entered table), this is purely computed from
 // scene.elements since nothing here isn't already fully described by
 // what's been placed on the canvas. Deliberately not filtered by layer

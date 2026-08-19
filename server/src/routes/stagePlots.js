@@ -147,7 +147,7 @@ router.post('/:eventId/channels', asyncHandler(async (req, res) => {
     include: { channels: true },
   });
   if (!plot) return res.status(404).json({ error: 'Stage plot not found.' });
-  const { source, micOrDi, standType, phantomPower, monitorNotes, elementId } = req.body || {};
+  const { source, musicianName, phantomPower, powerNeeded, monitorNotes, elementId } = req.body || {};
   if (!source?.trim()) return res.status(400).json({ error: 'source is required.' });
 
   // "Next available" is read-then-write, not atomic — two requests close
@@ -159,9 +159,9 @@ router.post('/:eventId/channels', asyncHandler(async (req, res) => {
   const data = {
     stagePlotId: plot.id,
     source: source.trim(),
-    micOrDi: micOrDi || null,
-    standType: standType || null,
+    musicianName: musicianName || null,
     phantomPower: !!phantomPower,
+    powerNeeded: !!powerNeeded,
     monitorNotes: monitorNotes || null,
     elementId: elementId || null,
   };
@@ -190,13 +190,13 @@ router.patch('/:eventId/channels/:channelId', asyncHandler(async (req, res) => {
   const channel = await loadOwnedChannel(req.membership.accountId, req.params.eventId, req.params.channelId);
   if (!channel) return res.status(404).json({ error: 'Channel not found.' });
 
-  const { channelNumber, source, micOrDi, standType, phantomPower, monitorNotes, elementId } = req.body || {};
+  const { channelNumber, source, musicianName, phantomPower, powerNeeded, monitorNotes, elementId } = req.body || {};
   const data = {};
   if (channelNumber !== undefined) data.channelNumber = channelNumber;
   if (source !== undefined) data.source = source;
-  if (micOrDi !== undefined) data.micOrDi = micOrDi || null;
-  if (standType !== undefined) data.standType = standType || null;
+  if (musicianName !== undefined) data.musicianName = musicianName || null;
   if (phantomPower !== undefined) data.phantomPower = !!phantomPower;
+  if (powerNeeded !== undefined) data.powerNeeded = !!powerNeeded;
   if (monitorNotes !== undefined) data.monitorNotes = monitorNotes || null;
   if (elementId !== undefined) data.elementId = elementId || null;
 

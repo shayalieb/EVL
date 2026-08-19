@@ -309,10 +309,10 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, p
     // No flex-1/min-w-0 here on purpose: those let this shrink below the
     // palette+canvas row's own natural width, which squeezed the canvas
     // into wrapping below the (now much taller) palette instead of the
-    // *intended* reflow — the I/O List (StagePlotEditorPage.jsx's own
+    // *intended* reflow — the Production List (StagePlotEditorPage.jsx's own
     // flex-wrap row) dropping to its own line first. Leaving this as a
     // plain block keeps its default min-width:auto, so the browser wraps
-    // the I/O List away before it ever squeezes this.
+    // the Production List away before it ever squeezes this.
     <div>
       <div className="flex flex-wrap items-center gap-2 mb-3 overflow-x-auto">
         <button type="button" onClick={undo} disabled={!canUndo} data-testid="stageplot-undo-button" className={toolbarButtonClass}>Undo</button>

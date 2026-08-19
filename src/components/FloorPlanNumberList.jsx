@@ -1,7 +1,7 @@
 const cellInputClass = 'w-full px-1.5 py-1 rounded border border-transparent hover:border-slate-200 focus:border-indigo-400 text-xs bg-transparent';
 
 // A numbered legend tying each placed item to a name/description note — the
-// floor-plan equivalent of Stage Plot's I/O list, but with no separate
+// floor-plan equivalent of Stage Plot's production list, but with no separate
 // table: number/name/description live directly on the scene element (see
 // sceneModel.js), so this is purely a view over scene.elements plus the
 // callbacks FloorPlanPageEditor.jsx already has in scope for mutating them.
