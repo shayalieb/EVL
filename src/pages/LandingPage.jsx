@@ -16,6 +16,11 @@ const PAIN_POINTS = [
     fix: "Every contractor's status is tracked per event, and they can confirm or decline from a link on their own phone — no more guessing.",
   },
   {
+    title: 'The same quartet, rebuilt from scratch every single gig.',
+    problem: 'Adding the same trio or quartet to the roster one contractor at a time, for every wedding they play.',
+    fix: "Save it once as an Ensemble — add the whole group to any event's roster in one click, priced as a flat package or the sum of each member's own rate.",
+  },
+  {
     title: 'The stage plot lives in a different app than the gig.',
     problem: 'Building it separately, emailing it around, hoping it reaches the sound engineer before load-in.',
     fix: "A stage plot builder tied directly to the event and the real lineup booked on it — not a disconnected file.",
@@ -48,13 +53,13 @@ const FEATURE_GROUPS = [
     title: 'For your roster',
     Icon: UsersIcon,
     Preview: RosterConfirmPreview,
-    items: ['Contractor roster & availability', 'Per-event confirm/decline tracking', 'A home-screen link every contractor can check themselves'],
+    items: ['Contractor roster & availability', 'Per-event confirm/decline tracking', 'Ensembles — save a group once, add its whole lineup in one click', 'A home-screen link every contractor can check themselves'],
   },
   {
     title: 'For the day of',
     Icon: ClipboardIcon,
     Preview: DayOfPreview,
-    items: ['Stage plots', 'Set lists with email + PDF export', 'Floor plans', 'Prep sheets & crew schedules'],
+    items: ['Stage plots with a live drag-and-drop canvas', 'Set lists with email + PDF export', 'Backline & production lists', 'Prep sheets & crew schedules'],
   },
 ];
 
@@ -246,7 +251,7 @@ export default function LandingPage() {
           <p className="mt-5 text-lg text-indigo-200 max-w-2xl mx-auto">
             GigWorks is the business software for entertainment agencies and bandleaders who book out multiple
             musicians — proposals, contracts, and invoicing for your clients, plus the day-of details (stage plots,
-            set lists, floor plans) connected to who's actually on the gig.
+            set lists, backline lists) connected to who's actually on the gig.
           </p>
           <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
             <a href="#waitlist" data-testid="landing-hero-waitlist-link" className="px-6 py-3 rounded-lg bg-white text-indigo-700 text-sm font-semibold hover:bg-indigo-50">
