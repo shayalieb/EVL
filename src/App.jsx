@@ -30,7 +30,7 @@ import EventFormPage from './pages/EventFormPage';
 import EmailTemplatesPage from './pages/EmailTemplatesPage';
 import RemindersPage from './pages/RemindersPage';
 import SettingsPage from './pages/SettingsPage';
-import SupportPage from './pages/SupportPage';
+import HelpPage from './pages/HelpPage';
 import AdminLayout from './layouts/AdminLayout';
 import AdminAccountsPage from './pages/admin/AdminAccountsPage';
 import AdminSupportPage from './pages/admin/AdminSupportPage';
@@ -168,7 +168,7 @@ function AppRoutes() {
         <Route path="reminders" element={<RemindersPage />} />
         <Route path="email-templates" element={<EmailTemplatesPage />} />
         <Route path="settings" element={<SettingsPage />} />
-        <Route path="help" element={<SupportPage />} />
+        <Route path="help" element={<HelpPage />} />
         <Route path="dev/canvas-demo" element={<DevOnlyRoute><CanvasEngineDemoPage /></DevOnlyRoute>} />
         <Route path="events/:eventId/stage-plot" element={<VerticalGate vertical="band_orchestra"><StagePlotEditorPage /></VerticalGate>} />
         <Route path="events/:eventId/floor-plan" element={<VerticalGate vertical="party_planning"><FloorPlanEditorPage /></VerticalGate>} />

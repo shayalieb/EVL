@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../context/AuthContext';
-import { useToast } from '../components/ui/Toast';
-import { FileIcon } from '../components/ui/icons';
+import { useToast } from './ui/Toast';
+import { FileIcon } from './ui/icons';
 import { sendSupportMessage, supportAttachmentDownloadUrl, formatFileSize } from '../lib/support';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -49,7 +49,11 @@ function pickFiles(existing, incoming) {
   return [...existing, ...Array.from(incoming || [])].slice(0, MAX_FILES);
 }
 
-export default function SupportPage() {
+// The "still stuck? talk to a person" fallback — pulled out of what used to
+// be the whole Help page (SupportPage.jsx) so HelpPage.jsx can put it
+// alongside the self-serve article browser instead of it being the only
+// thing "Help" offered.
+export default function HelpContactSupport() {
   const { showToast } = useToast();
   const [threads, setThreads] = useState(null);
   const [loadError, setLoadError] = useState('');
@@ -107,12 +111,10 @@ export default function SupportPage() {
   const openThread = threads.find((t) => t.status === 'open') || threads[0];
 
   return (
-    <div className="max-w-2xl">
-      <h2 className="text-2xl font-bold text-slate-800 mb-4">Help</h2>
-
+    <div>
       {!openThread ? (
         <form onSubmit={handleStart} className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
-          <p className="text-sm text-slate-500">Have an issue or a question? Send us a message and we'll get back to you.</p>
+          <p className="text-sm text-slate-500">Can't find what you need in the articles? Send us a message and we'll get back to you.</p>
           <input required placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} data-testid="support-start-subject-input" className={inputClass} />
           <textarea required placeholder="Describe your issue…" rows={4} value={body} onChange={(e) => setBody(e.target.value)} data-testid="support-start-body-textarea" className={inputClass} />
           <PendingFiles files={startFiles} onRemove={(i) => setStartFiles((prev) => prev.filter((_, idx) => idx !== i))} />
