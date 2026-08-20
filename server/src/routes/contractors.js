@@ -5,6 +5,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createWithPreservedId } from '../lib/idPreservingCreate.js';
+import { MAX_LIST_ROWS } from '../lib/listLimits.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
 
@@ -44,6 +45,7 @@ router.get('/', asyncHandler(async (req, res) => {
   const contractors = await prisma.contractor.findMany({
     where: { accountId: req.membership.accountId },
     orderBy: { createdAt: 'asc' },
+    take: MAX_LIST_ROWS,
   });
   res.json({ contractors: contractors.map(serializeContractor) });
 }));

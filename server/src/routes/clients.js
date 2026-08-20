@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createWithPreservedId } from '../lib/idPreservingCreate.js';
+import { MAX_LIST_ROWS } from '../lib/listLimits.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -30,6 +31,7 @@ router.get('/', asyncHandler(async (req, res) => {
   const clients = await prisma.client.findMany({
     where: { accountId: req.membership.accountId },
     orderBy: { createdAt: 'asc' },
+    take: MAX_LIST_ROWS,
   });
   res.json({ clients: clients.map(serializeClient) });
 }));

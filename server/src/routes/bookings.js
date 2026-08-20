@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createWithPreservedId } from '../lib/idPreservingCreate.js';
+import { MAX_LIST_ROWS } from '../lib/listLimits.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -88,11 +89,6 @@ function serializeBookingLite(b) {
     updatedAt: b.updatedAt,
   };
 }
-
-// Hard ceiling, not real pagination — no account is anywhere near this today,
-// it just stops a single request from pulling an unbounded row count into
-// memory (concurrent requests against a huge account can OOM the process).
-const MAX_LIST_ROWS = 10000;
 
 router.get('/', asyncHandler(async (req, res) => {
   const bookings = await prisma.booking.findMany({
