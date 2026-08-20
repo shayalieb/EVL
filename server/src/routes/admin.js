@@ -132,6 +132,22 @@ function sanitizeAdminPermissions(input) {
   return result;
 }
 
+// A caller holding only a subset of ADMIN_PERMISSION_KEYS (e.g. just
+// manageAdmins, from the router.use('/platform-admins', ...) gate above)
+// must never be able to grant themself or anyone else a key they don't
+// already hold — otherwise manageAdmins alone is a path to full platform-
+// admin access via a self-issued PATCH. The owner's access is implicit/
+// full and isn't stored as adminPermissions, so this is a no-op for them.
+function clampToCallerPermissions(req, input) {
+  const sanitized = sanitizeAdminPermissions(input);
+  if (req.user?.isPlatformOwner) return sanitized;
+  const callerPermissions = req.user?.adminPermissions || {};
+  for (const key of ADMIN_PERMISSION_KEYS) {
+    if (sanitized[key] && !callerPermissions[key]) sanitized[key] = false;
+  }
+  return sanitized;
+}
+
 async function createInvitedUser({ firstName, lastName, email }, { grantAdmin = false, permissions, approvedById } = {}) {
   const normalizedEmail = email.trim().toLowerCase();
 
@@ -551,7 +567,7 @@ router.post('/platform-admins', asyncHandler(async (req, res) => {
 
   const updated = await prisma.user.update({
     where: { id: user.id },
-    data: { isPlatformAdmin: true, adminPermissions: sanitizeAdminPermissions(permissions) },
+    data: { isPlatformAdmin: true, adminPermissions: clampToCallerPermissions(req, permissions) },
   });
   res.status(201).json({ admin: serializeAdmin(updated) });
 }));
@@ -565,7 +581,7 @@ router.post('/platform-admins/invite', asyncHandler(async (req, res) => {
   }
   let user;
   try {
-    user = await createInvitedUser({ firstName, lastName, email }, { grantAdmin: true, permissions, approvedById: req.user.id });
+    user = await createInvitedUser({ firstName, lastName, email }, { grantAdmin: true, permissions: clampToCallerPermissions(req, permissions), approvedById: req.user.id });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     throw err;
@@ -584,7 +600,7 @@ router.patch('/platform-admins/:id', asyncHandler(async (req, res) => {
   }
   const updated = await prisma.user.update({
     where: { id: target.id },
-    data: { adminPermissions: sanitizeAdminPermissions(req.body?.permissions) },
+    data: { adminPermissions: clampToCallerPermissions(req, req.body?.permissions) },
   });
   res.json({ admin: serializeAdmin(updated) });
 }));

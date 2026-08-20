@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { attachMembership } from '../lib/membership.js';
+import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createWithPreservedId } from '../lib/idPreservingCreate.js';
 
 const router = Router();
@@ -113,6 +113,9 @@ router.get('/:id', asyncHandler(async (req, res) => {
 }));
 
 router.post('/', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const { id, ...rest } = req.body || {};
   if (!id?.trim()) {
     return res.status(400).json({ error: 'id is required.' });
@@ -143,6 +146,9 @@ router.post('/', asyncHandler(async (req, res) => {
 }));
 
 router.patch('/:id', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const existing = await prisma.event.findUnique({ where: { id: req.params.id } });
   if (!existing || existing.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Event not found.' });

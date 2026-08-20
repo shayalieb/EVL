@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { attachMembership } from '../lib/membership.js';
+import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { getStripeClient } from '../lib/stripe.js';
@@ -107,6 +107,9 @@ function parsePositiveInt(value) {
 }
 
 router.post('/', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageBookings) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const { bookingId, recipientEmail, recipientName, snapshot, dueDate, memo, number, acceptPayment } = req.body || {};
   if (!bookingId?.trim() || !recipientEmail?.trim() || !snapshot) {
     return res.status(400).json({ error: 'bookingId, recipientEmail, and snapshot are required.' });
@@ -151,6 +154,9 @@ router.post('/', asyncHandler(async (req, res) => {
 // draft — once sent, a pay link is out in the world pointing at this exact
 // content.
 router.patch('/:id', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageBookings) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
   if (!invoice || invoice.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Invoice not found.' });
@@ -192,6 +198,9 @@ router.patch('/:id', asyncHandler(async (req, res) => {
 }));
 
 router.post('/:id/send', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageBookings) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
   if (!invoice || invoice.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Invoice not found.' });
@@ -256,6 +265,9 @@ router.post('/:id/send', asyncHandler(async (req, res) => {
 // going through the Stripe-gated POST /:id/send. Only 'void' is off-limits
 // — there's nothing to record a payment against once cancelled.
 router.post('/:id/mark-payment', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageBookings) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
   if (!invoice || invoice.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Invoice not found.' });
@@ -309,6 +321,9 @@ router.post('/:id/mark-payment', asyncHandler(async (req, res) => {
 // A receipt only makes sense once money has actually landed — gated on
 // 'paid' rather than allowing it any time, unlike mark-payment above.
 router.post('/:id/send-receipt', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageBookings) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
   if (!invoice || invoice.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Invoice not found.' });
@@ -352,6 +367,9 @@ router.post('/:id/send-receipt', asyncHandler(async (req, res) => {
 }));
 
 router.post('/:id/void', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageBookings) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
   if (!invoice || invoice.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Invoice not found.' });

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { attachMembership } from '../lib/membership.js';
+import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 
@@ -72,6 +72,9 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 router.post('/', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageBookings) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const { recipientEmail, recipientName, bookingId } = req.body || {};
   const owner = await prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } });
   const token = generateToken();
@@ -138,6 +141,9 @@ router.get('/reusable-link', asyncHandler(async (req, res) => {
 // regenerate, there's no 'open' guard needed since a reusable link never
 // leaves that status).
 router.post('/reusable-link/regenerate', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageBookings) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   let link = await prisma.inquiryLink.findFirst({ where: { accountId: req.membership.accountId, isReusable: true } });
   if (!link) {
     link = await createReusableLink(req.membership.accountId, req.session.userId);
@@ -153,6 +159,9 @@ router.post('/reusable-link/regenerate', asyncHandler(async (req, res) => {
 // Contract's regenerate-client-link. Only valid while still 'open': once a
 // client has submitted, the response is what matters, not the link itself.
 router.post('/:id/regenerate', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageBookings) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const link = await prisma.inquiryLink.findUnique({ where: { id: req.params.id } });
   if (!link || link.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Inquiry link not found.' });
@@ -190,6 +199,9 @@ router.post('/:id/regenerate', asyncHandler(async (req, res) => {
 // authenticated addClient/addBooking(orUpdateBooking) flow, not a bespoke
 // server-side one.
 router.post('/:id/apply', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageBookings) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const { bookingId, clientId } = req.body || {};
   const link = await prisma.inquiryLink.findUnique({ where: { id: req.params.id } });
   if (!link || link.accountId !== req.membership.accountId) {
@@ -219,6 +231,9 @@ router.post('/:id/apply', asyncHandler(async (req, res) => {
 // links only — this manual route allows deleting a submitted/applied one
 // too, since that's a deliberate choice the owner is making).
 router.delete('/:id', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageBookings) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const link = await prisma.inquiryLink.findUnique({ where: { id: req.params.id } });
   if (!link || link.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Inquiry link not found.' });

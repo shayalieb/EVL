@@ -3,7 +3,7 @@ import { rateLimit } from 'express-rate-limit';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { attachMembership } from '../lib/membership.js';
+import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { requireVertical } from '../lib/verticals.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
@@ -45,6 +45,9 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 router.post('/', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const { eventId, name, email, phone, partySize, rsvpStatus, notes } = req.body || {};
   if (!eventId) return res.status(400).json({ error: 'eventId is required.' });
   if (!name?.trim()) return res.status(400).json({ error: 'Guest name is required.' });
@@ -66,6 +69,9 @@ router.post('/', asyncHandler(async (req, res) => {
 }));
 
 router.patch('/:id', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const existing = await prisma.guest.findUnique({ where: { id: req.params.id } });
   if (!existing || existing.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Guest not found.' });
@@ -93,6 +99,9 @@ router.patch('/:id', asyncHandler(async (req, res) => {
 }));
 
 router.delete('/:id', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const existing = await prisma.guest.findUnique({ where: { id: req.params.id } });
   if (!existing || existing.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Guest not found.' });
@@ -124,6 +133,9 @@ router.get('/rsvp-link', asyncHandler(async (req, res) => {
 // Rotates the link's token — the previously-shared URL stops working (e.g.
 // if it leaked somewhere it shouldn't have), a fresh one is returned.
 router.post('/rsvp-link/regenerate', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const { eventId } = req.body || {};
   if (!eventId) return res.status(400).json({ error: 'eventId is required.' });
 

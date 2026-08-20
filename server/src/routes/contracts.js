@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { attachMembership } from '../lib/membership.js';
+import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 
@@ -98,6 +98,9 @@ function statusFor({ clientSigned, ownerSigned }) {
 }
 
 router.post('/', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageBookings) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const { bookingId, recipientEmail, recipientName, snapshot, terms, manual, reason } = req.body || {};
   if (!bookingId?.trim() || !recipientEmail?.trim() || !snapshot) {
     return res.status(400).json({ error: 'bookingId, recipientEmail, and snapshot are required.' });
@@ -169,6 +172,9 @@ router.post('/', asyncHandler(async (req, res) => {
 }));
 
 router.post('/:id/owner-sign', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageBookings) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const { signatureName, signatureImage } = req.body || {};
   if (!signatureName?.trim() || !signatureImage) {
     return res.status(400).json({ error: 'signatureName and signatureImage are required.' });
@@ -199,6 +205,9 @@ router.post('/:id/owner-sign', asyncHandler(async (req, res) => {
 // Terms is deliberately editable regardless of status — unlike the frozen
 // snapshot, it's meant to be touched up any time (before or after signing).
 router.patch('/:id/terms', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageBookings) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const { terms } = req.body || {};
   const contract = await prisma.contract.findUnique({ where: { id: req.params.id } });
   if (!contract || contract.accountId !== req.membership.accountId) {
@@ -218,6 +227,9 @@ router.patch('/:id/terms', asyncHandler(async (req, res) => {
 // Manual free-text log entries — same idea as a booking's Activity Log,
 // but persisted server-side since Contract has no client-editable blob.
 router.post('/:id/log', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageBookings) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const { note } = req.body || {};
   if (!note?.trim()) return res.status(400).json({ error: 'note is required.' });
 
@@ -240,6 +252,9 @@ router.post('/:id/log', asyncHandler(async (req, res) => {
 // stops working the moment this runs, since it's a full replace, not an
 // additional valid token.
 router.post('/:id/regenerate-client-link', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageBookings) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const contract = await prisma.contract.findUnique({ where: { id: req.params.id } });
   if (!contract || contract.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Contract not found.' });

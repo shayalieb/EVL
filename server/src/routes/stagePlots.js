@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { attachMembership } from '../lib/membership.js';
+import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { requireVertical } from '../lib/verticals.js';
 import { uploadFile, getSignedDownloadUrl } from '../lib/fileStorage.js';
 
@@ -59,6 +59,9 @@ async function loadOwnedPlot(accountId, eventId) {
 // Storage path every other document type uses; optional so a save can skip
 // re-uploading the image when only, say, a page rename happened.
 router.patch('/:eventId/pages/:pageId', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const plot = await loadOwnedPlot(req.membership.accountId, req.params.eventId);
   if (!plot) return res.status(404).json({ error: 'Stage plot not found.' });
   const page = plot.pages.find((p) => p.id === req.params.pageId);
@@ -95,6 +98,9 @@ router.get('/:eventId/pages/:pageId/thumbnail', asyncHandler(async (req, res) =>
 }));
 
 router.post('/:eventId/pages', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const plot = await loadOwnedPlot(req.membership.accountId, req.params.eventId);
   if (!plot) return res.status(404).json({ error: 'Stage plot not found.' });
   const nextOrder = plot.pages.reduce((max, p) => Math.max(max, p.order), -1) + 1;
@@ -115,6 +121,9 @@ router.post('/:eventId/pages', asyncHandler(async (req, res) => {
 // (not unlinking) those channels here matches the "list mirrors what's
 // actually on stage" behavior an icon's own delete already has.
 router.delete('/:eventId/pages/:pageId', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const plot = await loadOwnedPlot(req.membership.accountId, req.params.eventId);
   if (!plot) return res.status(404).json({ error: 'Stage plot not found.' });
   if (plot.pages.length <= 1) return res.status(400).json({ error: 'A stage plot needs at least one page.' });
@@ -142,6 +151,9 @@ router.delete('/:eventId/pages/:pageId', asyncHandler(async (req, res) => {
 // avoids the client needing to predict/resolve @@unique([stagePlotId,
 // channelNumber]) conflicts itself.
 router.post('/:eventId/channels', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const plot = await prisma.stagePlot.findUnique({
     where: { accountId_eventId: { accountId: req.membership.accountId, eventId: req.params.eventId } },
     include: { channels: true },
@@ -188,6 +200,9 @@ router.post('/:eventId/channels', asyncHandler(async (req, res) => {
 // transiently collide with @@unique([stagePlotId, channelNumber]) the
 // moment two rows' old/new numbers cross.
 router.post('/:eventId/channels/reorder', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const plot = await prisma.stagePlot.findUnique({
     where: { accountId_eventId: { accountId: req.membership.accountId, eventId: req.params.eventId } },
     include: { channels: true },
@@ -216,6 +231,9 @@ async function loadOwnedChannel(accountId, eventId, channelId) {
 }
 
 router.patch('/:eventId/channels/:channelId', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const channel = await loadOwnedChannel(req.membership.accountId, req.params.eventId, req.params.channelId);
   if (!channel) return res.status(404).json({ error: 'Channel not found.' });
 
@@ -239,6 +257,9 @@ router.patch('/:eventId/channels/:channelId', asyncHandler(async (req, res) => {
 }));
 
 router.delete('/:eventId/channels/:channelId', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const channel = await loadOwnedChannel(req.membership.accountId, req.params.eventId, req.params.channelId);
   if (!channel) return res.status(404).json({ error: 'Channel not found.' });
   await prisma.stagePlotChannel.delete({ where: { id: channel.id } });
@@ -248,6 +269,9 @@ router.delete('/:eventId/channels/:channelId', asyncHandler(async (req, res) => 
 // No server-assigned numbering like channels above — backline items don't
 // map to a numbered input, so there's no @@unique to retry against.
 router.post('/:eventId/backline-items', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const plot = await loadOwnedPlot(req.membership.accountId, req.params.eventId);
   if (!plot) return res.status(404).json({ error: 'Stage plot not found.' });
   const { item, quantity, providedBy, notesHtml } = req.body || {};
@@ -272,6 +296,9 @@ async function loadOwnedBacklineItem(accountId, eventId, itemId) {
 }
 
 router.patch('/:eventId/backline-items/:itemId', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const item = await loadOwnedBacklineItem(req.membership.accountId, req.params.eventId, req.params.itemId);
   if (!item) return res.status(404).json({ error: 'Backline item not found.' });
 
@@ -287,6 +314,9 @@ router.patch('/:eventId/backline-items/:itemId', asyncHandler(async (req, res) =
 }));
 
 router.delete('/:eventId/backline-items/:itemId', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const item = await loadOwnedBacklineItem(req.membership.accountId, req.params.eventId, req.params.itemId);
   if (!item) return res.status(404).json({ error: 'Backline item not found.' });
   await prisma.stagePlotBacklineItem.delete({ where: { id: item.id } });

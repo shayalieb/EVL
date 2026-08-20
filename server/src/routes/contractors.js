@@ -49,6 +49,9 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 router.post('/', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageContractors) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const { id, firstName, lastName, middleName, email, phone, contractorType1, contractorType2, pricingTiers, priceNotes } = req.body || {};
   if (!id?.trim()) {
     return res.status(400).json({ error: 'id is required.' });
@@ -136,6 +139,9 @@ router.post('/bulk-email', bulkEmailLimiter, asyncHandler(async (req, res) => {
 }));
 
 router.patch('/:id', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageContractors) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const existing = await prisma.contractor.findUnique({ where: { id: req.params.id } });
   if (!existing || existing.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Contractor not found.' });
@@ -164,6 +170,9 @@ router.patch('/:id', asyncHandler(async (req, res) => {
 }));
 
 router.delete('/:id', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageContractors) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const existing = await prisma.contractor.findUnique({ where: { id: req.params.id } });
   if (!existing || existing.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Contractor not found.' });
@@ -199,6 +208,9 @@ router.get('/:id/calendar-link', asyncHandler(async (req, res) => {
 // comment) — get-or-create first, same as the GET above, since a business
 // might toggle these before ever having copied/emailed the link.
 router.patch('/:id/calendar-link', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageContractors) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const existing = await prisma.contractor.findUnique({ where: { id: req.params.id } });
   if (!existing || existing.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Contractor not found.' });
@@ -224,6 +236,9 @@ router.patch('/:id/calendar-link', asyncHandler(async (req, res) => {
 // `update` below), so regenerating doesn't reset what the contractor's
 // allowed to see.
 router.post('/:id/calendar-link/regenerate', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageContractors) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const existing = await prisma.contractor.findUnique({ where: { id: req.params.id } });
   if (!existing || existing.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Contractor not found.' });
@@ -241,6 +256,9 @@ router.post('/:id/calendar-link/regenerate', asyncHandler(async (req, res) => {
 // Emails the contractor their own calendar link (get-or-create first, same
 // as GET above — a business might email it before ever copying it).
 router.post('/:id/calendar-link/email', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageContractors) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const existing = await prisma.contractor.findUnique({ where: { id: req.params.id } });
   if (!existing || existing.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Contractor not found.' });
