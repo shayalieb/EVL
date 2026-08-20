@@ -45,22 +45,27 @@ router.post('/request-link', requestLinkLimiter, asyncHandler(async (req, res) =
   });
 
   if (clients.length) {
-    const links = [];
-    for (const client of clients) {
-      const token = generateToken();
-      await prisma.clientPortalToken.deleteMany({ where: { clientId: client.id, usedAt: null } });
-      await prisma.clientPortalToken.create({
-        data: { clientId: client.id, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + LOGIN_TOKEN_TTL_MS) },
-      });
+    // Batched rather than a per-client delete+create loop — same end state
+    // (each client's stale unused token gone, one fresh one issued), but two
+    // round trips total instead of 2*N, regardless of how many accounts
+    // share this email.
+    const tokenByClientId = new Map(clients.map((c) => [c.id, generateToken()]));
+    const expiresAt = new Date(Date.now() + LOGIN_TOKEN_TTL_MS);
+    await prisma.clientPortalToken.deleteMany({ where: { clientId: { in: clients.map((c) => c.id) }, usedAt: null } });
+    await prisma.clientPortalToken.createMany({
+      data: clients.map((c) => ({ clientId: c.id, tokenHash: hashToken(tokenByClientId.get(c.id)), expiresAt })),
+    });
+
+    const links = clients.map((client) => {
       const businessInfo = client.account?.accountData?.data?.businessInfo;
-      links.push({
-        url: `${frontendUrl()}/portal/verify?token=${token}`,
+      return {
+        url: `${frontendUrl()}/portal/verify?token=${tokenByClientId.get(client.id)}`,
         // Both the business name and the client's own name — two Client
         // rows in the same account can share an email, so business name
         // alone wouldn't always disambiguate which link is which.
         label: `${businessInfo?.name || 'GigWorks'} — ${client.firstName} ${client.lastName}`,
-      });
-    }
+      };
+    });
 
     const bodyHtml = `<p>Click below to view your event details${links.length > 1 ? ' — we found more than one account associated with this email' : ''}:</p>`
       + links.map((l) => `<p><a href="${l.url}">${escapeHtml(l.label)}</a></p>`).join('');
