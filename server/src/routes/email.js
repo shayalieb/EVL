@@ -25,7 +25,7 @@ router.post('/send', sendLimiter, asyncHandler(async (req, res) => {
   if (!effectivePermissions(req.membership).manageBookings) {
     return res.status(403).json({ error: 'Not authorized.' });
   }
-  const { to, subject, body, fromName, replyTo, pdfAttachment, inlineImages } = req.body || {};
+  const { to, subject, body, fromName, replyTo, pdfAttachment, inlineImages, wide } = req.body || {};
   if (!to?.trim() || !subject?.trim() || !body?.trim()) {
     return res.status(400).json({ error: 'Recipient, subject, and body are required.' });
   }
@@ -46,8 +46,11 @@ router.post('/send', sendLimiter, asyncHandler(async (req, res) => {
     const from = await resolveFromHeader({ accountId: req.membership.accountId, fromName, localPart: 'hello' });
     // bodyHtml, not escapeHtml(body) — this is already-composed HTML from the
     // client (a proposal cover note, etc.), same trust boundary as every
-    // other buildActionEmailHtml caller.
-    ({ data, error } = await sendMail({ from, to, subject, html: buildActionEmailHtml({ businessInfo, bodyHtml: body }), replyTo, attachments }));
+    // other buildActionEmailHtml caller. `wide` is set by callers whose body
+    // carries richer content than a plain cover note (StagePlotEmailModal.jsx's
+    // ad hoc, non-roster recipients) — see buildActionEmailHtml's own
+    // comment for why the default width squeezes that content.
+    ({ data, error } = await sendMail({ from, to, subject, html: buildActionEmailHtml({ businessInfo, bodyHtml: body, ...(wide ? { maxWidth: 640 } : {}) }), replyTo, attachments }));
   } catch {
     return res.status(503).json({ error: 'Email sending is not configured yet.' });
   }

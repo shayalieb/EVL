@@ -103,7 +103,7 @@ export default function StagePlotEmailModal({ open, onClose, eventId, eventName,
       for (const email of adhocEmails) {
         try {
           // eslint-disable-next-line no-await-in-loop
-          await sendEmail({ to: email, subject, body: fullBody, fromName, pdfAttachment, inlineImages });
+          await sendEmail({ to: email, subject, body: fullBody, fromName, pdfAttachment, inlineImages, wide: true });
           successCount += 1;
         } catch {
           // keep going

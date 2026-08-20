@@ -89,3 +89,83 @@ export function centerElementsOnStage(elements, ids, stageCenter) {
   const dy = stageCenter.y - (minY + maxY) / 2;
   return elements.map((e) => (idSet.has(e.id) ? { ...e, x: e.x + dx, y: e.y + dy } : e));
 }
+
+// A gap this big between two consecutive icons (already sorted along one
+// axis) means "these are two different things," not "these are the same
+// row/cluster placed a little unevenly" — e.g. a monitor wedge at stage
+// left and one at stage right, with the performer's own footprint empty
+// between them. Below it, two icons count as neighbors in the same cluster.
+// Expressed as a multiple of icon size (rather than a fixed scene-unit
+// number) so it scales sensibly if ICON_SIZE(the caller's own icon
+// footprint) is ever tuned.
+const ROW_GAP_ICON_MULTIPLE = 1.35;
+const CLUSTER_GAP_ICON_MULTIPLE = 3;
+
+// Greedy 1D clustering along one axis: sort by that axis, then start a new
+// cluster whenever the gap to the previous item exceeds threshold — the
+// same "gap means different group" idea used for both passes below (rows
+// by Y, then left/right sub-groups within a row by X), just parameterized
+// by axis and threshold so one function serves both.
+function clusterByGap(items, axis, threshold) {
+  const sorted = items.slice().sort((a, b) => a[axis] - b[axis]);
+  const clusters = [];
+  let current = [];
+  for (const item of sorted) {
+    if (current.length && item[axis] - current[current.length - 1][axis] > threshold) {
+      clusters.push(current);
+      current = [];
+    }
+    current.push(item);
+  }
+  if (current.length) clusters.push(current);
+  return clusters;
+}
+
+// The one-click "neaten everything up" pass: groups icons that read as
+// belonging together — first into rows by how close their Y positions
+// already are, then each row split into left/right (or however many)
+// sub-groups wherever there's a real gap along X, so two clusters that
+// happen to sit at a similar stage depth (monitor wedges flanking either
+// side of the stage, say) don't get merged into one long row spanning the
+// dead space between them. Each resulting cluster of 2+ icons is leveled to
+// one shared Y (their own average, not moved to some fixed row) and, for
+// 3+, evenly spaced along X between its own two outermost members — same
+// "endpoints stay, only the middle redistributes" behavior as
+// distributeElements above, just auto-detected per cluster instead of
+// requiring a manual selection. Clusters of exactly 2 still get leveled
+// (meaningfully "aligned") but aren't redistributed — with only two points
+// there's nothing between them to space out, same reasoning
+// distributeElements documents for why it no-ops under three.
+//
+// `iconSize` is the caller's fixed on-screen icon footprint (in scene
+// units) — both thresholds below scale off it so this reads sensibly
+// whether the canvas is a tight cluster of small icons or a sparse plot of
+// bigger ones. `isLinear(element)` excludes runs (cable ramp, truss, drape)
+// that have their own length/width semantics — moving their x/y like a
+// point icon would silently displace one end of a real physical run.
+export function autoAlignAll(elements, iconSize, isLinear) {
+  const candidates = elements.filter((e) => !isLinear?.(e));
+  if (candidates.length < 2) return elements;
+
+  const rows = clusterByGap(candidates, 'y', iconSize * ROW_GAP_ICON_MULTIPLE);
+  const updates = new Map();
+  for (const row of rows) {
+    if (row.length < 2) continue;
+    const subClusters = clusterByGap(row, 'x', iconSize * CLUSTER_GAP_ICON_MULTIPLE);
+    for (const cluster of subClusters) {
+      if (cluster.length < 2) continue;
+      const avgY = cluster.reduce((sum, e) => sum + e.y, 0) / cluster.length;
+      if (cluster.length === 2) {
+        for (const e of cluster) updates.set(e.id, { x: e.x, y: avgY });
+        continue;
+      }
+      const sorted = cluster.slice().sort((a, b) => a.x - b.x);
+      const first = sorted[0].x;
+      const last = sorted[sorted.length - 1].x;
+      const step = (last - first) / (sorted.length - 1);
+      sorted.forEach((e, i) => updates.set(e.id, { x: first + step * i, y: avgY }));
+    }
+  }
+  if (!updates.size) return elements;
+  return elements.map((e) => (updates.has(e.id) ? { ...e, ...updates.get(e.id) } : e));
+}

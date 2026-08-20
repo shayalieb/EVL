@@ -5,7 +5,10 @@ import { computeDragSnap, SNAP_THRESHOLD_PX } from './alignment';
 import { useSvgImage, preloadIconRegistry } from './useSvgImage';
 import RichTextToolbar from '../../components/ui/RichTextToolbar';
 
-const ICON_SIZE = 56;
+// Exported for alignment.js's autoAlignAll — its row/cluster-gap thresholds
+// scale off this same fixed icon footprint, so it reads sensibly against
+// whatever size icons this canvas actually draws.
+export const ICON_SIZE = 56;
 // Cable ramp / drape / truss runs are commonly 20-50+ ft on a real stage
 // plot — nothing like this engine's other icons, which are always drawn at
 // one fixed size. Stretching a *raster* icon that long would smear its
@@ -134,14 +137,19 @@ function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSe
   const labelText = element.seats ? `${baseLabel} (${element.seats})` : baseLabel;
   const linearWidth = icon?.linearKind ? Math.max(LINEAR_MIN_WIDTH, element.width || LINEAR_DEFAULT_WIDTH) : null;
   const labelY = linearWidth != null ? LINEAR_HEIGHT / 2 + 10 : icon ? ICON_SIZE / 2 + 12 : 24;
-  // The label and number badge live inside the same rotatable Group as the
-  // icon (see the file-level comment below) so they track drags correctly,
-  // but readers shouldn't have to tilt their head to read a rotated icon's
-  // name — counter-rotating these two inner Groups by the icon's own
-  // rotation cancels the parent's spin, and rotating their *offset* by the
-  // same amount keeps them anchored at the same fixed spot next to the
-  // icon (below, and top-right) instead of orbiting around it as it turns.
+  // The label and number badge live inside the same rotatable/scalable Group
+  // as the icon (see the file-level comment below) so they track drags
+  // correctly, but readers shouldn't have to tilt their head to read a
+  // rotated icon's name, or squint at a squashed/stretched one on an icon
+  // that's been resized non-uniformly — counter-rotating and counter-scaling
+  // these two inner Groups cancels the parent's spin and stretch, and
+  // rotating their *offset* by the same amount keeps them anchored at the
+  // same fixed spot next to the icon (below, and top-right) instead of
+  // orbiting around it as it turns. boundBoxFunc below never lets scaleX/
+  // scaleY reach 0, so this inverse is always finite.
   const counterRotation = -element.rotation;
+  const counterScaleX = 1 / (element.scaleX || 1);
+  const counterScaleY = 1 / (element.scaleY || 1);
   const labelAnchor = rotateOffset(0, labelY, counterRotation);
   const numberAnchor = rotateOffset(16, -24, counterRotation);
 
@@ -200,7 +208,7 @@ function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSe
           cornerRadius={4}
         />
       )}
-      <Group x={labelAnchor.x} y={labelAnchor.y} rotation={counterRotation} listening={false}>
+      <Group x={labelAnchor.x} y={labelAnchor.y} rotation={counterRotation} scaleX={counterScaleX} scaleY={counterScaleY} listening={false}>
         <Text
           x={-34}
           y={0}
@@ -212,7 +220,7 @@ function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSe
         />
       </Group>
       {number != null && (
-        <Group x={numberAnchor.x} y={numberAnchor.y} rotation={counterRotation} listening={false}>
+        <Group x={numberAnchor.x} y={numberAnchor.y} rotation={counterRotation} scaleX={counterScaleX} scaleY={counterScaleY} listening={false}>
           <Circle radius={9} fill="#4f46e5" stroke="#fff" strokeWidth={1.5} />
           <Text
             text={String(number)}

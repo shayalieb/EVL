@@ -1,9 +1,9 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import CanvasStage from '../lib/canvasEngine/CanvasStage';
+import CanvasStage, { ICON_SIZE } from '../lib/canvasEngine/CanvasStage';
 import { useUndoRedo } from '../lib/canvasEngine/history';
 import { createEmptyScene, deleteElement, deleteAnnotation, deleteStroke, addLayer, updateLayer } from '../lib/canvasEngine/sceneModel';
 import { scaleFromCalibration } from '../lib/canvasEngine/measurement';
-import { alignElementsCenter, distributeElements, centerElementsOnStage } from '../lib/canvasEngine/alignment';
+import { alignElementsCenter, distributeElements, centerElementsOnStage, autoAlignAll } from '../lib/canvasEngine/alignment';
 import { STAGE_PLOT_ICON_LIST, STAGE_PLOT_ICONS } from '../lib/canvasEngine/stagePlotIcons';
 import { saveStagePlotPage } from '../lib/stagePlots';
 import CanvasIconPalette from './CanvasIconPalette';
@@ -261,6 +261,41 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, p
   // that into a pixels-per-unit value, same math a "click two points, tell
   // me the distance" CAD tool uses. Scene-setting change, not an
   // undo-worthy edit — same as the plain "Pixels per ft" input below.
+  // The double-click popup's "Name" field (CanvasStage.jsx) writes to the
+  // linked Production List channel's `source` — that's the field that
+  // actually needs to survive a page reload/PDF export, so onUpdateElementContent
+  // (from the parent) persists it there. But the icon's on-canvas label
+  // (element.label, what's actually visible on the plot itself) was never
+  // updated to match, so renaming here looked like it did nothing on the
+  // canvas. Mirroring the new name onto the element's own label — an
+  // ordinary undo-worthy edit, same as any other canvas change — is what
+  // makes this a real rename instead of a Production-List-only edit. An
+  // empty name isn't force-written as a blank label: ElementShape's own
+  // `element.label || icon?.label` fallback already means clearing this
+  // field naturally reverts the canvas to the icon's default label, exactly
+  // as if it had never been renamed.
+  function handleUpdateElementContent(elementId, { name, description }) {
+    apply((s) => ({
+      ...s,
+      elements: s.elements.map((e) => (e.id === elementId ? { ...e, label: name } : e)),
+    }));
+    return onUpdateElementContent?.(elementId, { name, description });
+  }
+
+  // Never runs unless clicked — this is the whole-canvas "neaten everything
+  // up" pass (see autoAlignAll's own comment for the row/cluster detection
+  // it does), as opposed to the Align popover above, which only ever acts
+  // on a manual selection. One undo-able history step, same as any other
+  // edit, so a result the user doesn't like is a single Cmd/Ctrl+Z away,
+  // and every icon it moved is still freely draggable afterward — this
+  // never re-applies itself or locks anything in place.
+  function handleAutoAlignAll() {
+    apply((s) => ({
+      ...s,
+      elements: autoAlignAll(s.elements, ICON_SIZE, (e) => !!STAGE_PLOT_ICONS[e.iconId]?.linearKind),
+    }));
+  }
+
   function handleCalibrate(pointA, pointB, distance) {
     const newScale = scaleFromCalibration(pointA, pointB, distance);
     if (newScale) replaceCurrent((s) => ({ ...s, scalePxPerUnit: newScale }));
@@ -325,6 +360,16 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, p
           className={toolbarButtonClass}
         >
           Center All
+        </button>
+        <button
+          type="button"
+          onClick={handleAutoAlignAll}
+          disabled={scene.elements.length < 2}
+          data-testid="stageplot-auto-align-all-button"
+          title="Line up icons that are already roughly in a row and space them evenly — undo (Cmd/Ctrl+Z) if you don't like the result"
+          className={toolbarButtonClass}
+        >
+          Auto-Align All
         </button>
         <div className="w-px h-6 bg-slate-200 mx-1" />
         <button type="button" onClick={() => setMode('select')} className={`${toolbarButtonClass} ${mode === 'select' ? 'bg-indigo-600 text-white border-indigo-600' : ''}`}>Select</button>
@@ -478,7 +523,7 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, p
             iconRegistry={STAGE_PLOT_ICONS}
             elementNumbers={elementNumbers}
             elementContent={elementContent}
-            onUpdateElementContent={onUpdateElementContent}
+            onUpdateElementContent={handleUpdateElementContent}
             onElementAdded={onElementAdded}
             pendingIconId={pendingIconId}
             onCalibrate={handleCalibrate}

@@ -63,7 +63,14 @@ export async function buildStagePlotViewsHtml({ eventId, stagePlot, checked }) {
           base64: dataUrl.slice(dataUrl.indexOf(',') + 1),
           contentType: 'image/png',
         });
-        pageBlocks += `<div style="margin-bottom:16px;"><div style="font-size:12px;font-weight:600;color:#475569;margin-bottom:4px;">${escapeHtml(page.name)}</div><img src="cid:${contentId}" alt="${escapeHtml(page.name)}" style="max-width:100%;border:1px solid #e2e8f0;border-radius:8px;" /></div>`;
+        // width="100%" as a real HTML attribute, not just CSS — Outlook
+        // desktop (the Word rendering engine) is notorious for ignoring an
+        // <img>'s own max-width/height:auto CSS and rendering it at its
+        // full intrinsic pixel size instead, which visibly overflows/clips
+        // against buildActionEmailHtml's container (server/src/lib/
+        // mailer.js) no matter how wide that container is made. The
+        // attribute is what actually gets that class of client to scale it.
+        pageBlocks += `<div style="margin-bottom:16px;"><div style="font-size:12px;font-weight:600;color:#475569;margin-bottom:4px;">${escapeHtml(page.name)}</div><img src="cid:${contentId}" alt="${escapeHtml(page.name)}" width="100%" style="width:100%;max-width:100%;height:auto;display:block;border:1px solid #e2e8f0;border-radius:8px;" /></div>`;
       } else {
         pageBlocks += `<div style="margin-bottom:16px;${emptyStyle}">${escapeHtml(page.name)} — not saved yet.</div>`;
       }

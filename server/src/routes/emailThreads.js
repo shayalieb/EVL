@@ -101,7 +101,12 @@ router.post('/send', asyncHandler(async (req, res) => {
     // bodyHtml, not escapeHtml(body) — this is already-composed HTML from
     // the client (free text or a loaded email template), same trust
     // boundary as every other buildActionEmailHtml caller.
-    sent = await sendMail({ from: fromAddress, to: contractorEmail, subject, html: buildActionEmailHtml({ businessInfo, bodyHtml: body }), replyTo: thread.replyToAlias, headers, attachments });
+    // Wider than buildActionEmailHtml's 480px default — this route carries
+    // richer content than a plain action-link notification (a prep sheet's
+    // tables, a Stage Plot page image), which get uncomfortably squeezed
+    // (or, for the image, can visibly clip in Outlook) at the narrower
+    // width. See that function's own comment for the full reasoning.
+    sent = await sendMail({ from: fromAddress, to: contractorEmail, subject, html: buildActionEmailHtml({ businessInfo, bodyHtml: body, maxWidth: 640 }), replyTo: thread.replyToAlias, headers, attachments });
   } catch {
     return res.status(503).json({ error: 'Email sending is not configured yet.' });
   }

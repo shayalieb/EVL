@@ -86,10 +86,20 @@ const DEFAULT_ACCENT_COLOR = '#6366f1';
 // throughout (no flexbox/grid) since email clients — Outlook especially —
 // render a much smaller CSS subset than a browser.
 //
+// `maxWidth` defaults to 480 — right for this shell's original use (a short
+// heading, a couple lines of body text, a button) but too narrow for the
+// richer bodyHtml the threaded-email routes (server/src/routes/
+// emailThreads.js) hand this same shell: a Stage Plot page image or a
+// multi-column table, which just get uncomfortably squeezed (an image can
+// visibly overflow/clip in email clients — Outlook especially — that don't
+// reliably honor an <img>'s own max-width:100% inside a narrow container)
+// at 480px. Those callers pass a wider value instead of duplicating this
+// whole shell just to change one number.
+//
 // Converts base64 Data URLs (data:image/...) into inline CID attachments
 // (cid:business-logo) so major email clients (Gmail, Outlook, Yahoo) display
 // the logo crisp and clear instead of blocking inline base64 data URLs.
-export function buildActionEmailHtml({ businessInfo, heading, bodyHtml, buttonText, buttonUrl, footnote }) {
+export function buildActionEmailHtml({ businessInfo, heading, bodyHtml, buttonText, buttonUrl, footnote, maxWidth = 480 }) {
   const accent = businessInfo?.accentColor || DEFAULT_ACCENT_COLOR;
   const name = businessInfo?.name || 'GigWorks';
   const attachments = [];
@@ -116,7 +126,7 @@ export function buildActionEmailHtml({ businessInfo, heading, bodyHtml, buttonTe
 
   const htmlString = `
 <div style="background-color:#f8fafc;padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-  <div style="max-width:480px;margin:0 auto;background-color:#ffffff;border-radius:16px;padding:32px;border:1px solid #e2e8f0;">
+  <div style="max-width:${maxWidth}px;margin:0 auto;background-color:#ffffff;border-radius:16px;padding:32px;border:1px solid #e2e8f0;">
     ${logoBlock}
     ${heading ? `<h1 style="font-size:18px;font-weight:700;color:#1e293b;margin:0 0 12px;text-align:center;">${escapeHtml(heading)}</h1>` : ''}
     <div style="font-size:14px;line-height:1.6;color:#475569;">${bodyHtml}</div>
