@@ -186,6 +186,9 @@ export default function ContractDocument({ snapshot, terms, clientSignature, own
         <TableCard title="Event Details" accent={accent} sectionStyle={layout.sectionStyle}>
           <Row label="Event Type" value={booking.eventType || '—'} />
           <Row label="Event Date" value={booking.eventDate ? formatEventDate(booking.eventDate) : 'Tentative'} />
+          {(booking.brideName || booking.groomName) && (
+            <Row label="Bride & Groom" value={[booking.brideName, booking.groomName].filter(Boolean).join(' & ')} />
+          )}
           <Row label="Location" value={formatVenueLine(booking.venue) || '—'} />
           <Row label="Estimated Hours" value={snapshot.hours ? `${snapshot.hours} hrs` : '—'} />
         </TableCard>

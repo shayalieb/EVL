@@ -133,6 +133,12 @@ export default function ProposalRespondPage() {
               <div className="text-slate-800">{booking.eventType || '—'}</div>
               <div className="text-slate-500">Event Date</div>
               <div className="text-slate-800">{booking.eventDate ? formatEventDate(booking.eventDate) : 'Tentative'}</div>
+              {(booking.brideName || booking.groomName) && (
+                <>
+                  <div className="text-slate-500">Bride & Groom</div>
+                  <div className="text-slate-800">{[booking.brideName, booking.groomName].filter(Boolean).join(' & ')}</div>
+                </>
+              )}
               <div className="text-slate-500">Location</div>
               <div className="text-slate-800">{formatVenueLine(booking.venue) || '—'}</div>
               {proposal.hours && (

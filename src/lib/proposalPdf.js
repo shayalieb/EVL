@@ -56,6 +56,7 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
   const eventRows = [
     ['Event Type', booking.eventType || '—'],
     ['Event Date', booking.eventDate ? formatEventDate(booking.eventDate) : 'Tentative'],
+    ...(booking.brideName || booking.groomName ? [['Bride & Groom', [booking.brideName, booking.groomName].filter(Boolean).join(' & ')]] : []),
     ['Location', formatVenueLine(booking.venue) || '—'],
     ['Estimated Hours', hours ? `${hours} hrs` : '—'],
   ];

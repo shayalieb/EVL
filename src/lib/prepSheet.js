@@ -81,7 +81,8 @@ export function renderPrepSheetEmail(form, prepContractors, requests = [], attac
   const body = `
     <div style="font-family:sans-serif;color:#1e293b;max-width:600px;">
       <h2 style="margin:0 0 4px;">${escapeHtml(form.name || 'Event')}</h2>
-      <p style="margin:0 0 16px;color:#475569;">${eventDate}${form.eventDayOfTheWeek ? ` (${escapeHtml(form.eventDayOfTheWeek)})` : ''} · ${formatTime(form.startTime)} – ${formatTime(form.endTime)}</p>
+      <p style="margin:0 0 ${form.brideName || form.groomName ? '4px' : '16px'};color:#475569;">${eventDate}${form.eventDayOfTheWeek ? ` (${escapeHtml(form.eventDayOfTheWeek)})` : ''} · ${formatTime(form.startTime)} – ${formatTime(form.endTime)}</p>
+      ${form.brideName || form.groomName ? `<p style="margin:0 0 16px;color:#475569;">${escapeHtml([form.brideName, form.groomName].filter(Boolean).join(' & '))}</p>` : ''}
 
       ${venue.name || address ? `
       <h3 style="margin:16px 0 4px;font-size:14px;text-transform:uppercase;letter-spacing:0.03em;color:#64748b;">Location</h3>

@@ -23,7 +23,15 @@ async function buildPrepSheetDoc(form, prepContractors, requests, businessInfo, 
   doc.setTextColor(90);
   const dateLine = `${formatDate(form.eventDate)}${form.eventDayOfTheWeek ? ` (${form.eventDayOfTheWeek})` : ''} · ${formatTime(form.startTime)} – ${formatTime(form.endTime)}`;
   doc.text(dateLine, marginX, y);
-  y += 10;
+  y += 6;
+
+  if (form.brideName || form.groomName) {
+    doc.setFontSize(11);
+    doc.setTextColor(90);
+    doc.text([form.brideName, form.groomName].filter(Boolean).join(' & '), marginX, y);
+    y += 6;
+  }
+  y += 4;
 
   const venue = form.venue || {};
   if (venue.name || venue.address1) {

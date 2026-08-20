@@ -1064,6 +1064,8 @@ export default function BookingFormPage() {
         notes: patch.notes,
         depositAmount: patch.depositAmount,
         depositDueDate: patch.depositDueDate,
+        brideName: patch.brideName,
+        groomName: patch.groomName,
       },
       proposal: {
         hours: patch.proposal?.hours,
@@ -1173,6 +1175,8 @@ export default function BookingFormPage() {
         depositDueDate: form.depositDueDate,
         depositPaid: form.depositPaid,
         notes: form.notes,
+        brideName: form.brideName,
+        groomName: form.groomName,
       },
       hours: contractHours,
       lineItems: contractLineItems,
@@ -1676,6 +1680,20 @@ export default function BookingFormPage() {
   const grandTotal = contract
     ? computeGrandTotal(contractLineItems, contractOfferings)
     : computeGrandTotal(form.proposal?.lineItems, form.proposal?.offerings);
+
+  // A percent-based deposit's dollar amount is only ever set by the
+  // percent input's own onChange (see the two Deposit sections below) —
+  // it doesn't otherwise track grandTotal, so it went stale whenever
+  // pricing changed some other way (e.g. adding an offering) after the
+  // percent was set. This keeps it correct regardless of what moved
+  // grandTotal.
+  useEffect(() => {
+    if (form.depositType !== 'percent' || form.depositPercent === '') return;
+    const synced = Math.round((Number(form.depositPercent) / 100) * grandTotal * 100) / 100;
+    if (synced !== form.depositAmount) update('depositAmount', synced);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grandTotal, form.depositType, form.depositPercent]);
+
   const alreadyInvoiced = invoices.filter((inv) => inv.status !== 'void').reduce((sum, inv) => sum + (inv.total || 0), 0);
   const remainingBalance = grandTotal - alreadyInvoiced;
   // Used to make quick-created invoice memos self-explanatory (e.g. "Deposit
