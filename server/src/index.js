@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import * as Sentry from '@sentry/node';
 import express from 'express';
+import compression from 'compression';
 import cors from 'cors';
 import session from 'express-session';
 import { PrismaSessionStore } from '@quixo3/prisma-session-store';
@@ -54,6 +55,11 @@ Sentry.init({
 
 const app = express();
 app.set('trust proxy', 1);
+// Every response (JSON, email/PDF payloads) was going out uncompressed —
+// this cuts bandwidth and client-perceived latency under load. Operates
+// purely on the response body, so it's safe ahead of the raw-body webhook
+// routes below (those are about request parsing, not this).
+app.use(compression());
 
 const extraOrigins = (process.env.EXTRA_CLIENT_ORIGINS || '')
   .split(',')
