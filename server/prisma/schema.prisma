@@ -1043,6 +1043,10 @@ model Booking {
   updatedAt DateTime @updatedAt
 
   @@index([accountId])
+  // Queried directly by the reminder rule engine and the deleted-record
+  // purger (both scan across accounts), not just filtered client-side —
+  // see server/src/lib/reminderRuleEngine.js and deletedRecordPurger.js.
+  @@index([convertedEventId])
 }
 
 // A business's staffed/logistics event — created either standalone or by
