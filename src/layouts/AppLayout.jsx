@@ -46,7 +46,13 @@ export default function AppLayout() {
 
   useEffect(() => {
     let cancelled = false;
+    // Skips the fetch while this tab is in the background — a user with
+    // several tabs open was polling from every one of them every 60s
+    // regardless of which they were actually looking at. visibilitychange
+    // below re-fires load() the moment a backgrounded tab comes back, so
+    // this only delays a stale bell, never leaves it stale indefinitely.
     const load = () => {
+      if (document.hidden) return;
       fetchReminders()
         .then((list) => { if (!cancelled) setReminders(list); })
         .catch(() => {});
@@ -54,10 +60,12 @@ export default function AppLayout() {
     load();
     const interval = setInterval(load, 60 * 1000);
     window.addEventListener('focus', load);
+    document.addEventListener('visibilitychange', load);
     return () => {
       cancelled = true;
       clearInterval(interval);
       window.removeEventListener('focus', load);
+      document.removeEventListener('visibilitychange', load);
     };
   }, []);
 
