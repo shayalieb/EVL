@@ -5,6 +5,7 @@ import cors from 'cors';
 import session from 'express-session';
 import { PrismaSessionStore } from '@quixo3/prisma-session-store';
 import { prisma } from './lib/prisma.js';
+import { withTouchThrottle } from './lib/touchThrottledStore.js';
 import authRouter from './routes/auth.js';
 import teamRouter from './routes/team.js';
 import accountDataRouter from './routes/accountData.js';
@@ -104,7 +105,7 @@ app.use(express.json());
 // applied to it. Two independent store instances avoids that entirely,
 // whatever the exact mechanism.
 function newSessionStore() {
-  return new PrismaSessionStore(prisma, { checkPeriodMs: 2 * 60 * 1000, dbRecordIdIsSessionId: true });
+  return withTouchThrottle(new PrismaSessionStore(prisma, { checkPeriodMs: 2 * 60 * 1000, dbRecordIdIsSessionId: true }));
 }
 
 // Also a fresh cookie-options object per session() call, same reasoning —
