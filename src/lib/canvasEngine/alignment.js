@@ -100,6 +100,13 @@ export function centerElementsOnStage(elements, ids, stageCenter) {
 // footprint) is ever tuned.
 const ROW_GAP_ICON_MULTIPLE = 1.35;
 const CLUSTER_GAP_ICON_MULTIPLE = 3;
+// The floor on center-to-center spacing after redistribution — a little
+// more than exact edge-to-edge touching (icons are ICON_SIZE square) so
+// leveled/spaced icons read as separate symbols instead of visually
+// overlapping. This is what actually prevents the "extreme" overlap a pure
+// endpoints-stay redistribution could produce: cramming several icons into
+// whatever (possibly narrow) span they happened to already occupy.
+const MIN_SPACING_ICON_MULTIPLE = 1.2;
 
 // Greedy 1D clustering along one axis: sort by that axis, then start a new
 // cluster whenever the gap to the previous item exceeds threshold — the
@@ -121,24 +128,41 @@ function clusterByGap(items, axis, threshold) {
   return clusters;
 }
 
-// The one-click "neaten everything up" pass: groups icons that read as
-// belonging together — first into rows by how close their Y positions
-// already are, then each row split into left/right (or however many)
-// sub-groups wherever there's a real gap along X, so two clusters that
-// happen to sit at a similar stage depth (monitor wedges flanking either
-// side of the stage, say) don't get merged into one long row spanning the
-// dead space between them. Each resulting cluster of 2+ icons is leveled to
-// one shared Y (their own average, not moved to some fixed row) and, for
-// 3+, evenly spaced along X between its own two outermost members — same
-// "endpoints stay, only the middle redistributes" behavior as
-// distributeElements above, just auto-detected per cluster instead of
-// requiring a manual selection. Clusters of exactly 2 still get leveled
-// (meaningfully "aligned") but aren't redistributed — with only two points
-// there's nothing between them to space out, same reasoning
-// distributeElements documents for why it no-ops under three.
+// Levels a cluster to one shared Y (its own average) and spaces its members
+// along X — centered on where they already were, but never closer together
+// than minSpacing. A cluster whose members were already spread out further
+// than that keeps its original spacing exactly (this only ever pulls icons
+// apart to fix overlap/crowding, never pushes an already-comfortable
+// cluster wider). Handles 2 and 3+ uniformly: with 2, there's one gap and
+// this either leaves it alone or opens it up to minSpacing; the "no
+// redistribution under 3" rule that manual distributeElements documents
+// doesn't apply here, since auto-align's whole job is readability, not
+// preserving a user's own deliberate two-point spacing.
+function levelAndSpaceCluster(cluster, minSpacing) {
+  const avgY = cluster.reduce((sum, e) => sum + e.y, 0) / cluster.length;
+  const sorted = cluster.slice().sort((a, b) => a.x - b.x);
+  const first = sorted[0].x;
+  const last = sorted[sorted.length - 1].x;
+  const naturalStep = (last - first) / (sorted.length - 1);
+  const step = Math.max(naturalStep, minSpacing);
+  const newFirst = (first + last) / 2 - (step * (sorted.length - 1)) / 2;
+  return sorted.map((e, i) => ({ id: e.id, x: newFirst + step * i, y: avgY }));
+}
+
+// The one-click "neaten everything up" pass: only ever aligns icons of the
+// same type with each other — a row of monitor wedges shouldn't snap to a
+// nearby mic or line array just because it's spatially close, since mixing
+// unrelated gear into one "row" is exactly what reads as illegible instead
+// of tidy. Within each type, icons are grouped into rows by how close their
+// Y positions already are, then each row split into left/right (or however
+// many) sub-groups wherever there's a real gap along X, so two clusters of
+// the same icon that happen to sit at a similar stage depth (monitor
+// wedges flanking either side of the stage, say) don't get merged into one
+// long row spanning the dead space between them. Each resulting cluster of
+// 2+ gets leveled and spaced — see levelAndSpaceCluster above.
 //
 // `iconSize` is the caller's fixed on-screen icon footprint (in scene
-// units) — both thresholds below scale off it so this reads sensibly
+// units) — every threshold below scales off it so this reads sensibly
 // whether the canvas is a tight cluster of small icons or a sparse plot of
 // bigger ones. `isLinear(element)` excludes runs (cable ramp, truss, drape)
 // that have their own length/width semantics — moving their x/y like a
@@ -147,23 +171,25 @@ export function autoAlignAll(elements, iconSize, isLinear) {
   const candidates = elements.filter((e) => !isLinear?.(e));
   if (candidates.length < 2) return elements;
 
-  const rows = clusterByGap(candidates, 'y', iconSize * ROW_GAP_ICON_MULTIPLE);
+  const byType = new Map();
+  for (const e of candidates) {
+    if (!byType.has(e.iconId)) byType.set(e.iconId, []);
+    byType.get(e.iconId).push(e);
+  }
+
   const updates = new Map();
-  for (const row of rows) {
-    if (row.length < 2) continue;
-    const subClusters = clusterByGap(row, 'x', iconSize * CLUSTER_GAP_ICON_MULTIPLE);
-    for (const cluster of subClusters) {
-      if (cluster.length < 2) continue;
-      const avgY = cluster.reduce((sum, e) => sum + e.y, 0) / cluster.length;
-      if (cluster.length === 2) {
-        for (const e of cluster) updates.set(e.id, { x: e.x, y: avgY });
-        continue;
+  for (const group of byType.values()) {
+    if (group.length < 2) continue;
+    const rows = clusterByGap(group, 'y', iconSize * ROW_GAP_ICON_MULTIPLE);
+    for (const row of rows) {
+      if (row.length < 2) continue;
+      const subClusters = clusterByGap(row, 'x', iconSize * CLUSTER_GAP_ICON_MULTIPLE);
+      for (const cluster of subClusters) {
+        if (cluster.length < 2) continue;
+        for (const placed of levelAndSpaceCluster(cluster, iconSize * MIN_SPACING_ICON_MULTIPLE)) {
+          updates.set(placed.id, { x: placed.x, y: placed.y });
+        }
       }
-      const sorted = cluster.slice().sort((a, b) => a.x - b.x);
-      const first = sorted[0].x;
-      const last = sorted[sorted.length - 1].x;
-      const step = (last - first) / (sorted.length - 1);
-      sorted.forEach((e, i) => updates.set(e.id, { x: first + step * i, y: avgY }));
     }
   }
   if (!updates.size) return elements;
