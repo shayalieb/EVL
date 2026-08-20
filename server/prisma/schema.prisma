@@ -327,18 +327,18 @@ model EventDocument {
   accountId String
   account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
-  eventId     String? // opaque localStorage id, same non-FK pattern as EmailThread; null for
+  eventId        String? // opaque localStorage id, same non-FK pattern as EmailThread; null for
   // account-level attachments not tied to an event (e.g. Set List library songs)
-  filename    String
-  contentType String
-  size        Int
+  filename       String
+  contentType    String
+  size           Int
   // Bytes live in Supabase Storage (see server/src/lib/fileStorage.js),
   // referenced by storageKey — data/storageKey are mutually exclusive in
   // practice: rows written before this migration only have `data`; every
   // row written after only has `storageKey`. Both stay nullable so each can
   // stand in for the other depending on which a given row has.
-  data        Bytes?
-  storageKey  String?
+  data           Bytes?
+  storageKey     String?
   // Unguessable, stable public identifier for this file — generated for
   // every document at upload/copy time (server/src/routes/eventDocuments.js)
   // and never regenerated, so a link built from it stays valid across every
@@ -349,7 +349,14 @@ model EventDocument {
   // fetch for every document type — only Set List songs actually surface
   // this token in a UI. Nullable so pre-migration rows (created before this
   // field existed) simply have none.
-  shareToken  String? @unique
+  //
+  // Same split as InquiryLink's tokenHash/publicToken: shareTokenHash is the
+  // actual public-route lookup key (so a DB dump alone can't produce a
+  // usable link), and shareToken is a plaintext copy kept only because the
+  // frontend needs to redisplay/rebuild the download URL later (Set List
+  // library reuse) — same reasoning InquiryLink.publicToken documents.
+  shareToken     String? @unique
+  shareTokenHash String? @unique
 
   createdAt DateTime @default(now())
 
@@ -724,7 +731,7 @@ model StagePlot {
   account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
   eventId   String
 
-  name          String                   @default("Stage Plot")
+  name          String                  @default("Stage Plot")
   pages         StagePlotPage[]
   channels      StagePlotChannel[]
   backlineItems StagePlotBacklineItem[]

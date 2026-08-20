@@ -6,7 +6,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
 import { uploadFile, getSignedDownloadUrl, getSignedPreviewUrl, deleteFile, copyFile } from '../lib/fileStorage.js';
-import { generateToken } from '../lib/resetToken.js';
+import { hashToken, generateToken } from '../lib/resetToken.js';
 import { requireCsrfHeader } from '../lib/csrf.js';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -44,6 +44,7 @@ router.post('/', requireCsrfHeader, (req, res, next) => {
   const contentType = req.file.mimetype || 'application/octet-stream';
   const storageKey = await uploadFile({ accountId: req.membership.accountId, buffer: req.file.buffer, contentType });
 
+  const shareToken = generateToken();
   const document = await prisma.eventDocument.create({
     data: {
       accountId: req.membership.accountId,
@@ -56,7 +57,8 @@ router.post('/', requireCsrfHeader, (req, res, next) => {
       // this route from needing to know why it's being uploaded. Only Set
       // List songs ever surface it in a UI (see schema.prisma's
       // EventDocument.shareToken doc comment).
-      shareToken: generateToken(),
+      shareToken,
+      shareTokenHash: hashToken(shareToken),
     },
     select: { id: true, filename: true, contentType: true, size: true, createdAt: true, shareToken: true },
   });
@@ -106,6 +108,7 @@ router.post('/:id/copy', asyncHandler(async (req, res) => {
   if (!source.storageKey) return res.status(400).json({ error: 'This document predates copyable storage and cannot be duplicated.' });
   const eventId = req.body?.eventId?.trim() || null;
   const storageKey = await copyFile(source.storageKey, req.membership.accountId);
+  const copyShareToken = generateToken();
   const document = await prisma.eventDocument.create({
     data: {
       accountId: req.membership.accountId,
@@ -117,7 +120,8 @@ router.post('/:id/copy', asyncHandler(async (req, res) => {
       // A fresh token, not the source's — the copy is a fully independent
       // document (see the doc comment above), so its public link shouldn't
       // ride on the original's lifecycle either.
-      shareToken: generateToken(),
+      shareToken: copyShareToken,
+      shareTokenHash: hashToken(copyShareToken),
     },
     select: { id: true, filename: true, contentType: true, size: true, createdAt: true, shareToken: true },
   });
@@ -153,7 +157,7 @@ const songSheetLimiter = rateLimit({
 });
 
 publicSongSheetsRouter.get('/:token/download', songSheetLimiter, asyncHandler(async (req, res) => {
-  const document = await prisma.eventDocument.findUnique({ where: { shareToken: req.params.token } });
+  const document = await prisma.eventDocument.findUnique({ where: { shareTokenHash: hashToken(req.params.token) } });
   if (!document) return res.status(404).json({ error: 'This link is invalid.' });
   if (document.storageKey) {
     return res.redirect(302, await getSignedDownloadUrl(document.storageKey, document.filename));
