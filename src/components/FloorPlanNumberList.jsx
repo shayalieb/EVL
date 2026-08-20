@@ -1,3 +1,5 @@
+import DOMPurify from 'dompurify';
+
 const cellInputClass = 'w-full px-1.5 py-1 rounded border border-transparent hover:border-slate-200 focus:border-indigo-400 text-xs bg-transparent';
 
 // A numbered legend tying each placed item to a name/description note — the
@@ -81,7 +83,7 @@ export default function FloorPlanNumberList({ elements, selectedElementId, onSel
                     title="Double-click this item on the canvas to edit its description"
                     data-testid="floorplan-number-description-preview"
                     className="w-full text-left px-1.5 py-1 rounded hover:bg-slate-50 text-xs text-slate-600 truncate [&_*]:inline"
-                    dangerouslySetInnerHTML={{ __html: el.description?.trim() ? el.description : '<span class="text-slate-300">Notes for the venue/vendor…</span>' }}
+                    dangerouslySetInnerHTML={{ __html: el.description?.trim() ? DOMPurify.sanitize(el.description) : '<span class="text-slate-300">Notes for the venue/vendor…</span>' }}
                   />
                 </td>
                 <td className="px-1 py-1">

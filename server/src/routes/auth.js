@@ -14,6 +14,14 @@ const router = Router();
 const SALT_ROUNDS = 12;
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
+// Any valid bcrypt hash at the same cost factor as SALT_ROUNDS works here —
+// its plaintext is irrelevant, since login always compares against it and
+// discards the result. Only exists so a nonexistent-email login takes the
+// same time as a wrong-password one (see POST /login below); without it,
+// skipping bcrypt.compare entirely for a nonexistent user is measurably
+// faster and lets a login attempt be used to enumerate valid emails.
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync('not-a-real-password', SALT_ROUNDS);
+
 // Keyed by IP (via `trust proxy`, set in index.js, so this reads the real
 // client IP behind Railway's proxy rather than Railway's own address).
 // Generous enough that a real user mistyping a password a few times never
@@ -109,8 +117,8 @@ router.post('/login', credentialsLimiter, asyncHandler(async (req, res) => {
 
   const normalizedEmail = email.trim().toLowerCase();
   const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-  const match = user?.passwordHash ? await bcrypt.compare(password, user.passwordHash) : false;
-  if (!match) {
+  const match = await bcrypt.compare(password, user?.passwordHash || DUMMY_PASSWORD_HASH);
+  if (!user?.passwordHash || !match) {
     return res.status(401).json({ error: 'Incorrect email or password.' });
   }
 
