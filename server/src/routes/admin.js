@@ -8,6 +8,7 @@ import { hashToken, generateToken } from '../lib/resetToken.js';
 import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
 import { uploadFile, getSignedDownloadUrl } from '../lib/fileStorage.js';
 import { VERTICALS } from '../lib/verticals.js';
+import { requireCsrfHeader } from '../lib/csrf.js';
 
 const router = Router();
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
@@ -388,7 +389,7 @@ router.post('/support/threads/:id/notes', asyncHandler(async (req, res) => {
   res.status(201).json({ note: serializeNote(note) });
 }));
 
-router.post('/support/threads/:id/messages', uploadFiles, asyncHandler(async (req, res) => {
+router.post('/support/threads/:id/messages', requireCsrfHeader, uploadFiles, asyncHandler(async (req, res) => {
   const { body } = req.body || {};
   if (!body?.trim()) return res.status(400).json({ error: 'Message body is required.' });
 

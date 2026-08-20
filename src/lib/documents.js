@@ -1,4 +1,4 @@
-import { apiFetch, API_BASE } from '../context/AuthContext';
+import { apiFetch, API_BASE, csrfHeader } from '../context/AuthContext';
 
 export async function listDocuments(eventId) {
   const data = await apiFetch(`/documents?eventId=${encodeURIComponent(eventId)}`);
@@ -16,6 +16,7 @@ export async function uploadDocument(eventId, file) {
   const res = await fetch(`${API_BASE}/documents`, {
     method: 'POST',
     credentials: 'include',
+    headers: csrfHeader(),
     body: formData,
   });
   const body = await res.json().catch(() => null);

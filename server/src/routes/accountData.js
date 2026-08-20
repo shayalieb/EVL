@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { attachMembership } from '../lib/membership.js';
+import { attachMembership, effectivePermissions } from '../lib/membership.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -34,7 +34,14 @@ router.get('/', asyncHandler(async (req, res) => {
 // account with no row yet). Updates are conditioned on it so two team
 // members saving near-simultaneously can't silently clobber one another —
 // see AccountData.version's doc comment in schema.prisma.
+// This blob holds both Settings' (businessInfo, status pipelines, etc.) and
+// Email Templates' content undifferentiated, so either permission is
+// accepted — a member with neither can't write any of it.
 router.put('/', asyncHandler(async (req, res) => {
+  const permissions = effectivePermissions(req.membership);
+  if (!permissions.manageSettings && !permissions.manageEmailTemplates) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
   const { data, version } = req.body || {};
   if (typeof data !== 'object' || data === null) {
     return res.status(400).json({ error: 'data is required.' });

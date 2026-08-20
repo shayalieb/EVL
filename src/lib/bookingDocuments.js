@@ -1,4 +1,4 @@
-import { apiFetch, API_BASE } from '../context/AuthContext';
+import { apiFetch, API_BASE, csrfHeader } from '../context/AuthContext';
 
 export async function listBookingDocuments(bookingId, category) {
   const data = await apiFetch(`/booking-documents?bookingId=${encodeURIComponent(bookingId)}&category=${encodeURIComponent(category)}`);
@@ -15,6 +15,7 @@ export async function uploadBookingDocument(bookingId, category, file) {
   const res = await fetch(`${API_BASE}/booking-documents`, {
     method: 'POST',
     credentials: 'include',
+    headers: csrfHeader(),
     body: formData,
   });
   const body = await res.json().catch(() => null);

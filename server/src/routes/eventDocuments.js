@@ -7,6 +7,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
 import { uploadFile, getSignedDownloadUrl, getSignedPreviewUrl, deleteFile, copyFile } from '../lib/fileStorage.js';
 import { generateToken } from '../lib/resetToken.js';
+import { requireCsrfHeader } from '../lib/csrf.js';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FILE_SIZE } });
@@ -26,7 +27,7 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ documents });
 }));
 
-router.post('/', (req, res, next) => {
+router.post('/', requireCsrfHeader, (req, res, next) => {
   upload.single('file')(req, res, (err) => {
     if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
       return res.status(413).json({ error: 'File is too large (10MB max).' });

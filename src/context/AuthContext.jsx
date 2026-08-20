@@ -12,6 +12,17 @@ import { createEvent } from '../lib/events';
 export const API_BASE = import.meta.env.VITE_API_BASE;
 const AuthContext = createContext(null);
 
+// For the few upload routes that can't go through apiFetch (multipart
+// bodies need the browser's own Content-Type, not JSON — see
+// lib/documents.js, lib/bookingDocuments.js, lib/support.js) and so must
+// send this themselves. Reads the cookie the backend's ensureCsrfCookie
+// middleware sets on every response (see server/src/lib/csrf.js) — the
+// header just has to echo it back for the double-submit check to pass.
+export function csrfHeader() {
+  const match = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/);
+  return match ? { 'X-CSRF-Token': decodeURIComponent(match[1]) } : {};
+}
+
 export async function apiFetch(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
     credentials: 'include',

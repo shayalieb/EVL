@@ -1,4 +1,4 @@
-import { API_BASE } from '../context/AuthContext';
+import { API_BASE, csrfHeader } from '../context/AuthContext';
 
 // Not apiFetch — the browser must set its own multipart boundary
 // Content-Type header, which a forced 'application/json' would break.
@@ -11,6 +11,7 @@ export async function sendSupportMessage(url, { body, subject, files } = {}) {
   const res = await fetch(`${API_BASE}${url}`, {
     method: 'POST',
     credentials: 'include',
+    headers: csrfHeader(),
     body: formData,
   });
   const responseBody = await res.json().catch(() => null);

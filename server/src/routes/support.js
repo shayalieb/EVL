@@ -6,6 +6,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
 import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
 import { uploadFile, getSignedDownloadUrl } from '../lib/fileStorage.js';
+import { requireCsrfHeader } from '../lib/csrf.js';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_FILES = 3;
@@ -65,7 +66,7 @@ router.get('/threads', asyncHandler(async (req, res) => {
   res.json({ threads });
 }));
 
-router.post('/threads', uploadFiles, asyncHandler(async (req, res) => {
+router.post('/threads', requireCsrfHeader, uploadFiles, asyncHandler(async (req, res) => {
   const { subject, body } = req.body || {};
   if (!subject?.trim() || !body?.trim()) {
     return res.status(400).json({ error: 'Subject and message are required.' });
@@ -100,7 +101,7 @@ router.post('/threads', uploadFiles, asyncHandler(async (req, res) => {
   res.status(201).json({ thread });
 }));
 
-router.post('/threads/:id/messages', uploadFiles, asyncHandler(async (req, res) => {
+router.post('/threads/:id/messages', requireCsrfHeader, uploadFiles, asyncHandler(async (req, res) => {
   const { body } = req.body || {};
   if (!body?.trim()) return res.status(400).json({ error: 'Message body is required.' });
 

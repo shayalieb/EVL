@@ -38,6 +38,7 @@ import { startReminderScheduler } from './lib/reminderScheduler.js';
 import { startReminderRuleEngine } from './lib/reminderRuleEngine.js';
 import { startDeletedRecordPurger } from './lib/deletedRecordPurger.js';
 import { startInquiryLinkPurger } from './lib/inquiryLinkPurger.js';
+import { ensureCsrfCookie, requireCsrfHeader } from './lib/csrf.js';
 
 // No-ops safely with no DSN set — nothing breaks in dev/test environments
 // or before SENTRY_DSN is added to Railway's env vars, this just silently
@@ -146,6 +147,10 @@ const portalSession = session({
   saveUninitialized: false,
   cookie: { ...baseSessionCookie(), path: '/api/portal' },
 });
+
+// Global — every response carries a CSRF cookie, so it's already in place
+// by the time a multipart upload route needs to check it (see lib/csrf.js).
+app.use(ensureCsrfCookie);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRouter);
