@@ -72,27 +72,19 @@ export default function StagePlotEditorPage({ onClose } = {}) {
     setPlot((prev) => (prev ? { ...prev, pages: prev.pages.map((pg) => (pg.id === pageId ? { ...pg, ...patch } : pg)) } : prev));
   }
 
-  // The Production List is now auto-generated from what's actually placed on the
-  // canvas (see handleElementAdded below) — so removing an icon removes its
-  // row too, keeping the list a live mirror of the plot instead of
-  // accumulating orphaned "New Channel" rows every time someone deletes a
-  // placed instrument. Manually-added rows (never linked to an icon) are
-  // untouched, since this only ever finds a channel by elementId.
+  // Placing an icon on the canvas no longer auto-creates a linked Production
+  // List row for it — an icon only ends up on the list once someone
+  // deliberately adds it there (the canvas double-click popup's "+ Add to
+  // Production List", or this list's own "+ Add Item for Selected Icon"),
+  // so the list stays exactly what the account actually wants tracked
+  // rather than every prop placed on the plot. Deleting an icon that IS
+  // linked still cleans up its row, though, so a deliberately-added row
+  // never gets left dangling after its icon is gone.
   async function handleElementDeleted(elementId) {
     const channel = plot.channels.find((c) => c.elementId === elementId);
     if (!channel) return;
     await deleteStagePlotChannel(eventId, channel.id);
     setPlot((prev) => ({ ...prev, channels: prev.channels.filter((c) => c.id !== channel.id) }));
-  }
-
-  // Fired the moment an icon is dropped onto the canvas (CanvasStage.jsx's
-  // handleDrop) — auto-creates its linked production-list/backline row immediately,
-  // rather than waiting for someone to open the icon's notes popup or click
-  // "+ Add Channel for Selected Icon". `source` starts as the icon's default
-  // label (e.g. "Vocal Mic"); still freely editable afterward.
-  async function handleElementAdded(element) {
-    const created = await addStagePlotChannel(eventId, { source: element.label, elementId: element.id });
-    setPlot((prev) => ({ ...prev, channels: [...prev.channels, created] }));
   }
 
   // Backs the canvas double-click popup (CanvasStage.jsx) — "Name" and
@@ -259,7 +251,6 @@ export default function StagePlotEditorPage({ onClose } = {}) {
             selectedElementId={selectedElementId}
             onSelectElement={setSelectedElementId}
             onElementDeleted={handleElementDeleted}
-            onElementAdded={handleElementAdded}
             elementNumbers={elementNumbers}
             elementContent={elementContent}
             onUpdateElementContent={handleUpdateElementContent}

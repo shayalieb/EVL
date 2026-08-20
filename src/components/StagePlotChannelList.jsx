@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import CanvasNotesPopover from './CanvasNotesPopover';
-import { addStagePlotChannel, updateStagePlotChannel, deleteStagePlotChannel } from '../lib/stagePlots';
+import { addStagePlotChannel, updateStagePlotChannel, deleteStagePlotChannel, reorderStagePlotChannels } from '../lib/stagePlots';
+import { useToast } from './ui/Toast';
 
 const cellInputClass = 'w-full px-1.5 py-1 rounded border border-transparent hover:border-slate-200 focus:border-indigo-400 text-xs bg-transparent';
 
@@ -18,8 +19,11 @@ function plainTextPreview(html) {
 // row (musician, instrument, power needs, notes) is general-purpose, not
 // tied to any one type of production.
 export default function StagePlotChannelList({ eventId, channels, onChannelsChange, selectedElementId, selectedElement, onSelectElement }) {
+  const { showToast } = useToast();
   const [busyId, setBusyId] = useState(null);
   const [openChannelId, setOpenChannelId] = useState(null);
+  const dragIndex = useRef(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
   const isLinked = (elementId) => channels.some((c) => c.elementId === elementId);
 
   async function handleAdd() {
@@ -55,6 +59,32 @@ export default function StagePlotChannelList({ eventId, channels, onChannelsChan
     }
   }
 
+  // channelNumber is the only sort field there is — reordering means
+  // renumbering every row 1..N to match the new order. Applied optimistically
+  // (the drag itself should feel instant) and reconciled with whatever the
+  // server actually persisted; a failed request reverts to the pre-drag
+  // order rather than leaving the list showing an order that didn't save.
+  async function handleReorderDrop(targetIndex) {
+    const sourceIndex = dragIndex.current;
+    dragIndex.current = null;
+    setDragOverIndex(null);
+    if (sourceIndex === null || sourceIndex === targetIndex) return;
+
+    const previous = channels;
+    const reordered = channels.slice();
+    const [moved] = reordered.splice(sourceIndex, 1);
+    reordered.splice(targetIndex, 0, moved);
+    onChannelsChange(reordered.map((c, i) => ({ ...c, channelNumber: i + 1 })));
+
+    try {
+      const saved = await reorderStagePlotChannels(eventId, reordered.map((c) => c.id));
+      onChannelsChange(saved);
+    } catch {
+      onChannelsChange(previous);
+      showToast('Failed to reorder the list', 'error');
+    }
+  }
+
   return (
     <div className="w-full max-w-[36rem] shrink-0">
       <div className="flex items-center justify-between mb-2">
@@ -77,6 +107,7 @@ export default function StagePlotChannelList({ eventId, channels, onChannelsChan
         <table className="w-full text-xs min-w-[40rem]">
           <thead className="bg-slate-50 text-slate-400">
             <tr>
+              <th className="px-1 py-1.5 w-5" aria-hidden="true" />
               <th className="px-2 py-1.5 text-left w-8">#</th>
               <th className="px-2 py-1.5 text-left w-28">Musician</th>
               <th className="px-2 py-1.5 text-left w-28">Instrument</th>
@@ -89,15 +120,20 @@ export default function StagePlotChannelList({ eventId, channels, onChannelsChan
           <tbody>
             {channels.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-2 py-4 text-center text-slate-400">No items yet.</td>
+                <td colSpan={8} className="px-2 py-4 text-center text-slate-400">No items yet.</td>
               </tr>
             )}
-            {channels.map((channel) => (
+            {channels.map((channel, index) => (
               <tr
                 key={channel.id}
+                draggable
+                onDragStart={() => { dragIndex.current = index; }}
+                onDragOver={(e) => { e.preventDefault(); setDragOverIndex(index); }}
+                onDrop={() => handleReorderDrop(index)}
                 data-testid="stageplot-channel-row"
-                className={`border-t border-slate-100 ${busyId === channel.id ? 'opacity-50' : ''} ${channel.elementId && channel.elementId === selectedElementId ? 'bg-indigo-50' : ''}`}
+                className={`border-t ${dragOverIndex === index && dragIndex.current !== index ? 'border-indigo-400' : 'border-slate-100'} ${busyId === channel.id ? 'opacity-50' : ''} ${channel.elementId && channel.elementId === selectedElementId ? 'bg-indigo-50' : ''}`}
               >
+                <td className="px-1 py-1 text-center cursor-grab text-slate-300 select-none" data-testid="stageplot-channel-drag-handle" aria-hidden="true">⠿</td>
                 <td className="px-2 py-1 text-slate-400">{channel.channelNumber}</td>
                 <td className="px-1 py-1">
                   <input

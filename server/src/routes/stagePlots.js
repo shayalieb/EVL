@@ -180,6 +180,35 @@ router.post('/:eventId/channels', asyncHandler(async (req, res) => {
   res.status(201).json({ channel });
 }));
 
+// Drag-to-reorder from StagePlotChannelList.jsx — channelNumber IS the
+// display order (there's no separate sort field), so reordering means
+// renumbering every row 1..N in the new order. Done in two passes inside
+// one transaction: first move every row to a negative, guaranteed-unused
+// number, then assign the real 1..N — a single-pass renumber would
+// transiently collide with @@unique([stagePlotId, channelNumber]) the
+// moment two rows' old/new numbers cross.
+router.post('/:eventId/channels/reorder', asyncHandler(async (req, res) => {
+  const plot = await prisma.stagePlot.findUnique({
+    where: { accountId_eventId: { accountId: req.membership.accountId, eventId: req.params.eventId } },
+    include: { channels: true },
+  });
+  if (!plot) return res.status(404).json({ error: 'Stage plot not found.' });
+
+  const { orderedIds } = req.body || {};
+  const ownedIds = new Set(plot.channels.map((c) => c.id));
+  if (!Array.isArray(orderedIds) || orderedIds.length !== plot.channels.length || !orderedIds.every((id) => ownedIds.has(id))) {
+    return res.status(400).json({ error: 'orderedIds must list exactly this stage plot\'s channels, once each.' });
+  }
+
+  await prisma.$transaction([
+    ...orderedIds.map((id, i) => prisma.stagePlotChannel.update({ where: { id }, data: { channelNumber: -(i + 1) } })),
+    ...orderedIds.map((id, i) => prisma.stagePlotChannel.update({ where: { id }, data: { channelNumber: i + 1 } })),
+  ]);
+
+  const channels = await prisma.stagePlotChannel.findMany({ where: { stagePlotId: plot.id }, orderBy: { channelNumber: 'asc' } });
+  res.json({ channels });
+}));
+
 async function loadOwnedChannel(accountId, eventId, channelId) {
   const channel = await prisma.stagePlotChannel.findUnique({ where: { id: channelId }, include: { stagePlot: true } });
   if (!channel || channel.stagePlot.accountId !== accountId || channel.stagePlot.eventId !== eventId) return null;

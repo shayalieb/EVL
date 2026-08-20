@@ -345,6 +345,13 @@ const CanvasStage = forwardRef(function CanvasStage({
   onElementAdded,
   pendingIconId,
   onCalibrate,
+  // Only Stage Plot passes this — it's what shows the "+ Add to Production
+  // List" button in the popup below. Floor Plan's own elementContent is
+  // keyed by name/description presence on the element itself (see
+  // FloorPlanPageEditor.jsx), where every element is already editable with
+  // no separate "add" step, so leaving this unset there keeps its popup
+  // exactly as it already was.
+  addToListLabel,
 }, ref) {
   const internalStageRef = useRef(null);
   const trRef = useRef(null);
@@ -680,6 +687,21 @@ const CanvasStage = forwardRef(function CanvasStage({
     if (hadExisting || nameTrimmed || descriptionTextOnly) {
       onUpdateElementContent?.(id, { name: draftName, description: draftDescriptionHtml });
     }
+  }
+
+  // The explicit "add it as-is" path, alongside just typing a name/
+  // description into the fields below (which also creates the row, once
+  // the popup closes — see commitEditingElement's comment). This one's for
+  // when there's nothing to type: it fills the Name field with the icon's
+  // own current label and saves immediately, so adding a fresh icon to the
+  // Production List doesn't require re-typing what's already on the plot.
+  function handleAddToProductionList() {
+    const id = editingElementId;
+    if (!id) return;
+    const element = scene.elements.find((e) => e.id === id);
+    const name = draftName.trim() || element?.label || iconRegistry?.[element?.iconId]?.label || '';
+    setDraftName(name);
+    onUpdateElementContent?.(id, { name, description: draftDescriptionHtml });
   }
 
   function handleStageMouseDown(e) {
@@ -1166,6 +1188,16 @@ const CanvasStage = forwardRef(function CanvasStage({
             data-testid="canvas-element-popup-name-input"
             className="w-full px-2 py-1.5 mb-2 rounded border border-slate-300 text-sm outline-none focus:border-indigo-400"
           />
+          {addToListLabel && !elementContent?.[editingElementId] && (
+            <button
+              type="button"
+              onClick={handleAddToProductionList}
+              data-testid="canvas-element-popup-add-to-list-button"
+              className="w-full mb-2 px-2 py-1.5 rounded border border-dashed border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50"
+            >
+              {addToListLabel}
+            </button>
+          )}
           <RichTextToolbar editorRef={descriptionEditRef} onFormat={() => setDraftDescriptionHtml(descriptionEditRef.current?.innerHTML || '')} />
           <div
             ref={descriptionEditRef}

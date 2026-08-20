@@ -45,6 +45,19 @@ export async function deleteStagePlotChannel(eventId, channelId) {
   return apiFetch(`/stage-plots/${encodeURIComponent(eventId)}/channels/${channelId}`, { method: 'DELETE' });
 }
 
+// channelNumber is the only sort field there is (see the model's schema
+// comment) — reordering means renumbering every row 1..N to match
+// `orderedIds`, which must list every one of this stage plot's channel ids
+// exactly once. Returns the full list, freshly numbered, since the server
+// is the source of truth for the final channelNumber values.
+export async function reorderStagePlotChannels(eventId, orderedIds) {
+  const data = await apiFetch(`/stage-plots/${encodeURIComponent(eventId)}/channels/reorder`, {
+    method: 'POST',
+    body: JSON.stringify({ orderedIds }),
+  });
+  return data.channels;
+}
+
 export async function addStagePlotBacklineItem(eventId, item) {
   const data = await apiFetch(`/stage-plots/${encodeURIComponent(eventId)}/backline-items`, {
     method: 'POST',

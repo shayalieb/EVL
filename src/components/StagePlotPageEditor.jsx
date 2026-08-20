@@ -524,6 +524,7 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, p
             elementNumbers={elementNumbers}
             elementContent={elementContent}
             onUpdateElementContent={handleUpdateElementContent}
+            addToListLabel="+ Add to Production List"
             onElementAdded={onElementAdded}
             pendingIconId={pendingIconId}
             onCalibrate={handleCalibrate}
