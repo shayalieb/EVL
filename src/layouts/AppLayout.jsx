@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Logo from '../components/ui/Logo';
 import { BellIcon } from '../components/ui/icons';
-import { fetchReminders, completeReminder } from '../lib/reminders';
+import { fetchReminders, completeReminder, relatedRecordPath } from '../lib/reminders';
 
 const NAV_GROUPS = [
   {
@@ -157,17 +157,25 @@ export default function AppLayout() {
                   <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
                     {pendingReminders.slice(0, 8).map((r) => {
                       const overdue = new Date(r.remindAt) <= new Date();
+                      const path = relatedRecordPath(r);
+                      const body = (
+                        <div className="min-w-0 flex-1">
+                          {r.relatedName && (
+                            <div className="text-xs font-semibold text-slate-500 truncate">{r.relatedName}</div>
+                          )}
+                          <div className="text-sm text-slate-700 truncate">{r.note}</div>
+                          <div className={`text-xs mt-0.5 ${overdue ? 'text-red-600 font-medium' : 'text-slate-400'}`}>
+                            {new Date(r.remindAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+                          </div>
+                        </div>
+                      );
                       return (
                         <div key={r.id} className="px-4 py-2.5 flex items-start gap-2">
-                          <div className="min-w-0 flex-1">
-                            {r.relatedName && (
-                              <div className="text-xs font-semibold text-slate-500 truncate">{r.relatedName}</div>
-                            )}
-                            <div className="text-sm text-slate-700 truncate">{r.note}</div>
-                            <div className={`text-xs mt-0.5 ${overdue ? 'text-red-600 font-medium' : 'text-slate-400'}`}>
-                              {new Date(r.remindAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
-                            </div>
-                          </div>
+                          {path ? (
+                            <Link to={path} onClick={() => setBellOpen(false)} className="min-w-0 flex-1 hover:opacity-80" data-testid={`reminders-bell-related-link-${r.id}`}>
+                              {body}
+                            </Link>
+                          ) : body}
                           <button
                             type="button"
                             onClick={() => handleMarkDone(r.id)}

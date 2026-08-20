@@ -681,7 +681,7 @@ export function DataProvider({ children }) {
     const clientEvents = events.filter((e) => e.clientId === clientId);
     const counts = { pending: 0, confirmed: 0, declined: 0 };
     for (const e of clientEvents) {
-      const status = currentUser?.eventStatuses.find((s) => s.id === e.eventStatus);
+      const status = currentUser?.eventStatuses?.find((s) => s.id === e.eventStatus);
       const label = (status?.label || '').toLowerCase();
       if (label === 'cancelled' || label === 'declined') counts.declined++;
       else if (label === 'confirmed' || label === 'completed') counts.confirmed++;
@@ -696,7 +696,7 @@ export function DataProvider({ children }) {
     const confirmed = [];
     for (const b of event.contractorBookings) {
       const contractor = getContractorById(b.contractorId);
-      const inqStatus = currentUser?.inquiryStatuses.find((s) => s.id === b.inquiryStatusId);
+      const inqStatus = currentUser?.inquiryStatuses?.find((s) => s.id === b.inquiryStatusId);
       const entry = { contractor, inqStatus };
       if (inqStatus?.isConfirmed) confirmed.push(entry);
       else pending.push(entry);

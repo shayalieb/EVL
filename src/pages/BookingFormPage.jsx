@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import ClientModal from '../components/ClientModal';
 import VenueCombobox from '../components/VenueCombobox';
 import SendInquiryLinkModal from '../components/SendInquiryLinkModal';
@@ -500,7 +500,14 @@ export default function BookingFormPage() {
   const [form, setForm] = useState(emptyForm());
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState('info');
+  // "?tab=invoices" (etc.) lets a link jump straight to a specific tab —
+  // used by Reminders' related-record links for invoice reminders, which
+  // land here since an Invoice has no page of its own.
+  const [initialTabSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => {
+    const requested = initialTabSearchParams.get('tab');
+    return TABS.some((t) => t.id === requested) ? requested : 'info';
+  });
   const [newClientModalOpen, setNewClientModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [sendInquiryModalOpen, setSendInquiryModalOpen] = useState(false);

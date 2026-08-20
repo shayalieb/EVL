@@ -7,9 +7,24 @@ import { attachMembership } from '../lib/membership.js';
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
 
+// `?all=true` opts into every completed reminder ever, however old — the
+// default (used by the nav bell's 60s poll and the page's normal Pending
+// view) caps completed rows to the last 90 days so an account that's been
+// live for years isn't shipping its entire reminder history on every load.
+// Pending rows are never capped either way — there's no volume concern
+// there since they get resolved or completed, not left to pile up.
+const COMPLETED_HISTORY_DAYS = 90;
+
 router.get('/', asyncHandler(async (req, res) => {
+  const includeAll = req.query.all === 'true';
+  const historyCutoff = new Date();
+  historyCutoff.setDate(historyCutoff.getDate() - COMPLETED_HISTORY_DAYS);
+
   const reminders = await prisma.reminder.findMany({
-    where: { accountId: req.membership.accountId },
+    where: {
+      accountId: req.membership.accountId,
+      ...(includeAll ? {} : { OR: [{ completedAt: null }, { completedAt: { gte: historyCutoff } }] }),
+    },
     orderBy: { remindAt: 'asc' },
   });
   res.json({ reminders });

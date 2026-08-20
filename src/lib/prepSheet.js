@@ -41,6 +41,21 @@ export function renderPrepSheetEmail(form, prepContractors, requests = [], attac
   const isPhotography = vertical === 'photography';
   const accentColor = businessInfo?.accentColor || DEFAULT_ACCENT_COLOR;
   const eventDate = formatDate(form.eventDate);
+
+  // Referenced via cid: (see buildInlineImageAttachments in server/src/lib/
+  // mailer.js) rather than a raw data: URL — same reasoning as
+  // stagePlotEmail.js's page thumbnails: major email clients strip inline
+  // base64 images. It'll show as a broken image in this draft's on-screen
+  // contentEditable preview (cid: only resolves once the backend attaches
+  // it to the actual outgoing MIME message) — same known trade-off
+  // StagePlotEmailModal.jsx already accepts for its own inline images.
+  const inlineImages = [];
+  const logoBlock = businessInfo?.logo
+    ? (() => {
+      inlineImages.push({ contentId: 'business-logo', filename: 'logo.png', base64: businessInfo.logo.slice(businessInfo.logo.indexOf(',') + 1), contentType: 'image/png' });
+      return '<img src="cid:business-logo" alt="Logo" style="max-height:40px;max-width:200px;display:block;margin-bottom:12px;" />';
+    })()
+    : '';
   const venue = form.venue || {};
   const address = [venue.address1, venue.address2, venue.city && venue.state ? `${venue.city}, ${venue.state} ${venue.zip || ''}` : '']
     .filter(Boolean).map(escapeHtml).join('<br>');
@@ -80,6 +95,7 @@ export function renderPrepSheetEmail(form, prepContractors, requests = [], attac
 
   const body = `
     <div style="font-family:sans-serif;color:#1e293b;max-width:600px;">
+      ${logoBlock}
       <h2 style="margin:0 0 4px;">${escapeHtml(form.name || 'Event')}</h2>
       <p style="margin:0 0 ${form.brideName || form.groomName ? '4px' : '16px'};color:#475569;">${eventDate}${form.eventDayOfTheWeek ? ` (${escapeHtml(form.eventDayOfTheWeek)})` : ''} · ${formatTime(form.startTime)} – ${formatTime(form.endTime)}</p>
       ${form.brideName || form.groomName ? `<p style="margin:0 0 16px;color:#475569;">${escapeHtml([form.brideName, form.groomName].filter(Boolean).join(' & '))}</p>` : ''}
@@ -125,5 +141,5 @@ export function renderPrepSheetEmail(form, prepContractors, requests = [], attac
     </div>
   `.trim();
 
-  return { subject: `${form.name || 'Event'} — Prep Sheet`, body };
+  return { subject: `${form.name || 'Event'} — Prep Sheet`, body, inlineImages };
 }

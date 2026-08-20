@@ -1061,6 +1061,7 @@ export default function EventFormPage() {
           await sendThreadedEmail({
             eventId: form.id, contractorId, contractorEmail: contractor.email,
             subject, body, fromName, documentIds: mergedDocumentIds, pdfAttachment,
+            inlineImages: prepEmailDraft.inlineImages,
           });
           successCount++;
         } catch {

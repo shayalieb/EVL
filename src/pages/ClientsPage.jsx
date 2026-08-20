@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import ClientModal from '../components/ClientModal';
@@ -28,6 +29,22 @@ export default function ClientsPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [search, setSearch] = useState('');
   const [engagementFilter, setEngagementFilter] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Deep-link support for "?open=<id>" — used by Reminders' related-record
+  // links so opening a reminder about a client jumps straight to editing
+  // them, instead of leaving the user to search the list by hand.
+  useEffect(() => {
+    const openId = searchParams.get('open');
+    if (!openId) return;
+    const match = clients.find((c) => c.id === openId);
+    if (match) {
+      setEditingClient(match);
+      setModalOpen(true);
+    }
+    setSearchParams((prev) => { prev.delete('open'); return prev; }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, clients]);
 
   const hasFilters = !!(search || engagementFilter);
   const filteredClients = clients.filter((c) => {

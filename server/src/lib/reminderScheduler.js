@@ -14,9 +14,30 @@ function formatRemindAt(date) {
   });
 }
 
+// Falls back to the account owner's email when the reminder's own creator
+// has none (most commonly: that membership's user was deleted, which
+// SetNulls Reminder.createdByUserId — see the schema). Returns null only
+// when neither exists, which should be rare (every account has an owner).
+async function resolveRecipient(reminder) {
+  if (reminder.createdByUser?.email) return reminder.createdByUser.email;
+  const ownerMembership = await prisma.membership.findFirst({
+    where: { accountId: reminder.accountId, role: 'owner' },
+    include: { user: true },
+  });
+  return ownerMembership?.user?.email || null;
+}
+
+// Returns whether an email was actually sent — tick() below only marks
+// emailSentAt on true, so a reminder with no resolvable recipient stays
+// visibly un-sent (not silently marked as if it had gone out) and keeps
+// getting logged on every tick until the underlying account state is fixed,
+// rather than either lying about it or retrying invisibly forever.
 async function sendReminderEmail(reminder) {
-  const to = reminder.createdByUser?.email;
-  if (!to) return;
+  const to = await resolveRecipient(reminder);
+  if (!to) {
+    console.error(`Reminder ${reminder.id} (account ${reminder.accountId}) has no resolvable recipient — creator has no email and no owner membership has one either. Skipping.`);
+    return false;
+  }
 
   const businessInfo = reminder.account?.accountData?.data?.businessInfo;
   const fromName = businessInfo?.name || 'GigWorks';
@@ -35,6 +56,7 @@ async function sendReminderEmail(reminder) {
       bodyHtml: `${relatedLine}<p>${escapeHtml(reminder.note)}</p><p style="color:#94a3b8;">Was due ${escapeHtml(formatRemindAt(reminder.remindAt))}</p>`,
     }),
   });
+  return true;
 }
 
 let running = false;
@@ -74,8 +96,13 @@ export async function tick() {
       });
       if (claim.count === 0) return; // another instance claimed it first this tick
 
-      await sendReminderEmail(reminder);
-      await prisma.reminder.update({ where: { id: reminder.id }, data: { emailSentAt: new Date() } });
+      const sent = await sendReminderEmail(reminder);
+      if (sent) {
+        await prisma.reminder.update({ where: { id: reminder.id }, data: { emailSentAt: new Date() } });
+      }
+      // Not sent (no resolvable recipient): leave emailSentAt null and
+      // emailClaimedAt stands until it goes stale, so this logs again and
+      // is retried each tick rather than silently pretending it went out.
     }));
 
     results.forEach((result, i) => {

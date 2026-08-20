@@ -12,6 +12,36 @@ export function buildDefaultBookingStatuses() {
   ];
 }
 
+// Also used to backfill an AccountData row missing this field — see
+// AuthContext's hydrate(). DataContext.jsx's computeClientEventCounts reads
+// currentUser.eventStatuses defensively (optional-chained) precisely
+// because this backfill can't run until hydrate() actually completes, so
+// there's a real window (or a hand-edited/malformed AccountData row) where
+// it's legitimately absent.
+export function buildDefaultEventStatuses() {
+  return [
+    { id: uid('estatus'), label: 'Draft', color: '#94a3b8' },
+    { id: uid('estatus'), label: 'Confirmed', color: '#22c55e' },
+    { id: uid('estatus'), label: 'Completed', color: '#3b82f6' },
+    { id: uid('estatus'), label: 'Cancelled', color: '#ef4444' },
+  ];
+}
+
+// Same backfill reasoning as buildDefaultEventStatuses above —
+// DataContext.jsx's computeVendorStatus reads currentUser.inquiryStatuses
+// defensively for the same reason.
+export function buildDefaultInquiryStatuses() {
+  return [
+    { id: uid('inq'), label: 'Added', color: '#94a3b8', isConfirmed: false, bucket: 'tentative' },
+    { id: uid('inq'), label: 'Not Contacted', color: '#94a3b8', isConfirmed: false, bucket: 'tentative' },
+    { id: uid('inq'), label: 'Emailed', color: '#eab308', isConfirmed: false, bucket: 'tentative' },
+    { id: uid('inq'), label: 'Called', color: '#eab308', isConfirmed: false, bucket: 'tentative' },
+    { id: uid('inq'), label: 'Confirmed', color: '#22c55e', isConfirmed: true, bucket: 'confirmed' },
+    { id: uid('inq'), label: 'Not Available', color: '#ef4444', isConfirmed: false, bucket: 'unavailable' },
+    { id: uid('inq'), label: 'Declined', color: '#ef4444', isConfirmed: false, bucket: 'unavailable' },
+  ];
+}
+
 // Per-vertical defaults for the fields that actually read as vertical-
 // specific (contractor/event type labels, email template copy) — everything
 // else below (statuses, sample contractors/clients/events) stays the same
@@ -141,23 +171,8 @@ export function buildSeedUserData(vertical) {
   const { contractorTypes, eventTypes, emailTemplates: emailTemplateDefs, proposalSections = [], offerings: offeringDefs = [] } =
     VERTICAL_DEFAULTS[vertical] || VERTICAL_DEFAULTS.band_orchestra;
 
-  const eventStatuses = [
-    { id: uid('estatus'), label: 'Draft', color: '#94a3b8' },
-    { id: uid('estatus'), label: 'Confirmed', color: '#22c55e' },
-    { id: uid('estatus'), label: 'Completed', color: '#3b82f6' },
-    { id: uid('estatus'), label: 'Cancelled', color: '#ef4444' },
-  ];
-
-  const inquiryStatuses = [
-    { id: uid('inq'), label: 'Added', color: '#94a3b8', isConfirmed: false, bucket: 'tentative' },
-    { id: uid('inq'), label: 'Not Contacted', color: '#94a3b8', isConfirmed: false, bucket: 'tentative' },
-    { id: uid('inq'), label: 'Emailed', color: '#eab308', isConfirmed: false, bucket: 'tentative' },
-    { id: uid('inq'), label: 'Called', color: '#eab308', isConfirmed: false, bucket: 'tentative' },
-    { id: uid('inq'), label: 'Confirmed', color: '#22c55e', isConfirmed: true, bucket: 'confirmed' },
-    { id: uid('inq'), label: 'Not Available', color: '#ef4444', isConfirmed: false, bucket: 'unavailable' },
-    { id: uid('inq'), label: 'Declined', color: '#ef4444', isConfirmed: false, bucket: 'unavailable' },
-  ];
-
+  const eventStatuses = buildDefaultEventStatuses();
+  const inquiryStatuses = buildDefaultInquiryStatuses();
   const bookingStatuses = buildDefaultBookingStatuses();
 
   const emailTemplates = emailTemplateDefs.map((t) => ({ id: uid('tmpl'), ...t }));

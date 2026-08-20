@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { loadUserData, uid } from '../lib/storage';
-import { buildSeedUserData, buildDefaultBookingStatuses } from '../lib/seed';
+import { buildSeedUserData, buildDefaultBookingStatuses, buildDefaultEventStatuses, buildDefaultInquiryStatuses } from '../lib/seed';
 import { createContractor } from '../lib/contractors';
 import { createClient } from '../lib/clients';
 import { createBooking } from '../lib/bookings';
@@ -215,6 +215,17 @@ export function AuthProvider({ children }) {
     if (!blob.setListLibrary) {
       // Backfill accounts created before the Set List library existed.
       blob = { ...blob, setListLibrary: [] };
+    }
+    if (!blob.eventStatuses || !blob.inquiryStatuses) {
+      // Backfill an AccountData row missing these — DataContext.jsx's
+      // computeVendorStatus/computeClientEventCounts otherwise crash on
+      // undefined.find() the moment anything reads them (this is what a
+      // hand-edited/malformed row, e.g. via a direct DB fix, looks like).
+      blob = {
+        ...blob,
+        eventStatuses: blob.eventStatuses || buildDefaultEventStatuses(),
+        inquiryStatuses: blob.inquiryStatuses || buildDefaultInquiryStatuses(),
+      };
     }
     setServerUser(user);
     setLocalBlob(blob);

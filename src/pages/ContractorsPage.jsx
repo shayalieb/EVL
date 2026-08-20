@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import ContractorModal from '../components/ContractorModal';
@@ -46,12 +47,28 @@ export default function ContractorsPage() {
   // elsewhere (HomePage.jsx's invoices, BookingsPage.jsx's contracts) for
   // data that isn't otherwise read on this page.
   const [contactSummary, setContactSummary] = useState({});
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     let cancelled = false;
     getRosterSummary().then((summaries) => { if (!cancelled) setContactSummary(summaries); }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
+
+  // Deep-link support for "?open=<id>" — used by Reminders' related-record
+  // links so opening a reminder about a contractor jumps straight to
+  // editing them, instead of leaving the user to search the list by hand.
+  useEffect(() => {
+    const openId = searchParams.get('open');
+    if (!openId) return;
+    const match = contractors.find((c) => c.id === openId);
+    if (match) {
+      setEditingContractor(match);
+      setModalOpen(true);
+    }
+    setSearchParams((prev) => { prev.delete('open'); return prev; }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, contractors]);
 
   const categoryOptions = [...new Set(contractors.map((c) => c.contractorType1).filter(Boolean))]
     .sort()

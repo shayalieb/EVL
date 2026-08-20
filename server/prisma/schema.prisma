@@ -618,12 +618,17 @@ model Invoice {
   @@index([accountId, bookingId])
 }
 
-// A follow-up reminder, optionally tied to a contractor/client from the
-// account's JSON blob (see AccountData) — relatedId is an opaque id from
-// that blob, same non-FK pattern as EventDocument.eventId, since
-// contractors/clients aren't real DB rows. relatedName is a snapshot label
-// taken at create/edit time so the reminder still reads sensibly even if
-// the underlying contractor/client is later renamed or deleted.
+// A follow-up reminder, optionally tied to a client, contractor, event,
+// invoice, or booking — relatedId is an opaque id into that record's own
+// table (or, for a rule-generated event/invoice reminder, whatever
+// relatedType says), same non-FK pattern as EventDocument.eventId. Manual
+// reminders can link to any of the five (see ReminderModal.jsx's picker);
+// rule-generated ones only ever use 'event' or 'invoice' today (see
+// reminderRuleEngine.js's ruleKey constants). relatedName is a snapshot
+// label taken at create/edit time so the reminder still reads sensibly even
+// if the underlying record is later renamed or deleted — ReminderModal.jsx
+// is careful to only ever overwrite it when the picker actually resolves a
+// live record, never to null it out just because a lookup came up empty.
 model Reminder {
   id              String  @id @default(cuid())
   accountId       String

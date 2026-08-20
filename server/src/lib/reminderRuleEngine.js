@@ -6,13 +6,27 @@ import { prisma } from './prisma.js';
 // the same cadence as the actual email sender.
 const POLL_INTERVAL_MS = 15 * 60 * 1000;
 
-// V1 thresholds are fixed, not per-account configurable — a clean fast-
-// follow once the mechanism itself is proven.
-const EVENT_AT_RISK_DAYS = 3;
-const INVOICE_OVERDUE_DAYS = 3;
+// Per-account overridable via Settings > Reminder Rules (AccountData.data.
+// reminderSettings — see server/src/routes/accountData.js, this is just
+// another blob field, same as businessInfo/inquiryStatuses/etc.). These are
+// the defaults an account gets until it saves its own values.
+const DEFAULT_THRESHOLDS = {
+  eventAtRiskDays: 3,
+  invoiceOverdueDays: 3,
+  depositDueSoonDays: 3,
+  contractUnsignedDays: 3,
+  followUpGraceDays: 0,
+  eventNotCompletedGraceDays: 1,
+  proposalNoResponseDays: 5,
+};
 
 const EVENT_RULE_KEY = 'event-unconfirmed';
 const INVOICE_RULE_KEY = 'invoice-overdue';
+const DEPOSIT_RULE_KEY = 'deposit-due-soon';
+const CONTRACT_RULE_KEY = 'contract-unsigned';
+const FOLLOWUP_RULE_KEY = 'booking-followup-due';
+const EVENT_NOT_COMPLETED_RULE_KEY = 'event-not-completed';
+const PROPOSAL_NO_RESPONSE_RULE_KEY = 'proposal-no-response';
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -22,6 +36,11 @@ function addDaysISO(days) {
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
 }
+// The widest window any rule's threshold could plausibly need, used only to
+// keep each rule's initial DB fetch reasonably bounded — exact per-account
+// thresholds are then applied in JS below, since Prisma can't express "this
+// row's own account's configurable N days" in a single where clause.
+const MAX_LOOKAHEAD_DAYS = 30;
 
 // Same "is every assigned vendor confirmed" logic as DataContext.jsx's
 // computeVendorStatus on the frontend, replicated here since this runs
@@ -43,6 +62,21 @@ async function getOwnerUserIdsByAccount(accountIds) {
   return new Map(owners.map((m) => [m.accountId, m.userId]));
 }
 
+// One shared lookup so every rule below reads the same per-account
+// thresholds (with defaults filled in for anything the account hasn't
+// customized) instead of each re-deriving it.
+async function getThresholdsByAccount(accountIds) {
+  if (!accountIds.length) return new Map();
+  const rows = await prisma.accountData.findMany({
+    where: { accountId: { in: accountIds } },
+    select: { accountId: true, data: true },
+  });
+  return new Map(rows.map((row) => [row.accountId, { ...DEFAULT_THRESHOLDS, ...(row.data?.reminderSettings || {}) }]));
+}
+function thresholdFor(thresholdsByAccount, accountId, key) {
+  return thresholdsByAccount.get(accountId)?.[key] ?? DEFAULT_THRESHOLDS[key];
+}
+
 // Idempotent across ticks: the `@@unique([accountId, relatedType, relatedId,
 // ruleKey])` constraint (server/prisma/schema.prisma's Reminder model) means
 // only the first tick that spots a qualifying record actually creates
@@ -56,9 +90,9 @@ async function createAutoReminders(rows) {
   });
 }
 
-async function createEventReminders() {
+async function createEventReminders(thresholdsByAccount) {
   const candidates = await prisma.event.findMany({
-    where: { deletedAt: null, completedAt: null, eventDate: { gte: todayISO(), lte: addDaysISO(EVENT_AT_RISK_DAYS) } },
+    where: { deletedAt: null, completedAt: null, eventDate: { gte: todayISO(), lte: addDaysISO(MAX_LOOKAHEAD_DAYS) } },
     select: { id: true, accountId: true, name: true, eventDate: true, contractorBookings: true },
   });
   if (!candidates.length) return;
@@ -72,6 +106,8 @@ async function createEventReminders() {
 
   const toCreate = [];
   for (const event of candidates) {
+    const days = thresholdFor(thresholdsByAccount, event.accountId, 'eventAtRiskDays');
+    if (event.eventDate > addDaysISO(days)) continue;
     if (!isVendorPending(event, inquiryStatusesByAccount.get(event.accountId))) continue;
     const createdByUserId = ownerUserIdsByAccount.get(event.accountId);
     if (!createdByUserId) continue; // no owner membership found — nothing sane to send from
@@ -88,11 +124,11 @@ async function createEventReminders() {
   await createAutoReminders(toCreate);
 }
 
-async function createInvoiceReminders() {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - INVOICE_OVERDUE_DAYS);
+async function createInvoiceReminders(thresholdsByAccount) {
+  // Precise per-account threshold filtering happens below, in JS — the DB
+  // query here just narrows to "overdue at all" (dueDate in the past).
   const candidates = await prisma.invoice.findMany({
-    where: { status: { in: ['sent', 'partial'] }, dueDate: { lt: cutoff } },
+    where: { status: { in: ['sent', 'partial'] }, dueDate: { lt: new Date() } },
     select: { id: true, accountId: true, number: true, recipientName: true, dueDate: true },
   });
   if (!candidates.length) return;
@@ -101,7 +137,11 @@ async function createInvoiceReminders() {
   const ownerUserIdsByAccount = await getOwnerUserIdsByAccount(accountIds);
 
   const toCreate = [];
+  const now = Date.now();
   for (const invoice of candidates) {
+    const days = thresholdFor(thresholdsByAccount, invoice.accountId, 'invoiceOverdueDays');
+    const overdueDays = (now - invoice.dueDate.getTime()) / (24 * 60 * 60 * 1000);
+    if (overdueDays < days) continue;
     const createdByUserId = ownerUserIdsByAccount.get(invoice.accountId);
     if (!createdByUserId) continue; // no owner membership found — nothing sane to send from
     toCreate.push({
@@ -117,54 +157,309 @@ async function createInvoiceReminders() {
   await createAutoReminders(toCreate);
 }
 
+async function createDepositReminders(thresholdsByAccount) {
+  const candidates = await prisma.booking.findMany({
+    where: { deletedAt: null, completedAt: null, depositPaid: false, depositAmount: { gt: 0 }, depositDueDate: { not: null, lte: addDaysISO(MAX_LOOKAHEAD_DAYS) } },
+    select: { id: true, accountId: true, eventName: true, depositDueDate: true },
+  });
+  if (!candidates.length) return;
+
+  const accountIds = [...new Set(candidates.map((b) => b.accountId))];
+  const ownerUserIdsByAccount = await getOwnerUserIdsByAccount(accountIds);
+  const today = todayISO();
+
+  const toCreate = [];
+  for (const booking of candidates) {
+    const days = thresholdFor(thresholdsByAccount, booking.accountId, 'depositDueSoonDays');
+    if (booking.depositDueDate > addDaysISO(days)) continue;
+    const createdByUserId = ownerUserIdsByAccount.get(booking.accountId);
+    if (!createdByUserId) continue;
+    const overdue = booking.depositDueDate < today;
+    toCreate.push({
+      accountId: booking.accountId,
+      createdByUserId,
+      relatedType: 'booking',
+      relatedId: booking.id,
+      relatedName: booking.eventName || 'Untitled booking',
+      ruleKey: DEPOSIT_RULE_KEY,
+      note: `${booking.eventName || 'This booking'}'s deposit is${overdue ? ' overdue' : ' due soon'} (${overdue ? 'was due' : 'due'} ${booking.depositDueDate}).`,
+    });
+  }
+  await createAutoReminders(toCreate);
+}
+
+// Anchored on the Event (not the Booking that spawned it) since that's what
+// "approaching" means here — same reasoning as createEventReminders. Finds
+// each such event's originating booking via convertedEventId (the reverse
+// lookup — see BookingsPage.jsx's handleMarkComplete for the same pattern),
+// then that booking's most recent Contract (a resend creates a new row
+// rather than overwriting, so "most recent" is the live one).
+async function createContractReminders(thresholdsByAccount) {
+  const events = await prisma.event.findMany({
+    where: { deletedAt: null, completedAt: null, eventDate: { gte: todayISO(), lte: addDaysISO(MAX_LOOKAHEAD_DAYS) } },
+    select: { id: true, accountId: true, name: true, eventDate: true },
+  });
+  if (!events.length) return;
+
+  const bookings = await prisma.booking.findMany({
+    where: { convertedEventId: { in: events.map((e) => e.id) } },
+    select: { id: true, convertedEventId: true },
+  });
+  if (!bookings.length) return;
+  const bookingIdByEventId = new Map(bookings.map((b) => [b.convertedEventId, b.id]));
+
+  const contracts = await prisma.contract.findMany({
+    where: { bookingId: { in: bookings.map((b) => b.id) } },
+    select: { bookingId: true, status: true, sentAt: true, createdAt: true },
+    orderBy: [{ sentAt: 'desc' }, { createdAt: 'desc' }],
+  });
+  const latestContractByBookingId = new Map();
+  for (const c of contracts) {
+    if (!latestContractByBookingId.has(c.bookingId)) latestContractByBookingId.set(c.bookingId, c);
+  }
+
+  const accountIds = [...new Set(events.map((e) => e.accountId))];
+  const ownerUserIdsByAccount = await getOwnerUserIdsByAccount(accountIds);
+
+  const toCreate = [];
+  for (const event of events) {
+    const bookingId = bookingIdByEventId.get(event.id);
+    if (!bookingId) continue;
+    const contract = latestContractByBookingId.get(bookingId);
+    if (!contract || contract.status === 'fully_signed') continue; // no contract sent yet is a different problem than "sent but unsigned"
+    const days = thresholdFor(thresholdsByAccount, event.accountId, 'contractUnsignedDays');
+    if (event.eventDate > addDaysISO(days)) continue;
+    const createdByUserId = ownerUserIdsByAccount.get(event.accountId);
+    if (!createdByUserId) continue;
+    toCreate.push({
+      accountId: event.accountId,
+      createdByUserId,
+      relatedType: 'event',
+      relatedId: event.id,
+      relatedName: event.name || 'Untitled event',
+      ruleKey: CONTRACT_RULE_KEY,
+      note: `${event.name || 'This event'} is on ${event.eventDate} and its contract still isn't fully signed.`,
+    });
+  }
+  await createAutoReminders(toCreate);
+}
+
+async function createFollowUpReminders(thresholdsByAccount) {
+  const candidates = await prisma.booking.findMany({
+    where: { deletedAt: null, completedAt: null, convertedEventId: null, nextFollowUpDate: { not: null, lte: todayISO() } },
+    select: { id: true, accountId: true, eventName: true, nextFollowUpDate: true },
+  });
+  if (!candidates.length) return;
+
+  const accountIds = [...new Set(candidates.map((b) => b.accountId))];
+  const ownerUserIdsByAccount = await getOwnerUserIdsByAccount(accountIds);
+
+  const toCreate = [];
+  for (const booking of candidates) {
+    const graceDays = thresholdFor(thresholdsByAccount, booking.accountId, 'followUpGraceDays');
+    if (booking.nextFollowUpDate > addDaysISO(-graceDays)) continue;
+    const createdByUserId = ownerUserIdsByAccount.get(booking.accountId);
+    if (!createdByUserId) continue;
+    toCreate.push({
+      accountId: booking.accountId,
+      createdByUserId,
+      relatedType: 'booking',
+      relatedId: booking.id,
+      relatedName: booking.eventName || 'Untitled booking',
+      ruleKey: FOLLOWUP_RULE_KEY,
+      note: `Follow up on ${booking.eventName || 'this booking'} — its follow-up date (${booking.nextFollowUpDate}) has arrived.`,
+    });
+  }
+  await createAutoReminders(toCreate);
+}
+
+async function createEventNotCompletedReminders(thresholdsByAccount) {
+  const candidates = await prisma.event.findMany({
+    where: { deletedAt: null, completedAt: null, eventDate: { lt: todayISO(), gte: addDaysISO(-MAX_LOOKAHEAD_DAYS) } },
+    select: { id: true, accountId: true, name: true, eventDate: true },
+  });
+  if (!candidates.length) return;
+
+  const accountIds = [...new Set(candidates.map((e) => e.accountId))];
+  const ownerUserIdsByAccount = await getOwnerUserIdsByAccount(accountIds);
+
+  const toCreate = [];
+  for (const event of candidates) {
+    const graceDays = thresholdFor(thresholdsByAccount, event.accountId, 'eventNotCompletedGraceDays');
+    if (event.eventDate > addDaysISO(-graceDays)) continue;
+    const createdByUserId = ownerUserIdsByAccount.get(event.accountId);
+    if (!createdByUserId) continue;
+    toCreate.push({
+      accountId: event.accountId,
+      createdByUserId,
+      relatedType: 'event',
+      relatedId: event.id,
+      relatedName: event.name || 'Untitled event',
+      ruleKey: EVENT_NOT_COMPLETED_RULE_KEY,
+      note: `${event.name || 'This event'} was on ${event.eventDate} and still isn't marked complete.`,
+    });
+  }
+  await createAutoReminders(toCreate);
+}
+
+// "Latest response per booking" — same grouping BookingsPage.jsx does
+// client-side for its own revision-request banner/badges, replicated here
+// since a resend creates a new ProposalResponse row rather than overwriting
+// the old one (see that model's schema comment).
+async function latestProposalResponseByBookingId(bookingIds) {
+  if (!bookingIds.length) return new Map();
+  const rows = await prisma.proposalResponse.findMany({
+    where: { bookingId: { in: bookingIds } },
+    select: { bookingId: true, status: true, sentAt: true, createdAt: true, recipientName: true, recipientEmail: true },
+    orderBy: [{ sentAt: 'desc' }, { createdAt: 'desc' }],
+  });
+  const latest = new Map();
+  for (const r of rows) {
+    if (!latest.has(r.bookingId)) latest.set(r.bookingId, r);
+  }
+  return latest;
+}
+
+async function createProposalNoResponseReminders(thresholdsByAccount) {
+  const cutoffCandidates = await prisma.proposalResponse.findMany({
+    where: { status: 'sent', sentAt: { lt: new Date() } },
+    select: { bookingId: true, accountId: true },
+    distinct: ['bookingId'],
+  });
+  if (!cutoffCandidates.length) return;
+
+  const bookings = await prisma.booking.findMany({
+    where: { id: { in: cutoffCandidates.map((c) => c.bookingId) }, deletedAt: null, completedAt: null, convertedEventId: null },
+    select: { id: true, accountId: true, eventName: true },
+  });
+  if (!bookings.length) return;
+  const bookingById = new Map(bookings.map((b) => [b.id, b]));
+
+  const latestByBookingId = await latestProposalResponseByBookingId(bookings.map((b) => b.id));
+  const accountIds = [...new Set(bookings.map((b) => b.accountId))];
+  const ownerUserIdsByAccount = await getOwnerUserIdsByAccount(accountIds);
+
+  const toCreate = [];
+  for (const [bookingId, response] of latestByBookingId) {
+    if (response.status !== 'sent') continue; // superseded by a later accept/revision-request
+    const booking = bookingById.get(bookingId);
+    if (!booking) continue;
+    const days = thresholdFor(thresholdsByAccount, booking.accountId, 'proposalNoResponseDays');
+    const ageDays = (Date.now() - new Date(response.sentAt).getTime()) / (24 * 60 * 60 * 1000);
+    if (ageDays < days) continue;
+    const createdByUserId = ownerUserIdsByAccount.get(booking.accountId);
+    if (!createdByUserId) continue;
+    const clientLabel = response.recipientName || response.recipientEmail;
+    toCreate.push({
+      accountId: booking.accountId,
+      createdByUserId,
+      relatedType: 'booking',
+      relatedId: booking.id,
+      relatedName: booking.eventName || 'Untitled booking',
+      ruleKey: PROPOSAL_NO_RESPONSE_RULE_KEY,
+      note: `${clientLabel} hasn't responded to the proposal for ${booking.eventName || 'this booking'} in over ${days} day${days === 1 ? '' : 's'}.`,
+    });
+  }
+  await createAutoReminders(toCreate);
+}
+
 // Auto-generated reminders whose underlying condition has since resolved
-// (event fully confirmed, invoice paid/void/deleted) get soft-completed so
-// they never fire a stale email — a reminder about an already-solved
-// problem would undermine trust in the whole feature. Only touches rows
-// the email sender hasn't already claimed or sent (see reminderScheduler.js
-// for that claim mechanism), so this can never race a send in flight.
+// (event fully confirmed, invoice paid/void/deleted, deposit paid, contract
+// signed, follow-up done, event completed, proposal responded to) get
+// soft-completed so they never fire a stale email — a reminder about an
+// already-solved problem would undermine trust in the whole feature. Only
+// touches rows the email sender hasn't already claimed or sent (see
+// reminderScheduler.js for that claim mechanism), so this can never race a
+// send in flight.
 async function completeResolvedReminders() {
   const pending = await prisma.reminder.findMany({
     where: {
       autoGenerated: true,
-      ruleKey: { in: [EVENT_RULE_KEY, INVOICE_RULE_KEY] },
+      ruleKey: { in: [EVENT_RULE_KEY, INVOICE_RULE_KEY, DEPOSIT_RULE_KEY, CONTRACT_RULE_KEY, FOLLOWUP_RULE_KEY, EVENT_NOT_COMPLETED_RULE_KEY, PROPOSAL_NO_RESPONSE_RULE_KEY] },
       emailSentAt: null,
       emailClaimedAt: null,
       completedAt: null,
     },
-    select: { id: true, relatedType: true, relatedId: true },
+    select: { id: true, relatedType: true, relatedId: true, ruleKey: true },
   });
   if (!pending.length) return;
 
-  const eventIds = pending.filter((r) => r.relatedType === 'event').map((r) => r.relatedId);
-  const invoiceIds = pending.filter((r) => r.relatedType === 'invoice').map((r) => r.relatedId);
+  const eventIds = pending.filter((r) => r.ruleKey === EVENT_RULE_KEY || r.ruleKey === EVENT_NOT_COMPLETED_RULE_KEY).map((r) => r.relatedId);
+  const contractEventIds = pending.filter((r) => r.ruleKey === CONTRACT_RULE_KEY).map((r) => r.relatedId);
+  const invoiceIds = pending.filter((r) => r.ruleKey === INVOICE_RULE_KEY).map((r) => r.relatedId);
+  const depositBookingIds = pending.filter((r) => r.ruleKey === DEPOSIT_RULE_KEY).map((r) => r.relatedId);
+  const followUpBookingIds = pending.filter((r) => r.ruleKey === FOLLOWUP_RULE_KEY).map((r) => r.relatedId);
+  const proposalBookingIds = pending.filter((r) => r.ruleKey === PROPOSAL_NO_RESPONSE_RULE_KEY).map((r) => r.relatedId);
 
-  const events = eventIds.length
-    ? await prisma.event.findMany({ where: { id: { in: eventIds } }, select: { id: true, accountId: true, deletedAt: true, completedAt: true, contractorBookings: true } })
-    : [];
-  const eventAccountIds = [...new Set(events.map((e) => e.accountId))];
-  const [accountDataRows, invoices] = await Promise.all([
-    eventAccountIds.length
-      ? prisma.accountData.findMany({ where: { accountId: { in: eventAccountIds } }, select: { accountId: true, data: true } })
-      : [],
-    invoiceIds.length
-      ? prisma.invoice.findMany({ where: { id: { in: invoiceIds } }, select: { id: true, status: true } })
-      : [],
+  const [events, contractCheckEvents, accountDataRows, invoices, depositBookings, followUpBookings, proposalBookings] = await Promise.all([
+    eventIds.length ? prisma.event.findMany({ where: { id: { in: eventIds } }, select: { id: true, accountId: true, deletedAt: true, completedAt: true, contractorBookings: true } }) : [],
+    contractEventIds.length ? prisma.event.findMany({ where: { id: { in: contractEventIds } }, select: { id: true, deletedAt: true, completedAt: true } }) : [],
+    prisma.accountData.findMany({ select: { accountId: true, data: true } }),
+    invoiceIds.length ? prisma.invoice.findMany({ where: { id: { in: invoiceIds } }, select: { id: true, status: true } }) : [],
+    depositBookingIds.length ? prisma.booking.findMany({ where: { id: { in: depositBookingIds } }, select: { id: true, deletedAt: true, completedAt: true, depositPaid: true } }) : [],
+    followUpBookingIds.length ? prisma.booking.findMany({ where: { id: { in: followUpBookingIds } }, select: { id: true, deletedAt: true, completedAt: true, convertedEventId: true, nextFollowUpDate: true } }) : [],
+    proposalBookingIds.length ? prisma.booking.findMany({ where: { id: { in: proposalBookingIds } }, select: { id: true, deletedAt: true, completedAt: true, convertedEventId: true } }) : [],
   ]);
   const eventsById = new Map(events.map((e) => [e.id, e]));
   const inquiryStatusesByAccount = new Map(accountDataRows.map((row) => [row.accountId, row.data?.inquiryStatuses || []]));
   const invoicesById = new Map(invoices.map((i) => [i.id, i]));
+  const depositBookingsById = new Map(depositBookings.map((b) => [b.id, b]));
+  const followUpBookingsById = new Map(followUpBookings.map((b) => [b.id, b]));
+  const proposalBookingsById = new Map(proposalBookings.map((b) => [b.id, b]));
+  const contractCheckEventsById = new Map(contractCheckEvents.map((e) => [e.id, e]));
+
+  let contractBookingIdByEventId = new Map();
+  let latestContractByBookingId = new Map();
+  if (contractCheckEvents.length) {
+    const stillLiveEventIds = contractCheckEvents.filter((e) => !e.deletedAt && !e.completedAt).map((e) => e.id);
+    const bookings = stillLiveEventIds.length
+      ? await prisma.booking.findMany({ where: { convertedEventId: { in: stillLiveEventIds } }, select: { id: true, convertedEventId: true } })
+      : [];
+    contractBookingIdByEventId = new Map(bookings.map((b) => [b.convertedEventId, b.id]));
+    const contracts = bookings.length
+      ? await prisma.contract.findMany({ where: { bookingId: { in: bookings.map((b) => b.id) } }, select: { bookingId: true, status: true, sentAt: true, createdAt: true }, orderBy: [{ sentAt: 'desc' }, { createdAt: 'desc' }] })
+      : [];
+    for (const c of contracts) {
+      if (!latestContractByBookingId.has(c.bookingId)) latestContractByBookingId.set(c.bookingId, c);
+    }
+  }
+
+  let latestProposalByBookingId = new Map();
+  if (proposalBookingIds.length) latestProposalByBookingId = await latestProposalResponseByBookingId(proposalBookingIds);
 
   const toComplete = [];
   for (const reminder of pending) {
-    if (reminder.relatedType === 'event') {
+    if (reminder.ruleKey === EVENT_RULE_KEY) {
       const event = eventsById.get(reminder.relatedId);
       const stillAtRisk = event && !event.deletedAt && !event.completedAt && isVendorPending(event, inquiryStatusesByAccount.get(event.accountId));
       if (!stillAtRisk) toComplete.push(reminder.id);
-    } else {
+    } else if (reminder.ruleKey === EVENT_NOT_COMPLETED_RULE_KEY) {
+      const event = eventsById.get(reminder.relatedId);
+      const stillIncomplete = event && !event.deletedAt && !event.completedAt;
+      if (!stillIncomplete) toComplete.push(reminder.id);
+    } else if (reminder.ruleKey === INVOICE_RULE_KEY) {
       const invoice = invoicesById.get(reminder.relatedId);
       const stillOverdue = invoice && (invoice.status === 'sent' || invoice.status === 'partial');
       if (!stillOverdue) toComplete.push(reminder.id);
+    } else if (reminder.ruleKey === DEPOSIT_RULE_KEY) {
+      const booking = depositBookingsById.get(reminder.relatedId);
+      const stillDue = booking && !booking.deletedAt && !booking.completedAt && !booking.depositPaid;
+      if (!stillDue) toComplete.push(reminder.id);
+    } else if (reminder.ruleKey === CONTRACT_RULE_KEY) {
+      const event = contractCheckEventsById.get(reminder.relatedId);
+      const bookingId = contractBookingIdByEventId.get(reminder.relatedId);
+      const contract = bookingId ? latestContractByBookingId.get(bookingId) : null;
+      const stillUnsigned = event && !event.deletedAt && !event.completedAt && contract && contract.status !== 'fully_signed';
+      if (!stillUnsigned) toComplete.push(reminder.id);
+    } else if (reminder.ruleKey === FOLLOWUP_RULE_KEY) {
+      const booking = followUpBookingsById.get(reminder.relatedId);
+      const stillDue = booking && !booking.deletedAt && !booking.completedAt && !booking.convertedEventId && booking.nextFollowUpDate;
+      if (!stillDue) toComplete.push(reminder.id);
+    } else if (reminder.ruleKey === PROPOSAL_NO_RESPONSE_RULE_KEY) {
+      const booking = proposalBookingsById.get(reminder.relatedId);
+      const latest = latestProposalByBookingId.get(reminder.relatedId);
+      const stillAwaiting = booking && !booking.deletedAt && !booking.completedAt && !booking.convertedEventId && latest?.status === 'sent';
+      if (!stillAwaiting) toComplete.push(reminder.id);
     }
   }
   if (!toComplete.length) return;
@@ -183,8 +478,20 @@ export async function tick() {
   if (running) return;
   running = true;
   try {
-    await createEventReminders();
-    await createInvoiceReminders();
+    // Every account with any AccountData row is a candidate for a threshold
+    // override — cheap enough (one small table) to just load all of them
+    // up front rather than working out which accountIds each rule's
+    // candidates will touch before it's queried them.
+    const allAccountIds = (await prisma.account.findMany({ select: { id: true } })).map((a) => a.id);
+    const thresholdsByAccount = await getThresholdsByAccount(allAccountIds);
+
+    await createEventReminders(thresholdsByAccount);
+    await createInvoiceReminders(thresholdsByAccount);
+    await createDepositReminders(thresholdsByAccount);
+    await createContractReminders(thresholdsByAccount);
+    await createFollowUpReminders(thresholdsByAccount);
+    await createEventNotCompletedReminders(thresholdsByAccount);
+    await createProposalNoResponseReminders(thresholdsByAccount);
     await completeResolvedReminders();
   } catch (err) {
     console.error('Reminder rule engine tick failed:', err);

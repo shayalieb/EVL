@@ -9,6 +9,7 @@ import BillingTab from './settings/BillingTab';
 import TemplatesTab from './settings/TemplatesTab';
 import BookingLinkTab from './settings/BookingLinkTab';
 import EmailDomainTab from './settings/EmailDomainTab';
+import ReminderRulesTab from './settings/ReminderRulesTab';
 import { resizeImageToDataUrl } from '../lib/resizeImage';
 import { formatPhoneNumber } from '../lib/format';
 import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
@@ -29,6 +30,7 @@ export default function SettingsPage() {
     ...(isAdminOrOwner ? [{ id: 'billing', label: 'Billing' }] : []),
     ...(isAdminOrOwner ? [{ id: 'bookingLink', label: 'Booking Link' }] : []),
     ...(isAdminOrOwner ? [{ id: 'emailDomain', label: 'Email Domain' }] : []),
+    ...(isAdminOrOwner ? [{ id: 'reminderRules', label: 'Reminder Rules' }] : []),
   ];
   const [tab, setTab] = useState('user');
 
@@ -59,6 +61,7 @@ export default function SettingsPage() {
       {tab === 'billing' && isAdminOrOwner && <BillingTab />}
       {tab === 'bookingLink' && isAdminOrOwner && <BookingLinkTab />}
       {tab === 'emailDomain' && isAdminOrOwner && <EmailDomainTab />}
+      {tab === 'reminderRules' && isAdminOrOwner && <ReminderRulesTab />}
     </div>
   );
 }

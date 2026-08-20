@@ -1,6 +1,7 @@
 import { formatEventDate as formatDate, formatEventTime as formatTime } from './format';
 import { DEFAULT_ACCENT_COLOR, hexToRgb } from './colorTheme';
 import { requestsLabels } from './prepSheet';
+import { loadImageDimensions } from './documentPdfKit';
 
 // jsPDF pulls in html2canvas/DOMPurify (~450KB) even though we only use its
 // plain drawing API — lazy-load it so that weight isn't in the main bundle.
@@ -12,8 +13,21 @@ async function buildPrepSheetDoc(form, prepContractors, requests, businessInfo, 
   ]);
   const doc = new jsPDF();
   const marginX = 14;
+  const pageWidth = doc.internal.pageSize.getWidth();
   const accentRgb = hexToRgb(businessInfo?.accentColor || DEFAULT_ACCENT_COLOR);
   let y = 18;
+
+  // Top-right corner, clear of the event-name title on the left — this doc
+  // has no letterhead block of its own (unlike proposalPdf.js/contractPdf.js,
+  // which use documentPdfKit's drawLetterhead), just the logo image itself.
+  if (businessInfo?.logo) {
+    const dims = await loadImageDimensions(businessInfo.logo);
+    if (dims) {
+      const h = 14;
+      const w = h * (dims.width / dims.height);
+      doc.addImage(businessInfo.logo, 'PNG', pageWidth - marginX - w, 10, w, h);
+    }
+  }
 
   doc.setFontSize(18);
   doc.text(form.name || 'Event', marginX, y);
