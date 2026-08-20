@@ -1,5 +1,11 @@
 import { getResendClient } from './resend.js';
 import { getVerifiedEmailDomain } from './emailDomains.js';
+import { withTimeout } from './withTimeout.js';
+
+// Resend's SDK doesn't expose a way to pass a per-call timeout/AbortSignal
+// through its typed send() methods — see withTimeout.js for what this can
+// and can't actually guarantee.
+const SEND_TIMEOUT_MS = 15000;
 
 export function buildFromHeader(fromName) {
   const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
@@ -172,7 +178,7 @@ export async function sendMail({ from, to, subject, html, replyTo, headers, atta
   const embeddedAttachments = (typeof html === 'object' && html !== null && Array.isArray(html.attachments)) ? html.attachments : [];
   const finalAttachments = [...(attachments || []), ...embeddedAttachments];
 
-  return resend.emails.send({
+  return withTimeout(resend.emails.send({
     from,
     to,
     subject,
@@ -180,5 +186,5 @@ export async function sendMail({ from, to, subject, html, replyTo, headers, atta
     ...(replyTo ? { replyTo } : {}),
     ...(headers ? { headers } : {}),
     ...(finalAttachments.length ? { attachments: finalAttachments } : {}),
-  });
+  }), SEND_TIMEOUT_MS, 'Resend email send');
 }

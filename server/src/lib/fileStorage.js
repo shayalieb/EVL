@@ -8,12 +8,20 @@ const BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'documents';
 // server on boot, not just the file-upload feature.
 let client = null;
 
+// A hung Supabase Storage call shouldn't hold a request handler's DB
+// connection open indefinitely under load — supabase-js has no direct
+// timeout option, so this injects a custom fetch that aborts after 15s
+// (the officially documented way to customize its transport).
+const STORAGE_TIMEOUT_MS = 15000;
+
 function getClient() {
   if (client) return client;
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error('File storage is not configured yet (SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY are missing).');
   }
-  client = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  client = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+    global: { fetch: (url, options) => fetch(url, { ...options, signal: AbortSignal.timeout(STORAGE_TIMEOUT_MS) }) },
+  });
   return client;
 }
 
