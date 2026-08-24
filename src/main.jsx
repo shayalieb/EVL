@@ -10,6 +10,8 @@ import App from './App.jsx'
 Sentry.init({
   dsn: import.meta.env.VITE_SENTRY_DSN,
   environment: import.meta.env.MODE,
+  release: import.meta.env.VITE_RELEASE_SHA,
+  sendDefaultPii: false,
   integrations: [Sentry.browserTracingIntegration()],
   // Light performance sampling — this is a small internal-tools app, not
   // high-traffic, so no need to sample down further than this.

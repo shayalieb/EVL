@@ -46,9 +46,9 @@ import { ensureCsrfCookie } from './lib/csrf.js';
 import { asyncHandler } from './lib/asyncHandler.js';
 import { validateRuntimeConfig } from './lib/runtimeConfig.js';
 import { requestContext, securityHeaders } from './lib/httpOperations.js';
-import { withTimeout } from './lib/withTimeout.js';
 import { closeRedis, pingRedis } from './lib/rateLimiter.js';
 import { releaseInfo } from './lib/releaseInfo.js';
+import { checkReadiness } from './lib/readiness.js';
 
 validateRuntimeConfig();
 
@@ -58,6 +58,8 @@ validateRuntimeConfig();
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
   environment: process.env.NODE_ENV || 'development',
+  release: process.env.RELEASE_SHA || process.env.RAILWAY_GIT_COMMIT_SHA,
+  sendDefaultPii: false,
   // Light performance sampling — this is a small internal-tools API, not a
   // high-traffic service, so no need to sample down further than this.
   tracesSampleRate: 0.1,
@@ -180,15 +182,22 @@ app.use(ensureCsrfCookie);
 // balancer sends business traffic here.
 app.get('/api/health', (req, res) => res.json({ ok: true, ...releaseInfo() }));
 app.get('/api/ready', asyncHandler(async (req, res) => {
-  try {
-    await Promise.all([
-      withTimeout(prisma.$queryRaw`SELECT 1`, 2000, 'Database readiness check'),
-      withTimeout(pingRedis(), 2000, 'Redis readiness check'),
-    ]);
-    res.json({ ok: true, ...releaseInfo() });
-  } catch {
-    res.status(503).json({ ok: false });
+  const result = await checkReadiness({
+    database: () => prisma.$queryRaw`SELECT 1`,
+    redis: () => pingRedis(),
+  });
+  if (!result.ok) {
+    console.error(JSON.stringify({
+      level: 'error',
+      type: 'readiness_failed',
+      requestId: req.requestId,
+      durationMs: result.durationMs,
+      failures: result.failures,
+      ...releaseInfo(),
+    }));
+    return res.status(503).json({ ok: false, ...releaseInfo() });
   }
+  res.json({ ok: true, ...releaseInfo() });
 }));
 app.use('/api/auth', authRouter);
 app.use('/api/team', teamRouter);

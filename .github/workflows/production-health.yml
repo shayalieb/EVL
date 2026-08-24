@@ -1,0 +1,31 @@
+name: Production health monitor
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-health-monitor
+  cancel-in-progress: true
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Verify production API
+        run: npm run test:smoke
+        working-directory: server
+        env:
+          SMOKE_TEST_BASE_URL: https://evl-production.up.railway.app
+          SMOKE_TEST_TIMEOUT_MS: 10000

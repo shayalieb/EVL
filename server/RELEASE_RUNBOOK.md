@@ -41,6 +41,45 @@
 All alerts should include environment, release identifier, request ID when
 available, and a link to logs/traces.
 
+The scheduled `Production health monitor` workflow verifies liveness,
+PostgreSQL/Redis readiness, security headers, and unknown-route handling every
+15 minutes. Configure GitHub Actions failure notifications for the on-call
+address; this monitor supplements Railway/Sentry alerts and is not a substitute
+for the two-minute readiness page above.
+
+## Incident response
+
+1. Assign an incident lead and record the UTC start time, affected workflows,
+   environment, and current release from `/api/health`.
+2. Preserve evidence before changing anything: request IDs, the first and most
+   recent errors, Railway deploy/runtime logs, Sentry event links, and database
+   or Redis health indicators. Never paste session cookies, tokens, or request
+   bodies into the incident record.
+3. Stabilize service. For a bad release, follow Rollback below. For a dependency
+   outage, stop nonessential background work or writes before attempting data
+   recovery. Communicate user impact and the next update time.
+4. Verify recovery with `/api/health`, `/api/ready`, the smoke workflow, and one
+   authenticated critical workflow. Continue monitoring for at least 30 minutes.
+5. Within two business days, document the timeline, root cause, detection gap,
+   customer impact, and follow-up work with an owner and due date.
+
+## Quarterly backup restore drill
+
+1. Record the source database, latest successful backup timestamp, retention
+   window, drill owner, and start time. Use a disposable destination database;
+   never restore over production.
+2. Restore the chosen backup or point-in-time snapshot. Record completion time
+   and calculate recovery time and recovered-data age.
+3. Apply pending migrations only if the restored snapshot predates them, then
+   verify representative row counts for accounts, users, bookings, events,
+   invoices, and sessions. Investigate unexpected differences before continuing.
+4. Point a disposable API service at the restored database and verify readiness,
+   sign-in, client/booking/event reads, and one reversible create/update/delete
+   workflow. Do not connect live email, Stripe, or webhook credentials.
+5. Delete the disposable service/database after evidence is saved. Record pass
+   or fail, measured recovery time, data-loss window, issues, owners, and due
+   dates. A drill is not complete until failed checks have tracked follow-ups.
+
 ## Rollback
 
 1. Stop the frontend rollout first if it requires the new API.
