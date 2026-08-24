@@ -35,7 +35,7 @@
     "rate-limit-redis": "^4.3.1",
     "redis": "^6.2.1",
     "resend": "^4.0.0",
-    "sanitize-html": "^2.17.6",
+    "sanitize-html": "2.17.5",
     "stripe": "^22.3.2",
     "svix": "^1.96.1"
   },
