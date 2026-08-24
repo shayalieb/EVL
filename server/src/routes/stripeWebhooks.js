@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getStripeClient } from '../lib/stripe.js';
 import { invoiceTotal } from './invoices.js';
+import { paidCheckoutSessionMatchesInvoice } from '../lib/invoicePaymentVerification.js';
 
 const router = Router();
 
@@ -43,7 +44,15 @@ router.post('/stripe', asyncHandler(async (req, res) => {
       // (nothing here would collide on a redelivery) — a repeated delivery
       // of the same event just no-ops the second time, which is the
       // natural idempotency key for this shape.
-      if (invoice && invoice.status !== 'paid') {
+      const account = invoice
+        ? await prisma.account.findUnique({ where: { id: invoice.accountId }, select: { stripeAccountId: true } })
+        : null;
+      if (
+        invoice
+        && invoice.status !== 'paid'
+        && event.account === account?.stripeAccountId
+        && paidCheckoutSessionMatchesInvoice(session, invoice)
+      ) {
         await prisma.invoice.update({
           where: { id: invoiceId },
           data: { status: 'paid', paidAmount: invoiceTotal(invoice), paidAt: new Date(), stripePaymentIntentId: session.payment_intent },

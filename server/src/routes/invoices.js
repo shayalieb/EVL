@@ -5,6 +5,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
+import { paidCheckoutSessionMatchesInvoice } from '../lib/invoicePaymentVerification.js';
 import { getStripeClient } from '../lib/stripe.js';
 
 const router = Router();
@@ -414,7 +415,7 @@ publicInvoicesRouter.get('/:token', asyncHandler(async (req, res) => {
       const account = await prisma.account.findUnique({ where: { id: invoice.accountId } });
       const stripe = getStripeClient();
       const session = await stripe.checkout.sessions.retrieve(sessionId, { stripeAccount: account.stripeAccountId });
-      if (session.payment_status === 'paid') {
+      if (paidCheckoutSessionMatchesInvoice(session, invoice)) {
         invoice = await prisma.invoice.update({
           where: { id: invoice.id },
           data: { status: 'paid', paidAmount: invoiceTotal(invoice), paidAt: new Date(), stripePaymentIntentId: session.payment_intent },
@@ -442,7 +443,7 @@ publicInvoicesRouter.post('/:token/view', asyncHandler(async (req, res) => {
       const account = await prisma.account.findUnique({ where: { id: invoice.accountId } });
       const stripe = getStripeClient();
       const session = await stripe.checkout.sessions.retrieve(sessionId, { stripeAccount: account.stripeAccountId });
-      if (session.payment_status === 'paid') {
+      if (paidCheckoutSessionMatchesInvoice(session, invoice)) {
         invoice = await prisma.invoice.update({
           where: { id: invoice.id },
           data: { status: 'paid', paidAmount: invoiceTotal(invoice), paidAt: new Date(), stripePaymentIntentId: session.payment_intent },

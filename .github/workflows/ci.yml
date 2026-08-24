@@ -49,6 +49,13 @@ jobs:
         run: npm ci
         working-directory: server
 
+      - name: Audit production dependencies
+        run: npm run audit:prod
+
+      - name: Audit backend production dependencies
+        run: npm run audit:prod
+        working-directory: server
+
       - name: Lint
         run: npm run lint
 

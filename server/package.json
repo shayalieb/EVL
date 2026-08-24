@@ -10,6 +10,7 @@
     "test:integration": "node --test integration-tests/*.integration.js",
     "test:load": "node scripts/loadTest.js",
     "test:smoke": "node scripts/smokeTest.js",
+    "audit:prod": "npm audit --omit=dev --audit-level=high",
     "start": "prisma migrate deploy && node src/index.js",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",

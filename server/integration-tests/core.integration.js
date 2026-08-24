@@ -221,6 +221,10 @@ test('only one worker can claim the same due reminder', async () => {
 
 test('a redelivered Stripe checkout webhook does not apply invoice payment twice', async () => {
   const identity = await createIdentity({ email: 'stripe@example.com' });
+  await prisma.account.update({
+    where: { id: identity.account.id },
+    data: { stripeAccountId: 'acct_integration' },
+  });
   const invoice = await prisma.invoice.create({
     data: {
       accountId: identity.account.id,
@@ -229,16 +233,19 @@ test('a redelivered Stripe checkout webhook does not apply invoice payment twice
       status: 'sent',
       recipientEmail: 'client@example.com',
       ownerEmail: identity.user.email,
+      stripeCheckoutSessionId: 'cs_integration',
     },
   });
   const payload = JSON.stringify({
     id: 'evt_integration_checkout',
     object: 'event',
     type: 'checkout.session.completed',
+    account: 'acct_integration',
     data: { object: {
       id: 'cs_integration',
       object: 'checkout.session',
       metadata: { invoiceId: invoice.id },
+      payment_status: 'paid',
       payment_intent: 'pi_integration',
     } },
   });
