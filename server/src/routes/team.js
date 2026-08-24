@@ -48,6 +48,16 @@ router.post('/members', asyncHandler(async (req, res) => {
     return res.status(409).json({ error: 'An account with that email already exists.' });
   }
 
+  // Null seatLimit (accounts that predate billing, or admin-created ones —
+  // see membership.js's isSubscriptionBlocked comment) is never capped.
+  const account = await prisma.account.findUnique({ where: { id: req.membership.accountId } });
+  if (account.seatLimit != null) {
+    const seatCount = await prisma.membership.count({ where: { accountId: req.membership.accountId } });
+    if (seatCount >= account.seatLimit) {
+      return res.status(400).json({ error: `You've reached your plan's limit of ${account.seatLimit} team member${account.seatLimit === 1 ? '' : 's'}. Upgrade your plan to add more.` });
+    }
+  }
+
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   const membership = await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({

@@ -64,12 +64,23 @@ export async function getMembershipWithAccount(userId) {
   }
 }
 
+// Statuses that block access once billing exists — mirrored between here
+// (client-facing) and attachMembership below (server-enforced). 'past_due'
+// deliberately isn't included: Stripe's own Smart Retries give a grace
+// period there, same as most SaaS billing.
+const BLOCKING_SUBSCRIPTION_STATUSES = ['canceled', 'unpaid', 'incomplete_expired'];
+
+export function isSubscriptionBlocked(account) {
+  return !!account.subscriptionStatus && BLOCKING_SUBSCRIPTION_STATUSES.includes(account.subscriptionStatus);
+}
+
 export function serializeMembership(membership) {
   if (!membership) {
     return {
       accountId: null, role: null, permissions: emptyPermissions(),
       vertical: null, allVerticalsEnabled: false, activeVerticals: [],
       accountApproved: false,
+      subscriptionStatus: null, planTier: null, seatLimit: null, trialEndsAt: null, subscriptionBlocked: false,
     };
   }
   return {
@@ -85,6 +96,13 @@ export function serializeMembership(membership) {
     // know this *before* it starts fetching account data, not after every
     // fetch fails.
     accountApproved: !!membership.account.approvedAt,
+    // GigWorks' own subscription (see lib/plans.js) — the frontend gate
+    // (App.jsx) and the Plan settings tab both need these.
+    subscriptionStatus: membership.account.subscriptionStatus,
+    planTier: membership.account.planTier,
+    seatLimit: membership.account.seatLimit,
+    trialEndsAt: membership.account.trialEndsAt,
+    subscriptionBlocked: isSubscriptionBlocked(membership.account),
   };
 }
 
@@ -103,6 +121,29 @@ export async function attachMembership(req, res, next) {
   // state, but this is the real enforcement boundary regardless.
   if (!membership.account.approvedAt) {
     return res.status(403).json({ error: 'This account is pending approval.' });
+  }
+  // A subscription that lapsed *after* being active — distinct from the
+  // approvedAt check above ("never set up billing" vs. "billing lapsed").
+  // Null subscriptionStatus never trips this: accounts that predate billing,
+  // or that an admin created directly (admin.js sets approvedAt itself,
+  // without ever touching Stripe), aren't affected.
+  if (isSubscriptionBlocked(membership.account)) {
+    return res.status(403).json({ error: 'Your subscription is inactive. Update your billing to regain access.' });
+  }
+  req.membership = membership;
+  next();
+}
+
+// Same as attachMembership but without the approvedAt/subscription checks —
+// for the subscription routes themselves (routes/subscription.js), which an
+// unapproved-because-no-plan-yet or a billing-lapsed account both need to
+// reach in order to fix that. Still blocks disabledAt; a platform-disabled
+// account has no legitimate reason to touch its own billing either.
+export async function attachMembershipForBilling(req, res, next) {
+  const membership = await getMembershipWithAccount(req.session.userId);
+  if (!membership) return res.status(403).json({ error: 'No account access.' });
+  if (membership.account.disabledAt) {
+    return res.status(403).json({ error: 'This account has been disabled.' });
   }
   req.membership = membership;
   next();

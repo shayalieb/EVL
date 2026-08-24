@@ -107,8 +107,30 @@ model Account {
   vertical            String  @default("band_orchestra")
   // Account-wide unlock of every vertical's tools, independent of the
   // `vertical` default above — flipped manually by a platform admin only
-  // (same manual-only shape as disabledAt above; no billing gate yet).
+  // (same manual-only shape as disabledAt above).
   allVerticalsEnabled Boolean @default(false)
+
+  // GigWorks' own subscription (what the business pays GigWorks) — entirely
+  // separate from the Stripe Connect fields above (what the business's own
+  // clients pay them). Direct Customer/Subscription objects on the
+  // platform's Stripe account, never created with a {stripeAccount} option.
+  // See server/src/lib/plans.js for the tier table and
+  // server/src/routes/subscriptionWebhooks.js for what keeps this in sync.
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  // Mirrors Stripe's own subscription status verbatim ('trialing' |
+  // 'active' | 'past_due' | 'canceled' | 'unpaid' | 'incomplete' |
+  // 'incomplete_expired'). Null means this account has never started a
+  // checkout — distinct from any of the real statuses, and deliberately
+  // never gated on in membership.js's attachMembership, so accounts that
+  // predate billing (or that an admin created directly) aren't affected.
+  subscriptionStatus   String?
+  planTier             String? // 'solo' | 'team' | 'studio' — see lib/plans.js
+  billingInterval      String? // 'month' | 'year'
+  // Denormalized from planTier so team.js's invite route can check the seat
+  // cap with a plain count query, no Stripe API call needed per invite.
+  seatLimit            Int?
+  trialEndsAt          DateTime?
 }
 
 model Membership {

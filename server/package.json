@@ -11,7 +11,8 @@
     "prisma:studio": "prisma studio",
     "prisma:generate": "prisma generate",
     "backfill:storage": "node scripts/backfillFileStorage.js",
-    "backfill:share-token-hash": "node scripts/backfillShareTokenHash.js"
+    "backfill:share-token-hash": "node scripts/backfillShareTokenHash.js",
+    "setup:billing-plans": "node scripts/setupBillingPlans.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",

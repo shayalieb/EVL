@@ -18,6 +18,8 @@ import bookingDocumentsRouter from './routes/bookingDocuments.js';
 import contractsRouter, { publicContractsRouter } from './routes/contracts.js';
 import proposalResponsesRouter, { publicProposalResponsesRouter } from './routes/proposalResponses.js';
 import billingRouter from './routes/billing.js';
+import subscriptionRouter from './routes/subscription.js';
+import subscriptionWebhooksRouter from './routes/subscriptionWebhooks.js';
 import invoicesRouter, { publicInvoicesRouter } from './routes/invoices.js';
 import inquiryLinksRouter, { publicInquiryLinksRouter } from './routes/inquiryLinks.js';
 import stripeWebhooksRouter from './routes/stripeWebhooks.js';
@@ -88,6 +90,9 @@ app.use(cors({
 // webhook router rather than shared.
 app.use('/api/webhooks', express.raw({ type: '*/*' }), emailWebhooksRouter);
 app.use('/api/webhooks', express.raw({ type: '*/*' }), stripeWebhooksRouter);
+// Separate endpoint/secret from stripeWebhooksRouter above — see
+// subscriptionWebhooks.js's comment for why these can't share one.
+app.use('/api/webhooks', express.raw({ type: '*/*' }), subscriptionWebhooksRouter);
 
 // Also mounted ahead of the global express.json() below, same reasoning —
 // once a body-parsing middleware has consumed the request and set req.body,
@@ -178,6 +183,7 @@ app.use('/api/proposal-responses', proposalResponsesRouter);
 // Public/unauthenticated — same reasoning as /api/contract-sign above.
 app.use('/api/proposal-respond', publicProposalResponsesRouter);
 app.use('/api/billing', billingRouter);
+app.use('/api/subscription', subscriptionRouter);
 app.use('/api/invoices', invoicesRouter);
 // Public/unauthenticated — same reasoning as /api/contract-sign above.
 app.use('/api/invoice-pay', publicInvoicesRouter);
