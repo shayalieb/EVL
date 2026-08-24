@@ -39,18 +39,14 @@ import { matchesSearch } from '../lib/search';
 import { DEFAULT_ACCENT_COLOR } from '../lib/colorTheme';
 import { isWedding } from '../lib/eventType';
 import { pipelineSteps, proposalStatusInfo, contractStatusInfo } from '../lib/bookingPipeline';
+import { PRIORITIES } from '../lib/bookingPriorities';
+import { emptyForm, emptyVenue } from '../lib/bookingDefaults';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 const cardClass = 'bg-white rounded-2xl border border-slate-200 p-6';
 const cardTitleClass = 'text-base font-bold text-slate-800 mb-5';
 const primaryButtonClass = 'px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700';
-
-export const PRIORITIES = [
-  { value: 'hot', label: 'Hot', color: '#ef4444' },
-  { value: 'warm', label: 'Warm', color: '#eab308' },
-  { value: 'cold', label: 'Cold', color: '#3b82f6' },
-];
 
 const TABS = [
   { id: 'info', label: 'Booking Info' },
@@ -74,44 +70,6 @@ const ESIGN_SECTION_TEXT = 'By signing this document electronically, all parties
 function withDefaultEsignSection(sections) {
   if (sections.some((s) => s.title === ESIGN_SECTION_TITLE)) return sections;
   return [...sections, { id: uid('section'), title: ESIGN_SECTION_TITLE, text: ESIGN_SECTION_TEXT, value: '' }];
-}
-
-// Mirrors EventFormPage's venue shape exactly — a booking's location carries
-// straight into the event created from it, so a partial object here would
-// leave that event's venue fields undefined (React controlled-input warnings).
-// Exported for reuse by applyInquiry.js (src/lib/applyInquiry.js), which
-// builds a full booking shape from a submitted inquiry response — addBooking
-// does a flat spread with no deep-defaulting, so a partial venue object
-// there would leave fields like city/state undefined instead of ''.
-export function emptyVenue() {
-  return {
-    name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '',
-    contactName: '', contactPhone: '', contactPhoneExt: '', contactEmail: '',
-  };
-}
-
-// Mirrors EventFormPage's schedule item shape exactly — carries straight
-// into the event created from this booking (see convertBookingToEvent).
-function emptyScheduleItem() {
-  return { id: uid('sched'), time: '', name: '', details: '' };
-}
-
-// Exported for the same reason as emptyVenue above.
-export function emptyForm() {
-  return {
-    // Generated up front so document uploads on a not-yet-saved booking still
-    // have a stable bookingId to attach to — mirrors EventFormPage.
-    id: uid('bkg'),
-    eventName: '', clientId: '', eventDate: '', eventType: '',
-    brideName: '', groomName: '',
-    guestCount: '',
-    venue: emptyVenue(),
-    schedule: [emptyScheduleItem()],
-    depositAmount: '', depositDueDate: '', depositPaid: false, depositType: 'fixed', depositPercent: '',
-    bookingStatus: '', priority: '', nextFollowUpDate: '',
-    contractSignedDate: '', referralSource: '', notes: '', activityLog: [],
-    proposal: null,
-  };
 }
 
 // A brand-new booking only lives in memory until "Add Booking" is clicked —

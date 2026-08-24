@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import ContractorPickerRow from '../components/ContractorPickerRow';
 import ContractorModal from '../components/ContractorModal';
@@ -10,7 +10,6 @@ import GroupChipSelector from '../components/GroupChipSelector';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Modal from '../components/ui/Modal';
 import HistoryModal from '../components/HistoryModal';
-import StagePlotEditorPage from './StagePlotEditorPage';
 import VenueCombobox from '../components/VenueCombobox';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
@@ -30,6 +29,8 @@ import { listGuests, createGuest, updateGuest, deleteGuest, getRsvpLink } from '
 import { InfoIcon, MapPinIcon, ClockIcon, UsersIcon, ClipboardIcon, NoteIcon, FileIcon } from '../components/ui/icons';
 import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
 import { isWedding } from '../lib/eventType';
+
+const StagePlotEditorPage = lazy(() => import('./StagePlotEditorPage'));
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -2718,7 +2719,11 @@ export default function EventFormPage() {
         widthClass="max-w-[1650px]"
         bodyClassName="px-6 py-5 max-h-[85vh] overflow-y-auto"
       >
-        {stagePlotModalOpen && <StagePlotEditorPage onClose={() => setStagePlotModalOpen(false)} />}
+        {stagePlotModalOpen && (
+          <Suspense fallback={<div className="py-12 text-center text-sm text-slate-500">Loading stage plot editor…</div>}>
+            <StagePlotEditorPage onClose={() => setStagePlotModalOpen(false)} />
+          </Suspense>
+        )}
       </Modal>
 
       <AcceptPaymentModal

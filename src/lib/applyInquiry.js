@@ -1,4 +1,4 @@
-import { emptyForm, emptyVenue } from '../pages/BookingFormPage';
+import { emptyForm, emptyVenue } from './bookingDefaults';
 
 // Match an existing Client against a submitted inquiry response, without
 // fuzzy name-matching (which could conflate two different people who share

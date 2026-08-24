@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
-import { PRIORITIES } from './BookingFormPage';
+import { PRIORITIES } from '../lib/bookingPriorities';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import ScrollShadow from '../components/ui/ScrollShadow';
 import MarkCompleteModal from '../components/MarkCompleteModal';
