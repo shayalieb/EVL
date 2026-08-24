@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { useToast } from '../components/ui/Toast';
@@ -6,6 +7,7 @@ import ColorPicker from '../components/ui/ColorPicker';
 import Badge from '../components/ui/Badge';
 import UsersTab from './settings/UsersTab';
 import BillingTab from './settings/BillingTab';
+import PlanTab from './settings/PlanTab';
 import TemplatesTab from './settings/TemplatesTab';
 import BookingLinkTab from './settings/BookingLinkTab';
 import EmailDomainTab from './settings/EmailDomainTab';
@@ -18,6 +20,8 @@ import { DOCUMENT_LAYOUTS, TEXT_SCALE_STEPS, DEFAULT_LAYOUT_ID, DEFAULT_TEXT_SCA
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 
+const TAB_IDS = ['user', 'business', 'fields', 'templates', 'users', 'plan', 'billing', 'bookingLink', 'emailDomain', 'reminderRules'];
+
 export default function SettingsPage() {
   const { role } = useAuth();
   const isAdminOrOwner = role === 'owner' || role === 'admin';
@@ -27,12 +31,18 @@ export default function SettingsPage() {
     { id: 'fields', label: 'Custom Fields' },
     { id: 'templates', label: 'Templates' },
     ...(isAdminOrOwner ? [{ id: 'users', label: 'Users' }] : []),
+    ...(isAdminOrOwner ? [{ id: 'plan', label: 'Plan' }] : []),
     ...(isAdminOrOwner ? [{ id: 'billing', label: 'Billing' }] : []),
     ...(isAdminOrOwner ? [{ id: 'bookingLink', label: 'Booking Link' }] : []),
     ...(isAdminOrOwner ? [{ id: 'emailDomain', label: 'Email Domain' }] : []),
     ...(isAdminOrOwner ? [{ id: 'reminderRules', label: 'Reminder Rules' }] : []),
   ];
-  const [tab, setTab] = useState('user');
+  // Lets a redirect back into the app (e.g. the Stripe Customer Portal's
+  // return_url) land on a specific tab — read once on mount, not kept in
+  // sync afterward, same as every other tab-click just using local state.
+  const [searchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const [tab, setTab] = useState(TAB_IDS.includes(requestedTab) ? requestedTab : 'user');
 
   return (
     <div>
@@ -58,6 +68,7 @@ export default function SettingsPage() {
       {tab === 'fields' && <CustomFieldsTab />}
       {tab === 'templates' && <TemplatesTab />}
       {tab === 'users' && isAdminOrOwner && <UsersTab />}
+      {tab === 'plan' && isAdminOrOwner && <PlanTab />}
       {tab === 'billing' && isAdminOrOwner && <BillingTab />}
       {tab === 'bookingLink' && isAdminOrOwner && <BookingLinkTab />}
       {tab === 'emailDomain' && isAdminOrOwner && <EmailDomainTab />}

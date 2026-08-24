@@ -56,11 +56,13 @@ function ProtectedArea() {
     return <Navigate to="/auth" replace />;
   }
   if (!currentUser.accountId) return <NoAccountAccessPage />;
-  // Gated here, before DataProvider ever mounts — a pending account can log
-  // in fine (auth.js's /login and /me don't run through attachMembership),
-  // so without this every DataContext fetch would 403 individually once the
-  // app tried to load, instead of showing one clear "you're pending" screen.
-  if (!currentUser.accountApproved) return <PendingApprovalPage />;
+  // Gated here, before DataProvider ever mounts — a pending (or billing-
+  // locked) account can log in fine (auth.js's /login and /me don't run
+  // through attachMembership), so without this every DataContext fetch
+  // would 403 individually once the app tried to load, instead of showing
+  // one clear screen. Same page handles both cases (see
+  // PendingApprovalPage.jsx) — never approved vs. approved-but-lapsed.
+  if (!currentUser.accountApproved || currentUser.subscriptionBlocked) return <PendingApprovalPage />;
   return (
     <DataProvider>
       <AppLayout />

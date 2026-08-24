@@ -35,7 +35,20 @@ router.get('/status', asyncHandler(async (req, res) => {
     prisma.account.findUnique({ where: { id: req.membership.accountId } }),
     prisma.membership.count({ where: { accountId: req.membership.accountId } }),
   ]);
-  res.json({ ...serializeStatus(account), seatCount, tiers: PLAN_TIERS.map((t) => ({ id: t.id, label: t.label, seatLimit: t.seatLimit })) });
+  res.json({
+    ...serializeStatus(account),
+    seatCount,
+    // amountCents, not a Price ID — the picker just needs to display a
+    // number, and this is the one config-level source of truth for it
+    // (lib/plans.js) rather than a second hardcoded copy in the frontend.
+    tiers: PLAN_TIERS.map((t) => ({
+      id: t.id,
+      label: t.label,
+      seatLimit: t.seatLimit,
+      monthlyAmountCents: t.monthly.amountCents,
+      annualAmountCents: t.annual.amountCents,
+    })),
+  });
 }));
 
 // Starts (or restarts) a subscription checkout. A returning account with an

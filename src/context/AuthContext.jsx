@@ -10,6 +10,15 @@ import { createEvent } from '../lib/events';
 // Railway backend so the browser only ever talks to the frontend's own
 // domain, keeping the session cookie first-party. See .env.example.
 export const API_BASE = import.meta.env.VITE_API_BASE;
+
+// True for both "never approved" and "approved, but billing lapsed since" —
+// either way every account-scoped route 403s (see membership.js's
+// attachMembership), so hydrate() would throw fetching /account-data. Used
+// everywhere the pending-approval-style hydrate skip already happens, so a
+// billing lockout gets the same tolerant treatment.
+function needsHydrateSkip(user) {
+  return !user.accountApproved || !!user.subscriptionBlocked;
+}
 const AuthContext = createContext(null);
 
 // For the few upload routes that can't go through apiFetch (multipart
@@ -254,7 +263,7 @@ export function AuthProvider({ children }) {
         // instead of showing the pending-approval screen. Skip straight to
         // setServerUser; currentUser below tolerates localBlob staying null
         // in exactly this one case.
-        if (data.user.accountId && !data.user.accountApproved) {
+        if (data.user.accountId && needsHydrateSkip(data.user)) {
           setServerUser(data.user);
         } else {
           await hydrate(data.user);
@@ -283,10 +292,11 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('focus', onFocus);
   }, [serverUser]);
 
-  // localBlob is only ever null here in the pending-approval case above
-  // (every other path either hydrates it or clears serverUser too) — so
-  // tolerating a null localBlob doesn't mask any other failure mode.
-  const currentUser = serverUser && (localBlob || !serverUser.accountApproved)
+  // localBlob is only ever null here in the pending-approval/billing-locked
+  // cases above (every other path either hydrates it or clears serverUser
+  // too) — so tolerating a null localBlob doesn't mask any other failure
+  // mode.
+  const currentUser = serverUser && (localBlob || needsHydrateSkip(serverUser))
     ? {
         ...localBlob,
         id: serverUser.id,
@@ -301,6 +311,14 @@ export function AuthProvider({ children }) {
         allVerticalsEnabled: serverUser.allVerticalsEnabled,
         activeVerticals: serverUser.activeVerticals,
         accountApproved: serverUser.accountApproved,
+        // GigWorks' own subscription (lib/subscription.js) — the
+        // pending-approval/plan-picker gate and the Plan settings tab both
+        // need these.
+        subscriptionStatus: serverUser.subscriptionStatus,
+        planTier: serverUser.planTier,
+        seatLimit: serverUser.seatLimit,
+        trialEndsAt: serverUser.trialEndsAt,
+        subscriptionBlocked: serverUser.subscriptionBlocked,
       }
     : null;
 
@@ -311,12 +329,12 @@ export function AuthProvider({ children }) {
         method: 'POST',
         body: JSON.stringify({ firstName, lastName, email: email.trim().toLowerCase(), phone, password, vertical }),
       });
-      // Pending accounts can't hydrate the account-data blob (see the
-      // session-init effect above for why) — go straight to serverUser so
-      // ProtectedArea's gate shows the pending-approval screen, instead of
-      // hydrate() throwing and this landing in the catch below as if signup
-      // itself had failed.
-      if (!data.user.accountApproved) {
+      // Pending/billing-locked accounts can't hydrate the account-data blob
+      // (see the session-init effect above for why) — go straight to
+      // serverUser so ProtectedArea's gate shows the right screen, instead
+      // of hydrate() throwing and this landing in the catch below as if
+      // signup itself had failed.
+      if (needsHydrateSkip(data.user)) {
         setServerUser({ ...data.user, businessName });
       } else {
         await hydrate({ ...data.user, businessName });
@@ -336,7 +354,7 @@ export function AuthProvider({ children }) {
         body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
       });
       // See signUp above — same reasoning.
-      if (!data.user.accountApproved) {
+      if (needsHydrateSkip(data.user)) {
         setServerUser(data.user);
       } else {
         await hydrate(data.user);
