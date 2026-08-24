@@ -420,6 +420,10 @@ const CanvasStage = forwardRef(function CanvasStage({
     if (editingElementId && descriptionEditRef.current) {
       descriptionEditRef.current.innerHTML = draftDescriptionHtml;
     }
+    // draftDescriptionHtml is intentionally captured only when a new editing
+    // session starts; adding it would reset the contentEditable caret on each
+    // keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingElementId]);
 
   function assignStageRef(node) {

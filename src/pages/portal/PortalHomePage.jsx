@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { usePortalAuth } from '../../context/PortalAuthContext';
 import { listPortalEvents, listPortalBookings, listPortalInvoices } from '../../lib/portal';
 import { formatEventDate, formatCurrency, formatVenueLine } from '../../lib/format';
-import { Skeleton, SkeletonCard } from '../../components/ui/Skeleton';
+import { SkeletonCard } from '../../components/ui/Skeleton';
 
 function StatusBadge({ status }) {
   if (!status) return null;

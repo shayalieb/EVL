@@ -1,10 +1,11 @@
 import { Router } from 'express';
-import { rateLimit } from 'express-rate-limit';
+import { createRateLimiter } from '../lib/rateLimiter.js';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
 import { invoiceTotal } from './invoices.js';
+import { establishSession } from '../lib/sessionAuth.js';
 
 const router = Router();
 const LOGIN_TOKEN_TTL_MS = 30 * 60 * 1000;
@@ -17,11 +18,9 @@ function frontendUrl() {
 // of endpoint (accepts an arbitrary email, emails a login link), same abuse
 // shape to guard against (token guessing, using someone's inbox as a spam
 // target).
-const requestLinkLimiter = rateLimit({
+const requestLinkLimiter = createRateLimiter('portal-request-link', {
   windowMs: 60 * 60 * 1000,
   limit: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { error: 'Too many attempts. Please try again later.' },
 });
 
@@ -97,8 +96,14 @@ router.get('/verify', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'This link is invalid or has expired.' });
   }
 
-  await prisma.clientPortalToken.update({ where: { id: record.id }, data: { usedAt: new Date() } });
-  req.session.clientId = record.clientId;
+  const consumed = await prisma.clientPortalToken.updateMany({
+    where: { id: record.id, usedAt: null, expiresAt: { gt: new Date() } },
+    data: { usedAt: new Date() },
+  });
+  if (consumed.count !== 1) {
+    return res.status(400).json({ error: 'This link is invalid or has expired.' });
+  }
+  await establishSession(req, { clientId: record.clientId });
   res.json({ ok: true });
 }));
 

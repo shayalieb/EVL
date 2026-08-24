@@ -1,8 +1,8 @@
 import { apiFetch } from '../context/AuthContext';
+import { fetchAllPages } from './fetchAllPages';
 
 export async function listContractors() {
-  const data = await apiFetch('/contractors');
-  return data.contractors;
+  return fetchAllPages('/contractors', 'contractors');
 }
 
 export async function createContractor(patch) {

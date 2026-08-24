@@ -1,0 +1,37 @@
+name: Staging smoke test
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: Staging API origin, without /api
+        required: true
+        type: string
+      expected_release:
+        description: Expected commit SHA (optional)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+        working-directory: server
+      - name: Verify deployed API
+        run: npm run test:smoke
+        working-directory: server
+        env:
+          SMOKE_TEST_BASE_URL: ${{ inputs.api_url }}
+          SMOKE_TEST_EXPECTED_RELEASE: ${{ inputs.expected_release }}

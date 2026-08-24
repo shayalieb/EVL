@@ -4,7 +4,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createWithPreservedId } from '../lib/idPreservingCreate.js';
-import { MAX_LIST_ROWS } from '../lib/listLimits.js';
+import { paginationFromRequest, paginatedResponse } from '../lib/pagination.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -91,12 +91,15 @@ function serializeBookingLite(b) {
 }
 
 router.get('/', asyncHandler(async (req, res) => {
+  const pagination = paginationFromRequest(req);
+  if (!pagination) return res.status(400).json({ error: 'Invalid pagination cursor.' });
   const bookings = await prisma.booking.findMany({
-    where: { accountId: req.membership.accountId, deletedAt: null },
-    orderBy: { createdAt: 'asc' },
-    take: MAX_LIST_ROWS,
+    where: { accountId: req.membership.accountId, deletedAt: null, ...pagination.cursorWhere },
+    orderBy: pagination.orderBy,
+    take: pagination.limit + 1,
   });
-  res.json({ bookings: bookings.map(serializeBookingLite) });
+  const { page, nextCursor } = paginatedResponse(bookings, pagination.limit);
+  res.json({ bookings: page.map(serializeBookingLite), nextCursor });
 }));
 
 router.get('/:id', asyncHandler(async (req, res) => {

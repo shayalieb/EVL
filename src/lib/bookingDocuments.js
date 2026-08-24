@@ -1,4 +1,5 @@
-import { apiFetch, API_BASE, csrfHeader } from '../context/AuthContext';
+import { apiFetch, API_BASE } from '../context/AuthContext';
+import { uploadToSignedUrl } from './directUpload';
 
 export async function listBookingDocuments(bookingId, category) {
   const data = await apiFetch(`/booking-documents?bookingId=${encodeURIComponent(bookingId)}&category=${encodeURIComponent(category)}`);
@@ -6,21 +7,16 @@ export async function listBookingDocuments(bookingId, category) {
 }
 
 export async function uploadBookingDocument(bookingId, category, file) {
-  const formData = new FormData();
-  formData.append('bookingId', bookingId);
-  formData.append('category', category);
-  formData.append('file', file);
-  // Not apiFetch — the browser must set its own multipart boundary
-  // Content-Type header, which a forced 'application/json' would break.
-  const res = await fetch(`${API_BASE}/booking-documents`, {
+  const upload = await apiFetch('/booking-documents/upload-url', {
     method: 'POST',
-    credentials: 'include',
-    headers: csrfHeader(),
-    body: formData,
+    body: JSON.stringify({ filename: file.name, size: file.size }),
   });
-  const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(body?.error || 'Failed to upload document.');
-  return body.document;
+  await uploadToSignedUrl(upload.signedUrl, file);
+  const result = await apiFetch('/booking-documents/upload-complete', {
+    method: 'POST',
+    body: JSON.stringify({ storageKey: upload.storageKey, bookingId, category, filename: file.name, contentType: file.type || 'application/octet-stream', size: file.size }),
+  });
+  return result.document;
 }
 
 export async function deleteBookingDocument(id) {

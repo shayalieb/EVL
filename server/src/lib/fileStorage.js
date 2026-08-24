@@ -56,6 +56,26 @@ export async function uploadFile({ accountId, buffer, contentType }) {
   return key;
 }
 
+// Lets browsers send large document bytes straight to object storage. The
+// API still chooses the account-scoped key and later creates the database
+// row, but never buffers or proxies the file contents itself.
+export async function createSignedUpload({ accountId }) {
+  await ensureBucket();
+  const storageKey = `${accountId}/${randomUUID()}`;
+  const { data, error } = await getClient().storage.from(BUCKET).createSignedUploadUrl(storageKey, { upsert: false });
+  if (error) throw error;
+  return { storageKey, signedUrl: data.signedUrl, token: data.token };
+}
+
+export async function uploadedFileSize(storageKey) {
+  const { data, error } = await getClient().storage.from(BUCKET).info(storageKey);
+  if (error) {
+    if (error.status === 404 || error.statusCode === '404') return null;
+    throw error;
+  }
+  return Number(data.metadata?.size ?? data.metadata?.contentLength ?? 0);
+}
+
 // Short-lived — minted fresh on every download click rather than stored,
 // same reasoning as every other one-time link in this codebase. Supabase
 // serves the original contentType and sets the download filename itself, so

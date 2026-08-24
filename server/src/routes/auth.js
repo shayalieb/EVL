@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
-import { rateLimit } from 'express-rate-limit';
+import { createRateLimiter } from '../lib/rateLimiter.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -9,6 +9,7 @@ import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { MIN_PASSWORD_LENGTH, passwordTooWeak } from '../lib/password.js';
 import { SIGNUP_VERTICALS } from '../lib/verticals.js';
+import { establishSession } from '../lib/sessionAuth.js';
 
 const router = Router();
 const SALT_ROUNDS = 12;
@@ -26,21 +27,17 @@ const DUMMY_PASSWORD_HASH = bcrypt.hashSync('not-a-real-password', SALT_ROUNDS);
 // client IP behind Railway's proxy rather than Railway's own address).
 // Generous enough that a real user mistyping a password a few times never
 // notices, tight enough to make brute-forcing credentials impractical.
-const credentialsLimiter = rateLimit({
+const credentialsLimiter = createRateLimiter('auth-credentials', {
   windowMs: 15 * 60 * 1000,
   limit: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { error: 'Too many attempts. Please try again later.' },
 });
 
 // Stricter — bounds both reset-token guessing and using someone else's
 // inbox as a spam target via repeated forgot-password requests.
-const passwordResetLimiter = rateLimit({
+const passwordResetLimiter = createRateLimiter('auth-password-reset', {
   windowMs: 60 * 60 * 1000,
   limit: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { error: 'Too many attempts. Please try again later.' },
 });
 
@@ -98,7 +95,7 @@ router.post('/signup', credentialsLimiter, asyncHandler(async (req, res) => {
       });
       return { user, membership, account };
     });
-    req.session.userId = user.id;
+    await establishSession(req, { userId: user.id });
     await notifyPendingSignup(user);
     res.status(201).json({ user: sanitize(user, { ...membership, account }) });
   } catch (err) {
@@ -122,7 +119,7 @@ router.post('/login', credentialsLimiter, asyncHandler(async (req, res) => {
     return res.status(401).json({ error: 'Incorrect email or password.' });
   }
 
-  req.session.userId = user.id;
+  await establishSession(req, { userId: user.id });
   const membership = await getMembershipWithAccount(user.id);
   res.json({ user: sanitize(user, membership) });
 }));
@@ -216,10 +213,28 @@ router.post('/reset-password', passwordResetLimiter, asyncHandler(async (req, re
   }
 
   const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
-  await prisma.$transaction([
-    prisma.user.update({ where: { id: record.userId }, data: { passwordHash } }),
-    prisma.passwordResetToken.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
-  ]);
+  const consumed = await prisma.$transaction(async (tx) => {
+    // The conditional update is the single-use boundary. Concurrent reset
+    // requests may both read the token above, but only one can change this
+    // row from unused to used; the other transaction makes no password
+    // change.
+    const result = await tx.passwordResetToken.updateMany({
+      where: { id: record.id, usedAt: null, expiresAt: { gt: new Date() } },
+      data: { usedAt: new Date() },
+    });
+    if (result.count !== 1) return false;
+
+    await tx.user.update({ where: { id: record.userId }, data: { passwordHash } });
+    // Account recovery should revoke sessions that may already be in an
+    // attacker's possession. PrismaSessionStore JSON-serializes session data
+    // without whitespace, so this exact property match avoids matching an ID
+    // that merely appears elsewhere in a session.
+    await tx.session.deleteMany({ where: { data: { contains: `"userId":"${record.userId}"` } } });
+    return true;
+  });
+  if (!consumed) {
+    return res.status(400).json({ error: 'This reset link is invalid or has expired.' });
+  }
   res.json({ ok: true });
 }));
 

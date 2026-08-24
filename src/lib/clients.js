@@ -1,8 +1,8 @@
 import { apiFetch } from '../context/AuthContext';
+import { fetchAllPages } from './fetchAllPages';
 
 export async function listClients() {
-  const data = await apiFetch('/clients');
-  return data.clients;
+  return fetchAllPages('/clients', 'clients');
 }
 
 export async function createClient(patch) {

@@ -5,6 +5,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
 import { resolveFromHeader, resolveReplyDomain, sendMail, buildActionEmailHtml, buildInlineImageAttachments } from '../lib/mailer.js';
 import { downloadFileBuffer } from '../lib/fileStorage.js';
+import { emailSendLimiter, requireEmailSendPermission } from '../lib/emailSendPolicy.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -25,7 +26,7 @@ function serializeMessage(m) {
   };
 }
 
-router.post('/send', asyncHandler(async (req, res) => {
+router.post('/send', requireEmailSendPermission, emailSendLimiter, asyncHandler(async (req, res) => {
   const { eventId, contractorId, contractorEmail, subject, body, templateId, fromName, documentIds, pdfAttachment, inlineImages } = req.body || {};
   if (!eventId?.trim() || !contractorId?.trim() || !contractorEmail?.trim() || !subject?.trim() || !body?.trim()) {
     return res.status(400).json({ error: 'eventId, contractorId, contractorEmail, subject, and body are required.' });

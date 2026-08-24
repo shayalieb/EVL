@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { rateLimit } from 'express-rate-limit';
+import { createRateLimiter } from '../lib/rateLimiter.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -158,11 +158,9 @@ export const publicRsvpRouter = Router();
 // can legitimately see many submissions from the same network (a venue's
 // wifi, a family gathered in one house), so this is sized for that rather
 // than auth.js's much tighter per-attempt limiters.
-const rsvpSubmitLimiter = rateLimit({
+const rsvpSubmitLimiter = createRateLimiter('rsvp-submit', {
   windowMs: 60 * 60 * 1000,
   limit: 40,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { error: 'Too many submissions from this network. Please try again later.' },
 });
 

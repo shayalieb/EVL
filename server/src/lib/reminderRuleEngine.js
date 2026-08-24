@@ -1,4 +1,5 @@
 import { prisma } from './prisma.js';
+import { withBackgroundJobLease } from './backgroundJobLease.js';
 
 // Deliberately much slower than reminderScheduler.js's 60s send-loop — these
 // conditions (an event's date, an invoice's due date, a vendor's confirmed
@@ -478,21 +479,23 @@ export async function tick() {
   if (running) return;
   running = true;
   try {
-    // Every account with any AccountData row is a candidate for a threshold
-    // override — cheap enough (one small table) to just load all of them
-    // up front rather than working out which accountIds each rule's
-    // candidates will touch before it's queried them.
-    const allAccountIds = (await prisma.account.findMany({ select: { id: true } })).map((a) => a.id);
-    const thresholdsByAccount = await getThresholdsByAccount(allAccountIds);
+    await withBackgroundJobLease('reminder-rule-engine', async () => {
+      // Every account with any AccountData row is a candidate for a threshold
+      // override — cheap enough (one small table) to just load all of them
+      // up front rather than working out which accountIds each rule's
+      // candidates will touch before it's queried them.
+      const allAccountIds = (await prisma.account.findMany({ select: { id: true } })).map((a) => a.id);
+      const thresholdsByAccount = await getThresholdsByAccount(allAccountIds);
 
-    await createEventReminders(thresholdsByAccount);
-    await createInvoiceReminders(thresholdsByAccount);
-    await createDepositReminders(thresholdsByAccount);
-    await createContractReminders(thresholdsByAccount);
-    await createFollowUpReminders(thresholdsByAccount);
-    await createEventNotCompletedReminders(thresholdsByAccount);
-    await createProposalNoResponseReminders(thresholdsByAccount);
-    await completeResolvedReminders();
+      await createEventReminders(thresholdsByAccount);
+      await createInvoiceReminders(thresholdsByAccount);
+      await createDepositReminders(thresholdsByAccount);
+      await createContractReminders(thresholdsByAccount);
+      await createFollowUpReminders(thresholdsByAccount);
+      await createEventNotCompletedReminders(thresholdsByAccount);
+      await createProposalNoResponseReminders(thresholdsByAccount);
+      await completeResolvedReminders();
+    });
   } catch (err) {
     console.error('Reminder rule engine tick failed:', err);
   } finally {
@@ -501,5 +504,6 @@ export async function tick() {
 }
 
 export function startReminderRuleEngine() {
-  setInterval(tick, POLL_INTERVAL_MS);
+  const timer = setInterval(tick, POLL_INTERVAL_MS);
+  return () => clearInterval(timer);
 }

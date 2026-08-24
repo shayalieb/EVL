@@ -47,5 +47,6 @@ export async function tick() {
 }
 
 export function startInquiryLinkPurger() {
-  setInterval(tick, POLL_INTERVAL_MS);
+  const timer = setInterval(tick, POLL_INTERVAL_MS);
+  return () => clearInterval(timer);
 }

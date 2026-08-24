@@ -1,14 +1,11 @@
 import { Router } from 'express';
-import multer from 'multer';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
-import { uploadFile, getSignedDownloadUrl, deleteFile } from '../lib/fileStorage.js';
-import { requireCsrfHeader } from '../lib/csrf.js';
+import { createSignedUpload, uploadedFileSize, getSignedDownloadUrl, deleteFile } from '../lib/fileStorage.js';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FILE_SIZE } });
 const CATEGORIES = ['proposal', 'contract'];
 
 const router = Router();
@@ -27,33 +24,31 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ documents });
 }));
 
-router.post('/', requireCsrfHeader, (req, res, next) => {
-  upload.single('file')(req, res, (err) => {
-    if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(413).json({ error: 'File is too large (10MB max).' });
-    }
-    if (err) return next(err);
-    next();
-  });
-}, asyncHandler(async (req, res) => {
-  const { bookingId, category } = req.body || {};
-  if (!bookingId?.trim()) return res.status(400).json({ error: 'bookingId is required.' });
-  if (!CATEGORIES.includes(category)) return res.status(400).json({ error: 'Invalid category.' });
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
+router.post('/upload-url', asyncHandler(async (req, res) => {
+  const { filename, size } = req.body || {};
+  if (!filename?.trim() || !Number.isInteger(size) || size <= 0) {
+    return res.status(400).json({ error: 'A valid filename and size are required.' });
+  }
+  if (size > MAX_FILE_SIZE) return res.status(413).json({ error: 'File is too large (10MB max).' });
+  res.json(await createSignedUpload({ accountId: req.membership.accountId }));
+}));
 
-  const contentType = req.file.mimetype || 'application/octet-stream';
-  const storageKey = await uploadFile({ accountId: req.membership.accountId, buffer: req.file.buffer, contentType });
-
+router.post('/upload-complete', asyncHandler(async (req, res) => {
+  const { storageKey, bookingId, category, filename, contentType, size } = req.body || {};
+  if (!storageKey?.startsWith(`${req.membership.accountId}/`) || !bookingId?.trim() || !CATEGORIES.includes(category) || !filename?.trim() || !Number.isInteger(size) || size <= 0) {
+    return res.status(400).json({ error: 'Invalid upload metadata.' });
+  }
+  if (size > MAX_FILE_SIZE) return res.status(413).json({ error: 'File is too large (10MB max).' });
+  const actualSize = await uploadedFileSize(storageKey);
+  if (actualSize === null) return res.status(409).json({ error: 'Upload has not completed.' });
+  if (actualSize > MAX_FILE_SIZE || (actualSize && actualSize !== size)) {
+    await deleteFile(storageKey);
+    return res.status(400).json({ error: 'Uploaded file size does not match.' });
+  }
+  const existing = await prisma.bookingDocument.findFirst({ where: { accountId: req.membership.accountId, storageKey } });
+  if (existing) return res.status(409).json({ error: 'Upload was already completed.' });
   const document = await prisma.bookingDocument.create({
-    data: {
-      accountId: req.membership.accountId,
-      bookingId,
-      category,
-      filename: req.file.originalname,
-      contentType,
-      size: req.file.size,
-      storageKey,
-    },
+    data: { accountId: req.membership.accountId, bookingId: bookingId.trim(), category, filename: filename.trim(), contentType: contentType || 'application/octet-stream', size, storageKey },
     select: { id: true, category: true, filename: true, contentType: true, size: true, createdAt: true },
   });
   res.status(201).json({ document });

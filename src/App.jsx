@@ -1,46 +1,48 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
 import { PortalAuthProvider, usePortalAuth } from './context/PortalAuthContext';
 import { ToastProvider } from './components/ui/Toast';
 import { SavingIndicatorProvider } from './components/ui/SavingIndicator';
-import AuthPage from './pages/AuthPage';
-import PortalLoginPage from './pages/portal/PortalLoginPage';
-import PortalVerifyPage from './pages/portal/PortalVerifyPage';
-import PortalHomePage from './pages/portal/PortalHomePage';
-import ResetPasswordPage from './pages/ResetPasswordPage';
-import ContractSignPage from './pages/ContractSignPage';
-import ProposalRespondPage from './pages/ProposalRespondPage';
-import InvoicePayPage from './pages/InvoicePayPage';
-import InquiryFormPage from './pages/InquiryFormPage';
-import RsvpPage from './pages/RsvpPage';
-import ContractorCalendarPage from './pages/ContractorCalendarPage';
-import AppLayout from './layouts/AppLayout';
-import HomePage from './pages/HomePage';
-import NoAccountAccessPage from './pages/NoAccountAccessPage';
-import PendingApprovalPage from './pages/PendingApprovalPage';
-import ContractorsPage from './pages/ContractorsPage';
-import ClientsPage from './pages/ClientsPage';
-import VenuesPage from './pages/VenuesPage';
-import OfferingsPage from './pages/OfferingsPage';
-import BookingsPage from './pages/BookingsPage';
-import BookingFormPage from './pages/BookingFormPage';
-import EventsPage from './pages/EventsPage';
-import EventFormPage from './pages/EventFormPage';
-import EmailTemplatesPage from './pages/EmailTemplatesPage';
-import RemindersPage from './pages/RemindersPage';
-import SettingsPage from './pages/SettingsPage';
-import HelpPage from './pages/HelpPage';
-import AdminLayout from './layouts/AdminLayout';
-import AdminAccountsPage from './pages/admin/AdminAccountsPage';
-import AdminSupportPage from './pages/admin/AdminSupportPage';
-import AdminAdminsPage from './pages/admin/AdminAdminsPage';
-import CanvasEngineDemoPage from './pages/dev/CanvasEngineDemoPage';
-import StagePlotEditorPage from './pages/StagePlotEditorPage';
-import FloorPlanEditorPage from './pages/FloorPlanEditorPage';
-import SetListsEditorPage from './pages/SetListsEditorPage';
-import SetListLibraryPage from './pages/SetListLibraryPage';
-import LandingPage from './pages/LandingPage';
+
+const AuthPage = lazy(() => import('./pages/AuthPage'));
+const PortalLoginPage = lazy(() => import('./pages/portal/PortalLoginPage'));
+const PortalVerifyPage = lazy(() => import('./pages/portal/PortalVerifyPage'));
+const PortalHomePage = lazy(() => import('./pages/portal/PortalHomePage'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
+const ContractSignPage = lazy(() => import('./pages/ContractSignPage'));
+const ProposalRespondPage = lazy(() => import('./pages/ProposalRespondPage'));
+const InvoicePayPage = lazy(() => import('./pages/InvoicePayPage'));
+const InquiryFormPage = lazy(() => import('./pages/InquiryFormPage'));
+const RsvpPage = lazy(() => import('./pages/RsvpPage'));
+const ContractorCalendarPage = lazy(() => import('./pages/ContractorCalendarPage'));
+const AppLayout = lazy(() => import('./layouts/AppLayout'));
+const HomePage = lazy(() => import('./pages/HomePage'));
+const NoAccountAccessPage = lazy(() => import('./pages/NoAccountAccessPage'));
+const PendingApprovalPage = lazy(() => import('./pages/PendingApprovalPage'));
+const ContractorsPage = lazy(() => import('./pages/ContractorsPage'));
+const ClientsPage = lazy(() => import('./pages/ClientsPage'));
+const VenuesPage = lazy(() => import('./pages/VenuesPage'));
+const OfferingsPage = lazy(() => import('./pages/OfferingsPage'));
+const BookingsPage = lazy(() => import('./pages/BookingsPage'));
+const BookingFormPage = lazy(() => import('./pages/BookingFormPage'));
+const EventsPage = lazy(() => import('./pages/EventsPage'));
+const EventFormPage = lazy(() => import('./pages/EventFormPage'));
+const EmailTemplatesPage = lazy(() => import('./pages/EmailTemplatesPage'));
+const RemindersPage = lazy(() => import('./pages/RemindersPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const HelpPage = lazy(() => import('./pages/HelpPage'));
+const AdminLayout = lazy(() => import('./layouts/AdminLayout'));
+const AdminAccountsPage = lazy(() => import('./pages/admin/AdminAccountsPage'));
+const AdminSupportPage = lazy(() => import('./pages/admin/AdminSupportPage'));
+const AdminAdminsPage = lazy(() => import('./pages/admin/AdminAdminsPage'));
+const CanvasEngineDemoPage = lazy(() => import('./pages/dev/CanvasEngineDemoPage'));
+const StagePlotEditorPage = lazy(() => import('./pages/StagePlotEditorPage'));
+const FloorPlanEditorPage = lazy(() => import('./pages/FloorPlanEditorPage'));
+const SetListsEditorPage = lazy(() => import('./pages/SetListsEditorPage'));
+const SetListLibraryPage = lazy(() => import('./pages/SetListLibraryPage'));
+const LandingPage = lazy(() => import('./pages/LandingPage'));
 
 // The marketing site lives at the exact root path, which otherwise sits
 // inside this same route tree (see AppRoutes' `path="/"` below) — checking
@@ -139,7 +141,8 @@ function PlatformAdminArea() {
 
 function AppRoutes() {
   return (
-    <Routes>
+    <Suspense fallback={<div className="min-h-screen bg-slate-50" aria-busy="true" />}>
+      <Routes>
       <Route path="/auth" element={<AuthGate><AuthPage /></AuthGate>} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/sign/:token" element={<ContractSignPage />} />
@@ -183,7 +186,8 @@ function AppRoutes() {
         <Route path="admins" element={<AdminAdminsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+      </Routes>
+    </Suspense>
   );
 }
 

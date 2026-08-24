@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { rateLimit } from 'express-rate-limit';
+import { createRateLimiter } from '../lib/rateLimiter.js';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { hashToken } from '../lib/resetToken.js';
@@ -17,11 +17,9 @@ export const publicContractorCalendarRouter = Router();
 // unlike a single indexed token lookup — a per-IP limiter on the GET itself
 // is a deliberate deviation from publicRsvpRouter, which only rate-limits
 // its POST (mutation) path.
-const calendarViewLimiter = rateLimit({
+const calendarViewLimiter = createRateLimiter('contractor-calendar-view', {
   windowMs: 15 * 60 * 1000,
   limit: 60,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { error: 'Too many requests. Please try again shortly.' },
 });
 

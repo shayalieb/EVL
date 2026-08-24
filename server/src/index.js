@@ -42,7 +42,15 @@ import { startReminderScheduler } from './lib/reminderScheduler.js';
 import { startReminderRuleEngine } from './lib/reminderRuleEngine.js';
 import { startDeletedRecordPurger } from './lib/deletedRecordPurger.js';
 import { startInquiryLinkPurger } from './lib/inquiryLinkPurger.js';
-import { ensureCsrfCookie, requireCsrfHeader } from './lib/csrf.js';
+import { ensureCsrfCookie } from './lib/csrf.js';
+import { asyncHandler } from './lib/asyncHandler.js';
+import { validateRuntimeConfig } from './lib/runtimeConfig.js';
+import { requestContext, securityHeaders } from './lib/httpOperations.js';
+import { withTimeout } from './lib/withTimeout.js';
+import { closeRedis, pingRedis } from './lib/rateLimiter.js';
+import { releaseInfo } from './lib/releaseInfo.js';
+
+validateRuntimeConfig();
 
 // No-ops safely with no DSN set — nothing breaks in dev/test environments
 // or before SENTRY_DSN is added to Railway's env vars, this just silently
@@ -57,6 +65,9 @@ Sentry.init({
 
 const app = express();
 app.set('trust proxy', 1);
+app.disable('x-powered-by');
+app.use(securityHeaders);
+app.use(requestContext);
 // Every response (JSON, email/PDF payloads) was going out uncompressed —
 // this cuts bandwidth and client-perceived latency under load. Operates
 // purely on the response body, so it's safe ahead of the raw-body webhook
@@ -164,7 +175,21 @@ const portalSession = session({
 // by the time a multipart upload route needs to check it (see lib/csrf.js).
 app.use(ensureCsrfCookie);
 
-app.get('/api/health', (req, res) => res.json({ ok: true }));
+// Liveness deliberately has no dependencies: it answers whether this process
+// can serve HTTP. Readiness additionally verifies the database before a load
+// balancer sends business traffic here.
+app.get('/api/health', (req, res) => res.json({ ok: true, ...releaseInfo() }));
+app.get('/api/ready', asyncHandler(async (req, res) => {
+  try {
+    await Promise.all([
+      withTimeout(prisma.$queryRaw`SELECT 1`, 2000, 'Database readiness check'),
+      withTimeout(pingRedis(), 2000, 'Redis readiness check'),
+    ]);
+    res.json({ ok: true, ...releaseInfo() });
+  } catch {
+    res.status(503).json({ ok: false });
+  }
+}));
 app.use('/api/auth', authRouter);
 app.use('/api/team', teamRouter);
 app.use('/api/account-data', accountDataRouter);
@@ -237,20 +262,84 @@ app.use((err, req, res, next) => {
   if (err.expose && status && status < 500) {
     return res.status(status).json({ error: err.message });
   }
-  console.error(err);
+  console.error(JSON.stringify({
+    level: 'error',
+    type: 'request_error',
+    requestId: req.requestId,
+    method: req.method,
+    path: req.path,
+    error: err instanceof Error ? err.message : String(err),
+    stack: err instanceof Error ? err.stack : undefined,
+  }));
   res.status(500).json({ error: 'Something went wrong. Please try again.' });
 });
 
 const port = process.env.PORT || 4000;
+const stopBackgroundJobs = [];
+let server = null;
 // Background jobs only start once listen actually succeeds. Previously these
 // ran unconditionally right after the call — but a port-bind failure surfaces
 // as an async 'error' event, not a synchronous throw, so a crashed watch-mode
 // process (e.g. EADDRINUSE) would silently keep running its own copies of all
 // four intervals against the same database forever.
-app.listen(port, () => {
-  console.log(`Server listening on ${port}`);
-  startReminderScheduler();
-  startReminderRuleEngine();
-  startDeletedRecordPurger();
-  startInquiryLinkPurger();
-});
+export function startServer() {
+  if (server) return server;
+  server = app.listen(port, () => {
+    console.log(`Server listening on ${port}`);
+    stopBackgroundJobs.push(
+      startReminderScheduler(),
+      startReminderRuleEngine(),
+      startDeletedRecordPurger(),
+      startInquiryLinkPurger(),
+    );
+  });
+  server.once('error', (err) => {
+    console.error(JSON.stringify({
+      level: 'error',
+      type: 'server_bind_failed',
+      code: err.code,
+      error: err.message,
+    }));
+    process.exitCode = 1;
+  });
+  return server;
+}
+
+let shuttingDown = false;
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(JSON.stringify({ level: 'info', type: 'shutdown_started', signal }));
+  stopBackgroundJobs.forEach((stop) => stop());
+
+  const forceTimer = setTimeout(() => {
+    console.error(JSON.stringify({ level: 'error', type: 'shutdown_forced', signal }));
+    process.exit(1);
+  }, 10_000);
+  forceTimer.unref();
+
+  if (!server) {
+    await Promise.all([prisma.$disconnect(), closeRedis()]);
+    clearTimeout(forceTimer);
+    return;
+  }
+  server.close(async () => {
+    try {
+      await Promise.all([prisma.$disconnect(), closeRedis()]);
+      clearTimeout(forceTimer);
+      console.log(JSON.stringify({ level: 'info', type: 'shutdown_complete', signal }));
+      process.exit(0);
+    } catch (err) {
+      console.error(err);
+      process.exit(1);
+    }
+  });
+  server.closeIdleConnections?.();
+}
+
+process.once('SIGTERM', () => shutdown('SIGTERM'));
+process.once('SIGINT', () => shutdown('SIGINT'));
+
+if (process.env.NODE_ENV !== 'test') startServer();
+
+export { app, shutdown };

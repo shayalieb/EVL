@@ -1,11 +1,11 @@
 import { Router } from 'express';
-import { rateLimit } from 'express-rate-limit';
+import { createRateLimiter } from '../lib/rateLimiter.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createWithPreservedId } from '../lib/idPreservingCreate.js';
-import { MAX_LIST_ROWS } from '../lib/listLimits.js';
+import { paginationFromRequest, paginatedResponse } from '../lib/pagination.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
 
@@ -42,12 +42,15 @@ function serializeContractor(c) {
 }
 
 router.get('/', asyncHandler(async (req, res) => {
+  const pagination = paginationFromRequest(req);
+  if (!pagination) return res.status(400).json({ error: 'Invalid pagination cursor.' });
   const contractors = await prisma.contractor.findMany({
-    where: { accountId: req.membership.accountId },
-    orderBy: { createdAt: 'asc' },
-    take: MAX_LIST_ROWS,
+    where: { accountId: req.membership.accountId, ...pagination.cursorWhere },
+    orderBy: pagination.orderBy,
+    take: pagination.limit + 1,
   });
-  res.json({ contractors: contractors.map(serializeContractor) });
+  const { page, nextCursor } = paginatedResponse(contractors, pagination.limit);
+  res.json({ contractors: page.map(serializeContractor), nextCursor });
 }));
 
 router.post('/', asyncHandler(async (req, res) => {
@@ -81,11 +84,9 @@ router.post('/', asyncHandler(async (req, res) => {
 // Real external email out to an arbitrary chunk of the roster, so this is
 // permission-gated (manageContractors — the page it's driven from) and
 // rate-limited the same way email.js's single-send /send route is.
-const bulkEmailLimiter = rateLimit({
+const bulkEmailLimiter = createRateLimiter('contractor-bulk-email', {
   windowMs: 15 * 60 * 1000,
   limit: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { error: 'Too many bulk sends. Please try again later.' },
 });
 

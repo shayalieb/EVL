@@ -1,4 +1,5 @@
-import { apiFetch, API_BASE, csrfHeader } from '../context/AuthContext';
+import { apiFetch, API_BASE } from '../context/AuthContext';
+import { uploadToSignedUrl } from './directUpload';
 
 export async function listDocuments(eventId) {
   const data = await apiFetch(`/documents?eventId=${encodeURIComponent(eventId)}`);
@@ -8,20 +9,16 @@ export async function listDocuments(eventId) {
 // eventId is optional — omit it (null/undefined) for an account-level
 // attachment not tied to any event, e.g. a Set List library song's PDF.
 export async function uploadDocument(eventId, file) {
-  const formData = new FormData();
-  if (eventId) formData.append('eventId', eventId);
-  formData.append('file', file);
-  // Not apiFetch — the browser must set its own multipart boundary
-  // Content-Type header, which a forced 'application/json' would break.
-  const res = await fetch(`${API_BASE}/documents`, {
+  const upload = await apiFetch('/documents/upload-url', {
     method: 'POST',
-    credentials: 'include',
-    headers: csrfHeader(),
-    body: formData,
+    body: JSON.stringify({ filename: file.name, size: file.size }),
   });
-  const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(body?.error || 'Failed to upload document.');
-  return body.document;
+  await uploadToSignedUrl(upload.signedUrl, file);
+  const result = await apiFetch('/documents/upload-complete', {
+    method: 'POST',
+    body: JSON.stringify({ storageKey: upload.storageKey, eventId, filename: file.name, contentType: file.type || 'application/octet-stream', size: file.size }),
+  });
+  return result.document;
 }
 
 export async function deleteDocument(id) {

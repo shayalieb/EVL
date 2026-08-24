@@ -118,8 +118,8 @@ export default function InvoiceDocument({
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
-                <tr key={item.id} className={rowBorderClass}>
+              {items.map((item, index) => (
+                <tr key={item.id || `${item.name || 'item'}-${index}`} className={rowBorderClass}>
                   <td className="py-3 pr-4">
                     <div className="font-semibold text-slate-700">{item.name || 'Item'}</div>
                     {item.details && <div className="text-[0.75em] text-slate-400 mt-0.5">{item.details}</div>}

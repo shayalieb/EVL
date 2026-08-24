@@ -26,11 +26,12 @@ No deploy config files needed — Railway auto-detects Node via
 `package.json` and runs `npm install` → `npm run build` (`prisma generate`)
 → `npm run start` (`prisma migrate deploy && node src/index.js`).
 
-1. Railway dashboard → New Project → Provision PostgreSQL.
+1. Railway dashboard → New Project → Provision PostgreSQL and Redis.
 2. New Service → Deploy from this GitHub repo → set **Root Directory** to
    `server`.
 3. Set env vars on that service: `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`
-   (reference variable), `SESSION_SECRET` (long random string), `NODE_ENV=production`,
+   and `REDIS_URL` = `${{Redis.REDIS_URL}}` (reference variables),
+   `SESSION_SECRET` (long random string), `NODE_ENV=production`,
    `EXTRA_CLIENT_ORIGINS` (comma-separated deployed frontend origins,
    localhost is always allowed automatically), `FRONTEND_URL` (the deployed
    frontend's base URL, used to build password-reset/invite email links),

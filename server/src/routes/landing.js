@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { rateLimit } from 'express-rate-limit';
+import { createRateLimiter } from '../lib/rateLimiter.js';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
@@ -9,11 +9,9 @@ import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
 // generous-but-bounded shape as auth.js's credentialsLimiter, tuned for a
 // form real visitors fill out at most once or twice, not for the retry
 // volume a login form sees.
-const submitLimiter = rateLimit({
+const submitLimiter = createRateLimiter('landing-submit', {
   windowMs: 15 * 60 * 1000,
   limit: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { error: 'Too many requests. Please try again shortly.' },
 });
 

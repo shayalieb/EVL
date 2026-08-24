@@ -1,8 +1,8 @@
 import { apiFetch } from '../context/AuthContext';
+import { fetchAllPages } from './fetchAllPages';
 
 export async function listEvents() {
-  const data = await apiFetch('/events');
-  return data.events;
+  return fetchAllPages('/events', 'events');
 }
 
 // Full record, including the heavy categoryTabs/schedule/prepGroups/

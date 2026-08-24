@@ -1,16 +1,13 @@
 import { Router } from 'express';
-import multer from 'multer';
-import { rateLimit } from 'express-rate-limit';
+import { createRateLimiter } from '../lib/rateLimiter.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
-import { uploadFile, getSignedDownloadUrl, getSignedPreviewUrl, deleteFile, copyFile } from '../lib/fileStorage.js';
+import { createSignedUpload, uploadedFileSize, getSignedDownloadUrl, getSignedPreviewUrl, deleteFile, copyFile } from '../lib/fileStorage.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
-import { requireCsrfHeader } from '../lib/csrf.js';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FILE_SIZE } });
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -27,39 +24,32 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ documents });
 }));
 
-router.post('/', requireCsrfHeader, (req, res, next) => {
-  upload.single('file')(req, res, (err) => {
-    if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(413).json({ error: 'File is too large (10MB max).' });
-    }
-    if (err) return next(err);
-    next();
-  });
-}, asyncHandler(async (req, res) => {
-  // eventId is omitted for account-level attachments not tied to any event
-  // (e.g. a Set List library song) — see schema.prisma's EventDocument.eventId.
-  const eventId = req.body?.eventId?.trim() || null;
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
+router.post('/upload-url', asyncHandler(async (req, res) => {
+  const { filename, size } = req.body || {};
+  if (!filename?.trim() || !Number.isInteger(size) || size <= 0) {
+    return res.status(400).json({ error: 'A valid filename and size are required.' });
+  }
+  if (size > MAX_FILE_SIZE) return res.status(413).json({ error: 'File is too large (10MB max).' });
+  res.json(await createSignedUpload({ accountId: req.membership.accountId }));
+}));
 
-  const contentType = req.file.mimetype || 'application/octet-stream';
-  const storageKey = await uploadFile({ accountId: req.membership.accountId, buffer: req.file.buffer, contentType });
-
+router.post('/upload-complete', asyncHandler(async (req, res) => {
+  const { storageKey, eventId, filename, contentType, size } = req.body || {};
+  if (!storageKey?.startsWith(`${req.membership.accountId}/`) || !filename?.trim() || !Number.isInteger(size) || size <= 0) {
+    return res.status(400).json({ error: 'Invalid upload metadata.' });
+  }
+  if (size > MAX_FILE_SIZE) return res.status(413).json({ error: 'File is too large (10MB max).' });
+  const actualSize = await uploadedFileSize(storageKey);
+  if (actualSize === null) return res.status(409).json({ error: 'Upload has not completed.' });
+  if (actualSize > MAX_FILE_SIZE || (actualSize && actualSize !== size)) {
+    await deleteFile(storageKey);
+    return res.status(400).json({ error: 'Uploaded file size does not match.' });
+  }
+  const existing = await prisma.eventDocument.findFirst({ where: { accountId: req.membership.accountId, storageKey } });
+  if (existing) return res.status(409).json({ error: 'Upload was already completed.' });
   const shareToken = generateToken();
   const document = await prisma.eventDocument.create({
-    data: {
-      accountId: req.membership.accountId,
-      eventId,
-      filename: req.file.originalname,
-      contentType,
-      size: req.file.size,
-      storageKey,
-      // Every document gets one, not just Set List songs — cheap, and keeps
-      // this route from needing to know why it's being uploaded. Only Set
-      // List songs ever surface it in a UI (see schema.prisma's
-      // EventDocument.shareToken doc comment).
-      shareToken,
-      shareTokenHash: hashToken(shareToken),
-    },
+    data: { accountId: req.membership.accountId, eventId: eventId?.trim() || null, filename: filename.trim(), contentType: contentType || 'application/octet-stream', size, storageKey, shareToken, shareTokenHash: hashToken(shareToken) },
     select: { id: true, filename: true, contentType: true, size: true, createdAt: true, shareToken: true },
   });
   res.status(201).json({ document });
@@ -148,11 +138,9 @@ router.delete('/:id', asyncHandler(async (req, res) => {
 // be turned into a public download.
 export const publicSongSheetsRouter = Router();
 
-const songSheetLimiter = rateLimit({
+const songSheetLimiter = createRateLimiter('public-song-sheet', {
   windowMs: 15 * 60 * 1000,
   limit: 60,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { error: 'Too many requests. Please try again shortly.' },
 });
 

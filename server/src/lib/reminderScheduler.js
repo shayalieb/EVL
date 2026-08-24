@@ -1,4 +1,5 @@
 import { prisma } from './prisma.js';
+import { mapWithConcurrency } from './concurrency.js';
 import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from './mailer.js';
 
 const POLL_INTERVAL_MS = 60 * 1000;
@@ -60,6 +61,8 @@ async function sendReminderEmail(reminder) {
 }
 
 let running = false;
+const SEND_BATCH_SIZE = 100;
+const SEND_CONCURRENCY = 10;
 
 // Exported for the same on-demand-testing reason as reminderRuleEngine.js's tick.
 export async function tick() {
@@ -79,9 +82,11 @@ export async function tick() {
         createdByUser: true,
         account: { include: { accountData: true } },
       },
+      orderBy: [{ remindAt: 'asc' }, { id: 'asc' }],
+      take: SEND_BATCH_SIZE,
     });
 
-    const results = await Promise.allSettled(dueReminders.map(async (reminder) => {
+    const results = await mapWithConcurrency(dueReminders, SEND_CONCURRENCY, async (reminder) => {
       // Atomic claim so multiple backend instances polling at once never
       // both send the same reminder — a plain conditional UPDATE is
       // race-safe under concurrent connections, unlike a Postgres advisory
@@ -103,7 +108,7 @@ export async function tick() {
       // Not sent (no resolvable recipient): leave emailSentAt null and
       // emailClaimedAt stands until it goes stale, so this logs again and
       // is retried each tick rather than silently pretending it went out.
-    }));
+    });
 
     results.forEach((result, i) => {
       if (result.status === 'rejected') {
@@ -118,5 +123,6 @@ export async function tick() {
 }
 
 export function startReminderScheduler() {
-  setInterval(tick, POLL_INTERVAL_MS);
+  const timer = setInterval(tick, POLL_INTERVAL_MS);
+  return () => clearInterval(timer);
 }

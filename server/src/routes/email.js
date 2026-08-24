@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { rateLimit } from 'express-rate-limit';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { attachMembership, effectivePermissions } from '../lib/membership.js';
+import { attachMembership } from '../lib/membership.js';
 import { resolveFromHeader, sendMail, buildActionEmailHtml, buildInlineImageAttachments } from '../lib/mailer.js';
+import { emailSendLimiter, requireEmailSendPermission } from '../lib/emailSendPolicy.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -13,18 +13,7 @@ router.use(requireAuth, asyncHandler(attachMembership));
 // gated on manageBookings (proposal/contract sends are the only current
 // caller) rather than just being logged in, plus a rate limit — bare
 // requireAuth would let any self-signed-up account use it as an open relay.
-const sendLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many emails sent. Please try again later.' },
-});
-
-router.post('/send', sendLimiter, asyncHandler(async (req, res) => {
-  if (!effectivePermissions(req.membership).manageBookings) {
-    return res.status(403).json({ error: 'Not authorized.' });
-  }
+router.post('/send', requireEmailSendPermission, emailSendLimiter, asyncHandler(async (req, res) => {
   const { to, subject, body, fromName, replyTo, pdfAttachment, inlineImages, wide } = req.body || {};
   if (!to?.trim() || !subject?.trim() || !body?.trim()) {
     return res.status(400).json({ error: 'Recipient, subject, and body are required.' });

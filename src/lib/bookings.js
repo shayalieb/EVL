@@ -1,8 +1,8 @@
 import { apiFetch } from '../context/AuthContext';
+import { fetchAllPages } from './fetchAllPages';
 
 export async function listBookings() {
-  const data = await apiFetch('/bookings');
-  return data.bookings;
+  return fetchAllPages('/bookings', 'bookings');
 }
 
 // Full record, including the heavy schedule/activityLog/proposal/history
