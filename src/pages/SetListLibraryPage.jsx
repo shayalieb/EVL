@@ -44,7 +44,11 @@ export default function SetListLibraryPage() {
 
   useContractorHydration(events.flatMap((event) => (event.contractorBookings || []).map((booking) => booking.contractorId)));
 
-  const filteredSetLists = setListLibrary.filter((s) => matchesSearch(search, [s.name]));
+  const filteredSetLists = setListLibrary.filter((s) => matchesSearch(search, [
+    s.name,
+    s.description,
+    ...(s.items || []).flatMap((item) => [item.songTitle, item.description]),
+  ]));
 
   function openAdd() {
     setEditingSetList(null);
@@ -74,7 +78,7 @@ export default function SetListLibraryPage() {
   }
 
   function hasSongs(setList) {
-    return setList.items.some((it) => it.songTitle?.trim());
+    return (setList.items || []).some((it) => it.songTitle?.trim());
   }
 
   // Whoever's booked on the given event, same pool SetListsEditorPage.jsx
@@ -158,7 +162,7 @@ export default function SetListLibraryPage() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Set Lists</h2>
-          <p className="text-sm text-slate-500 mt-1">Reusable set lists you can pull into any gig without rebuilding them from scratch.</p>
+          <p className="text-sm text-slate-500 mt-1">Build reusable song collections once, then copy them into any event. Event copies stay independent from the library original.</p>
         </div>
         <button
           type="button"
@@ -172,7 +176,7 @@ export default function SetListLibraryPage() {
       </div>
 
       <div className="flex items-center gap-2 flex-wrap mb-4">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search set lists…" className="w-64" testId="setlist-library-search-input" />
+        <SearchInput value={search} onChange={setSearch} placeholder="Search lists, descriptions, or songs…" className="w-full sm:w-80" testId="setlist-library-search-input" />
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -182,6 +186,7 @@ export default function SetListLibraryPage() {
               <tr className="border-b border-slate-100 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Description</th>
+                <th className="px-4 py-3 text-center">Songs</th>
                 <th className="px-4 py-3">Linked Events</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
@@ -189,10 +194,20 @@ export default function SetListLibraryPage() {
             <tbody>
               {filteredSetLists.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-10 text-center text-slate-400">
-                    {setListLibrary.length === 0
-                      ? 'No set lists yet. Add one to reuse it across gigs.'
-                      : 'No set lists match your search.'}
+                  <td colSpan={5} className="px-4 py-10 text-center text-slate-400">
+                    {setListLibrary.length === 0 ? (
+                      <div className="flex flex-col items-center gap-3">
+                        <div>
+                          <p className="font-semibold text-slate-600">Create your first reusable set list</p>
+                          <p className="text-sm mt-1">Add songs, notes, links, and sheet music, then copy the finished list into any event.</p>
+                        </div>
+                        {canEdit && (
+                          <button type="button" onClick={openAdd} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
+                            + Add Set List
+                          </button>
+                        )}
+                      </div>
+                    ) : 'No set lists match your search.'}
                   </td>
                 </tr>
               )}
@@ -219,6 +234,7 @@ export default function SetListLibraryPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-slate-500 max-w-md truncate">{s.description || '—'}</td>
+                    <td className="px-4 py-3 text-center text-slate-600">{(s.items || []).filter((item) => item.songTitle?.trim()).length}</td>
                     <td className="px-4 py-3 text-slate-600">
                       {linked.length === 0 ? (
                         <span className="text-slate-300">—</span>

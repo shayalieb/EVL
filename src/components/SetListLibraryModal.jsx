@@ -35,6 +35,8 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
   const [uploadingItemId, setUploadingItemId] = useState(null);
   const [previewDocument, setPreviewDocument] = useState(null);
   const dragIndex = useRef(null);
+  const pendingDocumentDeletes = useRef(new Set());
+  const uploadedDraftDocuments = useRef(new Set());
   const [dragOverIndex, setDragOverIndex] = useState(null);
 
   useEffect(() => {
@@ -49,6 +51,8 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
       const linkedIds = setList?.eventIds || (setList?.eventId ? [setList.eventId] : []);
       Promise.allSettled(linkedIds.map(loadEvent));
       setError('');
+      pendingDocumentDeletes.current.clear();
+      uploadedDraftDocuments.current.clear();
     }
   }, [open, setList, loadEvent]);
 
@@ -73,7 +77,17 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
   function removeItem(id) {
     const item = items.find((it) => it.id === id);
     setItems((prev) => prev.filter((it) => it.id !== id));
-    if (item?.documentId) deleteDocument(item.documentId).catch(() => {});
+    if (item?.documentId) pendingDocumentDeletes.current.add(item.documentId);
+  }
+
+  function moveItem(index, direction) {
+    const target = index + direction;
+    if (target < 0 || target >= items.length) return;
+    setItems((prev) => {
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
   }
 
   async function handleUploadPdf(itemId, file) {
@@ -81,8 +95,9 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
     setUploadingItemId(itemId);
     try {
       const item = items.find((it) => it.id === itemId);
-      if (item?.documentId) await deleteDocument(item.documentId).catch(() => {});
+      if (item?.documentId) pendingDocumentDeletes.current.add(item.documentId);
       const doc = await uploadDocument(null, file);
+      uploadedDraftDocuments.current.add(doc.id);
       updateItem(itemId, { documentId: doc.id, documentName: doc.filename, documentContentType: doc.contentType, documentShareToken: doc.shareToken });
     } catch (err) {
       showToast(err.message || 'Failed to upload PDF', 'error');
@@ -93,8 +108,8 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
 
   function handleRemovePdf(itemId) {
     const item = items.find((it) => it.id === itemId);
-    updateItem(itemId, { documentId: null, documentName: null, documentContentType: null });
-    if (item?.documentId) deleteDocument(item.documentId).catch(() => {});
+    updateItem(itemId, { documentId: null, documentName: null, documentContentType: null, documentShareToken: null });
+    if (item?.documentId) pendingDocumentDeletes.current.add(item.documentId);
   }
 
   function handleDrop(targetIndex) {
@@ -121,19 +136,29 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
     // A title-less row (e.g. a PDF attached before typing a title, then
     // saved without ever filling it in) gets silently dropped below — clean
     // up its upload too, or it orphans in storage with nothing referencing it.
-    droppedItems.forEach((it) => { if (it.documentId) deleteDocument(it.documentId).catch(() => {}); });
+    droppedItems.forEach((it) => { if (it.documentId) pendingDocumentDeletes.current.add(it.documentId); });
     // eventId: undefined explicitly drops the old single-event field (if
     // this record predates multi-event linking) once JSON-serialized, so it
     // doesn't linger stale alongside the new eventIds array.
     const payload = { name: name.trim(), description: description.trim(), items: keptItems, eventIds, eventId: undefined };
     const record = setList ? { ...setList, ...payload } : addSetListLibraryItem(payload);
     if (setList) updateSetListLibraryItem(setList.id, payload);
+    pendingDocumentDeletes.current.forEach((id) => deleteDocument(id).catch(() => {}));
+    pendingDocumentDeletes.current.clear();
+    uploadedDraftDocuments.current.clear();
     onSaved?.(record);
     onClose();
   }
 
+  function handleCancel() {
+    uploadedDraftDocuments.current.forEach((id) => deleteDocument(id).catch(() => {}));
+    pendingDocumentDeletes.current.clear();
+    uploadedDraftDocuments.current.clear();
+    onClose();
+  }
+
   return (
-    <Modal open={open} onClose={onClose} title={setList ? 'Edit Set List' : 'Add Set List'} widthClass="max-w-2xl">
+    <Modal open={open} onClose={handleCancel} title={setList ? 'Edit Set List' : 'Add Set List'} widthClass="max-w-2xl">
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <div data-testid="setlist-library-modal-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
@@ -164,7 +189,7 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
             testId="setlist-library-modal-event-picker"
           />
           <p className="text-xs text-slate-400 mt-1">
-            Linking this set list to one or more events unlocks Email/Download PDF for it from the Set Lists page. Sending or exporting always targets one event at a time — you'll be asked which one if more than one is linked.
+            Optional. Linking an event enables email recipients and adds event context to exports. A PDF can still be downloaded without a linked event.
           </p>
         </div>
 
@@ -179,33 +204,42 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
                 onDragOver={(e) => { e.preventDefault(); setDragOverIndex(i); }}
                 onDrop={() => handleDrop(i)}
                 data-testid="setlist-library-modal-item-row"
-                className={`flex items-center gap-2 border border-slate-200 rounded-lg px-2 py-1.5 ${dragOverIndex === i && dragIndex.current !== i ? 'border-indigo-400 bg-indigo-50/40' : ''}`}
+                className={`grid grid-cols-[auto_1fr_auto] sm:flex sm:items-center gap-2 border border-slate-200 rounded-lg p-2 ${dragOverIndex === i && dragIndex.current !== i ? 'border-indigo-400 bg-indigo-50/40' : ''}`}
               >
-                <span className="cursor-grab text-slate-300 select-none shrink-0" aria-hidden="true">⠿</span>
-                <span className="text-slate-400 text-sm w-5 shrink-0 text-right">{i + 1}.</span>
-                <input
-                  placeholder="Song title"
-                  value={item.songTitle}
-                  onChange={(e) => updateItem(item.id, { songTitle: e.target.value })}
-                  data-testid="setlist-library-modal-item-title-input"
-                  className={`${inputClass} flex-[2] min-w-0`}
-                />
-                <input
-                  placeholder="Description / notes"
-                  value={item.description}
-                  onChange={(e) => updateItem(item.id, { description: e.target.value })}
-                  data-testid="setlist-library-modal-item-description-input"
-                  className={`${inputClass} flex-[2] min-w-0`}
-                />
-                <input
-                  placeholder="Link"
-                  value={item.link}
-                  onChange={(e) => updateItem(item.id, { link: e.target.value })}
-                  onBlur={(e) => updateItem(item.id, { link: normalizeUrl(e.target.value) })}
-                  data-testid="setlist-library-modal-item-link-input"
-                  className={`${inputClass} flex-1 min-w-0`}
-                />
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex flex-col items-center gap-0.5 shrink-0">
+                  <span className="hidden sm:inline cursor-grab text-slate-300 select-none" aria-hidden="true">⠿</span>
+                  <span className="text-slate-400 text-sm">{i + 1}.</span>
+                </div>
+                <div className="grid grid-cols-1 sm:flex gap-2 min-w-0">
+                  <input
+                    aria-label={`Song ${i + 1} title`}
+                    placeholder="Song title"
+                    value={item.songTitle}
+                    onChange={(e) => updateItem(item.id, { songTitle: e.target.value })}
+                    data-testid="setlist-library-modal-item-title-input"
+                    className={`${inputClass} sm:flex-[2] min-w-0`}
+                  />
+                  <input
+                    aria-label={`Song ${i + 1} notes`}
+                    placeholder="Description / notes"
+                    value={item.description}
+                    onChange={(e) => updateItem(item.id, { description: e.target.value })}
+                    data-testid="setlist-library-modal-item-description-input"
+                    className={`${inputClass} sm:flex-[2] min-w-0`}
+                  />
+                  <input
+                    aria-label={`Song ${i + 1} reference link`}
+                    placeholder="Reference link"
+                    value={item.link}
+                    onChange={(e) => updateItem(item.id, { link: e.target.value })}
+                    onBlur={(e) => updateItem(item.id, { link: normalizeUrl(e.target.value) })}
+                    data-testid="setlist-library-modal-item-link-input"
+                    className={`${inputClass} sm:flex-1 min-w-0`}
+                  />
+                </div>
+                <div className="flex flex-col sm:flex-row items-center gap-1 shrink-0">
+                  <button type="button" onClick={() => moveItem(i, -1)} disabled={i === 0} className="w-7 h-7 rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-20" aria-label={`Move song ${i + 1} up`}>↑</button>
+                  <button type="button" onClick={() => moveItem(i, 1)} disabled={i === items.length - 1} className="w-7 h-7 rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-20" aria-label={`Move song ${i + 1} down`}>↓</button>
                   {item.documentId ? (
                     <>
                       <button
@@ -241,16 +275,16 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
                       />
                     </label>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => removeItem(item.id)}
+                    data-testid="setlist-library-modal-item-remove-button"
+                    className="w-7 h-7 shrink-0 flex items-center justify-center rounded text-slate-300 hover:text-red-600 hover:bg-red-50"
+                    aria-label="Remove song"
+                  >
+                    ✕
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => removeItem(item.id)}
-                  data-testid="setlist-library-modal-item-remove-button"
-                  className="w-6 h-6 shrink-0 flex items-center justify-center rounded text-slate-300 hover:text-red-600"
-                  aria-label="Remove song"
-                >
-                  ✕
-                </button>
               </div>
             ))}
           </div>
@@ -260,7 +294,7 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} data-testid="setlist-library-modal-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button type="button" onClick={handleCancel} data-testid="setlist-library-modal-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
           <button type="submit" data-testid="setlist-library-modal-save-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
             {setList ? 'Save Changes' : 'Add Set List'}
           </button>
