@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import { uid } from '../lib/storage';
 import { getBookingTotal, computeDurationHours as computeDurationHoursUtil } from '../lib/pricingTiers';
@@ -96,6 +97,9 @@ const LIST_FIELDS = {
 
 export function DataProvider({ children }) {
   const { currentUser, updateCurrentUser } = useAuth();
+  const { pathname } = useLocation();
+  const needsClients = /^\/(clients|bookings|events)(\/|$)/.test(pathname);
+  const needsContractors = /^\/(contractors|events|offerings|set-lists)(\/|$)/.test(pathname) || pathname.startsWith('/bookings/');
 
   const patchList = useCallback((field, nextList) => {
     updateCurrentUser({ [field]: nextList });
@@ -111,31 +115,34 @@ export function DataProvider({ children }) {
   const [contractors, setContractors] = useState([]);
   const [contractorsLoaded, setContractorsLoaded] = useState(false);
   useEffect(() => {
-    if (!currentUser) { setContractors([]); setContractorsLoaded(false); return; }
+    setContractors([]);
+    setContractorsLoaded(false);
+  }, [currentUser?.accountId]);
+  useEffect(() => {
+    if (!currentUser || !needsContractors || contractorsLoaded) return;
     let cancelled = false;
     listContractors()
       .then((list) => { if (!cancelled) setContractors(list); })
       .finally(() => { if (!cancelled) setContractorsLoaded(true); });
     return () => { cancelled = true; };
-    // Deliberately keyed on accountId, not the whole currentUser object —
-    // currentUser gets a new reference on every single blob autosave
-    // elsewhere in the app, which would otherwise refetch on every keystroke.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.accountId]);
+  }, [currentUser, needsContractors, contractorsLoaded]);
 
   // Same real-table-not-blob treatment as contractors above — see
   // server/prisma/schema.prisma's Client model comment.
   const [clients, setClients] = useState([]);
   const [clientsLoaded, setClientsLoaded] = useState(false);
   useEffect(() => {
-    if (!currentUser) { setClients([]); setClientsLoaded(false); return; }
+    setClients([]);
+    setClientsLoaded(false);
+  }, [currentUser?.accountId]);
+  useEffect(() => {
+    if (!currentUser || !needsClients || clientsLoaded) return;
     let cancelled = false;
     listClients()
       .then((list) => { if (!cancelled) setClients(list); })
       .finally(() => { if (!cancelled) setClientsLoaded(true); });
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.accountId]);
+  }, [currentUser, needsClients, clientsLoaded]);
 
   // Same real-table-not-blob treatment as contractors/clients above — see
   // server/prisma/schema.prisma's Booking/Event model comments. Bookings and
@@ -831,7 +838,7 @@ export function DataProvider({ children }) {
   // `events` are synchronously populated (.find(...) inline in render
   // bodies, no loading states of their own), so this keeps that assumption
   // true rather than pushing a loading state into every consuming file.
-  if (currentUser && (!contractorsLoaded || !clientsLoaded)) return null;
+  if (currentUser && ((needsContractors && !contractorsLoaded) || (needsClients && !clientsLoaded))) return null;
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

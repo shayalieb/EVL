@@ -42,7 +42,10 @@ const emptyForm = {
 };
 
 export default function ReminderModal({ open, onClose, reminder, onSaved }) {
-  const { clients, contractors, events, searchEvents, loadEvent } = useData();
+  const {
+    clients, contractors, events,
+    searchClients, loadClient, searchContractors, loadContractor, searchEvents, loadEvent,
+  } = useData();
   const [invoices, setInvoices] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
@@ -69,9 +72,13 @@ export default function ReminderModal({ open, onClose, reminder, onSaved }) {
   useEffect(() => {
     if (!open) return;
     listInvoices().then(setInvoices).catch(() => setInvoices([]));
+    searchClients('').catch(() => {});
+    searchContractors('').catch(() => {});
     searchEvents('').catch(() => {});
+    if (reminder?.relatedType === 'client' && reminder.relatedId) loadClient(reminder.relatedId).catch(() => {});
+    if (reminder?.relatedType === 'contractor' && reminder.relatedId) loadContractor(reminder.relatedId).catch(() => {});
     if (reminder?.relatedType === 'event' && reminder.relatedId) loadEvent(reminder.relatedId).catch(() => {});
-  }, [open, reminder?.relatedId, reminder?.relatedType, searchEvents, loadEvent]);
+  }, [open, reminder?.relatedId, reminder?.relatedType, searchClients, loadClient, searchContractors, loadContractor, searchEvents, loadEvent]);
 
   function update(field, val) {
     setForm((f) => ({ ...f, [field]: val }));
