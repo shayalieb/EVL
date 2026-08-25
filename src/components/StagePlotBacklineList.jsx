@@ -46,7 +46,7 @@ export default function StagePlotBacklineList({ eventId, items, onItemsChange })
   }
 
   return (
-    <div className="w-full max-w-[36rem] shrink-0 mt-4">
+    <div className="w-full mt-4">
       <div className="flex items-center justify-between mb-2">
         <div className="text-xs font-semibold text-slate-500">Backline List</div>
         <button type="button" onClick={handleAdd} data-testid="stageplot-add-backline-item-button" className="text-xs font-semibold text-indigo-600">+ Add Item</button>

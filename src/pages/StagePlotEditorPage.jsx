@@ -250,7 +250,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
         )}
       </div>
 
-      <div className="flex flex-wrap gap-4 items-start w-full min-w-0">
+      <div className="w-full min-w-0">
         {activePage && (
           <StagePlotPageEditor
             ref={pageEditorRef}
@@ -266,7 +266,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
             onUpdateElementContent={handleUpdateElementContent}
           />
         )}
-        <div className="flex flex-col">
+        <div className="w-full lg:w-4/5 mx-auto mt-6">
           <StagePlotChannelList
             eventId={eventId}
             channels={plot.channels}
@@ -281,7 +281,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
             onItemsChange={(backlineItems) => setPlot((prev) => ({ ...prev, backlineItems }))}
           />
 
-          <div className="w-full max-w-[36rem] shrink-0 mt-4">
+          <div className="w-full mt-4">
             <div className="text-xs font-semibold text-slate-500 mb-2">Sent Emails</div>
             {contractorsWithThreads.length === 0 ? (
               <p className="text-sm text-slate-400">No emails sent from here yet.</p>

@@ -885,14 +885,9 @@ const CanvasStage = forwardRef(function CanvasStage({
         draggable={mode === 'select'}
         onDragStart={(e) => { if (e.target === e.target.getStage()) setIsPanning(true); }}
         onDragEnd={handleStageDragEnd}
-        // No zoom logic here anymore (buttons only, per feedback that
-        // scroll-to-zoom was hard to control) — but still swallowing the
-        // event, not removing the handler outright. Without this, a wheel
-        // gesture over the canvas falls through to the browser's default
-        // behavior and scrolls the *page*, not the canvas — which silently
-        // moves the canvas out from under itself and desyncs anything
-        // relying on its on-screen position.
-        onWheel={(e) => e.evt.preventDefault()}
+        // Zoom is button-only. Leave wheel/touchpad events unhandled so the
+        // surrounding page scrolls normally even while the pointer is over
+        // this large canvas.
         onMouseDown={handleStageMouseDown}
         onMouseMove={handleStageMouseMove}
         onMouseUp={handleStageMouseUp}

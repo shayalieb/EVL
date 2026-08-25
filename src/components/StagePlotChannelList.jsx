@@ -86,7 +86,7 @@ export default function StagePlotChannelList({ eventId, channels, onChannelsChan
   }
 
   return (
-    <div className="w-full max-w-[36rem] shrink-0">
+    <div className="w-full">
       <div className="flex items-center justify-between mb-2">
         <div className="text-xs font-semibold text-slate-500">Production List</div>
         <div className="flex items-center gap-3">
