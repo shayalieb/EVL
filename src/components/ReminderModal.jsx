@@ -41,18 +41,28 @@ const emptyForm = {
   emailEnabled: false,
 };
 
+function defaultReminderDate() {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  date.setHours(9, 0, 0, 0);
+  return date;
+}
+
 export default function ReminderModal({ open, onClose, reminder, onSaved }) {
   const {
-    clients, contractors, events,
-    searchClients, loadClient, searchContractors, loadContractor, searchEvents, loadEvent,
+    searchClients, loadClient, searchContractors, loadContractor, searchEvents, loadEvent, searchBookings, loadBooking,
   } = useData();
   const [invoices, setInvoices] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [relatedQuery, setRelatedQuery] = useState('');
+  const [relatedResults, setRelatedResults] = useState([]);
+  const [relatedLoading, setRelatedLoading] = useState(false);
 
   useEffect(() => {
     if (open) {
+      const defaultDate = defaultReminderDate();
       setForm(reminder ? {
         relatedType: reminder.relatedType || '',
         relatedId: reminder.relatedId || '',
@@ -60,8 +70,10 @@ export default function ReminderModal({ open, onClose, reminder, onSaved }) {
         time: toTimeInputValue(reminder.remindAt),
         note: reminder.note || '',
         emailEnabled: !!reminder.emailEnabled,
-      } : emptyForm);
+      } : { ...emptyForm, date: toDateInputValue(defaultDate), time: toTimeInputValue(defaultDate) });
       setError('');
+      setRelatedQuery('');
+      setRelatedResults([]);
     }
   }, [open, reminder]);
 
@@ -72,13 +84,29 @@ export default function ReminderModal({ open, onClose, reminder, onSaved }) {
   useEffect(() => {
     if (!open) return;
     listInvoices().then(setInvoices).catch(() => setInvoices([]));
-    searchClients('').catch(() => {});
-    searchContractors('').catch(() => {});
-    searchEvents('').catch(() => {});
-    if (reminder?.relatedType === 'client' && reminder.relatedId) loadClient(reminder.relatedId).catch(() => {});
-    if (reminder?.relatedType === 'contractor' && reminder.relatedId) loadContractor(reminder.relatedId).catch(() => {});
-    if (reminder?.relatedType === 'event' && reminder.relatedId) loadEvent(reminder.relatedId).catch(() => {});
-  }, [open, reminder?.relatedId, reminder?.relatedType, searchClients, loadClient, searchContractors, loadContractor, searchEvents, loadEvent]);
+    const loaders = { client: loadClient, contractor: loadContractor, event: loadEvent, booking: loadBooking };
+    const loader = loaders[reminder?.relatedType];
+    if (loader && reminder.relatedId) loader(reminder.relatedId).then((record) => setRelatedResults([record])).catch(() => {});
+  }, [open, reminder?.relatedId, reminder?.relatedType, loadClient, loadContractor, loadEvent, loadBooking]);
+
+  useEffect(() => {
+    if (!open || !['client', 'contractor', 'event', 'booking'].includes(form.relatedType)) return undefined;
+    let cancelled = false;
+    const searches = { client: searchClients, contractor: searchContractors, event: searchEvents, booking: searchBookings };
+    const timer = setTimeout(() => {
+      setRelatedLoading(true);
+      searches[form.relatedType](relatedQuery)
+        .then((items) => {
+          if (!cancelled) setRelatedResults((previous) => {
+            const selected = previous.find((item) => item.id === form.relatedId);
+            return selected && !items.some((item) => item.id === selected.id) ? [selected, ...items] : items;
+          });
+        })
+        .catch(() => { if (!cancelled) setRelatedResults([]); })
+        .finally(() => { if (!cancelled) setRelatedLoading(false); });
+    }, 200);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [open, form.relatedType, relatedQuery, searchClients, searchContractors, searchEvents, searchBookings]);
 
   function update(field, val) {
     setForm((f) => ({ ...f, [field]: val }));
@@ -86,16 +114,18 @@ export default function ReminderModal({ open, onClose, reminder, onSaved }) {
 
   function updateRelatedType(type) {
     setForm((f) => ({ ...f, relatedType: type, relatedId: '' }));
+    setRelatedQuery('');
+    setRelatedResults([]);
   }
 
-  const relatedOptions = form.relatedType === 'client' ? clients
-    : form.relatedType === 'contractor' ? contractors
-    : form.relatedType === 'event' ? events
-    : form.relatedType === 'invoice' ? invoices
-    : [];
+  const invoiceQuery = relatedQuery.trim().toLowerCase();
+  const relatedOptions = form.relatedType === 'invoice'
+    ? invoices.filter((invoice) => invoiceLabel(invoice).toLowerCase().includes(invoiceQuery))
+    : relatedResults;
 
   function labelFor(type, record) {
     if (type === 'event') return record.name || 'Untitled event';
+    if (type === 'booking') return record.name || record.eventName || record.clientName || 'Untitled booking';
     if (type === 'invoice') return invoiceLabel(record);
     return personName(record);
   }
@@ -120,12 +150,14 @@ export default function ReminderModal({ open, onClose, reminder, onSaved }) {
       ? labelFor(form.relatedType, related)
       : (form.relatedType === reminder?.relatedType && form.relatedId === reminder?.relatedId ? reminder?.relatedName : null);
 
+    const remindAt = new Date(`${form.date}T${form.time}`);
+    if (!reminder && remindAt <= new Date()) return setError('Choose a future date and time for a new reminder.');
     const payload = {
       relatedType: form.relatedType || null,
       relatedId: form.relatedType ? form.relatedId || null : null,
       relatedName: form.relatedType ? relatedName : null,
       note: form.note.trim(),
-      remindAt: new Date(`${form.date}T${form.time}`).toISOString(),
+      remindAt: remindAt.toISOString(),
       emailEnabled: form.emailEnabled,
     };
 
@@ -198,10 +230,20 @@ export default function ReminderModal({ open, onClose, reminder, onSaved }) {
                 <option value="contractor">Contractor</option>
                 <option value="event">Event</option>
                 <option value="invoice">Invoice</option>
+                <option value="booking">Booking</option>
               </select>
             </div>
             <div>
               <label className={labelClass}>{RELATED_TYPE_LABELS[form.relatedType] || '—'}</label>
+              {form.relatedType && (
+                <input
+                  value={relatedQuery}
+                  onChange={(e) => setRelatedQuery(e.target.value)}
+                  placeholder={`Search ${RELATED_TYPE_LABELS[form.relatedType]?.toLowerCase() || 'records'}…`}
+                  data-testid="reminder-modal-related-search-input"
+                  className={`${inputClass} mb-2`}
+                />
+              )}
               <select
                 value={form.relatedId}
                 onChange={(e) => update('relatedId', e.target.value)}
@@ -209,7 +251,7 @@ export default function ReminderModal({ open, onClose, reminder, onSaved }) {
                 data-testid="reminder-modal-related-id-select"
                 className={`${inputClass} disabled:bg-slate-50 disabled:text-slate-400`}
               >
-                <option value="">Select…</option>
+                <option value="">{relatedLoading ? 'Searching…' : 'Select…'}</option>
                 {relatedOptions.map((r) => (
                   <option key={r.id} value={r.id}>{labelFor(form.relatedType, r)}</option>
                 ))}
@@ -227,6 +269,29 @@ export default function ReminderModal({ open, onClose, reminder, onSaved }) {
             <label className={labelClass}>Reminder Time *</label>
             <input required type="time" value={form.time} onChange={(e) => update('time', e.target.value)} data-testid="reminder-modal-time-input" className={inputClass} />
           </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap -mt-2">
+          <span className="text-xs text-slate-400">Quick set:</span>
+          {[
+            { label: 'Tomorrow, 9 AM', days: 1 },
+            { label: 'In 3 days, 9 AM', days: 3 },
+            { label: 'Next week, 9 AM', days: 7 },
+          ].map((option) => (
+            <button
+              key={option.days}
+              type="button"
+              onClick={() => {
+                const next = new Date();
+                next.setDate(next.getDate() + option.days);
+                next.setHours(9, 0, 0, 0);
+                setForm((current) => ({ ...current, date: toDateInputValue(next), time: toTimeInputValue(next) }));
+              }}
+              className="px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-semibold text-slate-500 hover:bg-slate-50"
+            >
+              {option.label}
+            </button>
+          ))}
+          <span className="text-xs text-slate-400">Times use {Intl.DateTimeFormat().resolvedOptions().timeZone.replaceAll('_', ' ')}.</span>
         </div>
 
         <div>
@@ -250,8 +315,9 @@ export default function ReminderModal({ open, onClose, reminder, onSaved }) {
             data-testid="reminder-modal-email-checkbox"
             className="rounded border-slate-300"
           />
-          Email me a reminder
+          Email me when this reminder is due
         </label>
+        {form.emailEnabled && <p className="text-xs text-slate-400 -mt-2">The email is sent to the account email for the person creating this reminder.</p>}
 
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} data-testid="reminder-modal-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>

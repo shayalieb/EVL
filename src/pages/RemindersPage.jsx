@@ -16,15 +16,15 @@ import { usePagination } from '../lib/usePagination';
 const RELATED_TYPE_COLORS = { client: '#6366f1', contractor: '#0ea5e9', event: '#d97706', invoice: '#e11d48', booking: '#8b5cf6' };
 
 const STATUS_FILTERS = [
-  { value: 'pending', label: 'Pending' },
+  { value: 'pending', label: 'Open' },
   { value: 'overdue', label: 'Overdue' },
   { value: 'completed', label: 'Completed' },
 ];
 
 const SNOOZE_OPTIONS = [
-  { label: '1 hour', ms: 60 * 60 * 1000 },
-  { label: '1 day', ms: 24 * 60 * 60 * 1000 },
-  { label: '1 week', ms: 7 * 24 * 60 * 60 * 1000 },
+  { label: 'In 1 hour', date: () => new Date(Date.now() + 60 * 60 * 1000) },
+  { label: 'Tomorrow, 9 AM', date: () => { const date = new Date(); date.setDate(date.getDate() + 1); date.setHours(9, 0, 0, 0); return date; } },
+  { label: 'Next week, 9 AM', date: () => { const date = new Date(); date.setDate(date.getDate() + 7); date.setHours(9, 0, 0, 0); return date; } },
 ];
 
 function RelatedBadge({ reminder }) {
@@ -76,6 +76,11 @@ export default function RemindersPage() {
     .filter((r) => matchesSearch(search, [r.note, r.relatedName]))
     .sort((a, b) => new Date(a.remindAt) - new Date(b.remindAt));
   const { page, setPage, pageCount, pageItems: pagedReminders, pageSize, totalItems } = usePagination(filteredReminders);
+  const statusCounts = {
+    pending: reminders.filter((reminder) => !reminder.completedAt).length,
+    overdue: reminders.filter((reminder) => !reminder.completedAt && new Date(reminder.remindAt) <= new Date()).length,
+    completed: reminders.filter((reminder) => !!reminder.completedAt).length,
+  };
 
   const allOnPageSelected = pagedReminders.length > 0 && pagedReminders.every((r) => selectedIds.has(r.id));
   function toggleSelectAllOnPage() {
@@ -124,10 +129,10 @@ export default function RemindersPage() {
     }
   }
 
-  async function handleSnooze(reminder, ms) {
+  async function handleSnooze(reminder, dateFactory) {
     setSnoozeMenuId(null);
     try {
-      const remindAt = new Date(Date.now() + ms).toISOString();
+      const remindAt = dateFactory().toISOString();
       const updated = await updateReminder(reminder.id, { remindAt });
       setReminders((prev) => prev.map((r) => (r.id === reminder.id ? updated : r)));
       showToast('Reminder snoozed');
@@ -172,8 +177,11 @@ export default function RemindersPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-slate-800">Reminders</h2>
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">Reminders</h2>
+          <p className="text-sm text-slate-500 mt-1">Track follow-ups here. Open includes upcoming and overdue reminders; optional emails are sent when reminders become due.</p>
+        </div>
         <button
           type="button"
           onClick={openAdd}
@@ -197,7 +205,7 @@ export default function RemindersPage() {
                 statusFilter === f.value ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'
               }`}
             >
-              {f.label}
+              {f.label} <span className="opacity-70">({statusCounts[f.value]})</span>
             </button>
           ))}
         </div>
@@ -252,7 +260,15 @@ export default function RemindersPage() {
               {!loading && filteredReminders.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
-                    {reminders.length === 0 ? 'No reminders yet. Add one to follow up with a client or contractor.' : 'No reminders match your search.'}
+                    {reminders.length === 0 ? (
+                      <div className="flex flex-col items-center gap-3">
+                        <div>
+                          <p className="font-semibold text-slate-600">Create your first follow-up reminder</p>
+                          <p className="text-sm mt-1">Schedule a note for yourself and optionally receive an email when it is due.</p>
+                        </div>
+                        <button type="button" onClick={openAdd} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">+ Add Reminder</button>
+                      </div>
+                    ) : search ? 'No reminders match your search.' : statusFilter === 'overdue' ? 'Nothing is overdue.' : statusFilter === 'completed' ? 'No completed reminders yet.' : 'No open reminders.'}
                   </td>
                 </tr>
               )}
@@ -272,6 +288,7 @@ export default function RemindersPage() {
                     </td>
                     <td className={`px-4 py-3 font-medium ${overdue ? 'text-red-600' : 'text-slate-800'}`}>
                       {new Date(r.remindAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+                      {overdue && <span className="block text-[11px] font-bold uppercase tracking-wide mt-0.5">Overdue</span>}
                     </td>
                     <td className="hidden sm:table-cell px-4 py-3 text-slate-500">
                       <RelatedBadge reminder={r} />
@@ -285,10 +302,14 @@ export default function RemindersPage() {
                       >
                         {r.note}
                       </button>
+                      <div className="sm:hidden mt-1 flex items-center gap-2 flex-wrap text-xs text-slate-400">
+                        {r.relatedName && <RelatedBadge reminder={r} />}
+                        {r.emailEnabled && <span>{r.emailSentAt ? 'Email sent' : 'Email scheduled'}</span>}
+                      </div>
                     </td>
                     <td className="hidden sm:table-cell px-4 py-3 text-center">
                       {r.emailEnabled ? (
-                        <span className="text-emerald-600" title={r.emailSentAt ? `Sent ${new Date(r.emailSentAt).toLocaleString()}` : 'Will be emailed'}>✉️</span>
+                        <span className="text-xs font-semibold text-emerald-600" title={r.emailSentAt ? `Sent ${new Date(r.emailSentAt).toLocaleString()}` : 'Will be emailed'}>{r.emailSentAt ? 'Sent' : 'Scheduled'}</span>
                       ) : (
                         <span className="text-slate-300">—</span>
                       )}
@@ -313,11 +334,11 @@ export default function RemindersPage() {
                                     <button
                                       key={opt.label}
                                       type="button"
-                                      onClick={() => handleSnooze(r, opt.ms)}
-                                      data-testid={`reminder-row-snooze-option-${opt.label.replace(' ', '-')}`}
+                                      onClick={() => handleSnooze(r, opt.date)}
+                                      data-testid={`reminder-row-snooze-option-${opt.label.replaceAll(' ', '-')}`}
                                       className="block w-full text-left px-3 py-2 text-xs text-slate-600 hover:bg-slate-50"
                                     >
-                                      +{opt.label}
+                                      {opt.label}
                                     </button>
                                   ))}
                                 </div>
