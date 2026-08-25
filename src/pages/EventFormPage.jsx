@@ -203,20 +203,21 @@ export default function EventFormPage() {
   // form itself hydrates from `event` below, which waits for the
   // full-detail fetch.
   const eventLite = isEditing ? events.find((e) => e.id === eventId) : null;
+  const eventLiteId = eventLite?.id;
   const [fullEvent, setFullEvent] = useState(null);
   const [eventDetailLoaded, setEventDetailLoaded] = useState(false);
   const event = isEditing ? fullEvent : null;
 
   useEffect(() => {
-    if (!eventLite) { setFullEvent(null); setEventDetailLoaded(false); return; }
+    if (!eventLiteId) { setFullEvent(null); setEventDetailLoaded(false); return; }
     let cancelled = false;
     setEventDetailLoaded(false);
-    getEvent(eventLite.id)
+    getEvent(eventLiteId)
       .then((full) => { if (!cancelled) setFullEvent(full); })
       .catch(() => { if (!cancelled) setFullEvent(null); })
       .finally(() => { if (!cancelled) setEventDetailLoaded(true); });
     return () => { cancelled = true; };
-  }, [eventLite?.id]);
+  }, [eventLiteId]);
 
   // Profit/loss is sensitive financial data — same owner/admin-only gate
   // already used for Settings -> Users/Billing.
@@ -340,7 +341,7 @@ export default function EventFormPage() {
     setAddingType(false);
     setPickerOpen(false);
     autoSaveSkipRef.current = true;
-  }, [eventId, event, contractors]);
+  }, [eventId, event, contractors, isEditing]);
 
   // Mirrors the in-progress draft of a brand-new (not-yet-saved) event into
   // sessionStorage on every change, so a discarded/reloaded tab can recover
@@ -440,6 +441,7 @@ export default function EventFormPage() {
   // Financials tab can pull its invoices for Revenue. Events created
   // directly (not converted from a booking) simply have no sourceBooking.
   const sourceBooking = event ? bookings.find((b) => b.convertedEventId === event.id) : null;
+  const sourceBookingId = sourceBooking?.id;
   // Fetched account-wide (not just this event's sourceBooking) so the
   // Financials tab's margin benchmark below can compare this gig against
   // every other one — one fetch either way, listInvoices(undefined) is the
@@ -451,8 +453,8 @@ export default function EventFormPage() {
     return () => { cancelled = true; };
   }, []);
   const eventInvoices = useMemo(
-    () => (sourceBooking ? allInvoices.filter((inv) => inv.bookingId === sourceBooking.id) : []),
-    [allInvoices, sourceBooking?.id]
+    () => (sourceBookingId ? allInvoices.filter((inv) => inv.bookingId === sourceBookingId) : []),
+    [allInvoices, sourceBookingId]
   );
 
   // Vendor email activity folded into the History popup — fetched lazily,

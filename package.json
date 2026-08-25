@@ -8,7 +8,7 @@
     "build": "vite build",
     "check:bundle": "node scripts/checkBundleSize.js",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
-    "lint": "oxlint",
+    "lint": "oxlint --deny-warnings",
     "test:e2e": "playwright test",
     "preview": "vite preview"
   },

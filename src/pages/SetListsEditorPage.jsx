@@ -41,14 +41,15 @@ export default function SetListsEditorPage() {
   // content excluded from it (see server/src/routes/events.js), so this
   // page fetches its own full record, same pattern as EventFormPage.jsx.
   const eventLite = events.find((e) => e.id === eventId);
+  const eventLiteId = eventLite?.id;
   const [event, setEvent] = useState(null);
 
   useEffect(() => {
-    if (!eventLite) { setEvent(null); return; }
+    if (!eventLiteId) { setEvent(null); return; }
     let cancelled = false;
-    getEvent(eventLite.id).then((full) => { if (!cancelled) setEvent(full); }).catch(() => { if (!cancelled) setEvent(null); });
+    getEvent(eventLiteId).then((full) => { if (!cancelled) setEvent(full); }).catch(() => { if (!cancelled) setEvent(null); });
     return () => { cancelled = true; };
-  }, [eventLite?.id]);
+  }, [eventLiteId]);
 
   const [setLists, setSetLists] = useState([]);
   const [activeSetListId, setActiveSetListId] = useState(null);

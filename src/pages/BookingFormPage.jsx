@@ -440,20 +440,21 @@ export default function BookingFormPage() {
   // full proposal. The form itself hydrates from `booking` below, which
   // waits for the full-detail fetch.
   const bookingLite = isEditing ? bookings.find((b) => b.id === bookingId) : null;
+  const bookingLiteId = bookingLite?.id;
   const [fullBooking, setFullBooking] = useState(null);
   const [bookingDetailLoaded, setBookingDetailLoaded] = useState(false);
   const booking = isEditing ? fullBooking : null;
 
   useEffect(() => {
-    if (!bookingLite) { setFullBooking(null); setBookingDetailLoaded(false); return; }
+    if (!bookingLiteId) { setFullBooking(null); setBookingDetailLoaded(false); return; }
     let cancelled = false;
     setBookingDetailLoaded(false);
-    getBooking(bookingLite.id)
+    getBooking(bookingLiteId)
       .then((full) => { if (!cancelled) setFullBooking(full); })
       .catch(() => { if (!cancelled) setFullBooking(null); })
       .finally(() => { if (!cancelled) setBookingDetailLoaded(true); });
     return () => { cancelled = true; };
-  }, [bookingLite?.id]);
+  }, [bookingLiteId]);
 
   const [form, setForm] = useState(emptyForm());
   const [error, setError] = useState('');
@@ -617,7 +618,7 @@ export default function BookingFormPage() {
     // user had typed something.
     autoSaveSkipRef.current = true;
     autoCreatedEventRef.current = false;
-  }, [bookingId, booking, bookingStatuses]);
+  }, [bookingId, booking, bookingStatuses, isEditing]);
 
   // Mirrors the in-progress draft of a brand-new (not-yet-saved) booking into
   // sessionStorage on every change, so a discarded/reloaded tab can recover
@@ -672,28 +673,28 @@ export default function BookingFormPage() {
 
   useEffect(() => {
     if (booking) refreshSubmittedInquiry(booking.id);
-  }, [booking?.id, refreshSubmittedInquiry]);
+  }, [booking, refreshSubmittedInquiry]);
 
   useEffect(() => {
     if (!booking) { setContract(null); return; }
     let cancelled = false;
     getContractForBooking(booking.id).then((c) => { if (!cancelled) setContract(c); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [booking?.id]);
+  }, [booking]);
 
   useEffect(() => {
     if (!booking) { setProposalResponse(null); return; }
     let cancelled = false;
     getProposalResponseForBooking(booking.id).then((pr) => { if (!cancelled) setProposalResponse(pr); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [booking?.id]);
+  }, [booking]);
 
   useEffect(() => {
     if (!booking) { setInvoices([]); return; }
     let cancelled = false;
     listInvoices(booking.id).then((list) => { if (!cancelled) setInvoices(list); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [booking?.id]);
+  }, [booking]);
 
   // Seeds the new-invoice composer from the client and the current proposal
   // each time a different booking loads — same idea as the contract prep
@@ -715,13 +716,13 @@ export default function BookingFormPage() {
       setNewInvoiceMemo(defaults.memo);
     }).catch(() => {});
     return () => { cancelled = true; };
-  }, [booking?.id]);
+  }, [booking]);
 
   useEffect(() => {
     if (!client) return;
     setNewInvoiceRecipientEmail((prev) => prev || client.email || '');
     setNewInvoiceRecipientName((prev) => prev || `${client.firstName} ${client.lastName}`.trim());
-  }, [client?.id]);
+  }, [client]);
 
   // Seeds the contract-prep panel from the current proposal each time a
   // different booking loads — only relevant before a contract exists, since
@@ -737,13 +738,13 @@ export default function BookingFormPage() {
     setLastOwnerSignLink('');
     setOwnerSignerName('');
     setOwnerSignatureImage('');
-  }, [booking?.id]);
+  }, [booking]);
 
   useEffect(() => {
     if (!client) return;
     setContractRecipientEmail((prev) => prev || client.email || '');
     setContractRecipientName((prev) => prev || `${client.firstName} ${client.lastName}`.trim());
-  }, [client?.id]);
+  }, [client]);
 
   // Terms rides along in the initial send payload before a contract exists,
   // then switches to auto-saving via PATCH below — same field either way, so
@@ -753,6 +754,10 @@ export default function BookingFormPage() {
   useEffect(() => {
     setContractTerms(contract?.terms || '');
     termsSkipRef.current = true;
+    // Intentionally keyed to identity, not contract.terms: the PATCH below
+    // replaces `contract` after each autosave. Reacting to that response
+    // would set termsSkipRef again and silently discard the next user edit.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [booking?.id, contract?.id]);
 
   useEffect(() => {
