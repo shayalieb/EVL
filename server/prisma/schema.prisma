@@ -78,6 +78,8 @@ model Account {
   contractors             Contractor[]
   clients                 Client[]
   venues                  Venue[]
+  offerings               Offering[]
+  contractorGroups        ContractorGroup[]
   bookings                Booking[]
   events                  Event[]
 
@@ -1015,6 +1017,46 @@ model Venue {
   contactEmail    String?
   locationNote    String? @db.Text
   loadInInfo      String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([accountId])
+  @@index([accountId, createdAt, id])
+}
+
+// Reusable service/package catalog. Proposal and contract line items keep
+// copied snapshots, so later catalog edits never rewrite historical work.
+model Offering {
+  id        String  @id
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  name        String
+  details     String? @db.Text
+  type        String
+  amount      String?
+  unitCount   String?
+  ratePerUnit String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([accountId])
+  @@index([accountId, createdAt, id])
+}
+
+// Named contractor ensembles used as reusable proposal/contract packages.
+// contractorIds remain opaque IDs because contractor deletion and historical
+// snapshots intentionally do not cascade through saved catalog records.
+model ContractorGroup {
+  id        String  @id
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  name          String
+  contractorIds Json   @default("[]")
+  price         String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

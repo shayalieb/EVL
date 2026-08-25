@@ -6,6 +6,8 @@ import { createClient } from '../lib/clients';
 import { createBooking } from '../lib/bookings';
 import { createEvent } from '../lib/events';
 import { createVenue } from '../lib/venues';
+import { createOffering, updateOfferingApi } from '../lib/offerings';
+import { createContractorGroup, updateContractorGroupApi } from '../lib/contractorGroups';
 
 // Relative in production (e.g. `/api`) — vercel.json proxies /api/* to the
 // Railway backend so the browser only ever talks to the frontend's own
@@ -118,6 +120,25 @@ async function migrateVenuesOutOfBlob(blob) {
   return next;
 }
 
+// Phase 5A compatibility copy: seed the new catalog tables without removing
+// the legacy arrays yet. The current UI remains entirely on the blob until
+// Phase 5B, so rollout or rollback cannot create a mixed-source experience.
+async function copyOfferingsOutOfBlob(blob) {
+  await Promise.allSettled(blob.offerings.map(async (offering) => {
+    await createOffering(offering);
+    await updateOfferingApi(offering.id, offering);
+  }));
+  return blob;
+}
+
+async function copyContractorGroupsOutOfBlob(blob) {
+  await Promise.allSettled(blob.contractorGroups.map(async (group) => {
+    await createContractorGroup(group);
+    await updateContractorGroupApi(group.id, group);
+  }));
+  return blob;
+}
+
 // Same idea again, for Booking/Event (see server/prisma/schema.prisma's
 // Booking/Event model comments) — the biggest of this whole graduation
 // series, since they're the two most actively-edited record types in the
@@ -174,11 +195,15 @@ export function AuthProvider({ children }) {
       const hadBookings = blob.bookings?.length;
       const hadEvents = blob.events?.length;
       const hadVenues = blob.venues?.length;
+      const hadOfferings = blob.offerings?.length;
+      const hadContractorGroups = blob.contractorGroups?.length;
       if (hadContractors) blob = await migrateContractorsOutOfBlob(blob);
       if (hadClients) blob = await migrateClientsOutOfBlob(blob);
       if (hadBookings) blob = await migrateBookingsOutOfBlob(blob);
       if (hadEvents) blob = await migrateEventsOutOfBlob(blob);
       if (hadVenues) blob = await migrateVenuesOutOfBlob(blob);
+      if (hadOfferings) blob = await copyOfferingsOutOfBlob(blob);
+      if (hadContractorGroups) blob = await copyContractorGroupsOutOfBlob(blob);
       if (hadContractors || hadClients || hadBookings || hadEvents || hadVenues) {
         // Non-fatal: two tabs (or two logins close together) hydrating
         // concurrently both see the embedded arrays and both attempt this
@@ -235,6 +260,8 @@ export function AuthProvider({ children }) {
         if (migrated.bookings?.length) migrated = await migrateBookingsOutOfBlob(migrated);
         if (migrated.events?.length) migrated = await migrateEventsOutOfBlob(migrated);
         if (migrated.venues?.length) migrated = await migrateVenuesOutOfBlob(migrated);
+        if (migrated.offerings?.length) migrated = await copyOfferingsOutOfBlob(migrated);
+        if (migrated.contractorGroups?.length) migrated = await copyContractorGroupsOutOfBlob(migrated);
         if (migrated !== blob) {
           const saved = await apiFetch('/account-data', { method: 'PUT', body: JSON.stringify({ data: migrated, version: versionRef.current }) });
           versionRef.current = saved.version;

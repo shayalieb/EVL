@@ -1,4 +1,29 @@
+import { apiFetch } from '../context/AuthContext';
+import { queryList } from './listQuery';
 import { getPricingTiers } from './pricingTiers';
+
+export function queryContractorGroups(params) {
+  return queryList('/contractor-groups', 'contractorGroups', params);
+}
+
+export async function getContractorGroup(id) {
+  const data = await apiFetch(`/contractor-groups/${encodeURIComponent(id)}`);
+  return data.contractorGroup;
+}
+
+export async function createContractorGroup(group) {
+  const data = await apiFetch('/contractor-groups', { method: 'POST', body: JSON.stringify(group) });
+  return data.contractorGroup;
+}
+
+export async function updateContractorGroupApi(id, patch) {
+  const data = await apiFetch(`/contractor-groups/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  return data.contractorGroup;
+}
+
+export async function deleteContractorGroupApi(id) {
+  return apiFetch(`/contractor-groups/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
 
 // Instrument (Category) plus Role, e.g. "Violin — Principal" — still no
 // name, just what they play and their role in the lineup. Falls back to
