@@ -44,16 +44,19 @@ export default function VenueModal({ open, onClose, venue, onSaved }) {
     setForm((f) => ({ ...f, [field]: val }));
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     if (!form.name.trim()) {
       setError('Venue name is required.');
       return;
     }
-    const record = venue ? { ...venue, ...form } : addVenue(form);
-    if (venue) updateVenue(venue.id, form);
-    onSaved?.(record);
-    onClose();
+    try {
+      const record = venue ? await updateVenue(venue.id, form) : await addVenue(form);
+      onSaved?.(record);
+      onClose();
+    } catch (saveError) {
+      setError(saveError.message || 'Unable to save venue.');
+    }
   }
 
   return (
@@ -123,7 +126,7 @@ export default function VenueModal({ open, onClose, venue, onSaved }) {
         </div>
 
         <div>
-          <label className={labelClass}>Location Note</label>
+          <label className={labelClass}>Event-day Venue Notes</label>
           <textarea
             rows={2}
             placeholder="e.g. Loading dock around back, no elevator access"
@@ -135,7 +138,7 @@ export default function VenueModal({ open, onClose, venue, onSaved }) {
         </div>
 
         <div>
-          <label className={labelClass}>Load In Info</label>
+          <label className={labelClass}>Load-in Instructions</label>
           <textarea
             rows={2}
             placeholder="e.g. Load in through the back entrance, freight elevator to 2nd floor"

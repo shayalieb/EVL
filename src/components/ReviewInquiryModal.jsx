@@ -36,7 +36,7 @@ function Row({ label, value }) {
 // autosave) instead of going through DataContext.updateBooking, which the
 // currently-open form's one-time hydration effect wouldn't pick up live.
 export default function ReviewInquiryModal({ open, link, onClose, onApplied, onApplyOverride, navigateAfterApply = true }) {
-  const { clients, searchClients, venues, addClient, addBooking, updateBooking } = useData();
+  const { clients, searchClients, venues, searchVenues, addClient, addBooking, updateBooking } = useData();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [applying, setApplying] = useState(false);
@@ -47,13 +47,14 @@ export default function ReviewInquiryModal({ open, link, onClose, onApplied, onA
     if (open && link?.response) {
       const response = link.response;
       searchClients(response.email || `${response.firstName || ''} ${response.lastName || ''}`.trim()).catch(() => {});
+      if (response.venueName) searchVenues(response.venueName).catch(() => {});
     }
     if (!open || !link?.bookingId || onApplyOverride) { setTargetBooking(null); setTargetBookingLoading(false); return; }
     let cancelled = false;
     setTargetBookingLoading(true);
     getBooking(link.bookingId).then((record) => { if (!cancelled) setTargetBooking(record); }).catch(() => { if (!cancelled) setTargetBooking(null); }).finally(() => { if (!cancelled) setTargetBookingLoading(false); });
     return () => { cancelled = true; };
-  }, [open, link, onApplyOverride, searchClients]);
+  }, [open, link, onApplyOverride, searchClients, searchVenues]);
 
   if (!link) return null;
   const r = link.response || {};
@@ -66,6 +67,8 @@ export default function ReviewInquiryModal({ open, link, onClose, onApplied, onA
   async function handleApply() {
     setApplying(true);
     try {
+      const venueMatches = r.venueName ? await searchVenues(r.venueName).catch(() => []) : [];
+      const candidateVenues = [...venues, ...venueMatches.filter((match) => !venues.some((venue) => venue.id === match.id))];
       let bookingId;
       let clientId;
       if (onApplyOverride) {
@@ -73,12 +76,12 @@ export default function ReviewInquiryModal({ open, link, onClose, onApplied, onA
       } else if (link.bookingId) {
         if (!targetBooking) throw new Error('The booking this was sent from no longer exists.');
         const resolved = await resolveClientForMerge(r, { clients, addClient, currentClientId: targetBooking.clientId });
-        const patch = buildBookingMergePatch(r, targetBooking, venues);
+        const patch = buildBookingMergePatch(r, targetBooking, candidateVenues);
         await updateBooking(targetBooking.id, { ...patch, clientId: resolved.clientId });
         bookingId = targetBooking.id;
         clientId = resolved.clientId;
       } else {
-        const created = await applyInquiryResponse(r, { clients, venues, addClient, addBooking });
+        const created = await applyInquiryResponse(r, { clients, venues: candidateVenues, addClient, addBooking });
         bookingId = created.booking.id;
         clientId = created.client.id;
       }

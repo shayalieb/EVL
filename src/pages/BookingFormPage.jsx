@@ -374,7 +374,7 @@ export default function BookingFormPage() {
   const { bookingId } = useParams();
   const navigate = useNavigate();
   const {
-    clients, searchClients, loadBooking, venues, eventTypes, addEventType, bookingStatuses,
+    clients, searchClients, loadBooking, venues, searchVenues, eventTypes, addEventType, bookingStatuses,
     addClient, addBooking, updateBooking, convertBookingToEvent, addEvent,
     proposalTemplates, addProposalTemplate, contractTemplates, addContractTemplate,
   } = useData();
@@ -856,7 +856,9 @@ export default function BookingFormPage() {
   // existing 800ms autosave effect persists it normally from here.
   async function handleApplyInquiryOverride(response) {
     const matches = await searchClients(response.email || `${response.firstName || ''} ${response.lastName || ''}`.trim()).catch(() => []);
-    const patch = buildBookingMergePatch(response, form, venues);
+    const venueMatches = response.venueName ? await searchVenues(response.venueName).catch(() => []) : [];
+    const candidateVenues = [...venues, ...venueMatches.filter((match) => !venues.some((venue) => venue.id === match.id))];
+    const patch = buildBookingMergePatch(response, form, candidateVenues);
     const candidateClients = [...clients, ...matches.filter((match) => !clients.some((client) => client.id === match.id))];
     const resolved = await resolveClientForMerge(response, { clients: candidateClients, addClient, currentClientId: form.clientId });
     setForm((f) => ({ ...f, ...patch, clientId: resolved.clientId }));
@@ -1923,12 +1925,12 @@ export default function BookingFormPage() {
               <div>
                 <label className={labelClass}>Venue Name</label>
                 <VenueCombobox
-                  venues={venues}
                   value={form.venue.name}
                   onChangeName={(name) => updateVenue('name', name)}
                   onSelectVenue={selectSavedVenue}
                   testId="booking-form-venue-name-input"
                 />
+                <p className="text-xs text-slate-400 mt-1">Choose a saved venue to copy its details, or keep typing to use and save a new venue.</p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -1985,7 +1987,7 @@ export default function BookingFormPage() {
                 </div>
               </div>
               <div>
-                <label className={labelClass}>Location Note</label>
+                <label className={labelClass}>Event-day Venue Notes</label>
                 <textarea
                   rows={2}
                   placeholder="e.g. Loading dock around back, no elevator access"
@@ -1996,7 +1998,7 @@ export default function BookingFormPage() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Load In Info</label>
+                <label className={labelClass}>Load-in Instructions</label>
                 <textarea
                   rows={2}
                   placeholder="e.g. Load in through the back entrance, freight elevator to 2nd floor"

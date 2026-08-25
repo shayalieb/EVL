@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import VenueModal from '../components/VenueModal';
@@ -6,10 +6,12 @@ import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Tooltip from '../components/ui/Tooltip';
 import SearchInput from '../components/ui/SearchInput';
 import { useToast } from '../components/ui/Toast';
-import { matchesSearch } from '../lib/search';
+import Pagination from '../components/ui/Pagination';
+import { queryVenues } from '../lib/venues';
+import { useServerList } from '../lib/useServerList';
 
 export default function VenuesPage() {
-  const { venues, deleteVenue } = useData();
+  const { deleteVenue } = useData();
   const { can } = useAuth();
   const canEdit = can('manageVenues');
   const { showToast } = useToast();
@@ -17,8 +19,13 @@ export default function VenuesPage() {
   const [editingVenue, setEditingVenue] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
 
-  const filteredVenues = venues.filter((v) => matchesSearch(search, [v.name, v.address1, v.city, v.state, v.contactName, v.contactPhone, v.contactEmail]));
+  const { items: pagedVenues, pageCount, pageSize, total: totalItems, loading, error, refresh } = useServerList(
+    () => queryVenues({ page, pageSize: 25, search, sort: 'name', direction: 'asc' }),
+    [page, search],
+  );
+  useEffect(() => { setPage(1); }, [search]);
 
   function openAdd() {
     setEditingVenue(null);
@@ -30,8 +37,9 @@ export default function VenuesPage() {
     setModalOpen(true);
   }
 
-  function handleDelete() {
-    deleteVenue(deleteTarget.id);
+  async function handleDelete() {
+    await deleteVenue(deleteTarget.id);
+    refresh();
     showToast('Venue deleted');
     setDeleteTarget(null);
   }
@@ -72,16 +80,16 @@ export default function VenuesPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredVenues.length === 0 && (
+              {!loading && pagedVenues.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-4 py-10 text-center text-slate-400">
-                    {venues.length === 0
+                    {totalItems === 0 && !search
                       ? 'No venues yet. Add one here, or it\'ll be saved automatically the first time you use it on a Booking or Event.'
                       : 'No venues match your search.'}
                   </td>
                 </tr>
               )}
-              {filteredVenues.map((v) => {
+              {pagedVenues.map((v) => {
                 const addressLine = [v.address1, v.city, v.state].filter(Boolean).join(', ');
                 const contactPhoneLine = v.contactPhone ? `${v.contactPhone}${v.contactPhoneExt ? ` ext. ${v.contactPhoneExt}` : ''}` : '';
                 const contactLine = [v.contactName, contactPhoneLine, v.contactEmail].filter(Boolean).join(' · ');
@@ -146,7 +154,10 @@ export default function VenuesPage() {
         </div>
       </div>
 
-      <VenueModal open={modalOpen} onClose={() => setModalOpen(false)} venue={editingVenue} />
+      {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
+      <Pagination page={page} pageCount={pageCount} onChange={setPage} totalItems={totalItems} pageSize={pageSize} testId="venues-pagination" />
+
+      <VenueModal open={modalOpen} onClose={() => setModalOpen(false)} venue={editingVenue} onSaved={refresh} />
       <ConfirmDialog
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}

@@ -8,6 +8,7 @@ import { queryContractors, getContractor, getContractors, createContractor as cr
 import { queryClients, getClient, createClient as createClientApi, updateClientApi, deleteClientApi } from '../lib/clients';
 import { queryBookings, getBooking, createBooking as createBookingApi, updateBookingApi } from '../lib/bookings';
 import { queryEvents, getEvent, createEvent as createEventApi, updateEventApi } from '../lib/events';
+import { queryVenues, getVenue, createVenue as createVenueApi, updateVenueApi, deleteVenueApi } from '../lib/venues';
 import { dispositionInfo } from '../lib/bookingDisposition';
 
 function statusLabel(statuses, id) {
@@ -80,7 +81,6 @@ function diffBookingFields(before, after, bookingStatuses) {
 const DataContext = createContext(null);
 
 const LIST_FIELDS = {
-  venues: 'venues',
   contractorTypes: 'contractorTypes',
   eventTypes: 'eventTypes',
   eventStatuses: 'eventStatuses',
@@ -114,6 +114,11 @@ export function DataProvider({ children }) {
   const [clients, setClients] = useState([]);
   useEffect(() => {
     setClients([]);
+  }, [currentUser?.accountId]);
+
+  const [venues, setVenues] = useState([]);
+  useEffect(() => {
+    setVenues([]);
   }, [currentUser?.accountId]);
 
   // Same real-table-not-blob treatment as contractors/clients above — see
@@ -160,6 +165,17 @@ export function DataProvider({ children }) {
     const cached = contractors.find((record) => record.id === id);
     return cached || mergeCachedRecord(setContractors, await getContractor(id));
   }, [contractors, mergeCachedRecord]);
+
+  const searchVenues = useCallback(async (search = '') => {
+    const result = await queryVenues({ page: 1, pageSize: 20, search, sort: 'updatedAt', direction: 'desc' });
+    result.items.forEach((record) => mergeCachedRecord(setVenues, record));
+    return result.items;
+  }, [mergeCachedRecord]);
+
+  const loadVenue = useCallback(async (id) => {
+    const cached = venues.find((record) => record.id === id);
+    return cached || mergeCachedRecord(setVenues, await getVenue(id));
+  }, [venues, mergeCachedRecord]);
 
   const loadContractors = useCallback(async (ids = []) => {
     const cachedIds = new Set(contractors.map((record) => record.id));
@@ -217,22 +233,22 @@ export function DataProvider({ children }) {
   // useCallback dependency array is a plain array literal evaluated
   // immediately at render time, so referencing a later `const` before its
   // declaration throws (temporal dead zone), not just a stale-closure risk.
-  const addVenue = useCallback((venue) => {
-    if (!currentUser) return;
-    const record = { id: uid('ven'), createdAt: new Date().toISOString(), ...venue };
-    patchList(LIST_FIELDS.venues, [...(currentUser.venues || []), record]);
+  const addVenue = useCallback(async (venue) => {
+    const record = await createVenueApi({ id: uid('ven'), ...venue });
+    mergeCachedRecord(setVenues, record);
     return record;
-  }, [currentUser, patchList]);
+  }, [mergeCachedRecord]);
 
-  const updateVenue = useCallback((id, patch) => {
-    if (!currentUser) return;
-    patchList(LIST_FIELDS.venues, (currentUser.venues || []).map((v) => (v.id === id ? { ...v, ...patch } : v)));
-  }, [currentUser, patchList]);
+  const updateVenue = useCallback(async (id, patch) => {
+    const record = await updateVenueApi(id, patch);
+    mergeCachedRecord(setVenues, record);
+    return record;
+  }, [mergeCachedRecord]);
 
-  const deleteVenue = useCallback((id) => {
-    if (!currentUser) return;
-    patchList(LIST_FIELDS.venues, (currentUser.venues || []).filter((v) => v.id !== id));
-  }, [currentUser, patchList]);
+  const deleteVenue = useCallback(async (id) => {
+    await deleteVenueApi(id);
+    setVenues((previous) => previous.filter((venue) => venue.id !== id));
+  }, []);
 
   // Auto-save-on-input for venues: called from addBooking/updateBooking/
   // addEvent/updateEvent below with whatever venue object was just saved.
@@ -241,14 +257,14 @@ export function DataProvider({ children }) {
   // time — matching venues are left untouched (never silently overwritten
   // by a booking's possibly-edited copy; the Venues page is the deliberate
   // place to edit a saved venue's own details).
-  const ensureVenueSaved = useCallback((venue) => {
-    if (!currentUser || !venue?.name?.trim()) return;
+  const ensureVenueSaved = useCallback(async (venue) => {
+    if (!venue?.name?.trim()) return;
     const name = venue.name.trim();
-    const exists = (currentUser.venues || []).some((v) => v.name?.trim().toLowerCase() === name.toLowerCase());
+    const matches = await searchVenues(name);
+    const exists = matches.some((v) => v.name?.trim().toLowerCase() === name.toLowerCase());
     if (exists) return;
-    const record = { id: uid('ven'), createdAt: new Date().toISOString(), ...venue, name };
-    patchList(LIST_FIELDS.venues, [...(currentUser.venues || []), record]);
-  }, [currentUser, patchList]);
+    await addVenue({ ...venue, name });
+  }, [searchVenues, addVenue]);
 
   // ---- Bookings (real API, not the blob — see the fetch effect above) ----
   // The id must already be set on `booking` — every caller generates one
@@ -263,7 +279,7 @@ export function DataProvider({ children }) {
     patch.history = [historyEntry('created', diffBookingFields({}, patch, currentUser?.bookingStatuses))];
     const record = await createBookingApi(patch);
     setBookings((prev) => [...prev, record]);
-    if (record.venue) ensureVenueSaved(record.venue);
+    if (record.venue) ensureVenueSaved(record.venue).catch(() => {});
     return record;
   }, [currentUser, historyEntry, ensureVenueSaved]);
 
@@ -274,7 +290,7 @@ export function DataProvider({ children }) {
     const merged = changes.length ? { ...patch, history: [...(existing.history || []), historyEntry('edited', changes)] } : patch;
     const record = await updateBookingApi(id, merged);
     mergeCachedRecord(setBookings, record);
-    if (patch.venue) ensureVenueSaved(patch.venue);
+    if (patch.venue) ensureVenueSaved(patch.venue).catch(() => {});
     return record;
   }, [bookings, currentUser, historyEntry, ensureVenueSaved, mergeCachedRecord]);
 
@@ -325,7 +341,7 @@ export function DataProvider({ children }) {
     patch.history = [historyEntry('created', diffEventFields({}, patch, currentUser?.eventStatuses))];
     const record = await createEventApi(patch);
     setEvents((prev) => [...prev, record]);
-    if (record.venue) ensureVenueSaved(record.venue);
+    if (record.venue) ensureVenueSaved(record.venue).catch(() => {});
     return record;
   }, [currentUser, historyEntry, ensureVenueSaved]);
 
@@ -339,7 +355,7 @@ export function DataProvider({ children }) {
     const merged = changes.length ? { ...patch, history: [...(existing.history || []), historyEntry('edited', changes)] } : patch;
     const record = await updateEventApi(id, merged);
     mergeCachedRecord(setEvents, record);
-    if (patch.venue) ensureVenueSaved(patch.venue);
+    if (patch.venue) ensureVenueSaved(patch.venue).catch(() => {});
     return record;
   }, [events, currentUser, historyEntry, ensureVenueSaved, contractors, mergeCachedRecord]);
 
@@ -713,7 +729,9 @@ export function DataProvider({ children }) {
   const value = useMemo(() => ({
     contractors,
     clients,
-    venues: currentUser?.venues || [],
+    venues,
+    searchVenues,
+    loadVenue,
     // Already filtered server-side (GET /api/events, /api/bookings both
     // exclude deletedAt rows) — no client-side filter needed anymore.
     events,
@@ -795,7 +813,7 @@ export function DataProvider({ children }) {
     computeEventTotalCost,
     computeVendorStatus,
   }), [
-    currentUser, contractors, clients, bookings, events, searchEvents, loadEvent, searchBookings, loadBooking,
+    currentUser, contractors, clients, venues, searchVenues, loadVenue, bookings, events, searchEvents, loadEvent, searchBookings, loadBooking,
     addContractor, searchContractors, loadContractor, loadContractors, updateContractor, deleteContractor,
     addClient, searchClients, loadClient, updateClient, deleteClient, computeClientEventCounts,
     addVenue, updateVenue, deleteVenue,

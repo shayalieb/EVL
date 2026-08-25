@@ -191,7 +191,7 @@ export default function EventFormPage() {
   const navigate = useNavigate();
   const {
     eventTypes, addEventType, eventStatuses, inquiryStatuses, addInquiryStatus, emailTemplates, loadEvent, loadContractors,
-    contractors, searchContractors, contractorTypes, venues, addEvent, updateEvent, computeDurationHours,
+    contractors, searchContractors, contractorTypes, addEvent, updateEvent, computeDurationHours,
     updateBooking, computeEventTotalCost, contractorGroups,
   } = useData();
   const { can, currentUser, role } = useAuth();
@@ -1688,12 +1688,12 @@ export default function EventFormPage() {
               <div>
                 <label className={labelClass}>Venue Name</label>
                 <VenueCombobox
-                  venues={venues}
                   value={form.venue.name}
                   onChangeName={(name) => updateVenue('name', name)}
                   onSelectVenue={selectSavedVenue}
                   testId="event-form-venue-name-input"
                 />
+                <p className="text-xs text-slate-400 mt-1">Choose a saved venue to copy its details, or keep typing to use and save a new venue.</p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -1745,7 +1745,7 @@ export default function EventFormPage() {
               </div>
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className={`${labelClass} mb-0`}>Location Note</label>
+                  <label className={`${labelClass} mb-0`}>Event-day Venue Notes</label>
                   {form.venue.locationNote && (
                     <button
                       type="button"
@@ -1769,7 +1769,7 @@ export default function EventFormPage() {
               </div>
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className={`${labelClass} mb-0`}>Load In Info</label>
+                  <label className={`${labelClass} mb-0`}>Load-in Instructions</label>
                   {form.venue.loadInInfo && (
                     <button
                       type="button"

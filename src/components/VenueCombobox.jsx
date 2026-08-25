@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { matchesSearch } from '../lib/search';
+import { useEffect, useState } from 'react';
+import { useData } from '../context/DataContext';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -10,9 +10,23 @@ const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text
 // saved — see DataContext's ensureVenueSaved). Picking a suggestion instead
 // fires onSelectVenue with the full record so the caller can autofill every
 // other venue field (address, contact, notes) in one shot.
-export default function VenueCombobox({ venues, value, onChangeName, onSelectVenue, testId }) {
+export default function VenueCombobox({ value, onChangeName, onSelectVenue, testId }) {
+  const { searchVenues } = useData();
   const [open, setOpen] = useState(false);
-  const filtered = value.trim() ? venues.filter((v) => matchesSearch(value, [v.name])) : venues;
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      setLoading(true);
+      searchVenues(value)
+        .then((venues) => { if (!cancelled) setResults(venues); })
+        .finally(() => { if (!cancelled) setLoading(false); });
+    }, 200);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [open, value, searchVenues]);
 
   return (
     <div className="relative">
@@ -24,11 +38,15 @@ export default function VenueCombobox({ venues, value, onChangeName, onSelectVen
         data-testid={testId}
         className={inputClass}
       />
-      {open && filtered.length > 0 && (
+      {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-white rounded-lg shadow-lg border border-slate-100 z-20">
-            {filtered.map((v) => (
+            {loading ? (
+              <div className="px-3 py-2 text-sm text-slate-400">Searching…</div>
+            ) : results.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-slate-400">No saved venues match. Keep typing to use a new venue.</div>
+            ) : results.map((v) => (
               <button
                 key={v.id}
                 type="button"
