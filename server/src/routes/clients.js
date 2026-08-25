@@ -27,6 +27,13 @@ function serializeClient(c) {
   };
 }
 
+function eventCountBucket(statuses, eventStatus) {
+  const label = String(statuses.find((status) => status.id === eventStatus)?.label || '').toLowerCase();
+  if (label === 'cancelled' || label === 'declined') return 'declined';
+  if (label === 'confirmed' || label === 'completed') return 'confirmed';
+  return 'pending';
+}
+
 router.get('/', asyncHandler(async (req, res) => {
   if (req.query.page !== undefined) {
     const pagination = listPageFromRequest(req, ['createdAt', 'firstName', 'lastName', 'updatedAt'], 'lastName');
@@ -59,7 +66,17 @@ router.get('/', asyncHandler(async (req, res) => {
       prisma.client.findMany({ where, orderBy: [{ [pagination.sort]: pagination.direction }, { id: pagination.direction }], skip: pagination.skip, take: pagination.pageSize }),
       prisma.client.count({ where }),
     ]);
-    return res.json({ clients: listPageResponse(items.map(serializeClient), total, pagination) });
+    const [clientEvents, accountData] = await Promise.all([
+      prisma.event.findMany({ where: { accountId: req.membership.accountId, deletedAt: null, clientId: { in: items.map((item) => item.id) } }, select: { clientId: true, eventStatus: true } }),
+      prisma.accountData.findUnique({ where: { accountId: req.membership.accountId }, select: { data: true } }),
+    ]);
+    const statuses = accountData?.data?.eventStatuses || [];
+    const countsByClient = new Map(items.map((item) => [item.id, { pending: 0, confirmed: 0, declined: 0 }]));
+    for (const event of clientEvents) {
+      const counts = countsByClient.get(event.clientId);
+      if (counts) counts[eventCountBucket(statuses, event.eventStatus)] += 1;
+    }
+    return res.json({ clients: listPageResponse(items.map((item) => ({ ...serializeClient(item), eventCounts: countsByClient.get(item.id) })), total, pagination) });
   }
   const pagination = paginationFromRequest(req);
   if (!pagination) return res.status(400).json({ error: 'Invalid pagination cursor.' });
@@ -147,7 +164,11 @@ router.delete('/:id', asyncHandler(async (req, res) => {
   if (!existing || existing.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Client not found.' });
   }
-  await prisma.client.delete({ where: { id: existing.id } });
+  await prisma.$transaction([
+    prisma.event.updateMany({ where: { accountId: req.membership.accountId, clientId: existing.id }, data: { clientId: null } }),
+    prisma.booking.updateMany({ where: { accountId: req.membership.accountId, clientId: existing.id }, data: { clientId: null } }),
+    prisma.client.delete({ where: { id: existing.id } }),
+  ]);
   res.json({ ok: true });
 }));
 

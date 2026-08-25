@@ -25,7 +25,7 @@ function emptySong() {
 // pullFromLibrary — so deleting the gig's copy or the library original
 // never affects the other.
 export default function SetListLibraryModal({ open, onClose, setList, onSaved }) {
-  const { addSetListLibraryItem, updateSetListLibraryItem, events } = useData();
+  const { addSetListLibraryItem, updateSetListLibraryItem, events, loadEvent } = useData();
   const { showToast } = useToast();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -46,9 +46,11 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
       // one-item list so a set list saved before this change still shows
       // its existing link instead of appearing unlinked.
       setEventIds(setList?.eventIds || (setList?.eventId ? [setList.eventId] : []));
+      const linkedIds = setList?.eventIds || (setList?.eventId ? [setList.eventId] : []);
+      Promise.allSettled(linkedIds.map(loadEvent));
       setError('');
     }
-  }, [open, setList]);
+  }, [open, setList, loadEvent]);
 
   const selectedEvents = eventIds.map((id) => events.find((e) => e.id === id)).filter(Boolean);
 

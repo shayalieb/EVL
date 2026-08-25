@@ -215,7 +215,17 @@ router.delete('/:id', asyncHandler(async (req, res) => {
   if (!existing || existing.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Contractor not found.' });
   }
-  await prisma.contractor.delete({ where: { id: existing.id } });
+  const affectedEvents = await prisma.event.findMany({
+    where: { accountId: req.membership.accountId, deletedAt: null },
+    select: { id: true, contractorBookings: true },
+  });
+  const unlinkUpdates = affectedEvents
+    .filter((event) => (event.contractorBookings || []).some((booking) => booking.contractorId === existing.id))
+    .map((event) => prisma.event.update({
+      where: { id: event.id },
+      data: { contractorBookings: event.contractorBookings.filter((booking) => booking.contractorId !== existing.id) },
+    }));
+  await prisma.$transaction([...unlinkUpdates, prisma.contractor.delete({ where: { id: existing.id } })]);
   res.json({ ok: true });
 }));
 

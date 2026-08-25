@@ -23,7 +23,8 @@ import { getPricingTiers, getPricingTier, getTierPrice, getBookingTotal, getOver
 import { getPrepContractors, renderPrepSheetEmail, requestsLabels } from '../lib/prepSheet';
 import { generatePrepSheetPdf, generatePrepSheetPdfAttachment } from '../lib/prepSheetPdf';
 import { listDocuments, uploadDocument, deleteDocument, documentDownloadUrl } from '../lib/documents';
-import { getEvent } from '../lib/events';
+import { getBookingByEvent } from '../lib/bookings';
+import { getDashboard } from '../lib/dashboard';
 import { listInvoices } from '../lib/invoices';
 import { listGuests, createGuest, updateGuest, deleteGuest, getRsvpLink } from '../lib/guests';
 import { InfoIcon, MapPinIcon, ClockIcon, UsersIcon, ClipboardIcon, NoteIcon, FileIcon } from '../components/ui/icons';
@@ -186,9 +187,9 @@ export default function EventFormPage() {
   const { eventId } = useParams();
   const navigate = useNavigate();
   const {
-    events, eventTypes, addEventType, eventStatuses, inquiryStatuses, addInquiryStatus, emailTemplates,
+    eventTypes, addEventType, eventStatuses, inquiryStatuses, addInquiryStatus, emailTemplates, loadEvent,
     contractors, contractorTypes, clients, venues, addEvent, updateEvent, computeDurationHours,
-    bookings, updateBooking, computeEventTotalCost, contractorGroups,
+    updateBooking, computeEventTotalCost, contractorGroups,
   } = useData();
   const { can, currentUser, role } = useAuth();
   const { showToast } = useToast();
@@ -206,12 +207,12 @@ export default function EventFormPage() {
     if (!eventId) { setFullEvent(null); setEventDetailLoaded(false); return; }
     let cancelled = false;
     setEventDetailLoaded(false);
-    getEvent(eventId)
+    loadEvent(eventId)
       .then((full) => { if (!cancelled) setFullEvent(full); })
       .catch(() => { if (!cancelled) setFullEvent(null); })
       .finally(() => { if (!cancelled) setEventDetailLoaded(true); });
     return () => { cancelled = true; };
-  }, [eventId]);
+  }, [eventId, loadEvent]);
 
   // Profit/loss is sensitive financial data — same owner/admin-only gate
   // already used for Settings -> Users/Billing.
@@ -435,18 +436,23 @@ export default function EventFormPage() {
   // -> Event) — reverse-lookup the booking this event came from so the
   // Financials tab can pull its invoices for Revenue. Events created
   // directly (not converted from a booking) simply have no sourceBooking.
-  const sourceBooking = event ? bookings.find((b) => b.convertedEventId === event.id) : null;
+  const [sourceBooking, setSourceBooking] = useState(null);
   const sourceBookingId = sourceBooking?.id;
-  // Fetched account-wide (not just this event's sourceBooking) so the
-  // Financials tab's margin benchmark below can compare this gig against
-  // every other one — one fetch either way, listInvoices(undefined) is the
-  // account's full list per its own doc comment.
   const [allInvoices, setAllInvoices] = useState([]);
+  const [marginBenchmark, setMarginBenchmark] = useState(null);
   useEffect(() => {
+    if (!event?.id) { setSourceBooking(null); return; }
     let cancelled = false;
-    listInvoices().then((list) => { if (!cancelled) setAllInvoices(list); }).catch(() => {});
+    getBookingByEvent(event.id).then((record) => { if (!cancelled) setSourceBooking(record); }).catch(() => { if (!cancelled) setSourceBooking(null); });
+    getDashboard().then((summary) => { if (!cancelled) setMarginBenchmark(summary.financials.avgMargin); }).catch(() => {});
     return () => { cancelled = true; };
-  }, []);
+  }, [event?.id]);
+  useEffect(() => {
+    if (!sourceBookingId) { setAllInvoices([]); return; }
+    let cancelled = false;
+    listInvoices(sourceBookingId).then((list) => { if (!cancelled) setAllInvoices(list); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [sourceBookingId]);
   const eventInvoices = useMemo(
     () => (sourceBookingId ? allInvoices.filter((inv) => inv.bookingId === sourceBookingId) : []),
     [allInvoices, sourceBookingId]
@@ -661,31 +667,9 @@ export default function EventFormPage() {
   const netProfit = revenueTotal - totalCost - otherExpensesTotal;
   const profitMargin = revenueTotal > 0 ? (netProfit / revenueTotal) * 100 : null;
 
-  // Average margin across every OTHER event in the account that has actual
-  // invoiced revenue — "this gig: 34% vs. your average: 41%" is a much
-  // more useful number than the margin alone, which says nothing about
-  // whether it's a good result for this business. Excludes the current
-  // event (comparing it to itself would be meaningless) and anything with
-  // no revenue (an unbooked/unconverted event has no real margin to
-  // compare). Uses computeEventTotalCost, same as this event's own
-  // totalCost, so overtime is folded into every gig's cost the same way.
-  const marginBenchmark = useMemo(() => {
-    const margins = [];
-    for (const evt of events) {
-      if (evt.id === event?.id) continue;
-      const evtBooking = bookings.find((b) => b.convertedEventId === evt.id);
-      if (!evtBooking) continue;
-      const evtRevenue = allInvoices
-        .filter((inv) => inv.bookingId === evtBooking.id && inv.status !== 'void' && inv.status !== 'draft')
-        .reduce((sum, inv) => sum + (inv.total || 0), 0);
-      if (evtRevenue <= 0) continue;
-      const evtCost = computeEventTotalCost(evt);
-      margins.push(((evtRevenue - evtCost) / evtRevenue) * 100);
-    }
-    if (!margins.length) return null;
-    return margins.reduce((sum, m) => sum + m, 0) / margins.length;
-  }, [events, bookings, allInvoices, event?.id, computeEventTotalCost]);
-
+  // Account-wide weighted margin across fully costed, invoiced events is
+  // supplied by the compact dashboard endpoint. This preserves the useful
+  // comparison without downloading every event, booking, and invoice.
   // "Actual" once both sides of the P&L are actually settled, not just
   // planned: every confirmed contractor is paid, nobody's still sitting in
   // Tentative (an undecided contractor means the final lineup — and so the

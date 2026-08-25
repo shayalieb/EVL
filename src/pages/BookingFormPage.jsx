@@ -18,7 +18,6 @@ import { useToast } from '../components/ui/Toast';
 import { uid } from '../lib/storage';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
 import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, bookingDocumentDownloadUrl } from '../lib/bookingDocuments';
-import { getBooking } from '../lib/bookings';
 import { generateProposalPdf, generateProposalPdfAttachment, getProposalPdfDataUrl } from '../lib/proposalPdf';
 import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms, addContractLogNote, regenerateClientSignLink } from '../lib/contracts';
 import { getProposalResponseForBooking, sendProposalResponseLink } from '../lib/proposalResponses';
@@ -433,7 +432,7 @@ export default function BookingFormPage() {
   const { bookingId } = useParams();
   const navigate = useNavigate();
   const {
-    clients, searchClients, venues, eventTypes, addEventType, bookingStatuses,
+    clients, searchClients, loadBooking, venues, eventTypes, addEventType, bookingStatuses,
     addClient, addBooking, updateBooking, convertBookingToEvent, addEvent,
     proposalTemplates, addProposalTemplate, contractTemplates, addContractTemplate,
   } = useData();
@@ -454,12 +453,12 @@ export default function BookingFormPage() {
     if (!bookingId) { setFullBooking(null); setBookingDetailLoaded(false); return; }
     let cancelled = false;
     setBookingDetailLoaded(false);
-    getBooking(bookingId)
+    loadBooking(bookingId)
       .then((full) => { if (!cancelled) setFullBooking(full); })
       .catch(() => { if (!cancelled) setFullBooking(null); })
       .finally(() => { if (!cancelled) setBookingDetailLoaded(true); });
     return () => { cancelled = true; };
-  }, [bookingId]);
+  }, [bookingId, loadBooking]);
 
   const [form, setForm] = useState(emptyForm());
   const [error, setError] = useState('');

@@ -42,7 +42,7 @@ const emptyForm = {
 };
 
 export default function ReminderModal({ open, onClose, reminder, onSaved }) {
-  const { clients, contractors, events } = useData();
+  const { clients, contractors, events, searchEvents, loadEvent } = useData();
   const [invoices, setInvoices] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
@@ -67,8 +67,11 @@ export default function ReminderModal({ open, onClose, reminder, onSaved }) {
   // for its View link (Invoice has no page of its own — see
   // relatedRecordPath in lib/reminders.js).
   useEffect(() => {
-    if (open) listInvoices().then(setInvoices).catch(() => setInvoices([]));
-  }, [open]);
+    if (!open) return;
+    listInvoices().then(setInvoices).catch(() => setInvoices([]));
+    searchEvents('').catch(() => {});
+    if (reminder?.relatedType === 'event' && reminder.relatedId) loadEvent(reminder.relatedId).catch(() => {});
+  }, [open, reminder?.relatedId, reminder?.relatedType, searchEvents, loadEvent]);
 
   function update(field, val) {
     setForm((f) => ({ ...f, [field]: val }));

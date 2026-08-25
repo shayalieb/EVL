@@ -1,10 +1,5 @@
 import { apiFetch } from '../context/AuthContext';
-import { fetchAllPages } from './fetchAllPages';
 import { queryList } from './listQuery';
-
-export async function listEvents() {
-  return fetchAllPages('/events', 'events');
-}
 
 export function queryEvents(params) {
   return queryList('/events', 'events', params);

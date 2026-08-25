@@ -6,8 +6,8 @@ import { statusBucket } from '../lib/inquiryStatusBucket';
 import { formatEventDate, formatCurrency } from '../lib/format';
 import { listContractors, queryContractors, getContractor, createContractor as createContractorApi, updateContractorApi, deleteContractorApi } from '../lib/contractors';
 import { listClients, queryClients, getClient, createClient as createClientApi, updateClientApi, deleteClientApi } from '../lib/clients';
-import { listBookings, queryBookings, getBooking, createBooking as createBookingApi, updateBookingApi } from '../lib/bookings';
-import { listEvents, queryEvents, getEvent, createEvent as createEventApi, updateEventApi } from '../lib/events';
+import { queryBookings, getBooking, createBooking as createBookingApi, updateBookingApi } from '../lib/bookings';
+import { queryEvents, getEvent, createEvent as createEventApi, updateEventApi } from '../lib/events';
 import { dispositionInfo } from '../lib/bookingDisposition';
 
 function statusLabel(statuses, id) {
@@ -144,27 +144,13 @@ export function DataProvider({ children }) {
   // plans, set lists all hang off them), so this is the biggest
   // write-amplification win of the graduation-out-of-the-blob series.
   const [bookings, setBookings] = useState([]);
-  const [bookingsLoaded, setBookingsLoaded] = useState(false);
   useEffect(() => {
-    if (!currentUser) { setBookings([]); setBookingsLoaded(false); return; }
-    let cancelled = false;
-    listBookings()
-      .then((list) => { if (!cancelled) setBookings(list); })
-      .finally(() => { if (!cancelled) setBookingsLoaded(true); });
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setBookings([]);
   }, [currentUser?.accountId]);
 
   const [events, setEvents] = useState([]);
-  const [eventsLoaded, setEventsLoaded] = useState(false);
   useEffect(() => {
-    if (!currentUser) { setEvents([]); setEventsLoaded(false); return; }
-    let cancelled = false;
-    listEvents()
-      .then((list) => { if (!cancelled) setEvents(list); })
-      .finally(() => { if (!cancelled) setEventsLoaded(true); });
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setEvents([]);
   }, [currentUser?.accountId]);
 
   const mergeCachedRecord = useCallback((setter, record) => {
@@ -294,23 +280,21 @@ export function DataProvider({ children }) {
   }, [currentUser, historyEntry, ensureVenueSaved]);
 
   const updateBooking = useCallback(async (id, patch) => {
-    const existing = bookings.find((b) => b.id === id);
-    if (!existing) return;
+    const existing = bookings.find((b) => b.id === id) || await getBooking(id);
     const next = { ...existing, ...patch };
     const changes = diffBookingFields(existing, next, currentUser?.bookingStatuses);
     const merged = changes.length ? { ...patch, history: [...(existing.history || []), historyEntry('edited', changes)] } : patch;
     const record = await updateBookingApi(id, merged);
-    setBookings((prev) => prev.map((b) => (b.id === id ? record : b)));
+    mergeCachedRecord(setBookings, record);
     if (patch.venue) ensureVenueSaved(patch.venue);
     return record;
-  }, [bookings, currentUser, historyEntry, ensureVenueSaved]);
+  }, [bookings, currentUser, historyEntry, ensureVenueSaved, mergeCachedRecord]);
 
   // Soft delete — hides the booking from normal views (filtered server-side
   // by GET /api/bookings) but keeps the record, and its history, around so
   // "who deleted this and when" stays answerable.
   const deleteBooking = useCallback(async (id) => {
-    const existing = bookings.find((b) => b.id === id);
-    if (!existing) return;
+    const existing = bookings.find((b) => b.id === id) || await getBooking(id);
     const record = await updateBookingApi(id, {
       deletedAt: new Date().toISOString(),
       history: [...(existing.history || []), historyEntry('deleted')],
@@ -326,26 +310,24 @@ export function DataProvider({ children }) {
   // linked event too" prompt that decides whether to also call
   // completeEvent alongside this.
   const completeBooking = useCallback(async (id) => {
-    const existing = bookings.find((b) => b.id === id);
-    if (!existing) return;
+    const existing = bookings.find((b) => b.id === id) || await getBooking(id);
     const record = await updateBookingApi(id, {
       completedAt: new Date().toISOString(),
       history: [...(existing.history || []), historyEntry('completed')],
     });
-    setBookings((prev) => prev.map((b) => (b.id === id ? record : b)));
+    mergeCachedRecord(setBookings, record);
     return record;
-  }, [bookings, historyEntry]);
+  }, [bookings, historyEntry, mergeCachedRecord]);
 
   const restoreBooking = useCallback(async (id) => {
-    const existing = bookings.find((b) => b.id === id);
-    if (!existing) return;
+    const existing = bookings.find((b) => b.id === id) || await getBooking(id);
     const record = await updateBookingApi(id, {
       completedAt: null,
       history: [...(existing.history || []), historyEntry('restored')],
     });
-    setBookings((prev) => prev.map((b) => (b.id === id ? record : b)));
+    mergeCachedRecord(setBookings, record);
     return record;
-  }, [bookings, historyEntry]);
+  }, [bookings, historyEntry, mergeCachedRecord]);
 
   // ---- Events (real API, not the blob — see the fetch effect above) ----
   // Same id-must-already-be-set contract as addBooking above.
@@ -360,8 +342,7 @@ export function DataProvider({ children }) {
   }, [currentUser, historyEntry, ensureVenueSaved]);
 
   const updateEvent = useCallback(async (id, patch) => {
-    const existing = events.find((e) => e.id === id);
-    if (!existing) return;
+    const existing = events.find((e) => e.id === id) || await getEvent(id);
     const next = { ...existing, ...patch };
     const changes = [
       ...diffEventFields(existing, next, currentUser?.eventStatuses),
@@ -369,15 +350,14 @@ export function DataProvider({ children }) {
     ];
     const merged = changes.length ? { ...patch, history: [...(existing.history || []), historyEntry('edited', changes)] } : patch;
     const record = await updateEventApi(id, merged);
-    setEvents((prev) => prev.map((e) => (e.id === id ? record : e)));
+    mergeCachedRecord(setEvents, record);
     if (patch.venue) ensureVenueSaved(patch.venue);
     return record;
-  }, [events, currentUser, historyEntry, ensureVenueSaved, contractors]);
+  }, [events, currentUser, historyEntry, ensureVenueSaved, contractors, mergeCachedRecord]);
 
   // Soft delete — same reasoning as deleteBooking above.
   const deleteEvent = useCallback(async (id) => {
-    const existing = events.find((e) => e.id === id);
-    if (!existing) return;
+    const existing = events.find((e) => e.id === id) || await getEvent(id);
     const record = await updateEventApi(id, {
       deletedAt: new Date().toISOString(),
       history: [...(existing.history || []), historyEntry('deleted')],
@@ -388,26 +368,24 @@ export function DataProvider({ children }) {
 
   // Same "stays intact, just moves tabs" reasoning as completeBooking below.
   const completeEvent = useCallback(async (id) => {
-    const existing = events.find((e) => e.id === id);
-    if (!existing) return;
+    const existing = events.find((e) => e.id === id) || await getEvent(id);
     const record = await updateEventApi(id, {
       completedAt: new Date().toISOString(),
       history: [...(existing.history || []), historyEntry('completed')],
     });
-    setEvents((prev) => prev.map((e) => (e.id === id ? record : e)));
+    mergeCachedRecord(setEvents, record);
     return record;
-  }, [events, historyEntry]);
+  }, [events, historyEntry, mergeCachedRecord]);
 
   const restoreEvent = useCallback(async (id) => {
-    const existing = events.find((e) => e.id === id);
-    if (!existing) return;
+    const existing = events.find((e) => e.id === id) || await getEvent(id);
     const record = await updateEventApi(id, {
       completedAt: null,
       history: [...(existing.history || []), historyEntry('restored')],
     });
-    setEvents((prev) => prev.map((e) => (e.id === id ? record : e)));
+    mergeCachedRecord(setEvents, record);
     return record;
-  }, [events, historyEntry]);
+  }, [events, historyEntry, mergeCachedRecord]);
 
   // Spins up the linked Event once a booking is ready to move into staffing —
   // carries over client/date/type and records the link back on the booking.
@@ -415,7 +393,7 @@ export function DataProvider({ children }) {
   // event create actually succeeds, so a failure never leaves a booking
   // pointing at an event that doesn't exist.
   const convertBookingToEvent = useCallback(async (bookingId) => {
-    const booking = bookings.find((b) => b.id === bookingId);
+    const booking = bookings.find((b) => b.id === bookingId) || await getBooking(bookingId);
     if (!booking || booking.convertedEventId) return;
     const client = clients.find((c) => c.id === booking.clientId);
     const name = booking.eventName || [client ? `${client.firstName} ${client.lastName}` : '', booking.eventType]
@@ -469,17 +447,11 @@ export function DataProvider({ children }) {
   const deleteContractor = useCallback(async (id) => {
     await deleteContractorApi(id);
     setContractors((prev) => prev.filter((c) => c.id !== id));
-    // Also remove this contractor from any events' contractorBookings so
-    // they don't reference a contractor that no longer exists — events are
-    // real table rows now too, so this is a per-record update call rather
-    // than a single blob patch. allSettled (not all) so one failed unlink
-    // doesn't abort the rest, matching this codebase's existing tolerance
-    // for bulk best-effort ops (see AuthContext's migrate*OutOfBlob).
-    const affected = events.filter((e) => e.contractorBookings?.some((b) => b.contractorId === id));
-    await Promise.allSettled(affected.map((e) => (
-      updateEvent(e.id, { contractorBookings: e.contractorBookings.filter((b) => b.contractorId !== id) })
-    )));
-  }, [events, updateEvent]);
+    setEvents((prev) => prev.map((event) => ({
+      ...event,
+      contractorBookings: (event.contractorBookings || []).filter((booking) => booking.contractorId !== id),
+    })));
+  }, []);
 
   // ---- Clients (real API, not the blob — see the fetch effect above) ----
   // addClient's return value is actually awaited by callers (unlike most
@@ -500,17 +472,9 @@ export function DataProvider({ children }) {
   const deleteClient = useCallback(async (id) => {
     await deleteClientApi(id);
     setClients((prev) => prev.filter((c) => c.id !== id));
-    // Unlink this client from any events/bookings that referenced it — both
-    // are real table rows now, so per-record update calls rather than a
-    // single blob patch. allSettled so one failed unlink doesn't abort the
-    // rest (same reasoning as deleteContractor above).
-    const affectedEvents = events.filter((e) => e.clientId === id);
-    const affectedBookings = bookings.filter((b) => b.clientId === id);
-    await Promise.allSettled([
-      ...affectedEvents.map((e) => updateEvent(e.id, { clientId: null })),
-      ...affectedBookings.map((b) => updateBooking(b.id, { clientId: null })),
-    ]);
-  }, [events, bookings, updateEvent, updateBooking]);
+    setEvents((prev) => prev.map((event) => (event.clientId === id ? { ...event, clientId: null } : event)));
+    setBookings((prev) => prev.map((booking) => (booking.clientId === id ? { ...booking, clientId: null } : booking)));
+  }, []);
 
   // ---- Booking statuses (color-coded + isBooked flag) ----
   const addBookingStatus = useCallback((status) => {
@@ -867,7 +831,7 @@ export function DataProvider({ children }) {
   // `events` are synchronously populated (.find(...) inline in render
   // bodies, no loading states of their own), so this keeps that assumption
   // true rather than pushing a loading state into every consuming file.
-  if (currentUser && (!contractorsLoaded || !clientsLoaded || !bookingsLoaded || !eventsLoaded)) return null;
+  if (currentUser && (!contractorsLoaded || !clientsLoaded)) return null;
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

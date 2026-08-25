@@ -15,6 +15,7 @@ import Pagination from '../components/ui/Pagination';
 import { useToast } from '../components/ui/Toast';
 import { formatCurrency as currency, formatEventDate } from '../lib/format';
 import { queryBookings } from '../lib/bookings';
+import { getEvent } from '../lib/events';
 import { useServerList } from '../lib/useServerList';
 import { listInquiryLinks, deleteInquiryLink } from '../lib/inquiryLinks';
 import { listContracts } from '../lib/contracts';
@@ -53,7 +54,7 @@ const VIEW_TABS = [
 
 export default function BookingsPage() {
   const {
-    bookings, events, bookingStatuses, eventTypes, clients,
+    bookingStatuses, eventTypes, clients,
     deleteBooking, completeBooking, restoreBooking, completeEvent, convertBookingToEvent,
   } = useData();
   const { can } = useAuth();
@@ -173,7 +174,10 @@ export default function BookingsPage() {
   // "complete this too?" prompt — otherwise there's nothing to choose
   // between, so it just completes directly.
   async function handleMarkComplete(booking) {
-    const linkedEvent = booking.convertedEventId ? events.find((e) => e.id === booking.convertedEventId) : null;
+    let linkedEvent = null;
+    if (booking.convertedEventId) {
+      try { linkedEvent = await getEvent(booking.convertedEventId); } catch { /* deleted/missing link */ }
+    }
     if (linkedEvent && !linkedEvent.completedAt) {
       setCompleteTarget({ booking, linkedEvent });
       return;
@@ -385,7 +389,7 @@ export default function BookingsPage() {
                   <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
                     {error || (activeTab === 'completed'
                       ? 'No completed bookings yet.'
-                      : bookings.length === 0
+                      : totalItems === 0 && !hasFilters
                         ? 'No bookings yet. Add an inquiry or quote to start tracking the sales pipeline.'
                         : 'No bookings match your search or filters.')}
                   </td>

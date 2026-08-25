@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import SetListLibraryModal from '../components/SetListLibraryModal';
@@ -19,7 +19,7 @@ import { renderSetListEmail, sendSetListEmail } from '../lib/setList';
 // one here never touches copies already pulled into a specific event — see
 // SetListsEditorPage.jsx, which deep-clones on pull.
 export default function SetListLibraryPage() {
-  const { setListLibrary, updateSetListLibraryItem, deleteSetListLibraryItem, events, contractors } = useData();
+  const { setListLibrary, updateSetListLibraryItem, deleteSetListLibraryItem, events, loadEvent, contractors } = useData();
   const { can, currentUser } = useAuth();
   const { showToast } = useToast();
   const canEdit = can('manageEvents');
@@ -35,6 +35,11 @@ export default function SetListLibraryPage() {
   // act on (recipients + header name/date are always scoped to one event at
   // a time, never a blended "several events" view).
   const [chooseEventFor, setChooseEventFor] = useState(null);
+
+  useEffect(() => {
+    const ids = [...new Set(setListLibrary.flatMap((item) => item.eventIds || (item.eventId ? [item.eventId] : [])))];
+    Promise.allSettled(ids.map(loadEvent));
+  }, [setListLibrary, loadEvent]);
 
   const filteredSetLists = setListLibrary.filter((s) => matchesSearch(search, [s.name]));
 

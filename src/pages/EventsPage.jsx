@@ -15,6 +15,7 @@ import FilterSelect from '../components/ui/FilterSelect';
 import Pagination from '../components/ui/Pagination';
 import { formatCurrency as currency } from '../lib/format';
 import { queryEventRange, queryEvents } from '../lib/events';
+import { getBookingByEvent } from '../lib/bookings';
 import { useServerList } from '../lib/useServerList';
 import { eventCostingStatus } from '../lib/eventCosting';
 
@@ -33,7 +34,7 @@ function formatDateWithWeekday(dateStr) {
 
 export default function EventsPage() {
   const {
-    events, bookings, contractors, inquiryStatuses, eventStatuses, eventTypes,
+    contractors, inquiryStatuses, eventStatuses, eventTypes,
     deleteEvent, completeEvent, restoreEvent, completeBooking,
     computeEventTotalCost, computeVendorStatus, getContractorById,
   } = useData();
@@ -66,7 +67,7 @@ export default function EventsPage() {
   // converted Event via convertedEventId, so finding the source booking
   // from here means searching for it rather than following a field.
   async function handleMarkComplete(evt) {
-    const linkedBooking = bookings.find((b) => b.convertedEventId === evt.id);
+    const linkedBooking = await getBookingByEvent(evt.id);
     if (linkedBooking && !linkedBooking.completedAt) {
       setCompleteTarget({ event: evt, linkedBooking });
       return;
@@ -224,7 +225,7 @@ export default function EventsPage() {
                   <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
                     {error || (activeTab === 'completed'
                       ? 'No completed events yet.'
-                      : events.length === 0
+                      : totalItems === 0 && !hasFilters
                         ? 'No events yet. Add your first event to start booking contractors.'
                         : 'No events match your search or filters.')}
                   </td>

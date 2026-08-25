@@ -1,10 +1,5 @@
 import { apiFetch } from '../context/AuthContext';
-import { fetchAllPages } from './fetchAllPages';
 import { queryList } from './listQuery';
-
-export async function listBookings() {
-  return fetchAllPages('/bookings', 'bookings');
-}
 
 export function queryBookings(params) {
   return queryList('/bookings', 'bookings', params);
@@ -14,6 +9,11 @@ export function queryBookings(params) {
 // fields the list route omits — see server/src/routes/bookings.js.
 export async function getBooking(id) {
   const data = await apiFetch(`/bookings/${id}`);
+  return data.booking;
+}
+
+export async function getBookingByEvent(eventId) {
+  const data = await apiFetch(`/bookings/by-event/${eventId}`);
   return data.booking;
 }
 

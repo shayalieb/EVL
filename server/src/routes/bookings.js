@@ -152,6 +152,13 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ bookings: page.map(serializeBookingLite), nextCursor });
 }));
 
+router.get('/by-event/:eventId', asyncHandler(async (req, res) => {
+  const booking = await prisma.booking.findFirst({
+    where: { accountId: req.membership.accountId, convertedEventId: req.params.eventId, deletedAt: null },
+  });
+  res.json({ booking: booking ? serializeBooking(booking) : null });
+}));
+
 router.get('/:id', asyncHandler(async (req, res) => {
   const booking = await prisma.booking.findUnique({ where: { id: req.params.id } });
   if (!booking || booking.accountId !== req.membership.accountId) {

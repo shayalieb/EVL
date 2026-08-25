@@ -140,7 +140,7 @@ export default function ClientsPage() {
                 </tr>
               )}
               {pagedClients.map((c) => {
-                const counts = computeClientEventCounts(c.id);
+                const counts = c.eventCounts || computeClientEventCounts(c.id);
                 return (
                   <tr key={c.id} data-testid="client-row" className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                     <td className="px-4 py-3 font-medium text-slate-800">
