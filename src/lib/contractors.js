@@ -10,6 +10,11 @@ export function queryContractors(params) {
   return queryList('/contractors', 'contractors', params);
 }
 
+export async function getContractor(id) {
+  const data = await apiFetch(`/contractors/${encodeURIComponent(id)}`);
+  return data.contractor;
+}
+
 export async function createContractor(patch) {
   const data = await apiFetch('/contractors', { method: 'POST', body: JSON.stringify(patch) });
   return data.contractor;

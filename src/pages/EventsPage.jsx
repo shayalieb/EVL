@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
@@ -14,8 +14,7 @@ import SearchInput from '../components/ui/SearchInput';
 import FilterSelect from '../components/ui/FilterSelect';
 import Pagination from '../components/ui/Pagination';
 import { formatCurrency as currency } from '../lib/format';
-import { matchesSearch } from '../lib/search';
-import { queryEvents } from '../lib/events';
+import { queryEventRange, queryEvents } from '../lib/events';
 import { useServerList } from '../lib/useServerList';
 import { eventCostingStatus } from '../lib/eventCosting';
 
@@ -52,6 +51,9 @@ export default function EventsPage() {
   const [vendorFilter, setVendorFilter] = useState('');
   const [eventTypeFilter, setEventTypeFilter] = useState('');
   const [contractorsFilter, setContractorsFilter] = useState('');
+  const [calendarEvents, setCalendarEvents] = useState([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarError, setCalendarError] = useState('');
 
   async function handleDelete() {
     await deleteEvent(deleteTarget.id);
@@ -90,22 +92,34 @@ export default function EventsPage() {
   }
 
   const hasFilters = !!(search || statusFilter || vendorFilter || eventTypeFilter || contractorsFilter);
-  const filteredEvents = events.filter((evt) => {
-    if (activeTab === 'completed' ? !evt.completedAt : !!evt.completedAt) return false;
-    if (statusFilter && evt.eventStatus !== statusFilter) return false;
-    if (vendorFilter && computeVendorStatus(evt).status !== vendorFilter) return false;
-    if (eventTypeFilter && evt.eventType !== eventTypeFilter) return false;
-    if (contractorsFilter === 'has' && evt.contractorBookings.length === 0) return false;
-    if (contractorsFilter === 'none' && evt.contractorBookings.length > 0) return false;
-    return matchesSearch(search, [evt.name, evt.eventType]);
-  });
-  // Calendar view keeps the complete collection until 3B adds a bounded
-  // date-range endpoint. The table is already fully server-driven in 3A.
   const { items: pagedEvents, pageCount, pageSize, total: totalItems, loading, error, refresh } = useServerList(
     () => queryEvents({ page, pageSize: 25, view: activeTab === 'completed' ? 'completed' : 'active', search, status: statusFilter, vendor: vendorFilter, eventType: eventTypeFilter, contractors: contractorsFilter, sort, direction: sort === 'createdAt' || sort === 'updatedAt' ? 'desc' : 'asc' }),
     [page, activeTab, search, statusFilter, vendorFilter, eventTypeFilter, contractorsFilter, sort],
   );
   useEffect(() => { setPage(1); }, [activeTab, search, statusFilter, vendorFilter, eventTypeFilter, contractorsFilter]);
+
+  const loadCalendarRange = useCallback(async (from, to) => {
+    setCalendarLoading(true);
+    setCalendarError('');
+    try {
+      const items = await queryEventRange({
+        from, to,
+        view: 'active',
+        search,
+        status: statusFilter,
+        vendor: vendorFilter,
+        eventType: eventTypeFilter,
+        contractors: contractorsFilter,
+        sort: 'eventDate',
+        direction: 'asc',
+      });
+      setCalendarEvents(items);
+    } catch (loadError) {
+      setCalendarError(loadError.message || 'Unable to load this calendar range.');
+    } finally {
+      setCalendarLoading(false);
+    }
+  }, [search, statusFilter, vendorFilter, eventTypeFilter, contractorsFilter]);
 
   return (
     <div>
@@ -182,9 +196,12 @@ export default function EventsPage() {
 
       {activeTab === 'calendar' ? (
         <EventsCalendarView
-          events={filteredEvents}
+          events={calendarEvents}
           eventStatuses={eventStatuses}
           onSelectEvent={(evt) => navigate(`/events/${evt.id}`)}
+          onRangeChange={loadCalendarRange}
+          loading={calendarLoading}
+          error={calendarError}
         />
       ) : (
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">

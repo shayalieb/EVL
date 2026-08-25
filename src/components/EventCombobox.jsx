@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { matchesSearch } from '../lib/search';
+import { useEffect, useState } from 'react';
 import { formatEventDate } from '../lib/format';
+import { useData } from '../context/DataContext';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -13,12 +13,24 @@ const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text
 // rapid multi-add — its click-outside overlay is a full-viewport div, and
 // leaving it up would block clicks on anything else in the same modal
 // (e.g. Save) until it's dismissed. Click back into the input to add another.
-export default function EventCombobox({ events, selectedEvents, onAdd, onRemove, testId }) {
+export default function EventCombobox({ selectedEvents, onAdd, onRemove, testId }) {
+  const { searchEvents } = useData();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
   const selectedIds = new Set(selectedEvents.map((e) => e.id));
-  const available = events.filter((e) => !selectedIds.has(e.id));
-  const filtered = (query.trim() ? available.filter((e) => matchesSearch(query, [e.name, e.eventType])) : available).slice(0, 50);
+  const available = results.filter((event) => !selectedIds.has(event.id));
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      setLoading(true);
+      searchEvents(query).then((items) => { if (!cancelled) setResults(items); }).finally(() => { if (!cancelled) setLoading(false); });
+    }, 200);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [open, query, searchEvents]);
 
   return (
     <div>
@@ -58,12 +70,14 @@ export default function EventCombobox({ events, selectedEvents, onAdd, onRemove,
           <>
             <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
             <div className="absolute left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-white rounded-lg shadow-lg border border-slate-100 z-20">
-              {filtered.length === 0 ? (
+              {loading ? (
+                <div className="px-3 py-2 text-sm text-slate-400">Searching…</div>
+              ) : available.length === 0 ? (
                 <div className="px-3 py-2 text-sm text-slate-400">
-                  {available.length === 0 ? 'All matching events are already linked.' : 'No events match.'}
+                  {results.length > 0 ? 'All matching events are already linked.' : 'No events match.'}
                 </div>
               ) : (
-                filtered.map((e) => (
+                available.map((e) => (
                   <button
                     key={e.id}
                     type="button"

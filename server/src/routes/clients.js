@@ -72,6 +72,12 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ clients: page.map(serializeClient), nextCursor });
 }));
 
+router.get('/:id', asyncHandler(async (req, res) => {
+  const client = await prisma.client.findUnique({ where: { id: req.params.id } });
+  if (!client || client.accountId !== req.membership.accountId) return res.status(404).json({ error: 'Client not found.' });
+  res.json({ client: serializeClient(client) });
+}));
+
 router.post('/', asyncHandler(async (req, res) => {
   if (!effectivePermissions(req.membership).manageClients) {
     return res.status(403).json({ error: 'Not authorized.' });

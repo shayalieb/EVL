@@ -103,6 +103,10 @@ router.get('/', asyncHandler(async (req, res) => {
       ...(req.query.view === 'completed' ? { completedAt: { not: null } } : { completedAt: null }),
       ...(req.query.status ? { eventStatus: req.query.status } : {}),
       ...(req.query.eventType ? { eventType: req.query.eventType } : {}),
+      ...(req.query.from || req.query.to ? { eventDate: {
+        ...(req.query.from ? { gte: String(req.query.from) } : {}),
+        ...(req.query.to ? { lte: String(req.query.to) } : {}),
+      } } : {}),
       ...(search ? { OR: [
         { name: { contains: search, mode: 'insensitive' } },
         { eventType: { contains: search, mode: 'insensitive' } },

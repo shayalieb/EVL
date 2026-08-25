@@ -35,7 +35,6 @@ import MoneyInput from '../components/ui/MoneyInput';
 import { useSavingIndicator } from '../components/ui/SavingIndicator';
 import OfferingPickerModal from '../components/OfferingPickerModal';
 import { computeOfferingTotal, computeOfferingsTotal } from '../lib/offerings';
-import { matchesSearch } from '../lib/search';
 import { DEFAULT_ACCENT_COLOR } from '../lib/colorTheme';
 import { isWedding } from '../lib/eventType';
 import { pipelineSteps, proposalStatusInfo, contractStatusInfo } from '../lib/bookingPipeline';
@@ -342,11 +341,21 @@ function CollapsibleSection({ title, subtitle, defaultOpen, badge, children, cla
 
 // Type-to-filter client picker — a plain <select> doesn't scale once an
 // account has more than a handful of clients.
-function ClientCombobox({ clients, value, onChange }) {
+function ClientCombobox({ clients, value, onChange, onSearch }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
   const selected = clients.find((c) => c.id === value);
-  const filtered = clients.filter((c) => matchesSearch(query, [c.firstName, c.lastName, c.email, c.phone]));
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      setLoading(true);
+      onSearch(query).then((items) => { if (!cancelled) setResults(items); }).finally(() => { if (!cancelled) setLoading(false); });
+    }, 200);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [open, query, onSearch]);
 
   return (
     <div className="relative">
@@ -364,10 +373,11 @@ function ClientCombobox({ clients, value, onChange }) {
               selection — only clear the transient search text. */}
           <div className="fixed inset-0 z-10" onClick={() => { setOpen(false); setQuery(''); }} />
           <div className="absolute left-0 right-0 mt-1 max-h-64 overflow-y-auto bg-white rounded-lg shadow-lg border border-slate-100 z-20">
-            {filtered.length === 0 && (
+            {!loading && results.length === 0 && (
               <div className="px-3 py-3 text-xs text-slate-400">No clients found.</div>
             )}
-            {filtered.map((c) => (
+            {loading && <div className="px-3 py-3 text-xs text-slate-400">Searching…</div>}
+            {results.map((c) => (
               <button
                 key={c.id}
                 type="button"
@@ -423,7 +433,7 @@ export default function BookingFormPage() {
   const { bookingId } = useParams();
   const navigate = useNavigate();
   const {
-    bookings, clients, venues, eventTypes, addEventType, bookingStatuses,
+    bookings, clients, searchClients, venues, eventTypes, addEventType, bookingStatuses,
     addClient, addBooking, updateBooking, convertBookingToEvent, addEvent,
     proposalTemplates, addProposalTemplate, contractTemplates, addContractTemplate,
   } = useData();
@@ -1881,7 +1891,7 @@ export default function BookingFormPage() {
                 <label className={labelClass}>Client *</label>
                 <div className="flex gap-2">
                   <div className="flex-1 min-w-0">
-                    <ClientCombobox clients={clients} value={form.clientId} onChange={(id) => update('clientId', id)} />
+                    <ClientCombobox clients={clients} value={form.clientId} onChange={(id) => update('clientId', id)} onSearch={searchClients} />
                   </div>
                   <button
                     type="button"

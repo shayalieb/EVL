@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -35,7 +35,7 @@ function buildMonthGrid(year, month) {
   return cells;
 }
 
-export default function EventsCalendarView({ events, eventStatuses, onSelectEvent }) {
+export default function EventsCalendarView({ events, eventStatuses, onSelectEvent, onRangeChange, loading = false, error = '' }) {
   const today = new Date();
   const [cursor, setCursor] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
 
@@ -45,6 +45,12 @@ export default function EventsCalendarView({ events, eventStatuses, onSelectEven
   const todayKey = toDateKey(today.getFullYear(), today.getMonth(), today.getDate());
 
   const cells = useMemo(() => buildMonthGrid(year, month), [year, month]);
+
+  useEffect(() => {
+    if (onRangeChange && cells.length) {
+      onRangeChange(cells[0].dateKey, cells[cells.length - 1].dateKey);
+    }
+  }, [cells, onRangeChange]);
 
   const eventsByDate = useMemo(() => {
     const map = {};
@@ -109,6 +115,12 @@ export default function EventsCalendarView({ events, eventStatuses, onSelectEven
           </div>
         ))}
       </div>
+
+      {(loading || error) && (
+        <div className={`px-4 py-2 text-sm border-b border-slate-100 ${error ? 'text-red-600' : 'text-slate-500'}`}>
+          {error || 'Loading calendar…'}
+        </div>
+      )}
 
       <div className="grid grid-cols-7">
         {cells.map((cell, idx) => {

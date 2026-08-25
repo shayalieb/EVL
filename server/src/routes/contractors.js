@@ -82,6 +82,12 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ contractors: page.map(serializeContractor), nextCursor });
 }));
 
+router.get('/:id', asyncHandler(async (req, res) => {
+  const contractor = await prisma.contractor.findUnique({ where: { id: req.params.id } });
+  if (!contractor || contractor.accountId !== req.membership.accountId) return res.status(404).json({ error: 'Contractor not found.' });
+  res.json({ contractor: serializeContractor(contractor) });
+}));
+
 router.post('/', asyncHandler(async (req, res) => {
   if (!effectivePermissions(req.membership).manageContractors) {
     return res.status(403).json({ error: 'Not authorized.' });

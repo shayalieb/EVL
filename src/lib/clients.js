@@ -10,6 +10,11 @@ export function queryClients(params) {
   return queryList('/clients', 'clients', params);
 }
 
+export async function getClient(id) {
+  const data = await apiFetch(`/clients/${encodeURIComponent(id)}`);
+  return data.client;
+}
+
 export async function createClient(patch) {
   const data = await apiFetch('/clients', { method: 'POST', body: JSON.stringify(patch) });
   return data.client;

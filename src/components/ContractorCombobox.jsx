@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { matchesSearch } from '../lib/search';
+import { useEffect, useState } from 'react';
+import { useData } from '../context/DataContext';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -12,12 +12,24 @@ function contractorName(c) {
 // component per entity type rather than a generic one. Already-selected
 // contractors are excluded from the dropdown; closes after each pick,
 // click back into the input to add another.
-export default function ContractorCombobox({ contractors, selectedContractors, onAdd, onRemove, testId }) {
+export default function ContractorCombobox({ selectedContractors, onAdd, onRemove, testId }) {
+  const { searchContractors } = useData();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
   const selectedIds = new Set(selectedContractors.map((c) => c.id));
-  const available = contractors.filter((c) => !selectedIds.has(c.id));
-  const filtered = (query.trim() ? available.filter((c) => matchesSearch(query, [c.firstName, c.lastName, c.contractorType1, c.contractorType2])) : available).slice(0, 50);
+  const available = results.filter((c) => !selectedIds.has(c.id));
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      setLoading(true);
+      searchContractors(query).then((items) => { if (!cancelled) setResults(items); }).finally(() => { if (!cancelled) setLoading(false); });
+    }, 200);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [open, query, searchContractors]);
 
   return (
     <div>
@@ -57,12 +69,14 @@ export default function ContractorCombobox({ contractors, selectedContractors, o
           <>
             <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
             <div className="absolute left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-white rounded-lg shadow-lg border border-slate-100 z-20">
-              {filtered.length === 0 ? (
+              {loading ? (
+                <div className="px-3 py-2 text-sm text-slate-400">Searching…</div>
+              ) : available.length === 0 ? (
                 <div className="px-3 py-2 text-sm text-slate-400">
-                  {available.length === 0 ? 'All matching contractors are already in this group.' : 'No contractors match.'}
+                  {results.length > 0 ? 'All matching contractors are already in this group.' : 'No contractors match.'}
                 </div>
               ) : (
-                filtered.map((c) => (
+                available.map((c) => (
                   <button
                     key={c.id}
                     type="button"

@@ -4,10 +4,10 @@ import { uid } from '../lib/storage';
 import { getBookingTotal, computeDurationHours as computeDurationHoursUtil } from '../lib/pricingTiers';
 import { statusBucket } from '../lib/inquiryStatusBucket';
 import { formatEventDate, formatCurrency } from '../lib/format';
-import { listContractors, createContractor as createContractorApi, updateContractorApi, deleteContractorApi } from '../lib/contractors';
-import { listClients, createClient as createClientApi, updateClientApi, deleteClientApi } from '../lib/clients';
-import { listBookings, getBooking, createBooking as createBookingApi, updateBookingApi } from '../lib/bookings';
-import { listEvents, createEvent as createEventApi, updateEventApi } from '../lib/events';
+import { listContractors, queryContractors, getContractor, createContractor as createContractorApi, updateContractorApi, deleteContractorApi } from '../lib/contractors';
+import { listClients, queryClients, getClient, createClient as createClientApi, updateClientApi, deleteClientApi } from '../lib/clients';
+import { listBookings, queryBookings, getBooking, createBooking as createBookingApi, updateBookingApi } from '../lib/bookings';
+import { listEvents, queryEvents, getEvent, createEvent as createEventApi, updateEventApi } from '../lib/events';
 import { dispositionInfo } from '../lib/bookingDisposition';
 
 function statusLabel(statuses, id) {
@@ -166,6 +166,57 @@ export function DataProvider({ children }) {
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.accountId]);
+
+  const mergeCachedRecord = useCallback((setter, record) => {
+    setter((previous) => previous.some((item) => item.id === record.id)
+      ? previous.map((item) => (item.id === record.id ? record : item))
+      : [...previous, record]);
+    return record;
+  }, []);
+
+  const searchClients = useCallback(async (search = '') => {
+    const result = await queryClients({ page: 1, pageSize: 20, search, sort: 'updatedAt', direction: 'desc' });
+    result.items.forEach((record) => mergeCachedRecord(setClients, record));
+    return result.items;
+  }, [mergeCachedRecord]);
+
+  const loadClient = useCallback(async (id) => {
+    const cached = clients.find((record) => record.id === id);
+    return cached || mergeCachedRecord(setClients, await getClient(id));
+  }, [clients, mergeCachedRecord]);
+
+  const searchContractors = useCallback(async (search = '') => {
+    const result = await queryContractors({ page: 1, pageSize: 20, search, sort: 'updatedAt', direction: 'desc' });
+    result.items.forEach((record) => mergeCachedRecord(setContractors, record));
+    return result.items;
+  }, [mergeCachedRecord]);
+
+  const loadContractor = useCallback(async (id) => {
+    const cached = contractors.find((record) => record.id === id);
+    return cached || mergeCachedRecord(setContractors, await getContractor(id));
+  }, [contractors, mergeCachedRecord]);
+
+  const searchEvents = useCallback(async (search = '') => {
+    const result = await queryEvents({ page: 1, pageSize: 20, search, sort: 'updatedAt', direction: 'desc' });
+    result.items.forEach((record) => mergeCachedRecord(setEvents, record));
+    return result.items;
+  }, [mergeCachedRecord]);
+
+  const loadEvent = useCallback(async (id) => {
+    // Search results use the lightweight list shape; detail/edit screens
+    // must always replace that cache entry with the complete record.
+    return mergeCachedRecord(setEvents, await getEvent(id));
+  }, [mergeCachedRecord]);
+
+  const searchBookings = useCallback(async (search = '') => {
+    const result = await queryBookings({ page: 1, pageSize: 20, search, sort: 'updatedAt', direction: 'desc' });
+    result.items.forEach((record) => mergeCachedRecord(setBookings, record));
+    return result.items;
+  }, [mergeCachedRecord]);
+
+  const loadBooking = useCallback(async (id) => {
+    return mergeCachedRecord(setBookings, await getBooking(id));
+  }, [mergeCachedRecord]);
 
   // System-generated create/edit/delete trail for Bookings and Events
   // (record.history) — who did what, when. Separate from Booking's own
@@ -714,7 +765,11 @@ export function DataProvider({ children }) {
     // Already filtered server-side (GET /api/events, /api/bookings both
     // exclude deletedAt rows) — no client-side filter needed anymore.
     events,
+    searchEvents,
+    loadEvent,
     bookings,
+    searchBookings,
+    loadBooking,
     contractorTypes: currentUser?.contractorTypes || [],
     eventTypes: currentUser?.eventTypes || [],
     eventStatuses: currentUser?.eventStatuses || [],
@@ -727,9 +782,13 @@ export function DataProvider({ children }) {
     setListLibrary: currentUser?.setListLibrary || [],
     contractorGroups: currentUser?.contractorGroups || [],
     addContractor,
+    searchContractors,
+    loadContractor,
     updateContractor,
     deleteContractor,
     addClient,
+    searchClients,
+    loadClient,
     updateClient,
     deleteClient,
     computeClientEventCounts,
@@ -783,9 +842,9 @@ export function DataProvider({ children }) {
     computeEventTotalCost,
     computeVendorStatus,
   }), [
-    currentUser, contractors, clients, bookings, events,
-    addContractor, updateContractor, deleteContractor,
-    addClient, updateClient, deleteClient, computeClientEventCounts,
+    currentUser, contractors, clients, bookings, events, searchEvents, loadEvent, searchBookings, loadBooking,
+    addContractor, searchContractors, loadContractor, updateContractor, deleteContractor,
+    addClient, searchClients, loadClient, updateClient, deleteClient, computeClientEventCounts,
     addVenue, updateVenue, deleteVenue,
     addBooking, updateBooking, deleteBooking, completeBooking, restoreBooking, convertBookingToEvent,
     addBookingStatus, updateBookingStatus, removeBookingStatus,

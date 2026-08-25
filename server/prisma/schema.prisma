@@ -1135,6 +1135,7 @@ model Event {
 
   @@index([accountId])
   @@index([accountId, deletedAt, createdAt, id])
+  @@index([accountId, deletedAt, completedAt, eventDate, id])
 }
 
 // The one shareable RSVP link per event — a guest visiting it adds

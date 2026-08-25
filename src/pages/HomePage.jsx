@@ -1,14 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import Badge from '../components/ui/Badge';
 import { formatCurrency } from '../lib/format';
-import { listInvoices } from '../lib/invoices';
+import { getDashboard } from '../lib/dashboard';
 import { CalendarIcon, ClockIcon, DollarIcon, UsersIcon, WrenchIcon, AlertIcon, ClipboardIcon } from '../components/ui/icons';
 
 import Skeleton from '../components/ui/Skeleton';
-import { eventCostingStatus } from '../lib/eventCosting';
 
 // At-risk window for the "needs attention soon" panel below — events inside
 // this many days that still have unconfirmed vendors are the ones actually
@@ -23,10 +22,6 @@ function currency(n) {
 function formatShortDate(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
 }
 
 function PanelHeading({ children, color, icon }) {
@@ -74,143 +69,38 @@ function WelcomeStep({ icon, title, description, actionLabel, onClick, testId })
 }
 
 export default function HomePage() {
-  const {
-    events, bookings, clients, contractors, eventStatuses,
-    computeEventTotalCost, computeVendorStatus, computeClientEventCounts, getContractorById,
-  } = useData();
+  const { eventStatuses } = useData();
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
-  // Contractors don't count toward "fresh" — a handful of sample ones are
-  // seeded into every new account regardless of vertical (see
-  // src/lib/seed.js) precisely so the roster isn't empty on day one, but
-  // that alone doesn't mean the business has actually started using the
-  // app. Once any real booking, event, or client exists, this is false for
-  // good — the normal dashboard below takes over permanently, even if
-  // everything gets deleted again later.
-  const isFreshAccount = bookings.length === 0 && events.length === 0 && clients.length === 0;
-
-  const [invoices, setInvoices] = useState([]);
-  const [invoicesLoading, setInvoicesLoading] = useState(true);
+  const [dashboard, setDashboard] = useState(null);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [dashboardError, setDashboardError] = useState('');
   useEffect(() => {
     let cancelled = false;
-    listInvoices()
-      .then((list) => { if (!cancelled) setInvoices(list); })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setInvoicesLoading(false); });
+    getDashboard()
+      .then((result) => { if (!cancelled) setDashboard(result); })
+      .catch((error) => { if (!cancelled) setDashboardError(error.message || 'Unable to load the dashboard.'); })
+      .finally(() => { if (!cancelled) setDashboardLoading(false); });
     return () => { cancelled = true; };
   }, []);
-
-  const stats = useMemo(() => {
-    const today = todayISO();
-    const isCancelled = (e) => {
-      const status = eventStatuses.find((s) => s.id === e.eventStatus);
-      return (status?.label || '').toLowerCase() === 'cancelled';
-    };
-
-    const upcoming = events
-      .filter((e) => e.eventDate >= today && !isCancelled(e) && !e.completedAt)
-      .sort((a, b) => a.eventDate.localeCompare(b.eventDate));
-
-    const fullyCostedUpcoming = upcoming.filter((event) => eventCostingStatus(event, contractors, currentUser?.inquiryStatuses || []).complete);
-    const pipelineValue = fullyCostedUpcoming.reduce((sum, e) => sum + computeEventTotalCost(e), 0);
-    const needsConfirmation = upcoming.filter((e) => computeVendorStatus(e).status === 'pending').length;
-
-    const atRiskCutoff = new Date();
-    atRiskCutoff.setDate(atRiskCutoff.getDate() + AT_RISK_WINDOW_DAYS);
-    const atRiskCutoffISO = atRiskCutoff.toISOString().slice(0, 10);
-    const atRiskEvents = upcoming
-      .filter((e) => e.eventDate <= atRiskCutoffISO && computeVendorStatus(e).status === 'pending')
-      .slice(0, 5);
-
-    const bookingCounts = new Map();
-    for (const e of events) {
-      for (const b of e.contractorBookings) {
-        bookingCounts.set(b.contractorId, (bookingCounts.get(b.contractorId) || 0) + 1);
-      }
-    }
-    const topContractors = [...bookingCounts.entries()]
-      .map(([contractorId, count]) => ({ contractor: getContractorById(contractorId), count }))
-      .filter((x) => x.contractor)
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-
-    const followUpClients = clients
-      .map((c) => ({ client: c, counts: computeClientEventCounts(c.id) }))
-      .filter((x) => x.counts.pending > 0)
-      .sort((a, b) => b.counts.pending - a.counts.pending)
-      .slice(0, 5);
-
-    return {
-      totalEvents: events.length,
-      upcomingCount: upcoming.length,
-      pipelineValue,
-      needsConfirmation,
-      upcomingList: upcoming.slice(0, 5),
-      atRiskEvents,
-      topContractors,
-      followUpClients,
-    };
-  }, [events, clients, contractors, currentUser, eventStatuses, computeEventTotalCost, computeVendorStatus, computeClientEventCounts, getContractorById]);
-
-  const overdueInvoices = useMemo(() => {
-    const today = todayISO();
-    return invoices
-      .filter((inv) => (inv.status === 'sent' || inv.status === 'partial') && inv.dueDate && inv.dueDate.slice(0, 10) < today)
-      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-      .slice(0, 5);
-  }, [invoices]);
+  const stats = dashboard?.stats;
+  const overdueInvoices = dashboard?.overdueInvoices || [];
+  const financialsSnapshot = dashboard?.financials;
 
   function daysOverdue(dueDate) {
     return Math.max(1, Math.floor((Date.now() - new Date(dueDate).getTime()) / 86400000));
   }
 
-  // Same per-gig margin math as EventFormPage's Financials tab benchmark —
-  // only gigs with real invoiced revenue count (an unbooked/unconverted
-  // event has no real margin to include), so this reads as "how are the
-  // gigs we've actually billed doing", not diluted by every event ever
-  // created. worst is null when there's only one qualifying gig, so it
-  // isn't shown as both the best AND the worst result.
-  const financialsSnapshot = useMemo(() => {
-    const gigs = [];
-    const incomplete = [];
-    let totalRevenue = 0;
-    let totalCosts = 0;
-    for (const evt of events) {
-      const evtBooking = bookings.find((b) => b.convertedEventId === evt.id);
-      if (!evtBooking) continue;
-      const evtRevenue = invoices
-        .filter((inv) => inv.bookingId === evtBooking.id && inv.status !== 'void' && inv.status !== 'draft')
-        .reduce((sum, inv) => sum + (inv.total || 0), 0);
-      if (evtRevenue <= 0) continue;
-      const evtCost = computeEventTotalCost(evt);
-      const costing = eventCostingStatus(evt, contractors, currentUser?.inquiryStatuses || []);
-      if (!costing.complete) {
-        incomplete.push({ id: evt.id, name: evt.name, reason: costing.reason });
-        continue;
-      }
-      gigs.push({ id: evt.id, name: evt.name, margin: ((evtRevenue - evtCost) / evtRevenue) * 100 });
-      totalRevenue += evtRevenue;
-      totalCosts += evtCost;
-    }
-    const avgMargin = totalRevenue > 0 ? ((totalRevenue - totalCosts) / totalRevenue) * 100 : null;
-    const sorted = [...gigs].sort((a, b) => b.margin - a.margin);
-    return {
-      totalRevenue,
-      totalCosts,
-      avgMargin,
-      count: gigs.length,
-      incomplete,
-      bestGig: sorted[0] || null,
-      worstGig: sorted.length > 1 ? sorted[sorted.length - 1] : null,
-    };
-  }, [events, bookings, invoices, computeEventTotalCost, contractors, currentUser]);
-
   return (
     <div>
       <h2 className="text-2xl font-bold text-slate-800 mb-4">Home</h2>
 
-      {isFreshAccount ? (
+      {dashboardLoading ? (
+        <Skeleton className="h-72 w-full rounded-xl" />
+      ) : dashboardError || !dashboard ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">{dashboardError || 'Unable to load the dashboard.'}</div>
+      ) : dashboard.isFreshAccount ? (
         <div data-testid="home-welcome-panel">
           <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
             <h3 className="text-lg font-bold text-slate-800 mb-1">
@@ -232,7 +122,7 @@ export default function HomePage() {
             />
             <WelcomeStep
               icon={<WrenchIcon className="w-4 h-4" />}
-              title={`Check your contractor roster (${contractors.length} added)`}
+              title={`Check your contractor roster (${dashboard.counts.contractors} added)`}
               description="A few sample contractors are already in there so you can see how it looks — edit them or add your own."
               actionLabel="View Contractors"
               onClick={() => navigate('/contractors')}
@@ -251,11 +141,11 @@ export default function HomePage() {
       ) : (
       <>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-        <StatTile label="Total Events" value={stats.totalEvents} color="#64748b" icon={<CalendarIcon />} testId="home-stat-total-events" />
+        <StatTile label="Total Events" value={dashboard.counts.events} color="#64748b" icon={<CalendarIcon />} testId="home-stat-total-events" />
         <StatTile label="Upcoming Events" value={stats.upcomingCount} color="#2563eb" icon={<ClockIcon />} testId="home-stat-upcoming-events" />
         <StatTile label="Upcoming Costs" value={currency(stats.pipelineValue)} color="#4f46e5" icon={<DollarIcon />} testId="home-stat-pipeline-value" />
-        <StatTile label="Total Clients" value={clients.length} color="#7c3aed" icon={<UsersIcon />} testId="home-stat-total-clients" />
-        <StatTile label="Total Contractors" value={contractors.length} color="#0d9488" icon={<WrenchIcon />} testId="home-stat-total-contractors" />
+        <StatTile label="Total Clients" value={dashboard.counts.clients} color="#7c3aed" icon={<UsersIcon />} testId="home-stat-total-clients" />
+        <StatTile label="Total Contractors" value={dashboard.counts.contractors} color="#0d9488" icon={<WrenchIcon />} testId="home-stat-total-contractors" />
         <StatTile
           label="Needs Confirmation"
           value={stats.needsConfirmation}
@@ -265,9 +155,7 @@ export default function HomePage() {
         />
       </div>
 
-      {invoicesLoading ? (
-        <Skeleton className="h-40 w-full rounded-xl mb-6" />
-      ) : (financialsSnapshot.count > 0 || financialsSnapshot.incomplete.length > 0) && (
+      {(financialsSnapshot.count > 0 || financialsSnapshot.incomplete.length > 0) && (
         <div className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
           <PanelHeading color="#0d9488" icon={<DollarIcon className="w-3.5 h-3.5" />}>Financials Snapshot</PanelHeading>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
@@ -341,12 +229,7 @@ export default function HomePage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <PanelHeading color="#e11d48" icon={<DollarIcon className="w-3.5 h-3.5" />}>Overdue Invoices</PanelHeading>
-          {invoicesLoading ? (
-            <div className="space-y-2 py-2">
-              <Skeleton className="h-10 w-full rounded-lg" />
-              <Skeleton className="h-10 w-full rounded-lg" />
-            </div>
-          ) : overdueInvoices.length === 0 ? (
+          {overdueInvoices.length === 0 ? (
             <div className="text-sm text-slate-400 text-center py-6">No overdue invoices.</div>
           ) : (
             <div className="space-y-1">
@@ -407,7 +290,7 @@ export default function HomePage() {
             <div className="space-y-1">
               {stats.upcomingList.map((e) => {
                 const status = eventStatuses.find((s) => s.id === e.eventStatus);
-                const vendor = computeVendorStatus(e);
+                const vendor = { status: e.vendorStatus };
                 return (
                   <button
                     key={e.id}
