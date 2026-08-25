@@ -66,8 +66,8 @@ export const HELP_CATEGORIES = [
             'Automatically, the moment a contract is signed by both sides — no button to click.',
             'Manually, any time, via the "Create Event →" button on a Booking\'s row on the Bookings page.',
           ] },
-          { type: 'p', text: 'Once a Booking has become an Event, its own page turns read-only-ish and shows a "This booking has been converted" banner with a "View Event" link — the Event is now where the real work happens.' },
-          { type: 'image', src: '/help/bookings-list-converted.png', alt: 'The Bookings list showing a booking with status "Converted" and a "View Event" link', caption: 'A converted booking on the Bookings list — Status reads "Converted," and the row links straight to its Event.' },
+          { type: 'p', text: 'Once a Booking has become an Event, its own page turns read-only-ish and shows a "Converted to an event." banner with a "View Event" link — the Event is now where the real work happens.' },
+          { type: 'image', src: '/help/bookings-list-converted.png', alt: 'The Bookings list showing a converted booking with a link to its Event', caption: 'A converted booking on the Bookings list — its Event column links straight to the Event it became.' },
           { type: 'tip', text: 'Skipping the sales pipeline entirely is fine — "+ Add Event" on the Events page creates one with no Booking behind it at all, useful for a walk-in or word-of-mouth gig.' },
         ],
       },
@@ -229,7 +229,7 @@ export const HELP_CATEGORIES = [
             'Fill in the contract title, recipient, pricing, and terms.',
             'Click "Send Contract for Signature."',
           ] },
-          { type: 'p', text: 'This generates two separate one-time signing links — one for the client, one for you — so you can countersign from your phone without needing to be logged in. The Contract tab tracks status as it happens: Waiting on signatures → Client signed, your turn → Fully signed.' },
+          { type: 'p', text: 'This generates two separate one-time signing links — one for the client, one for you — so you can countersign from your phone without needing to be logged in. The Contract tab tracks status as it happens: Waiting on signatures → Client signed — your turn to countersign (or You\'ve signed — waiting on the client, if you sign first) → Fully signed by both parties.' },
           { type: 'image', src: '/help/contract-tab-sent.png', alt: 'A Contract tab right after sending, showing "Waiting on signatures," copyable Client and Your links, a Terms box, and an in-app Your Signature card' },
           { type: 'h', text: 'Signing' },
           { type: 'p', text: 'Both sides sign on the same kind of page: type your full legal name, draw your signature, and click "Sign Contract." You (the owner) can also sign right inside the app on the Contract tab itself — in either order, whether the client has signed yet or not — instead of using the emailed link.' },
@@ -247,13 +247,13 @@ export const HELP_CATEGORIES = [
     articles: [
       {
         id: 'offerings-basics',
-        title: 'Offerings: General vs. Per Unit',
+        title: 'Offerings: Flat Price vs. Per Unit',
         summary: 'Your reusable catalog of services and packages.',
         blocks: [
           { type: 'p', text: 'An Offering is a saved catalog item you can drop onto any proposal, contract, or invoice instead of typing the same line item from scratch every time. Manage them from the Offerings page.' },
           { type: 'h', text: 'Two pricing types' },
           { type: 'list', items: [
-            'General — a flat amount.',
+            'Flat Price — a flat amount.',
             'Per Unit — a unit count × a rate per unit (e.g. hours, guests), with the total computed automatically as you type.',
           ] },
           { type: 'image', src: '/help/offerings-page.png', alt: 'The Services & Packages page, listing saved Flat Price and Per Unit offerings with their values, plus the Ensembles section below' },
@@ -268,7 +268,7 @@ export const HELP_CATEGORIES = [
           { type: 'p', text: 'Wherever you see "+ Add Offering" — on a Proposal, Contract, or Invoice — it opens the same picker with four options:' },
           { type: 'list', items: [
             'Pick an existing Offering from your saved catalog.',
-            'Add a one-off "Quick Item" — just a name and amount, never saved to the catalog.',
+            'Add a one-off "+ One-time item" — just a name and amount, never saved to the catalog.',
             'Create a brand-new Offering on the spot, which both adds it here and saves it to your catalog for next time.',
             'Add an Ensemble (proposals and contracts only) — see Group Contractors Into an Ensemble.',
           ] },
@@ -323,7 +323,7 @@ export const HELP_CATEGORIES = [
         blocks: [
           { type: 'p', text: "Not every payment goes through Stripe — a check, cash, or a card run outside the app all still need to be logged. On any invoice you can:" },
           { type: 'list', items: [
-            '"Mark Paid" — opens Accept Payment: amount, date, method (ACH, Check, Card, Other), and a memo.',
+            '"Mark Paid" — opens Accept Payment: amount, date, method (ACH, Check, Credit/Debit Card, Other), and a memo.',
             '"Mark Partial" — a quick inline amount for a partial payment.',
             '"Mark Open" — reverts a paid/partial invoice back to sent, if you need to undo.',
             '"Void" — kills a sent/partial invoice without deleting the record.',
@@ -367,7 +367,7 @@ export const HELP_CATEGORIES = [
         title: 'Stage Plot',
         summary: 'A drag-and-drop canvas for exactly where everything goes on stage.',
         blocks: [
-          { type: 'p', text: "From an event, open Stage Plot to place icons on a to-scale canvas — mics, amps, drums, keys, strings, brass & woodwind, DJ gear, lighting, staging, seating, and a dedicated PA & AV category (speakers, line arrays, a mixing board, amp racks, LED walls, projectors)." },
+          { type: 'p', text: "From an event, open Stage Plot to place icons on a to-scale canvas — mics, amps, drums, keys, strings, brass & woodwind, DJ & Electronic, lighting, staging, seating, a Utility category (power strips, stage boxes, cable ramp), and a dedicated PA & AV category (speakers, line arrays, a mixing board, amp racks, LED walls, projectors)." },
           { type: 'list', items: [
             'Drag an icon from the palette onto the canvas, or tap one then tap the canvas to place it (touch-friendly).',
             'Click an icon to select it, then use the toolbar to rotate, duplicate, align, or delete.',
@@ -404,7 +404,7 @@ export const HELP_CATEGORIES = [
         title: 'Floor Plan',
         summary: 'A seating/layout canvas for party-planning accounts.',
         blocks: [
-          { type: 'note', text: 'Floor Plan is only available on accounts set up for party/event planning rather than band/orchestra booking — if you don\'t see it in an event, your account isn\'t set up for it.' },
+          { type: 'note', text: 'Floor Plan only shows up on accounts set up for party/event planning rather than band/orchestra booking. Party/event planning isn\'t offered to new signups right now — this only applies to accounts already set up for it before that changed.' },
           { type: 'p', text: 'Where it is available, it works like Stage Plot — a drag-and-drop canvas, but for tables, chairs, and room layout instead of instruments, with an auto-generated item breakdown (including seat counts) for handing to a caterer or venue.' },
         ],
       },
@@ -417,16 +417,24 @@ export const HELP_CATEGORIES = [
       {
         id: 'reminders',
         title: 'Reminders',
-        summary: 'Manual follow-ups, plus two things GigWorks watches for automatically.',
+        summary: 'Manual follow-ups, plus seven things GigWorks watches for automatically.',
         blocks: [
-          { type: 'p', text: 'The Reminders page is a flat, filterable to-do list, each item optionally tied to a client or contractor. Click "+ Add Reminder" for a manual one — a date, time, note, and an optional "Email me a reminder" checkbox.' },
-          { type: 'h', text: "Two things GigWorks flags on its own" },
+          { type: 'p', text: 'The Reminders page is a flat, filterable to-do list, each item optionally tied to a client, contractor, event, invoice, or booking. Click "+ Add Reminder" for a manual one, then search and pick the related record if you want one, a date and time (three "Quick set" buttons cover the common cases — Tomorrow, In 3 days, Next week), a note, and an optional "Email me when this reminder is due" checkbox.' },
+          { type: 'h', text: 'Filtering the list' },
+          { type: 'p', text: 'The status filter buttons — Open, Overdue, Completed — each show a live count. Open covers everything not yet completed, including anything overdue.' },
+          { type: 'h', text: "Seven things GigWorks flags on its own" },
           { type: 'list', items: [
-            'Event at risk — an event within 3 days that still has at least one contractor unconfirmed.',
-            'Invoice overdue — an invoice more than 3 days past due and still unpaid.',
+            'Unconfirmed vendor — an event within a few days that still has at least one contractor who hasn\'t confirmed.',
+            'Unsigned contract — an event within a few days whose contract still isn\'t fully signed.',
+            'Deposit due — a booking\'s deposit due within a few days, or already overdue.',
+            'Overdue invoice — a sent invoice a few days past its due date and still unpaid.',
+            'Booking follow-up — a booking\'s own follow-up date has arrived.',
+            'Event not marked complete — an event\'s date has passed and it\'s still not marked complete.',
+            'Proposal awaiting response — a sent proposal that\'s gone several days without the client responding.',
           ] },
+          { type: 'note', text: 'Each rule\'s exact threshold (how many days out or overdue it fires) is configurable under Settings → Reminder Rules, visible to owners/admins only. The list above uses each rule\'s default.' },
           { type: 'p', text: 'These auto-generated reminders always email the account owner and never duplicate, no matter how often the check re-runs.' },
-          { type: 'image', src: '/help/reminders-list.png', alt: 'The Reminders list, showing a pending reminder tied to a client, with its date/time, note, and a Mark Done button' },
+          { type: 'image', src: '/help/reminders-list.png', alt: 'The Reminders list, showing an open reminder tied to a client, with its date/time, note, and a Mark Done button' },
         ],
       },
       {
@@ -434,9 +442,9 @@ export const HELP_CATEGORIES = [
         title: 'Your dashboard (Home)',
         summary: 'The at-a-glance view of where things stand.',
         blocks: [
-          { type: 'p', text: 'Home leads with six stat tiles: Total Events, Upcoming Events, Pipeline Value (the total value of everything still in your Booking pipeline), Total Clients, Total Contractors, and how many gigs Need Confirmation.' },
+          { type: 'p', text: 'Home leads with six stat tiles: Total Events, Upcoming Events, Upcoming Costs (total contractor cost across your upcoming events), Total Clients, Total Contractors, and how many gigs Needs Confirmation.' },
           { type: 'list', items: [
-            'Overdue Invoices and At-Risk Events — the same two conditions Reminders watches for automatically, surfaced right on the dashboard too.',
+            'Overdue Invoices and At-Risk Events — two of the seven conditions Reminders watches for automatically, surfaced right on the dashboard too.',
             'Upcoming Events — your actual next gigs, with each contractor status shown inline.',
             'Top Contractors — who you book most, by number of bookings.',
             'Clients Needing Follow-up — anyone with an open reminder against them.',
