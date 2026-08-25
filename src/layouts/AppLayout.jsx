@@ -23,6 +23,7 @@ const NAV_GROUPS = [
       { to: '/contractors', label: 'Contractors', icon: '🧰' },
       { to: '/offerings', label: 'Offerings', icon: '🎁' },
       { to: '/set-lists', label: 'Set Lists', icon: '🎵', vertical: 'band_orchestra' },
+      { to: '/stage-plot-library', label: 'Stage Plots', icon: '🎛️', vertical: 'band_orchestra' },
       { to: '/email-templates', label: 'Email Templates', icon: '✉️' },
     ],
   },

@@ -81,6 +81,7 @@ model Account {
   offerings               Offering[]
   contractorGroups        ContractorGroup[]
   setListLibraryItems     SetListLibraryItem[]
+  stagePlotLibraryItems   StagePlotLibraryItem[]
   bookings                Booking[]
   events                  Event[]
 
@@ -1087,6 +1088,86 @@ model SetListLibraryItem {
 
   @@index([accountId])
   @@index([accountId, createdAt, id])
+}
+
+// Reusable stage-plot templates — the same StagePlot/StagePlotPage/
+// StagePlotChannel/StagePlotBacklineItem shape (server/src/routes/
+// stagePlots.js), but account-scoped instead of event-scoped since a
+// template isn't tied to any one event. Applying a template to an event
+// (POST /stage-plots/:eventId/apply-library/:libraryItemId) deep-clones
+// these rows into fresh StagePlot rows with regenerated canvas element IDs,
+// so the copy is fully independent from the moment it's added — editing
+// either side never touches the other. A dedicated table family (like
+// FloorPlan's own tables above) rather than reusing StagePlot itself with a
+// nullable eventId, since StagePlot's @@unique([accountId, eventId]) and
+// lazy get-or-create logic are both keyed on a real event existing.
+model StagePlotLibraryItem {
+  id        String  @id @default(cuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  name          String                         @default("Stage Plot")
+  pages         StagePlotLibraryPage[]
+  channels      StagePlotLibraryChannel[]
+  backlineItems StagePlotLibraryBacklineItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([accountId])
+  @@index([accountId, createdAt, id])
+}
+
+model StagePlotLibraryPage {
+  id            String               @id @default(cuid())
+  libraryItemId String
+  libraryItem   StagePlotLibraryItem @relation(fields: [libraryItemId], references: [id], onDelete: Cascade)
+
+  order               Int
+  name                String  @default("Page 1")
+  scene               Json    @default("{}")
+  thumbnailStorageKey String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([libraryItemId, order])
+}
+
+model StagePlotLibraryChannel {
+  id            String               @id @default(cuid())
+  libraryItemId String
+  libraryItem   StagePlotLibraryItem @relation(fields: [libraryItemId], references: [id], onDelete: Cascade)
+
+  channelNumber Int
+  source        String
+  musicianName  String?
+  phantomPower  Boolean @default(false)
+  powerNeeded   Boolean @default(false)
+  monitorNotes  String? @db.Text
+  elementId     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([libraryItemId, channelNumber])
+  @@index([libraryItemId])
+}
+
+model StagePlotLibraryBacklineItem {
+  id            String               @id @default(cuid())
+  libraryItemId String
+  libraryItem   StagePlotLibraryItem @relation(fields: [libraryItemId], references: [id], onDelete: Cascade)
+
+  item       String
+  quantity   Int     @default(1)
+  providedBy String?
+  notesHtml  String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([libraryItemId])
 }
 
 // Magic-link login for the client-facing self-service portal (server/src/

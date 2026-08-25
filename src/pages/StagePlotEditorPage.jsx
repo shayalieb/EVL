@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
-import { getOrCreateStagePlot, addStagePlotPage, deleteStagePlotPage, updateStagePlotChannel, addStagePlotChannel, deleteStagePlotChannel } from '../lib/stagePlots';
+import { getOrCreateStagePlot, addStagePlotPage, deleteStagePlotPage, updateStagePlotChannel, addStagePlotChannel, deleteStagePlotChannel, applyStagePlotLibraryItem } from '../lib/stagePlots';
 import { generateStagePlotPdf } from '../lib/stagePlotPdf';
 import { getThreadSummaries } from '../lib/email/threads';
 import StagePlotPageEditor from '../components/StagePlotPageEditor';
@@ -10,8 +10,14 @@ import StagePlotChannelList from '../components/StagePlotChannelList';
 import StagePlotBacklineList from '../components/StagePlotBacklineList';
 import StagePlotEmailModal from '../components/StagePlotEmailModal';
 import EmailThreadModal from '../components/EmailThreadModal';
+import Modal from '../components/ui/Modal';
+import SearchInput from '../components/ui/SearchInput';
+import { useToast } from '../components/ui/Toast';
+import { matchesSearch } from '../lib/search';
 import { getEvent } from '../lib/events';
 import { useContractorHydration } from '../lib/useContractorHydration';
+
+const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
 function formatTimeAgo(iso) {
   if (!iso) return '';
@@ -29,7 +35,8 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   const { eventId } = useParams();
   const isModal = !!onClose;
   const { currentUser } = useAuth();
-  const { contractors } = useData();
+  const { contractors, stagePlotLibrary, saveStagePlotToLibrary } = useData();
+  const { showToast } = useToast();
   const [event, setEvent] = useState(null);
   const [plot, setPlot] = useState(null);
   const [loadError, setLoadError] = useState('');
@@ -39,6 +46,12 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [threadSummaries, setThreadSummaries] = useState({});
   const [activeThreadContractorId, setActiveThreadContractorId] = useState(null);
+  const [saveLibraryModalOpen, setSaveLibraryModalOpen] = useState(false);
+  const [saveLibraryName, setSaveLibraryName] = useState('');
+  const [savingToLibrary, setSavingToLibrary] = useState(false);
+  const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
+  const [librarySearch, setLibrarySearch] = useState('');
+  const [applyingLibraryId, setApplyingLibraryId] = useState(null);
   const pageEditorRef = useRef(null);
 
   useContractorHydration([
@@ -153,6 +166,47 @@ export default function StagePlotEditorPage({ onClose } = {}) {
     }
   }
 
+  function openSaveToLibrary() {
+    setSaveLibraryName(`${event?.name || 'Untitled'} Stage Plot`);
+    setSaveLibraryModalOpen(true);
+  }
+
+  async function handleSaveToLibrary(e) {
+    e.preventDefault();
+    const name = saveLibraryName.trim();
+    if (!name) return;
+    setSavingToLibrary(true);
+    try {
+      await saveStagePlotToLibrary(eventId, name);
+      showToast(`Saved "${name}" to your stage plot library`);
+      setSaveLibraryModalOpen(false);
+    } catch (err) {
+      showToast(err.message || 'Failed to save to library', 'error');
+    } finally {
+      setSavingToLibrary(false);
+    }
+  }
+
+  // Server does the actual clone-and-remap (stagePlots.js's apply-library
+  // route) — this just swaps local state to the merged result and jumps to
+  // the first newly-added page tab so the addition is immediately visible.
+  async function handleAddFromLibrary(item) {
+    setApplyingLibraryId(item.id);
+    try {
+      const existingPageIds = new Set(plot.pages.map((p) => p.id));
+      const merged = await applyStagePlotLibraryItem(eventId, item.id);
+      setPlot(merged);
+      const firstNewPage = merged.pages.slice().sort((a, b) => a.order - b.order).find((p) => !existingPageIds.has(p.id));
+      if (firstNewPage) setActivePageId(firstNewPage.id);
+      showToast(`Added "${item.name}"`);
+      setLibraryPickerOpen(false);
+    } catch (err) {
+      showToast(err.message || 'Failed to add from library', 'error');
+    } finally {
+      setApplyingLibraryId(null);
+    }
+  }
+
   if (loadError) return <div data-testid="stageplot-load-error" className="p-6 text-sm text-red-600">{loadError}</div>;
   if (!plot) return <div className="p-6 text-sm text-slate-500">Loading…</div>;
 
@@ -191,6 +245,22 @@ export default function StagePlotEditorPage({ onClose } = {}) {
           </div>
         )}
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setLibraryPickerOpen(true)}
+            data-testid="stageplot-add-from-library-button"
+            className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold"
+          >
+            + Add from Library
+          </button>
+          <button
+            type="button"
+            onClick={openSaveToLibrary}
+            data-testid="stageplot-save-to-library-button"
+            className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold"
+          >
+            Save to Library
+          </button>
           <button
             type="button"
             onClick={() => setEmailModalOpen(true)}
@@ -340,6 +410,59 @@ export default function StagePlotEditorPage({ onClose } = {}) {
         fromName={fromName}
         onChanged={refreshThreadSummaries}
       />
+
+      <Modal open={saveLibraryModalOpen} onClose={() => setSaveLibraryModalOpen(false)} title="Save to Stage Plot Library" widthClass="max-w-sm">
+        <form onSubmit={handleSaveToLibrary}>
+          <p className="text-sm text-slate-500 mb-3">Saves a copy of this event's current stage plot — pages, channel list, and backline — to your library for reuse on other events.</p>
+          <label className="block text-xs font-semibold text-slate-500 mb-1">Name</label>
+          <input
+            autoFocus
+            value={saveLibraryName}
+            onChange={(e) => setSaveLibraryName(e.target.value)}
+            data-testid="stageplot-save-to-library-name-input"
+            className={inputClass}
+          />
+          <div className="flex justify-end gap-2 mt-4">
+            <button type="button" onClick={() => setSaveLibraryModalOpen(false)} className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+            <button
+              type="submit"
+              disabled={savingToLibrary}
+              data-testid="stageplot-save-to-library-confirm-button"
+              className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {savingToLibrary ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={libraryPickerOpen} onClose={() => setLibraryPickerOpen(false)} title="Add from Stage Plot Library" widthClass="max-w-xl">
+        <p className="text-sm text-slate-500 mb-3">
+          Adds the saved plot's pages, channel list, and backline as new additions to this event's stage plot — nothing already here is replaced. This creates an independent copy: changes here won't alter the library original, and later library edits won't change this event.
+        </p>
+        <SearchInput value={librarySearch} onChange={setLibrarySearch} placeholder="Search saved stage plots…" className="w-full mb-3" testId="stageplot-library-picker-search-input" />
+        <div className="max-h-80 overflow-y-auto space-y-1.5">
+          {stagePlotLibrary.length === 0 && <div className="text-sm text-slate-400 text-center py-6">No saved stage plots yet — use "Save to Library" on any event's Stage Plot to start one.</div>}
+          {stagePlotLibrary.length > 0 && stagePlotLibrary.filter((item) => matchesSearch(librarySearch, [item.name])).length === 0 && (
+            <div className="text-sm text-slate-400 text-center py-6">No saved stage plots match your search.</div>
+          )}
+          {stagePlotLibrary.filter((item) => matchesSearch(librarySearch, [item.name])).map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => handleAddFromLibrary(item)}
+              disabled={applyingLibraryId === item.id}
+              data-testid="stageplot-library-picker-item"
+              className="w-full text-left px-3 py-2 rounded-lg border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 flex items-center justify-between disabled:opacity-50"
+            >
+              <span className="font-medium text-slate-700">{item.name}</span>
+              <span className="text-xs text-slate-400 shrink-0 ml-2">
+                {applyingLibraryId === item.id ? 'Adding…' : `${item.pageCount} page${item.pageCount === 1 ? '' : 's'} · ${item.channelCount} channel${item.channelCount === 1 ? '' : 's'}`}
+              </span>
+            </button>
+          ))}
+        </div>
+      </Modal>
     </div>
   );
 }

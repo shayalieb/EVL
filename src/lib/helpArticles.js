@@ -379,6 +379,9 @@ export const HELP_CATEGORIES = [
           { type: 'p', text: 'There\'s also a Backline List for equipment the venue or band needs on hand (amps, risers, monitors) that isn\'t tied to a specific canvas icon.' },
           { type: 'image', src: '/help/stage-plot-production-list.png', alt: 'A stage plot canvas with several icons placed (line array, vocal mic, PA speaker, keyboard, drum kit, mixing board, cable ramp), and the Production List below with musician names and instruments filled in' },
           { type: 'tip', text: "Use the Email button to send the stage plot, Production List, and Backline List straight to your sound engineer or venue — check whichever sections you want included, and it also attaches a PDF." },
+          { type: 'h', text: 'Reusing a plot for a similar gig' },
+          { type: 'p', text: 'Playing the same venue again, with the same lineup? Click "Save to Library" to save this event\'s canvas, Production List, and Backline List for reuse — manage saved plots from the Stage Plots page. On a different event, click "+ Add from Library" to add a saved plot in: it appends as new pages plus the matching Production List and Backline List rows, alongside anything already on that event\'s stage plot, rather than replacing it.' },
+          { type: 'note', text: 'Adding a saved plot to an event creates an independent copy — editing it afterward never touches the saved original, and editing the saved original later never changes copies already added to an event.' },
         ],
       },
       {

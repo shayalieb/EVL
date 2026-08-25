@@ -12,6 +12,7 @@ import { queryVenues, getVenue, createVenue as createVenueApi, updateVenueApi, d
 import { getAllOfferings, createOffering as createOfferingApi, updateOfferingApi, deleteOfferingApi } from '../lib/offerings';
 import { getAllContractorGroups, createContractorGroup as createContractorGroupApi, updateContractorGroupApi, deleteContractorGroupApi } from '../lib/contractorGroups';
 import { getAllSetListLibraryItems, createSetListLibraryItem, updateSetListLibraryItemApi, deleteSetListLibraryItemApi } from '../lib/setListLibrary';
+import { getAllStagePlotLibraryItems, saveEventStagePlotToLibrary, renameStagePlotLibraryItem as renameStagePlotLibraryItemApi, deleteStagePlotLibraryItemApi } from '../lib/stagePlotLibrary';
 import { dispositionInfo } from '../lib/bookingDisposition';
 
 function statusLabel(statuses, id) {
@@ -161,6 +162,19 @@ export function DataProvider({ children }) {
     return () => { cancelled = true; };
     // Legacy items are a rollout-only fallback captured at account load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.accountId]);
+
+  const [stagePlotLibrary, setStagePlotLibrary] = useState([]);
+  const [stagePlotLibraryLoading, setStagePlotLibraryLoading] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    if (!currentUser?.accountId) return undefined;
+    setStagePlotLibraryLoading(true);
+    getAllStagePlotLibraryItems()
+      .then((items) => { if (!cancelled) setStagePlotLibrary(items); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setStagePlotLibraryLoading(false); });
+    return () => { cancelled = true; };
   }, [currentUser?.accountId]);
 
   // Same real-table-not-blob treatment as contractors/clients above — see
@@ -701,6 +715,27 @@ export function DataProvider({ children }) {
     setSetListLibrary((previous) => previous.filter((item) => item.id !== id));
   }, []);
 
+  // ---- Stage Plot Library (reusable stage plots, band/orchestra only —
+  // applied to a specific event's own stage plot via a server-side clone,
+  // see stagePlots.js's apply-library route, so editing the event's copy
+  // never touches these saved originals) ----
+  const saveStagePlotToLibrary = useCallback(async (eventId, name) => {
+    const record = await saveEventStagePlotToLibrary(eventId, name);
+    setStagePlotLibrary((previous) => [record, ...previous]);
+    return record;
+  }, []);
+
+  const renameStagePlotLibraryItem = useCallback(async (id, name) => {
+    const record = await renameStagePlotLibraryItemApi(id, name);
+    setStagePlotLibrary((previous) => previous.map((item) => (item.id === id ? record : item)));
+    return record;
+  }, []);
+
+  const deleteStagePlotLibraryItem = useCallback(async (id) => {
+    await deleteStagePlotLibraryItemApi(id);
+    setStagePlotLibrary((previous) => previous.filter((item) => item.id !== id));
+  }, []);
+
   // ---- Contractor Groups (saved ensembles/lineups — "+ Add Ensemble" on
   // EventFormPage.jsx's roster clones a group's contractorIds into that
   // event's own contractorBookings, same "pick a template, clone it, the
@@ -799,6 +834,8 @@ export function DataProvider({ children }) {
     contractTemplates: currentUser?.contractTemplates || [],
     setListLibrary,
     setListLibraryLoading,
+    stagePlotLibrary,
+    stagePlotLibraryLoading,
     contractorGroups,
     addContractor,
     searchContractors,
@@ -849,6 +886,9 @@ export function DataProvider({ children }) {
     addSetListLibraryItem,
     updateSetListLibraryItem,
     deleteSetListLibraryItem,
+    saveStagePlotToLibrary,
+    renameStagePlotLibraryItem,
+    deleteStagePlotLibraryItem,
     addContractorGroup,
     updateContractorGroup,
     deleteContractorGroup,
@@ -862,7 +902,7 @@ export function DataProvider({ children }) {
     computeEventTotalCost,
     computeVendorStatus,
   }), [
-    currentUser, contractors, clients, venues, offerings, contractorGroups, catalogLoading, setListLibrary, setListLibraryLoading, searchVenues, loadVenue, bookings, events, searchEvents, loadEvent, searchBookings, loadBooking,
+    currentUser, contractors, clients, venues, offerings, contractorGroups, catalogLoading, setListLibrary, setListLibraryLoading, stagePlotLibrary, stagePlotLibraryLoading, searchVenues, loadVenue, bookings, events, searchEvents, loadEvent, searchBookings, loadBooking,
     addContractor, searchContractors, loadContractor, loadContractors, updateContractor, deleteContractor,
     addClient, searchClients, loadClient, updateClient, deleteClient, computeClientEventCounts,
     addVenue, updateVenue, deleteVenue,
@@ -877,6 +917,7 @@ export function DataProvider({ children }) {
     addContractTemplate, updateContractTemplate, removeContractTemplate,
     addOffering, updateOffering, deleteOffering,
     addSetListLibraryItem, updateSetListLibraryItem, deleteSetListLibraryItem,
+    saveStagePlotToLibrary, renameStagePlotLibraryItem, deleteStagePlotLibraryItem,
     addContractorGroup, updateContractorGroup, deleteContractorGroup,
     addEvent, updateEvent, deleteEvent, completeEvent, restoreEvent,
     getContractorById, computeDurationHours, computeEventTotalCost, computeVendorStatus,

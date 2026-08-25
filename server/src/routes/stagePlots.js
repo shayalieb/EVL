@@ -25,11 +25,10 @@ function serializePlot(plot) {
 
 // Get-or-create — an event's stage plot is provisioned lazily on first
 // visit to the editor rather than at event-creation time, same idea as
-// inquiryLinks.js's reusable-link. Always has at least one page.
-router.get('/:eventId', asyncHandler(async (req, res) => {
-  const { accountId } = req.membership;
-  const { eventId } = req.params;
-
+// inquiryLinks.js's reusable-link. Always has at least one page. Exported
+// for stagePlotLibrary.js's "Save to Library" route, which needs the same
+// lazy-create behavior to snapshot whatever the event's plot currently is.
+export async function getOrCreatePlot(accountId, eventId) {
   let plot = await prisma.stagePlot.findUnique({
     where: { accountId_eventId: { accountId, eventId } },
     include: { pages: true, channels: true, backlineItems: true },
@@ -46,12 +45,121 @@ router.get('/:eventId', asyncHandler(async (req, res) => {
     });
   }
 
+  return plot;
+}
+
+router.get('/:eventId', asyncHandler(async (req, res) => {
+  const plot = await getOrCreatePlot(req.membership.accountId, req.params.eventId);
   res.json({ stagePlot: serializePlot(plot) });
 }));
 
 async function loadOwnedPlot(accountId, eventId) {
   return prisma.stagePlot.findUnique({ where: { accountId_eventId: { accountId, eventId } }, include: { pages: true } });
 }
+
+// Regenerates every id in a page's scene graph (see sceneModel.js's header
+// comment for the shape) and rewrites the layerId references that point at
+// them, so a cloned page can never collide with ids already present
+// elsewhere in the target stage plot. Returns the elementId remap too, since
+// StagePlotChannel.elementId is a loose pointer into a page's elements that
+// has to follow the clone. Deliberately reimplemented here rather than
+// imported from src/lib/canvasEngine/sceneModel.js — that module is
+// browser-only canvas-authoring code; this just needs to walk known JSON.
+let remapCounter = 0;
+function remapId(prefix) {
+  remapCounter += 1;
+  return `${prefix}_clone_${Date.now().toString(36)}_${remapCounter}`;
+}
+function remapSceneIds(scene) {
+  const layerIdMap = new Map((scene?.layers || []).map((l) => [l.id, remapId('layer')]));
+  const elementIdMap = new Map();
+  const remapped = {
+    ...scene,
+    layers: (scene?.layers || []).map((l) => ({ ...l, id: layerIdMap.get(l.id) })),
+    elements: (scene?.elements || []).map((e) => {
+      const newId = remapId('el');
+      elementIdMap.set(e.id, newId);
+      return { ...e, id: newId, layerId: layerIdMap.get(e.layerId) || e.layerId };
+    }),
+    strokes: (scene?.strokes || []).map((s) => ({ ...s, id: remapId('stroke'), layerId: layerIdMap.get(s.layerId) || s.layerId })),
+    annotations: (scene?.annotations || []).map((a) => ({ ...a, id: remapId('note'), layerId: layerIdMap.get(a.layerId) || a.layerId })),
+  };
+  return { scene: remapped, elementIdMap };
+}
+
+// "Add from Library" — deep-clones a saved StagePlotLibraryItem's
+// pages/channels/backline into this event's own stage plot as brand-new
+// rows. Always appends (new page tabs, channel numbers continuing on from
+// whatever's already there) rather than replacing, so it never destroys
+// work already on the event's plot. Every id is freshly generated (pages,
+// channels, backline rows, and every id inside each page's scene JSON), so
+// the copy is fully independent from this point on — same guarantee Set
+// List Library's "pull from library" gives, just done server-side because
+// this data is normalized across several tables instead of one JSON blob.
+router.post('/:eventId/apply-library/:libraryItemId', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
+  const { accountId } = req.membership;
+  const { eventId, libraryItemId } = req.params;
+
+  const libraryItem = await prisma.stagePlotLibraryItem.findUnique({
+    where: { id: libraryItemId },
+    include: { pages: true, channels: true, backlineItems: true },
+  });
+  if (!libraryItem || libraryItem.accountId !== accountId) return res.status(404).json({ error: 'Saved stage plot not found.' });
+
+  const plot = await getOrCreatePlot(accountId, eventId);
+  let nextOrder = plot.pages.reduce((max, p) => Math.max(max, p.order), -1) + 1;
+  let nextChannelNumber = plot.channels.reduce((max, c) => Math.max(max, c.channelNumber), 0) + 1;
+
+  const elementIdMap = new Map();
+  const pageCreates = libraryItem.pages
+    .slice()
+    .sort((a, b) => a.order - b.order)
+    .map((page) => {
+      const { scene, elementIdMap: pageElementIdMap } = remapSceneIds(page.scene);
+      pageElementIdMap.forEach((newId, oldId) => elementIdMap.set(oldId, newId));
+      return {
+        stagePlotId: plot.id,
+        order: nextOrder++,
+        name: page.name,
+        scene,
+        thumbnailStorageKey: page.thumbnailStorageKey,
+      };
+    });
+
+  const channelCreates = libraryItem.channels.map((channel) => ({
+    stagePlotId: plot.id,
+    channelNumber: nextChannelNumber++,
+    source: channel.source,
+    musicianName: channel.musicianName,
+    phantomPower: channel.phantomPower,
+    powerNeeded: channel.powerNeeded,
+    monitorNotes: channel.monitorNotes,
+    elementId: elementIdMap.get(channel.elementId) || null,
+  }));
+
+  const backlineCreates = libraryItem.backlineItems.map((item) => ({
+    stagePlotId: plot.id,
+    item: item.item,
+    quantity: item.quantity,
+    providedBy: item.providedBy,
+    notesHtml: item.notesHtml,
+  }));
+
+  await prisma.$transaction([
+    ...pageCreates.map((data) => prisma.stagePlotPage.create({ data })),
+    ...channelCreates.map((data) => prisma.stagePlotChannel.create({ data })),
+    ...backlineCreates.map((data) => prisma.stagePlotBacklineItem.create({ data })),
+  ]);
+
+  const merged = await prisma.stagePlot.findUnique({
+    where: { id: plot.id },
+    include: { pages: true, channels: true, backlineItems: true },
+  });
+  res.json({ stagePlot: serializePlot(merged) });
+}));
 
 // Autosave — debounced client-side (see StagePlotEditorPage.jsx), writes
 // just this one page's scene, never the whole plot. thumbnailBase64 is a

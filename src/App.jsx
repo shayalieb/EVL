@@ -42,6 +42,7 @@ const StagePlotEditorPage = lazy(() => import('./pages/StagePlotEditorPage'));
 const FloorPlanEditorPage = lazy(() => import('./pages/FloorPlanEditorPage'));
 const SetListsEditorPage = lazy(() => import('./pages/SetListsEditorPage'));
 const SetListLibraryPage = lazy(() => import('./pages/SetListLibraryPage'));
+const StagePlotLibraryPage = lazy(() => import('./pages/StagePlotLibraryPage'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 
 // The marketing site lives at the exact root path, which otherwise sits
@@ -164,6 +165,7 @@ function AppRoutes() {
         <Route path="venues" element={<VenuesPage />} />
         <Route path="offerings" element={<OfferingsPage />} />
         <Route path="set-lists" element={<VerticalGate vertical="band_orchestra"><SetListLibraryPage /></VerticalGate>} />
+        <Route path="stage-plot-library" element={<VerticalGate vertical="band_orchestra"><StagePlotLibraryPage /></VerticalGate>} />
         <Route path="bookings" element={<BookingsPage />} />
         <Route path="bookings/new" element={<BookingFormPage />} />
         <Route path="bookings/:bookingId" element={<BookingFormPage />} />

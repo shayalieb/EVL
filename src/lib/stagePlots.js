@@ -78,6 +78,18 @@ export async function deleteStagePlotBacklineItem(eventId, itemId) {
   return apiFetch(`/stage-plots/${encodeURIComponent(eventId)}/backline-items/${itemId}`, { method: 'DELETE' });
 }
 
+// Clones a saved Stage Plot Library item into this event's stage plot —
+// appends its pages/channels/backline as brand-new, independent rows
+// (server-side clone, since the target is normalized across several tables
+// rather than one JSON blob). Returns the full merged plot in the same
+// shape as getOrCreateStagePlot, so callers can just replace local state.
+export async function applyStagePlotLibraryItem(eventId, libraryItemId) {
+  const data = await apiFetch(`/stage-plots/${encodeURIComponent(eventId)}/apply-library/${encodeURIComponent(libraryItemId)}`, {
+    method: 'POST',
+  });
+  return data.stagePlot;
+}
+
 // Not apiFetch — this redirects (302) to a signed Supabase Storage URL,
 // which fetch()'s default redirect:'follow' resolves transparently into
 // the actual PNG bytes. Used by stagePlotPdf.js to pull each page's
