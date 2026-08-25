@@ -13,8 +13,8 @@ import Pagination from '../components/ui/Pagination';
 import { useToast } from '../components/ui/Toast';
 import { formatCurrency as currency, formatEventDate } from '../lib/format';
 import { getPricingTiers } from '../lib/pricingTiers';
-import { matchesSearch } from '../lib/search';
-import { usePagination } from '../lib/usePagination';
+import { queryContractors } from '../lib/contractors';
+import { useServerList } from '../lib/useServerList';
 import { getRosterSummary } from '../lib/email/threads';
 
 // "Was this contractor inquired with" answered at a glance instead of
@@ -41,6 +41,8 @@ export default function ContractorsPage() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [priceFilter, setPriceFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [sort, setSort] = useState('lastName');
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
   // Account-wide, fetched once — same lightweight local-fetch pattern used
@@ -77,21 +79,12 @@ export default function ContractorsPage() {
     .sort()
     .map((role) => ({ value: role, label: role }));
 
-  function priceBucket(c) {
-    const price = getPricingTiers(c)[0]?.price ?? 0;
-    if (price < 500) return 'under-500';
-    if (price <= 1500) return '500-1500';
-    return '1500-plus';
-  }
-
   const hasFilters = !!(search || categoryFilter || roleFilter || priceFilter);
-  const filteredContractors = contractors.filter((c) => {
-    if (categoryFilter && c.contractorType1 !== categoryFilter) return false;
-    if (roleFilter && c.contractorType2 !== roleFilter) return false;
-    if (priceFilter && priceBucket(c) !== priceFilter) return false;
-    return matchesSearch(search, [c.firstName, c.middleName, c.lastName, c.email, c.phone, c.contractorType1, c.contractorType2]);
-  });
-  const { page, setPage, pageCount, pageItems: pagedContractors, pageSize, totalItems } = usePagination(filteredContractors);
+  const { items: pagedContractors, pageCount, pageSize, total: totalItems, loading, error, refresh } = useServerList(
+    () => queryContractors({ page, pageSize: 25, search, category: categoryFilter, role: roleFilter, price: priceFilter, sort, direction: sort === 'createdAt' || sort === 'updatedAt' ? 'desc' : 'asc' }),
+    [page, search, categoryFilter, roleFilter, priceFilter, sort],
+  );
+  useEffect(() => { setPage(1); }, [search, categoryFilter, roleFilter, priceFilter]);
 
   // Selection persists across pages/filters (by id, not by row) so picking
   // a few contractors, then searching for more to add to the same send,
@@ -125,8 +118,9 @@ export default function ContractorsPage() {
     setModalOpen(true);
   }
 
-  function handleDelete() {
-    deleteContractor(deleteTarget.id);
+  async function handleDelete() {
+    await deleteContractor(deleteTarget.id);
+    refresh();
     showToast('Contractor deleted');
     setDeleteTarget(null);
   }
@@ -185,6 +179,12 @@ export default function ContractorsPage() {
           ]}
           testId="contractors-price-filter"
         />
+        <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort contractors" className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-600">
+          <option value="lastName">Last name</option>
+          <option value="firstName">First name</option>
+          <option value="createdAt">Newest added</option>
+          <option value="updatedAt">Recently updated</option>
+        </select>
         {hasFilters && (
           <button
             type="button"
@@ -226,12 +226,12 @@ export default function ContractorsPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredContractors.length === 0 && (
+              {!loading && pagedContractors.length === 0 && (
                 <tr>
                   <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
-                    {contractors.length === 0
+                    {error || (contractors.length === 0
                       ? 'No contractors yet. Add your first contractor to build your vendor roster.'
-                      : 'No contractors match your search or filters.'}
+                      : 'No contractors match your search or filters.')}
                   </td>
                 </tr>
               )}
@@ -347,7 +347,7 @@ export default function ContractorsPage() {
         <Pagination page={page} pageCount={pageCount} onChange={setPage} totalItems={totalItems} pageSize={pageSize} testId="contractors-pagination" />
       </div>
 
-      <ContractorModal open={modalOpen} onClose={() => setModalOpen(false)} contractor={editingContractor} />
+      <ContractorModal open={modalOpen} onClose={() => { setModalOpen(false); refresh(); }} contractor={editingContractor} />
       <ConfirmDialog
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}

@@ -14,14 +14,14 @@ import FilterSelect from '../components/ui/FilterSelect';
 import Pagination from '../components/ui/Pagination';
 import { useToast } from '../components/ui/Toast';
 import { formatCurrency as currency, formatEventDate } from '../lib/format';
-import { matchesSearch } from '../lib/search';
-import { usePagination } from '../lib/usePagination';
+import { queryBookings } from '../lib/bookings';
+import { useServerList } from '../lib/useServerList';
 import { listInquiryLinks, deleteInquiryLink } from '../lib/inquiryLinks';
 import { listContracts } from '../lib/contracts';
 import { listProposalResponses } from '../lib/proposalResponses';
 import { listInvoices } from '../lib/invoices';
 import { pipelineSteps, currentPipelineStep } from '../lib/bookingPipeline';
-import { BOOKING_DISPOSITIONS, bookingDisposition, dispositionInfo } from '../lib/bookingDisposition';
+import { BOOKING_DISPOSITIONS, dispositionInfo } from '../lib/bookingDisposition';
 import SendInquiryLinkModal from '../components/SendInquiryLinkModal';
 import ReviewInquiryModal from '../components/ReviewInquiryModal';
 
@@ -68,6 +68,8 @@ export default function BookingsPage() {
   const [priorityFilter, setPriorityFilter] = useState('');
   const [eventTypeFilter, setEventTypeFilter] = useState('');
   const [depositFilter, setDepositFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [sort, setSort] = useState('createdAt');
   const [sendInquiryModalOpen, setSendInquiryModalOpen] = useState(false);
   const [pendingInquiries, setPendingInquiries] = useState([]);
   const [reviewingInquiry, setReviewingInquiry] = useState(null);
@@ -124,23 +126,12 @@ export default function BookingsPage() {
     }
   }
 
-  function depositStatus(b) {
-    if (b.depositPaid) return 'paid';
-    if (b.depositAmount) return 'due';
-    return 'none';
-  }
-
   const hasFilters = !!(search || statusFilter || priorityFilter || eventTypeFilter || depositFilter);
-  const filteredBookings = bookings.filter((b) => {
-    if (activeTab === 'completed' ? !b.completedAt : !!b.completedAt) return false;
-    if (statusFilter && bookingDisposition(b.bookingStatus, bookingStatuses) !== statusFilter) return false;
-    if (priorityFilter && b.priority !== priorityFilter) return false;
-    if (eventTypeFilter && b.eventType !== eventTypeFilter) return false;
-    if (depositFilter && depositStatus(b) !== depositFilter) return false;
-    const client = clients.find((c) => c.id === b.clientId);
-    return matchesSearch(search, [client?.firstName, client?.lastName, b.eventType, b.notes]);
-  });
-  const { page, setPage, pageCount, pageItems: pagedBookings, pageSize, totalItems } = usePagination(filteredBookings);
+  const { items: pagedBookings, pageCount, pageSize, total: totalItems, loading, error, refresh } = useServerList(
+    () => queryBookings({ page, pageSize: 25, view: activeTab, search, status: statusFilter, priority: priorityFilter, eventType: eventTypeFilter, deposit: depositFilter, sort, direction: sort === 'eventDate' || sort === 'eventName' ? 'asc' : 'desc' }),
+    [page, activeTab, search, statusFilter, priorityFilter, eventTypeFilter, depositFilter, sort],
+  );
+  useEffect(() => { setPage(1); }, [activeTab, search, statusFilter, priorityFilter, eventTypeFilter, depositFilter]);
 
   function openAdd() {
     navigate('/bookings/new');
@@ -150,8 +141,9 @@ export default function BookingsPage() {
     navigate(`/bookings/${booking.id}`);
   }
 
-  function handleDelete() {
-    deleteBooking(deleteTarget.id);
+  async function handleDelete() {
+    await deleteBooking(deleteTarget.id);
+    refresh();
     showToast('Booking deleted');
     setDeleteTarget(null);
   }
@@ -180,13 +172,14 @@ export default function BookingsPage() {
   // A booking's linked event (if any, and not already completed) gets a
   // "complete this too?" prompt — otherwise there's nothing to choose
   // between, so it just completes directly.
-  function handleMarkComplete(booking) {
+  async function handleMarkComplete(booking) {
     const linkedEvent = booking.convertedEventId ? events.find((e) => e.id === booking.convertedEventId) : null;
     if (linkedEvent && !linkedEvent.completedAt) {
       setCompleteTarget({ booking, linkedEvent });
       return;
     }
-    completeBooking(booking.id);
+    await completeBooking(booking.id);
+    refresh();
     showToast('Booking marked complete');
   }
 
@@ -194,12 +187,14 @@ export default function BookingsPage() {
     const { booking, linkedEvent } = completeTarget;
     if (includePrimary) await completeBooking(booking.id);
     if (includeLinked && linkedEvent) await completeEvent(linkedEvent.id);
+    refresh();
     showToast('Marked complete');
     setCompleteTarget(null);
   }
 
-  function handleRestore(booking) {
-    restoreBooking(booking.id);
+  async function handleRestore(booking) {
+    await restoreBooking(booking.id);
+    refresh();
     showToast('Booking restored to active');
   }
 
@@ -349,6 +344,12 @@ export default function BookingsPage() {
           ]}
           testId="bookings-deposit-filter"
         />
+        <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort bookings" className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-600">
+          <option value="createdAt">Newest added</option>
+          <option value="eventDate">Event date</option>
+          <option value="eventName">Event name</option>
+          <option value="updatedAt">Recently updated</option>
+        </select>
         {hasFilters && (
           <button
             type="button"
@@ -379,14 +380,14 @@ export default function BookingsPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredBookings.length === 0 && (
+              {!loading && pagedBookings.length === 0 && (
                 <tr>
                   <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
-                    {activeTab === 'completed'
+                    {error || (activeTab === 'completed'
                       ? 'No completed bookings yet.'
                       : bookings.length === 0
                         ? 'No bookings yet. Add an inquiry or quote to start tracking the sales pipeline.'
-                        : 'No bookings match your search or filters.'}
+                        : 'No bookings match your search or filters.')}
                   </td>
                 </tr>
               )}

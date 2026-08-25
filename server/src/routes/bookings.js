@@ -4,7 +4,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createWithPreservedId } from '../lib/idPreservingCreate.js';
-import { paginationFromRequest, paginatedResponse } from '../lib/pagination.js';
+import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPageResponse } from '../lib/pagination.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -91,6 +91,56 @@ function serializeBookingLite(b) {
 }
 
 router.get('/', asyncHandler(async (req, res) => {
+  if (req.query.page !== undefined) {
+    const pagination = listPageFromRequest(req, ['createdAt', 'eventDate', 'eventName', 'updatedAt']);
+    const search = String(req.query.search || '').trim();
+    let statusValues;
+    if (req.query.status) {
+      const accountData = await prisma.accountData.findUnique({ where: { accountId: req.membership.accountId }, select: { data: true } });
+      const legacy = accountData?.data?.bookingStatuses || [];
+      const disposition = (label) => {
+        const value = String(label || '').toLowerCase();
+        if (value === 'cancelled' || value === 'canceled') return 'cancelled';
+        if (value === 'lost' || value === 'declined') return 'lost';
+        if (value === 'on hold' || value === 'paused') return 'on_hold';
+        return 'active';
+      };
+      statusValues = [req.query.status, ...legacy.filter((item) => disposition(item.label) === req.query.status).map((item) => item.id)];
+    }
+    let clientIds;
+    if (search) {
+      const matchingClients = await prisma.client.findMany({
+        where: { accountId: req.membership.accountId, OR: [
+          { firstName: { contains: search, mode: 'insensitive' } },
+          { lastName: { contains: search, mode: 'insensitive' } },
+        ] },
+        select: { id: true },
+      });
+      clientIds = matchingClients.map((client) => client.id);
+    }
+    const where = {
+      accountId: req.membership.accountId,
+      deletedAt: null,
+      ...(req.query.view === 'completed' ? { completedAt: { not: null } } : { completedAt: null }),
+      ...(statusValues ? { bookingStatus: { in: statusValues } } : {}),
+      ...(req.query.priority ? { priority: req.query.priority } : {}),
+      ...(req.query.eventType ? { eventType: req.query.eventType } : {}),
+      ...(req.query.deposit === 'paid' ? { depositPaid: true } : {}),
+      ...(req.query.deposit === 'due' ? { depositPaid: false, depositAmount: { gt: 0 } } : {}),
+      ...(req.query.deposit === 'none' ? { OR: [{ depositAmount: null }, { depositAmount: 0 }] } : {}),
+      ...(search ? { OR: [
+        { eventName: { contains: search, mode: 'insensitive' } },
+        { eventType: { contains: search, mode: 'insensitive' } },
+        { notes: { contains: search, mode: 'insensitive' } },
+        ...(clientIds.length ? [{ clientId: { in: clientIds } }] : []),
+      ] } : {}),
+    };
+    const [items, total] = await Promise.all([
+      prisma.booking.findMany({ where, orderBy: [{ [pagination.sort]: pagination.direction }, { id: pagination.direction }], skip: pagination.skip, take: pagination.pageSize }),
+      prisma.booking.count({ where }),
+    ]);
+    return res.json({ bookings: listPageResponse(items.map(serializeBookingLite), total, pagination) });
+  }
   const pagination = paginationFromRequest(req);
   if (!pagination) return res.status(400).json({ error: 'Invalid pagination cursor.' });
   const bookings = await prisma.booking.findMany({

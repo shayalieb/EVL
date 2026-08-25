@@ -1,8 +1,13 @@
 import { apiFetch } from '../context/AuthContext';
 import { fetchAllPages } from './fetchAllPages';
+import { queryList } from './listQuery';
 
 export async function listClients() {
   return fetchAllPages('/clients', 'clients');
+}
+
+export function queryClients(params) {
+  return queryList('/clients', 'clients', params);
 }
 
 export async function createClient(patch) {

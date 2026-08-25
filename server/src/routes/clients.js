@@ -4,7 +4,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createWithPreservedId } from '../lib/idPreservingCreate.js';
-import { paginationFromRequest, paginatedResponse } from '../lib/pagination.js';
+import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPageResponse } from '../lib/pagination.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -28,6 +28,39 @@ function serializeClient(c) {
 }
 
 router.get('/', asyncHandler(async (req, res) => {
+  if (req.query.page !== undefined) {
+    const pagination = listPageFromRequest(req, ['createdAt', 'firstName', 'lastName', 'updatedAt'], 'lastName');
+    const search = String(req.query.search || '').trim();
+    let engagementIds;
+    if (req.query.engagement) {
+      const [events, accountData] = await Promise.all([
+        prisma.event.findMany({ where: { accountId: req.membership.accountId, deletedAt: null }, select: { clientId: true, eventStatus: true } }),
+        prisma.accountData.findUnique({ where: { accountId: req.membership.accountId }, select: { data: true } }),
+      ]);
+      const statuses = accountData?.data?.eventStatuses || [];
+      const buckets = new Map();
+      for (const event of events) {
+        if (!event.clientId) continue;
+        const label = String(statuses.find((status) => status.id === event.eventStatus)?.label || '').toLowerCase();
+        const bucket = label === 'cancelled' || label === 'declined' ? 'declined' : label === 'confirmed' || label === 'completed' ? 'confirmed' : 'pending';
+        if (!buckets.has(event.clientId)) buckets.set(event.clientId, new Set());
+        buckets.get(event.clientId).add(bucket);
+      }
+      if (req.query.engagement === 'has-confirmed') engagementIds = [...buckets].filter(([, set]) => set.has('confirmed')).map(([id]) => id);
+      if (req.query.engagement === 'has-pending') engagementIds = [...buckets].filter(([, set]) => set.has('pending')).map(([id]) => id);
+      if (req.query.engagement === 'no-events') engagementIds = { notIn: [...buckets.keys()] };
+    }
+    const where = {
+      accountId: req.membership.accountId,
+      ...(Array.isArray(engagementIds) ? { id: { in: engagementIds } } : engagementIds ? { id: engagementIds } : {}),
+      ...(search ? { OR: ['firstName', 'lastName', 'email', 'phone', 'notes'].map((field) => ({ [field]: { contains: search, mode: 'insensitive' } })) } : {}),
+    };
+    const [items, total] = await Promise.all([
+      prisma.client.findMany({ where, orderBy: [{ [pagination.sort]: pagination.direction }, { id: pagination.direction }], skip: pagination.skip, take: pagination.pageSize }),
+      prisma.client.count({ where }),
+    ]);
+    return res.json({ clients: listPageResponse(items.map(serializeClient), total, pagination) });
+  }
   const pagination = paginationFromRequest(req);
   if (!pagination) return res.status(400).json({ error: 'Invalid pagination cursor.' });
   const clients = await prisma.client.findMany({

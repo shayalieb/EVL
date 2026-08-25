@@ -4,7 +4,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createWithPreservedId } from '../lib/idPreservingCreate.js';
-import { paginationFromRequest, paginatedResponse } from '../lib/pagination.js';
+import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPageResponse } from '../lib/pagination.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -94,6 +94,49 @@ function serializeEventLite(e) {
 }
 
 router.get('/', asyncHandler(async (req, res) => {
+  if (req.query.page !== undefined) {
+    const pagination = listPageFromRequest(req, ['createdAt', 'eventDate', 'name', 'updatedAt'], 'eventDate');
+    const search = String(req.query.search || '').trim();
+    const where = {
+      accountId: req.membership.accountId,
+      deletedAt: null,
+      ...(req.query.view === 'completed' ? { completedAt: { not: null } } : { completedAt: null }),
+      ...(req.query.status ? { eventStatus: req.query.status } : {}),
+      ...(req.query.eventType ? { eventType: req.query.eventType } : {}),
+      ...(search ? { OR: [
+        { name: { contains: search, mode: 'insensitive' } },
+        { eventType: { contains: search, mode: 'insensitive' } },
+        { eventNote: { contains: search, mode: 'insensitive' } },
+      ] } : {}),
+    };
+    let items;
+    let total;
+    if (req.query.vendor || req.query.contractors) {
+      const [matching, accountData] = await Promise.all([
+        prisma.event.findMany({ where, orderBy: [{ [pagination.sort]: pagination.direction }, { id: pagination.direction }] }),
+        prisma.accountData.findUnique({ where: { accountId: req.membership.accountId }, select: { data: true } }),
+      ]);
+      const statuses = accountData?.data?.inquiryStatuses || [];
+      const filtered = matching.filter((event) => {
+        const bookings = event.contractorBookings || [];
+        if (req.query.contractors === 'has' && bookings.length === 0) return false;
+        if (req.query.contractors === 'none' && bookings.length > 0) return false;
+        if (req.query.vendor) {
+          const vendor = bookings.length === 0 ? 'none' : bookings.every((booking) => statuses.find((status) => status.id === booking.inquiryStatusId)?.isConfirmed) ? 'confirmed' : 'pending';
+          if (vendor !== req.query.vendor) return false;
+        }
+        return true;
+      });
+      total = filtered.length;
+      items = filtered.slice(pagination.skip, pagination.skip + pagination.pageSize);
+    } else {
+      [items, total] = await Promise.all([
+        prisma.event.findMany({ where, orderBy: [{ [pagination.sort]: pagination.direction }, { id: pagination.direction }], skip: pagination.skip, take: pagination.pageSize }),
+        prisma.event.count({ where }),
+      ]);
+    }
+    return res.json({ events: listPageResponse(items.map(serializeEventLite), total, pagination) });
+  }
   const pagination = paginationFromRequest(req);
   if (!pagination) return res.status(400).json({ error: 'Invalid pagination cursor.' });
   const events = await prisma.event.findMany({

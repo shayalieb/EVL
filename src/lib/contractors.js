@@ -1,8 +1,13 @@
 import { apiFetch } from '../context/AuthContext';
 import { fetchAllPages } from './fetchAllPages';
+import { queryList } from './listQuery';
 
 export async function listContractors() {
   return fetchAllPages('/contractors', 'contractors');
+}
+
+export function queryContractors(params) {
+  return queryList('/contractors', 'contractors', params);
 }
 
 export async function createContractor(patch) {

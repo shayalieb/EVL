@@ -5,7 +5,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createWithPreservedId } from '../lib/idPreservingCreate.js';
-import { paginationFromRequest, paginatedResponse } from '../lib/pagination.js';
+import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPageResponse } from '../lib/pagination.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
 
@@ -42,6 +42,35 @@ function serializeContractor(c) {
 }
 
 router.get('/', asyncHandler(async (req, res) => {
+  if (req.query.page !== undefined) {
+    const pagination = listPageFromRequest(req, ['createdAt', 'firstName', 'lastName', 'updatedAt'], 'lastName');
+    const search = String(req.query.search || '').trim();
+    const where = {
+      accountId: req.membership.accountId,
+      ...(req.query.category ? { contractorType1: req.query.category } : {}),
+      ...(req.query.role ? { contractorType2: req.query.role } : {}),
+      ...(search ? { OR: ['firstName', 'middleName', 'lastName', 'email', 'phone', 'contractorType1', 'contractorType2'].map((field) => ({ [field]: { contains: search, mode: 'insensitive' } })) } : {}),
+    };
+    let items;
+    let total;
+    if (req.query.price) {
+      const matching = await prisma.contractor.findMany({ where, orderBy: [{ [pagination.sort]: pagination.direction }, { id: pagination.direction }] });
+      const filtered = matching.filter((contractor) => {
+        const price = Number(contractor.pricingTiers?.[0]?.price) || 0;
+        if (req.query.price === 'under-500') return price < 500;
+        if (req.query.price === '500-1500') return price >= 500 && price <= 1500;
+        return price > 1500;
+      });
+      total = filtered.length;
+      items = filtered.slice(pagination.skip, pagination.skip + pagination.pageSize);
+    } else {
+      [items, total] = await Promise.all([
+        prisma.contractor.findMany({ where, orderBy: [{ [pagination.sort]: pagination.direction }, { id: pagination.direction }], skip: pagination.skip, take: pagination.pageSize }),
+        prisma.contractor.count({ where }),
+      ]);
+    }
+    return res.json({ contractors: listPageResponse(items.map(serializeContractor), total, pagination) });
+  }
   const pagination = paginationFromRequest(req);
   if (!pagination) return res.status(400).json({ error: 'Invalid pagination cursor.' });
   const contractors = await prisma.contractor.findMany({

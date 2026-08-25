@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { paginatedResponse, paginationFromRequest } from '../src/lib/pagination.js';
+import { listPageFromRequest, listPageResponse, paginatedResponse, paginationFromRequest } from '../src/lib/pagination.js';
 
 test('pagination caps page size and returns a stable continuation cursor', () => {
   const req = { query: { limit: '5000' } };
@@ -27,4 +27,12 @@ test('pagination caps page size and returns a stable continuation cursor', () =>
 
 test('pagination rejects malformed cursors', () => {
   assert.equal(paginationFromRequest({ query: { cursor: 'not-a-cursor' } }), null);
+});
+
+test('UI list pagination bounds inputs and only accepts allowed sorting', () => {
+  const pagination = listPageFromRequest({ query: { page: '3', pageSize: '1000', sort: 'unsafe', direction: 'asc' } }, ['name'], 'name');
+  assert.deepEqual(pagination, { page: 3, pageSize: 100, skip: 200, sort: 'name', direction: 'asc' });
+  assert.deepEqual(listPageResponse(['row'], 245, pagination), {
+    items: ['row'], total: 245, page: 3, pageSize: 100, pageCount: 3,
+  });
 });

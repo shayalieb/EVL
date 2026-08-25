@@ -43,3 +43,26 @@ export function paginatedResponse(rows, limit) {
     nextCursor: hasMore ? encodeCursor(page.at(-1)) : null,
   };
 }
+
+const UI_PAGE_SIZE = 25;
+const MAX_UI_PAGE_SIZE = 100;
+
+export function listPageFromRequest(req, allowedSorts, defaultSort = 'createdAt') {
+  const requestedPage = Number.parseInt(req.query.page, 10);
+  const requestedLimit = Number.parseInt(req.query.pageSize, 10);
+  const page = Number.isFinite(requestedPage) ? Math.max(1, requestedPage) : 1;
+  const pageSize = Number.isFinite(requestedLimit) ? Math.min(Math.max(1, requestedLimit), MAX_UI_PAGE_SIZE) : UI_PAGE_SIZE;
+  const sort = allowedSorts.includes(req.query.sort) ? req.query.sort : defaultSort;
+  const direction = req.query.direction === 'asc' ? 'asc' : 'desc';
+  return { page, pageSize, skip: (page - 1) * pageSize, sort, direction };
+}
+
+export function listPageResponse(items, total, pagination) {
+  return {
+    items,
+    total,
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    pageCount: Math.max(1, Math.ceil(total / pagination.pageSize)),
+  };
+}

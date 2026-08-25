@@ -10,8 +10,8 @@ import SearchInput from '../components/ui/SearchInput';
 import FilterSelect from '../components/ui/FilterSelect';
 import Pagination from '../components/ui/Pagination';
 import { useToast } from '../components/ui/Toast';
-import { matchesSearch } from '../lib/search';
-import { usePagination } from '../lib/usePagination';
+import { queryClients } from '../lib/clients';
+import { useServerList } from '../lib/useServerList';
 
 const ENGAGEMENT_OPTIONS = [
   { value: 'has-confirmed', label: 'Has Confirmed Events' },
@@ -29,6 +29,8 @@ export default function ClientsPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [search, setSearch] = useState('');
   const [engagementFilter, setEngagementFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [sort, setSort] = useState('lastName');
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Deep-link support for "?open=<id>" — used by Reminders' related-record
@@ -47,16 +49,11 @@ export default function ClientsPage() {
   }, [searchParams, clients]);
 
   const hasFilters = !!(search || engagementFilter);
-  const filteredClients = clients.filter((c) => {
-    if (engagementFilter) {
-      const counts = computeClientEventCounts(c.id);
-      if (engagementFilter === 'has-confirmed' && !(counts.confirmed > 0)) return false;
-      if (engagementFilter === 'has-pending' && !(counts.pending > 0)) return false;
-      if (engagementFilter === 'no-events' && (counts.confirmed > 0 || counts.pending > 0 || counts.declined > 0)) return false;
-    }
-    return matchesSearch(search, [c.firstName, c.lastName, c.phone, c.email, c.notes]);
-  });
-  const { page, setPage, pageCount, pageItems: pagedClients, pageSize, totalItems } = usePagination(filteredClients);
+  const { items: pagedClients, pageCount, pageSize, total: totalItems, loading, error, refresh } = useServerList(
+    () => queryClients({ page, pageSize: 25, search, engagement: engagementFilter, sort, direction: sort === 'createdAt' || sort === 'updatedAt' ? 'desc' : 'asc' }),
+    [page, search, engagementFilter, sort],
+  );
+  useEffect(() => { setPage(1); }, [search, engagementFilter]);
 
   function openAdd() {
     setEditingClient(null);
@@ -68,8 +65,9 @@ export default function ClientsPage() {
     setModalOpen(true);
   }
 
-  function handleDelete() {
-    deleteClient(deleteTarget.id);
+  async function handleDelete() {
+    await deleteClient(deleteTarget.id);
+    refresh();
     showToast('Client deleted');
     setDeleteTarget(null);
   }
@@ -98,6 +96,12 @@ export default function ClientsPage() {
           options={ENGAGEMENT_OPTIONS}
           testId="clients-engagement-filter"
         />
+        <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort clients" className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-600">
+          <option value="lastName">Last name</option>
+          <option value="firstName">First name</option>
+          <option value="createdAt">Newest added</option>
+          <option value="updatedAt">Recently updated</option>
+        </select>
         {hasFilters && (
           <button
             type="button"
@@ -126,12 +130,12 @@ export default function ClientsPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredClients.length === 0 && (
+              {!loading && pagedClients.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
-                    {clients.length === 0
+                    {error || (clients.length === 0
                       ? 'No clients yet. Add your first client to start tracking their events.'
-                      : 'No clients match your search.'}
+                      : 'No clients match your search.')}
                   </td>
                 </tr>
               )}
@@ -202,7 +206,7 @@ export default function ClientsPage() {
         <Pagination page={page} pageCount={pageCount} onChange={setPage} totalItems={totalItems} pageSize={pageSize} testId="clients-pagination" />
       </div>
 
-      <ClientModal open={modalOpen} onClose={() => setModalOpen(false)} client={editingClient} />
+      <ClientModal open={modalOpen} onClose={() => { setModalOpen(false); refresh(); }} client={editingClient} />
       <ConfirmDialog
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}

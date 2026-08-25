@@ -1,8 +1,13 @@
 import { apiFetch } from '../context/AuthContext';
 import { fetchAllPages } from './fetchAllPages';
+import { queryList } from './listQuery';
 
 export async function listBookings() {
   return fetchAllPages('/bookings', 'bookings');
+}
+
+export function queryBookings(params) {
+  return queryList('/bookings', 'bookings', params);
 }
 
 // Full record, including the heavy schedule/activityLog/proposal/history

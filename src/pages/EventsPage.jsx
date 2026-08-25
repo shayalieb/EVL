@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
@@ -15,7 +15,8 @@ import FilterSelect from '../components/ui/FilterSelect';
 import Pagination from '../components/ui/Pagination';
 import { formatCurrency as currency } from '../lib/format';
 import { matchesSearch } from '../lib/search';
-import { usePagination } from '../lib/usePagination';
+import { queryEvents } from '../lib/events';
+import { useServerList } from '../lib/useServerList';
 import { eventCostingStatus } from '../lib/eventCosting';
 
 const VIEW_TABS = [
@@ -43,6 +44,8 @@ export default function EventsPage() {
   const navigate = useNavigate();
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [completeTarget, setCompleteTarget] = useState(null);
+  const [page, setPage] = useState(1);
+  const [sort, setSort] = useState('eventDate');
   const [activeTab, setActiveTab] = useState('list');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -50,8 +53,9 @@ export default function EventsPage() {
   const [eventTypeFilter, setEventTypeFilter] = useState('');
   const [contractorsFilter, setContractorsFilter] = useState('');
 
-  function handleDelete() {
-    deleteEvent(deleteTarget.id);
+  async function handleDelete() {
+    await deleteEvent(deleteTarget.id);
+    refresh();
     showToast('Event deleted');
     setDeleteTarget(null);
   }
@@ -59,13 +63,14 @@ export default function EventsPage() {
   // The reverse of BookingsPage's lookup — a Booking points forward at its
   // converted Event via convertedEventId, so finding the source booking
   // from here means searching for it rather than following a field.
-  function handleMarkComplete(evt) {
+  async function handleMarkComplete(evt) {
     const linkedBooking = bookings.find((b) => b.convertedEventId === evt.id);
     if (linkedBooking && !linkedBooking.completedAt) {
       setCompleteTarget({ event: evt, linkedBooking });
       return;
     }
-    completeEvent(evt.id);
+    await completeEvent(evt.id);
+    refresh();
     showToast('Event marked complete');
   }
 
@@ -73,12 +78,14 @@ export default function EventsPage() {
     const { event: evt, linkedBooking } = completeTarget;
     if (includePrimary) await completeEvent(evt.id);
     if (includeLinked && linkedBooking) await completeBooking(linkedBooking.id);
+    refresh();
     showToast('Marked complete');
     setCompleteTarget(null);
   }
 
-  function handleRestore(evt) {
-    restoreEvent(evt.id);
+  async function handleRestore(evt) {
+    await restoreEvent(evt.id);
+    refresh();
     showToast('Event restored to active');
   }
 
@@ -92,9 +99,13 @@ export default function EventsPage() {
     if (contractorsFilter === 'none' && evt.contractorBookings.length > 0) return false;
     return matchesSearch(search, [evt.name, evt.eventType]);
   });
-  // Calendar view needs the full filtered set (it lays events out by date,
-  // not in a scrollable list), so only the table view paginates.
-  const { page, setPage, pageCount, pageItems: pagedEvents, pageSize, totalItems } = usePagination(filteredEvents);
+  // Calendar view keeps the complete collection until 3B adds a bounded
+  // date-range endpoint. The table is already fully server-driven in 3A.
+  const { items: pagedEvents, pageCount, pageSize, total: totalItems, loading, error, refresh } = useServerList(
+    () => queryEvents({ page, pageSize: 25, view: activeTab === 'completed' ? 'completed' : 'active', search, status: statusFilter, vendor: vendorFilter, eventType: eventTypeFilter, contractors: contractorsFilter, sort, direction: sort === 'createdAt' || sort === 'updatedAt' ? 'desc' : 'asc' }),
+    [page, activeTab, search, statusFilter, vendorFilter, eventTypeFilter, contractorsFilter, sort],
+  );
+  useEffect(() => { setPage(1); }, [activeTab, search, statusFilter, vendorFilter, eventTypeFilter, contractorsFilter]);
 
   return (
     <div>
@@ -150,6 +161,12 @@ export default function EventsPage() {
             ]}
             testId="events-contractors-filter"
           />
+          <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort events" className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-600">
+            <option value="eventDate">Event date</option>
+            <option value="name">Event name</option>
+            <option value="createdAt">Newest added</option>
+            <option value="updatedAt">Recently updated</option>
+          </select>
           {hasFilters && (
             <button
               type="button"
@@ -185,14 +202,14 @@ export default function EventsPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredEvents.length === 0 && (
+              {!loading && pagedEvents.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
-                    {activeTab === 'completed'
+                    {error || (activeTab === 'completed'
                       ? 'No completed events yet.'
                       : events.length === 0
                         ? 'No events yet. Add your first event to start booking contractors.'
-                        : 'No events match your search or filters.'}
+                        : 'No events match your search or filters.')}
                   </td>
                 </tr>
               )}
