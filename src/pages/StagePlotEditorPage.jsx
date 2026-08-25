@@ -2,7 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
-import { getOrCreateStagePlot, addStagePlotPage, deleteStagePlotPage, updateStagePlotChannel, addStagePlotChannel, deleteStagePlotChannel, applyStagePlotLibraryItem } from '../lib/stagePlots';
+import {
+  getOrCreateStagePlot, addStagePlotPage, deleteStagePlotPage, saveStagePlotPage,
+  updateStagePlotChannel, addStagePlotChannel, deleteStagePlotChannel, reorderStagePlotChannels,
+  addStagePlotBacklineItem, updateStagePlotBacklineItem, deleteStagePlotBacklineItem,
+  applyStagePlotLibraryItem,
+} from '../lib/stagePlots';
 import { generateStagePlotPdf } from '../lib/stagePlotPdf';
 import { getThreadSummaries } from '../lib/email/threads';
 import StagePlotPageEditor from '../components/StagePlotPageEditor';
@@ -219,6 +224,21 @@ export default function StagePlotEditorPage({ onClose } = {}) {
     plot.channels.filter((c) => c.elementId).map((c) => [c.elementId, { name: c.source, description: c.monitorNotes }])
   );
   const selectedElement = selectedElementId ? activePage?.scene?.elements?.find((e) => e.id === selectedElementId) : null;
+  // Bound closures over eventId — StagePlotChannelList/BacklineList take
+  // this generic `api` shape so they're not hardwired to event-scoped
+  // persistence (StagePlotLibraryEditorPage.jsx passes library-scoped
+  // closures to the exact same components instead).
+  const channelApi = {
+    addChannel: (patch) => addStagePlotChannel(eventId, patch),
+    updateChannel: (channelId, patch) => updateStagePlotChannel(eventId, channelId, patch),
+    deleteChannel: (channelId) => deleteStagePlotChannel(eventId, channelId),
+    reorderChannels: (orderedIds) => reorderStagePlotChannels(eventId, orderedIds),
+  };
+  const backlineApi = {
+    addItem: (patch) => addStagePlotBacklineItem(eventId, patch),
+    updateItem: (itemId, patch) => updateStagePlotBacklineItem(eventId, itemId, patch),
+    deleteItem: (itemId) => deleteStagePlotBacklineItem(eventId, itemId),
+  };
   const rosterContractors = (event?.contractorBookings || [])
     .map((b) => contractors.find((c) => c.id === b.contractorId))
     .filter((c) => c?.email);
@@ -325,7 +345,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
           <StagePlotPageEditor
             ref={pageEditorRef}
             key={activePage.id}
-            eventId={eventId}
+            onSavePage={(pageId, patch) => saveStagePlotPage(eventId, pageId, patch)}
             page={activePage}
             onSaved={(patch) => handlePageSaved(activePage.id, patch)}
             selectedElementId={selectedElementId}
@@ -338,7 +358,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
         )}
         <div className="w-full lg:w-4/5 mx-auto mt-6">
           <StagePlotChannelList
-            eventId={eventId}
+            api={channelApi}
             channels={plot.channels}
             onChannelsChange={(channels) => setPlot((prev) => ({ ...prev, channels }))}
             selectedElementId={selectedElementId}
@@ -346,7 +366,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
             onSelectElement={setSelectedElementId}
           />
           <StagePlotBacklineList
-            eventId={eventId}
+            api={backlineApi}
             items={plot.backlineItems}
             onItemsChange={(backlineItems) => setPlot((prev) => ({ ...prev, backlineItems }))}
           />

@@ -12,7 +12,7 @@ import { queryVenues, getVenue, createVenue as createVenueApi, updateVenueApi, d
 import { getAllOfferings, createOffering as createOfferingApi, updateOfferingApi, deleteOfferingApi } from '../lib/offerings';
 import { getAllContractorGroups, createContractorGroup as createContractorGroupApi, updateContractorGroupApi, deleteContractorGroupApi } from '../lib/contractorGroups';
 import { getAllSetListLibraryItems, createSetListLibraryItem, updateSetListLibraryItemApi, deleteSetListLibraryItemApi } from '../lib/setListLibrary';
-import { getAllStagePlotLibraryItems, saveEventStagePlotToLibrary, renameStagePlotLibraryItem as renameStagePlotLibraryItemApi, deleteStagePlotLibraryItemApi } from '../lib/stagePlotLibrary';
+import { getAllStagePlotLibraryItems, saveEventStagePlotToLibrary, createStagePlotLibraryItem, renameStagePlotLibraryItem as renameStagePlotLibraryItemApi, deleteStagePlotLibraryItemApi } from '../lib/stagePlotLibrary';
 import { dispositionInfo } from '../lib/bookingDisposition';
 
 function statusLabel(statuses, id) {
@@ -725,6 +725,14 @@ export function DataProvider({ children }) {
     return record;
   }, []);
 
+  // "+ Add Stage Plot" on the library page — a blank template with no event
+  // behind it, built directly in StagePlotLibraryEditorPage.jsx.
+  const addBlankStagePlotLibraryItem = useCallback(async (name) => {
+    const record = await createStagePlotLibraryItem(name);
+    setStagePlotLibrary((previous) => [record, ...previous]);
+    return record;
+  }, []);
+
   const renameStagePlotLibraryItem = useCallback(async (id, name) => {
     const record = await renameStagePlotLibraryItemApi(id, name);
     setStagePlotLibrary((previous) => previous.map((item) => (item.id === id ? record : item)));
@@ -887,6 +895,7 @@ export function DataProvider({ children }) {
     updateSetListLibraryItem,
     deleteSetListLibraryItem,
     saveStagePlotToLibrary,
+    addBlankStagePlotLibraryItem,
     renameStagePlotLibraryItem,
     deleteStagePlotLibraryItem,
     addContractorGroup,
@@ -917,7 +926,7 @@ export function DataProvider({ children }) {
     addContractTemplate, updateContractTemplate, removeContractTemplate,
     addOffering, updateOffering, deleteOffering,
     addSetListLibraryItem, updateSetListLibraryItem, deleteSetListLibraryItem,
-    saveStagePlotToLibrary, renameStagePlotLibraryItem, deleteStagePlotLibraryItem,
+    saveStagePlotToLibrary, addBlankStagePlotLibraryItem, renameStagePlotLibraryItem, deleteStagePlotLibraryItem,
     addContractorGroup, updateContractorGroup, deleteContractorGroup,
     addEvent, updateEvent, deleteEvent, completeEvent, restoreEvent,
     getContractorById, computeDurationHours, computeEventTotalCost, computeVendorStatus,

@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react';
 import CanvasNotesPopover from './CanvasNotesPopover';
-import { addStagePlotChannel, updateStagePlotChannel, deleteStagePlotChannel, reorderStagePlotChannels } from '../lib/stagePlots';
 import { useToast } from './ui/Toast';
 
 const cellInputClass = 'w-full px-1.5 py-1 rounded border border-transparent hover:border-slate-200 focus:border-indigo-400 text-xs bg-transparent';
@@ -18,7 +17,7 @@ function plainTextPreview(html) {
 // puts its running number badge on the plot — everything else about the
 // row (musician, instrument, power needs, notes) is general-purpose, not
 // tied to any one type of production.
-export default function StagePlotChannelList({ eventId, channels, onChannelsChange, selectedElementId, selectedElement, onSelectElement }) {
+export default function StagePlotChannelList({ api, channels, onChannelsChange, selectedElementId, selectedElement, onSelectElement }) {
   const { showToast } = useToast();
   const [busyId, setBusyId] = useState(null);
   const [openChannelId, setOpenChannelId] = useState(null);
@@ -27,12 +26,12 @@ export default function StagePlotChannelList({ eventId, channels, onChannelsChan
   const isLinked = (elementId) => channels.some((c) => c.elementId === elementId);
 
   async function handleAdd() {
-    const channel = await addStagePlotChannel(eventId, { source: 'New Item' });
+    const channel = await api.addChannel({ source: 'New Item' });
     onChannelsChange([...channels, channel]);
   }
 
   async function handleAddForSelected() {
-    const channel = await addStagePlotChannel(eventId, {
+    const channel = await api.addChannel({
       source: selectedElement?.label || selectedElement?.iconId || 'New Item',
       elementId: selectedElementId,
     });
@@ -43,7 +42,7 @@ export default function StagePlotChannelList({ eventId, channels, onChannelsChan
     onChannelsChange(channels.map((c) => (c.id === channel.id ? { ...c, ...patch } : c)));
     setBusyId(channel.id);
     try {
-      await updateStagePlotChannel(eventId, channel.id, patch);
+      await api.updateChannel(channel.id, patch);
     } finally {
       setBusyId(null);
     }
@@ -52,7 +51,7 @@ export default function StagePlotChannelList({ eventId, channels, onChannelsChan
   async function handleDelete(channel) {
     setBusyId(channel.id);
     try {
-      await deleteStagePlotChannel(eventId, channel.id);
+      await api.deleteChannel(channel.id);
       onChannelsChange(channels.filter((c) => c.id !== channel.id));
     } finally {
       setBusyId(null);
@@ -77,7 +76,7 @@ export default function StagePlotChannelList({ eventId, channels, onChannelsChan
     onChannelsChange(reordered.map((c, i) => ({ ...c, channelNumber: i + 1 })));
 
     try {
-      const saved = await reorderStagePlotChannels(eventId, reordered.map((c) => c.id));
+      const saved = await api.reorderChannels(reordered.map((c) => c.id));
       onChannelsChange(saved);
     } catch {
       onChannelsChange(previous);

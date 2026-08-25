@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -27,21 +28,25 @@ function Thumbnail({ item }) {
 
 // Resources-section ListView for reusable stage plots (band/orchestra only —
 // gated at the nav item in AppLayout.jsx and the route in App.jsx). Items
-// are only ever created via "Save to Library" on an event's Stage Plot page
-// — there's no from-scratch builder here, since a plot needs a live event's
-// autosaving canvas to build in the first place. Adding one to an event
-// (StagePlotEditorPage.jsx's "+ Add from Library") deep-clones it
-// server-side (see stagePlots.js's apply-library route), so editing one
-// side never touches the other.
+// come from two sources: "Save to Library" on an event's Stage Plot page
+// (snapshots what's already built there), or "+ Add Stage Plot" below
+// (builds a template from scratch, no event involved — StagePlotLibrary
+// EditorPage.jsx). Either way, adding one to an event (StagePlotEditorPage.
+// jsx's "+ Add from Library") deep-clones it server-side (see stagePlots.
+// js's apply-library route), so editing one side never touches the other.
 export default function StagePlotLibraryPage() {
-  const { stagePlotLibrary, stagePlotLibraryLoading, renameStagePlotLibraryItem, deleteStagePlotLibraryItem } = useData();
+  const { stagePlotLibrary, stagePlotLibraryLoading, addBlankStagePlotLibraryItem, renameStagePlotLibraryItem, deleteStagePlotLibraryItem } = useData();
   const { can } = useAuth();
   const { showToast } = useToast();
+  const navigate = useNavigate();
   const canEdit = can('manageEvents');
   const [search, setSearch] = useState('');
   const [renaming, setRenaming] = useState(null);
   const [renameValue, setRenameValue] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [addName, setAddName] = useState('Stage Plot');
+  const [creating, setCreating] = useState(false);
 
   const filtered = stagePlotLibrary.filter((item) => matchesSearch(search, [item.name]));
 
@@ -73,13 +78,36 @@ export default function StagePlotLibraryPage() {
     }
   }
 
+  async function handleAddBlank(e) {
+    e.preventDefault();
+    setCreating(true);
+    try {
+      const record = await addBlankStagePlotLibraryItem(addName.trim() || 'Stage Plot');
+      setAddModalOpen(false);
+      navigate(`/stage-plot-library/${record.id}`);
+    } catch (err) {
+      showToast(err.message || 'Failed to create stage plot', 'error');
+    } finally {
+      setCreating(false);
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Stage Plots</h2>
-          <p className="text-sm text-slate-500 mt-1">Saved stage plots, ready to reuse for a similar event — same venue, same lineup. Save one from any event's Stage Plot page; copies added to an event stay independent of the saved original.</p>
+          <p className="text-sm text-slate-500 mt-1">Saved stage plots, ready to reuse for a similar event — same venue, same lineup. Save one from any event's Stage Plot page, or build one from scratch here; copies added to an event stay independent of the saved original.</p>
         </div>
+        <button
+          type="button"
+          onClick={() => { setAddName('Stage Plot'); setAddModalOpen(true); }}
+          disabled={!canEdit}
+          data-testid="stageplot-library-add-button"
+          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          + Add Stage Plot
+        </button>
       </div>
 
       <div className="flex items-center gap-2 flex-wrap mb-4">
@@ -104,9 +132,16 @@ export default function StagePlotLibraryPage() {
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
                     {stagePlotLibrary.length === 0 && !search ? (
-                      <div>
-                        <p className="font-semibold text-slate-600">No saved stage plots yet</p>
-                        <p className="text-sm mt-1">Open any event's Stage Plot page and click "Save to Library" to start reusing it.</p>
+                      <div className="flex flex-col items-center gap-3">
+                        <div>
+                          <p className="font-semibold text-slate-600">No saved stage plots yet</p>
+                          <p className="text-sm mt-1">Click "+ Add Stage Plot" to build one from scratch, or open any event's Stage Plot page and click "Save to Library."</p>
+                        </div>
+                        {canEdit && (
+                          <button type="button" onClick={() => { setAddName('Stage Plot'); setAddModalOpen(true); }} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
+                            + Add Stage Plot
+                          </button>
+                        )}
                       </div>
                     ) : 'No stage plots match your search.'}
                   </td>
@@ -117,9 +152,9 @@ export default function StagePlotLibraryPage() {
                   <td className="pl-4 py-3"><Thumbnail item={item} /></td>
                   <td className="px-4 py-3 font-medium text-slate-800">
                     {canEdit ? (
-                      <button type="button" onClick={() => openRename(item)} data-testid="stageplot-library-row-name-link" className="hover:text-indigo-600 hover:underline text-left">
+                      <Link to={`/stage-plot-library/${item.id}`} data-testid="stageplot-library-row-name-link" className="hover:text-indigo-600 hover:underline">
                         {item.name}
-                      </button>
+                      </Link>
                     ) : (
                       <span>{item.name}</span>
                     )}
@@ -171,6 +206,31 @@ export default function StagePlotLibraryPage() {
           <div className="flex justify-end gap-2 mt-4">
             <button type="button" onClick={() => setRenaming(null)} className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
             <button type="submit" data-testid="stageplot-library-rename-save-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">Save</button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={addModalOpen} onClose={() => setAddModalOpen(false)} title="New stage plot" widthClass="max-w-sm">
+        <form onSubmit={handleAddBlank}>
+          <p className="text-sm text-slate-500 mb-3">Builds a blank template you can drag icons onto, add channels, and add backline items for — with no event attached. Add it to any event later from that event's Stage Plot page.</p>
+          <label className="block text-xs font-semibold text-slate-500 mb-1">Name</label>
+          <input
+            autoFocus
+            value={addName}
+            onChange={(e) => setAddName(e.target.value)}
+            data-testid="stageplot-library-add-name-input"
+            className={inputClass}
+          />
+          <div className="flex justify-end gap-2 mt-4">
+            <button type="button" onClick={() => setAddModalOpen(false)} className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+            <button
+              type="submit"
+              disabled={creating}
+              data-testid="stageplot-library-add-confirm-button"
+              className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {creating ? 'Creating…' : 'Create & Open'}
+            </button>
           </div>
         </form>
       </Modal>

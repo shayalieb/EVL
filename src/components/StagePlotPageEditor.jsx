@@ -5,7 +5,6 @@ import { createEmptyScene, deleteElement, deleteAnnotation, deleteStroke, addLay
 import { scaleFromCalibration } from '../lib/canvasEngine/measurement';
 import { alignElementsCenter, distributeElements, centerElementsOnStage, autoAlignAll } from '../lib/canvasEngine/alignment';
 import { STAGE_PLOT_ICON_LIST, STAGE_PLOT_ICONS } from '../lib/canvasEngine/stagePlotIcons';
-import { saveStagePlotPage } from '../lib/stagePlots';
 import CanvasIconPalette from './CanvasIconPalette';
 
 const AUTOSAVE_DELAY_MS = 2000;
@@ -53,7 +52,7 @@ function isTypingTarget(el) {
 // so deleting a page right after placing an icon on it could race a save
 // that hasn't landed yet, leaving that icon's channel un-cleaned. Flushing
 // on demand before the delete request closes that window.
-const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, page, onSaved, selectedElementId, onSelectElement, onElementDeleted, onElementAdded, elementNumbers, elementContent, onUpdateElementContent }, ref) {
+const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage, page, onSaved, selectedElementId, onSelectElement, onElementDeleted, onElementAdded, elementNumbers, elementContent, onUpdateElementContent }, ref) {
   const initialScene = page.scene && Object.keys(page.scene).length > 0 ? page.scene : createEmptyScene();
   const { scene, apply, replaceCurrent, undo, redo, canUndo, canRedo } = useUndoRedo(initialScene);
   const [mode, setMode] = useState('select');
@@ -92,14 +91,14 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, p
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const thumbnailBase64 = stageRef.current ? captureCleanThumbnail(stageRef.current) : undefined;
       setCleanCapture(false);
-      const saved = await saveStagePlotPage(eventId, page.id, { scene: sceneRef.current, thumbnailBase64 });
+      const saved = await onSavePage(page.id, { scene: sceneRef.current, thumbnailBase64 });
       onSaved({ scene: saved.scene, hasThumbnail: saved.hasThumbnail });
       setSaveStatus('saved');
     } catch {
       setCleanCapture(false);
       setSaveStatus('unsaved');
     }
-  }, [eventId, page.id, onSaved]);
+  }, [onSavePage, page.id, onSaved]);
 
   // persist's identity changes on every save (onSaved is a fresh closure
   // from the parent each render) — a ref lets the debounce/unmount-flush

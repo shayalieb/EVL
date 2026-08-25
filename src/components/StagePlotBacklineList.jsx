@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import CanvasNotesPopover from './CanvasNotesPopover';
-import { addStagePlotBacklineItem, updateStagePlotBacklineItem, deleteStagePlotBacklineItem } from '../lib/stagePlots';
 
 const PROVIDED_BY_OPTIONS = ['', 'band', 'venue', 'rental'];
 const PROVIDED_BY_LABELS = { band: 'Band', venue: 'Venue', rental: 'Rental' };
@@ -16,12 +15,12 @@ function plainTextPreview(html) {
 // as StagePlotChannelList's Production List, per server/src/routes/stagePlots.js's
 // StagePlotBacklineItem model. Not linked to canvas icons like a channel can
 // be — backline is a rider list, not a specific placed instrument.
-export default function StagePlotBacklineList({ eventId, items, onItemsChange }) {
+export default function StagePlotBacklineList({ api, items, onItemsChange }) {
   const [busyId, setBusyId] = useState(null);
   const [openItemId, setOpenItemId] = useState(null);
 
   async function handleAdd() {
-    const item = await addStagePlotBacklineItem(eventId, { item: 'New Item' });
+    const item = await api.addItem({ item: 'New Item' });
     onItemsChange([...items, item]);
   }
 
@@ -29,7 +28,7 @@ export default function StagePlotBacklineList({ eventId, items, onItemsChange })
     onItemsChange(items.map((i) => (i.id === item.id ? { ...i, ...patch } : i)));
     setBusyId(item.id);
     try {
-      await updateStagePlotBacklineItem(eventId, item.id, patch);
+      await api.updateItem(item.id, patch);
     } finally {
       setBusyId(null);
     }
@@ -38,7 +37,7 @@ export default function StagePlotBacklineList({ eventId, items, onItemsChange })
   async function handleDelete(item) {
     setBusyId(item.id);
     try {
-      await deleteStagePlotBacklineItem(eventId, item.id);
+      await api.deleteItem(item.id);
       onItemsChange(items.filter((i) => i.id !== item.id));
     } finally {
       setBusyId(null);
