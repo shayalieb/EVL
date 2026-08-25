@@ -7,6 +7,7 @@ import { createBooking } from '../lib/bookings';
 import { createEvent } from '../lib/events';
 import { createVenue } from '../lib/venues';
 import { syncCatalog } from '../lib/offerings';
+import { syncSetListLibrary } from '../lib/setListLibrary';
 
 // Relative in production (e.g. `/api`) — vercel.json proxies /api/* to the
 // Railway backend so the browser only ever talks to the frontend's own
@@ -130,6 +131,13 @@ async function migrateCatalogOutOfBlob(blob) {
   return next;
 }
 
+async function migrateSetListLibraryOutOfBlob(blob) {
+  await syncSetListLibrary(blob.setListLibrary || []);
+  const next = { ...blob };
+  delete next.setListLibrary;
+  return next;
+}
+
 // Same idea again, for Booking/Event (see server/prisma/schema.prisma's
 // Booking/Event model comments) — the biggest of this whole graduation
 // series, since they're the two most actively-edited record types in the
@@ -188,6 +196,7 @@ export function AuthProvider({ children }) {
       const hadVenues = blob.venues?.length;
       const hadOfferings = Array.isArray(blob.offerings);
       const hadContractorGroups = Array.isArray(blob.contractorGroups);
+      const hadSetListLibrary = Array.isArray(blob.setListLibrary);
       if (hadContractors) blob = await migrateContractorsOutOfBlob(blob);
       if (hadClients) blob = await migrateClientsOutOfBlob(blob);
       if (hadBookings) blob = await migrateBookingsOutOfBlob(blob);
@@ -202,7 +211,15 @@ export function AuthProvider({ children }) {
           // retry on the next hydrate instead of risking a partial cutover.
         }
       }
-      if (hadContractors || hadClients || hadBookings || hadEvents || hadVenues || (hadOfferings && !blob.offerings) || (hadContractorGroups && !blob.contractorGroups)) {
+      if (hadSetListLibrary) {
+        try {
+          blob = await migrateSetListLibraryOutOfBlob(blob);
+        } catch {
+          // Mixed-version rollout: retain the legacy library until the new
+          // backend route is available, then retry on the next hydrate.
+        }
+      }
+      if (hadContractors || hadClients || hadBookings || hadEvents || hadVenues || (hadOfferings && !blob.offerings) || (hadContractorGroups && !blob.contractorGroups) || (hadSetListLibrary && !blob.setListLibrary)) {
         // Non-fatal: two tabs (or two logins close together) hydrating
         // concurrently both see the embedded arrays and both attempt this
         // shrink-and-write-back; the second one loses the optimistic-
@@ -267,6 +284,13 @@ export function AuthProvider({ children }) {
             // still finishing the backend half of this deployment.
           }
         }
+        if (Array.isArray(migrated.setListLibrary)) {
+          try {
+            migrated = await migrateSetListLibraryOutOfBlob(migrated);
+          } catch {
+            // Keep first-login data intact while Railway finishes rollout.
+          }
+        }
         if (migrated !== blob) {
           const saved = await apiFetch('/account-data', { method: 'PUT', body: JSON.stringify({ data: migrated, version: versionRef.current }) });
           versionRef.current = saved.version;
@@ -279,10 +303,6 @@ export function AuthProvider({ children }) {
       // Backfill accounts created before Bookings existed so the status
       // picker/pipeline isn't empty on first visit.
       blob = { ...blob, bookingStatuses: buildDefaultBookingStatuses(), bookings: blob.bookings || [] };
-    }
-    if (!blob.setListLibrary) {
-      // Backfill accounts created before the Set List library existed.
-      blob = { ...blob, setListLibrary: [] };
     }
     if (!blob.eventStatuses || !blob.inquiryStatuses) {
       // Backfill an AccountData row missing these — DataContext.jsx's

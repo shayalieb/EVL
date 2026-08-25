@@ -11,6 +11,7 @@ import { queryEvents, getEvent, createEvent as createEventApi, updateEventApi } 
 import { queryVenues, getVenue, createVenue as createVenueApi, updateVenueApi, deleteVenueApi } from '../lib/venues';
 import { getAllOfferings, createOffering as createOfferingApi, updateOfferingApi, deleteOfferingApi } from '../lib/offerings';
 import { getAllContractorGroups, createContractorGroup as createContractorGroupApi, updateContractorGroupApi, deleteContractorGroupApi } from '../lib/contractorGroups';
+import { getAllSetListLibraryItems, createSetListLibraryItem, updateSetListLibraryItemApi, deleteSetListLibraryItemApi } from '../lib/setListLibrary';
 import { dispositionInfo } from '../lib/bookingDisposition';
 
 function statusLabel(statuses, id) {
@@ -91,7 +92,6 @@ const LIST_FIELDS = {
   emailTemplates: 'emailTemplates',
   proposalTemplates: 'proposalTemplates',
   contractTemplates: 'contractTemplates',
-  setListLibrary: 'setListLibrary',
 };
 
 export function DataProvider({ children }) {
@@ -142,6 +142,25 @@ export function DataProvider({ children }) {
       .catch(() => {})
       .finally(() => { if (!cancelled) setCatalogLoading(false); });
     return () => { cancelled = true; };
+  }, [currentUser?.accountId]);
+
+  const [setListLibrary, setSetListLibrary] = useState([]);
+  const [setListLibraryLoading, setSetListLibraryLoading] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const legacyItems = currentUser?.setListLibrary || [];
+    setSetListLibrary(legacyItems);
+    if (!currentUser?.accountId) return undefined;
+    setSetListLibraryLoading(true);
+    getAllSetListLibraryItems()
+      .then((items) => {
+        if (!cancelled) setSetListLibrary(items.length || !legacyItems.length ? items : legacyItems);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setSetListLibraryLoading(false); });
+    return () => { cancelled = true; };
+    // Legacy items are a rollout-only fallback captured at account load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.accountId]);
 
   // Same real-table-not-blob treatment as contractors/clients above — see
@@ -665,22 +684,22 @@ export function DataProvider({ children }) {
   // pulled into a specific event's own setLists via a deep clone, see
   // SetListsEditorPage.jsx, so editing the event's copy never touches
   // these saved originals) ----
-  const addSetListLibraryItem = useCallback((setList) => {
-    if (!currentUser) return;
-    const record = { id: uid('setlistlib'), createdAt: new Date().toISOString(), ...setList };
-    patchList(LIST_FIELDS.setListLibrary, [...(currentUser.setListLibrary || []), record]);
+  const addSetListLibraryItem = useCallback(async (setList) => {
+    const record = await createSetListLibraryItem({ id: uid('setlistlib'), ...setList });
+    setSetListLibrary((previous) => [...previous, record]);
     return record;
-  }, [currentUser, patchList]);
+  }, []);
 
-  const updateSetListLibraryItem = useCallback((id, patch) => {
-    if (!currentUser) return;
-    patchList(LIST_FIELDS.setListLibrary, (currentUser.setListLibrary || []).map((s) => (s.id === id ? { ...s, ...patch } : s)));
-  }, [currentUser, patchList]);
+  const updateSetListLibraryItem = useCallback(async (id, patch) => {
+    const record = await updateSetListLibraryItemApi(id, patch);
+    setSetListLibrary((previous) => previous.map((item) => (item.id === id ? record : item)));
+    return record;
+  }, []);
 
-  const deleteSetListLibraryItem = useCallback((id) => {
-    if (!currentUser) return;
-    patchList(LIST_FIELDS.setListLibrary, (currentUser.setListLibrary || []).filter((s) => s.id !== id));
-  }, [currentUser, patchList]);
+  const deleteSetListLibraryItem = useCallback(async (id) => {
+    await deleteSetListLibraryItemApi(id);
+    setSetListLibrary((previous) => previous.filter((item) => item.id !== id));
+  }, []);
 
   // ---- Contractor Groups (saved ensembles/lineups — "+ Add Ensemble" on
   // EventFormPage.jsx's roster clones a group's contractorIds into that
@@ -778,7 +797,8 @@ export function DataProvider({ children }) {
     catalogLoading,
     proposalTemplates: currentUser?.proposalTemplates || [],
     contractTemplates: currentUser?.contractTemplates || [],
-    setListLibrary: currentUser?.setListLibrary || [],
+    setListLibrary,
+    setListLibraryLoading,
     contractorGroups,
     addContractor,
     searchContractors,
@@ -842,7 +862,7 @@ export function DataProvider({ children }) {
     computeEventTotalCost,
     computeVendorStatus,
   }), [
-    currentUser, contractors, clients, venues, offerings, contractorGroups, catalogLoading, searchVenues, loadVenue, bookings, events, searchEvents, loadEvent, searchBookings, loadBooking,
+    currentUser, contractors, clients, venues, offerings, contractorGroups, catalogLoading, setListLibrary, setListLibraryLoading, searchVenues, loadVenue, bookings, events, searchEvents, loadEvent, searchBookings, loadBooking,
     addContractor, searchContractors, loadContractor, loadContractors, updateContractor, deleteContractor,
     addClient, searchClients, loadClient, updateClient, deleteClient, computeClientEventCounts,
     addVenue, updateVenue, deleteVenue,

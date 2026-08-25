@@ -38,7 +38,7 @@ function emptySetListItem() {
 export default function SetListsEditorPage() {
   const { eventId } = useParams();
   const { currentUser } = useAuth();
-  const { updateEvent, contractors, setListLibrary } = useData();
+  const { updateEvent, contractors, setListLibrary, setListLibraryLoading } = useData();
   const { showToast } = useToast();
   const [event, setEvent] = useState(null);
 
@@ -493,7 +493,9 @@ export default function SetListsEditorPage() {
         <div className="text-sm text-slate-500 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 mb-3">
           This creates an independent event copy. Changes here will not alter the library original, and later library edits will not change this event.
         </div>
-        {setListLibrary.length === 0 ? (
+        {setListLibraryLoading ? (
+          <div className="text-sm text-slate-400 text-center py-6">Loading your set list library…</div>
+        ) : setListLibrary.length === 0 ? (
           <div className="text-sm text-slate-400 text-center py-6">
             No saved set lists yet.
             <br />

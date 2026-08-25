@@ -80,6 +80,7 @@ model Account {
   venues                  Venue[]
   offerings               Offering[]
   contractorGroups        ContractorGroup[]
+  setListLibraryItems     SetListLibraryItem[]
   bookings                Booking[]
   events                  Event[]
 
@@ -1057,6 +1058,29 @@ model ContractorGroup {
   name          String
   contractorIds Json   @default("[]")
   price         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([accountId])
+  @@index([accountId, createdAt, id])
+}
+
+// Reusable set-list templates. Songs stay as ordered JSON because the editor
+// saves/reorders the list as one unit; each library entry is independently
+// searchable and pageable without inflating the relational model per song.
+model SetListLibraryItem {
+  id        String  @id
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  name          String
+  description   String?  @db.Text
+  items         Json     @default("[]")
+  eventIds      Json     @default("[]")
+  searchText    String?  @db.Text
+  lastSentAt    DateTime?
+  lastSentCount Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

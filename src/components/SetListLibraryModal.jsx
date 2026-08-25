@@ -38,6 +38,7 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
   const pendingDocumentDeletes = useRef(new Set());
   const uploadedDraftDocuments = useRef(new Set());
   const [dragOverIndex, setDragOverIndex] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -51,6 +52,7 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
       const linkedIds = setList?.eventIds || (setList?.eventId ? [setList.eventId] : []);
       Promise.allSettled(linkedIds.map(loadEvent));
       setError('');
+      setSaving(false);
       pendingDocumentDeletes.current.clear();
       uploadedDraftDocuments.current.clear();
     }
@@ -125,7 +127,7 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
     });
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     if (!name.trim()) {
       setError('Set list name is required.');
@@ -141,13 +143,20 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
     // this record predates multi-event linking) once JSON-serialized, so it
     // doesn't linger stale alongside the new eventIds array.
     const payload = { name: name.trim(), description: description.trim(), items: keptItems, eventIds, eventId: undefined };
-    const record = setList ? { ...setList, ...payload } : addSetListLibraryItem(payload);
-    if (setList) updateSetListLibraryItem(setList.id, payload);
-    pendingDocumentDeletes.current.forEach((id) => deleteDocument(id).catch(() => {}));
-    pendingDocumentDeletes.current.clear();
-    uploadedDraftDocuments.current.clear();
-    onSaved?.(record);
-    onClose();
+    setSaving(true);
+    setError('');
+    try {
+      const record = setList ? await updateSetListLibraryItem(setList.id, payload) : await addSetListLibraryItem(payload);
+      pendingDocumentDeletes.current.forEach((id) => deleteDocument(id).catch(() => {}));
+      pendingDocumentDeletes.current.clear();
+      uploadedDraftDocuments.current.clear();
+      onSaved?.(record);
+      onClose();
+    } catch (err) {
+      setError(err.message || 'Unable to save this set list.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleCancel() {
@@ -158,7 +167,7 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
   }
 
   return (
-    <Modal open={open} onClose={handleCancel} title={setList ? 'Edit Set List' : 'Add Set List'} widthClass="max-w-2xl">
+    <Modal open={open} onClose={saving ? () => {} : handleCancel} title={setList ? 'Edit Set List' : 'Add Set List'} widthClass="max-w-2xl">
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <div data-testid="setlist-library-modal-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
@@ -294,9 +303,9 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={handleCancel} data-testid="setlist-library-modal-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
-          <button type="submit" data-testid="setlist-library-modal-save-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
-            {setList ? 'Save Changes' : 'Add Set List'}
+          <button type="button" onClick={handleCancel} disabled={saving} data-testid="setlist-library-modal-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50">Cancel</button>
+          <button type="submit" disabled={saving} data-testid="setlist-library-modal-save-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50">
+            {saving ? 'Saving…' : setList ? 'Save Changes' : 'Add Set List'}
           </button>
         </div>
       </form>

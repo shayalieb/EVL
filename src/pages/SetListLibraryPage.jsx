@@ -7,6 +7,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Modal from '../components/ui/Modal';
 import SearchInput from '../components/ui/SearchInput';
 import Tooltip from '../components/ui/Tooltip';
+import Pagination from '../components/ui/Pagination';
 import { useToast } from '../components/ui/Toast';
 import { matchesSearch } from '../lib/search';
 import { formatEventDate } from '../lib/format';
@@ -14,6 +15,8 @@ import { deleteDocument } from '../lib/documents';
 import { generateSetListPdf } from '../lib/setListPdf';
 import { renderSetListEmail, sendSetListEmail } from '../lib/setList';
 import { useContractorHydration } from '../lib/useContractorHydration';
+import { querySetListLibrary } from '../lib/setListLibrary';
+import { useServerList } from '../lib/useServerList';
 
 // Resources-section ListView for reusable set lists (band/orchestra only —
 // gated at the nav item in AppLayout.jsx and the route in App.jsx). Editing
@@ -36,19 +39,26 @@ export default function SetListLibraryPage() {
   // act on (recipients + header name/date are always scoped to one event at
   // a time, never a blended "several events" view).
   const [chooseEventFor, setChooseEventFor] = useState(null);
+  const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    const ids = [...new Set(setListLibrary.flatMap((item) => item.eventIds || (item.eventId ? [item.eventId] : [])))];
-    Promise.allSettled(ids.map(loadEvent));
-  }, [setListLibrary, loadEvent]);
-
-  useContractorHydration(events.flatMap((event) => (event.contractorBookings || []).map((booking) => booking.contractorId)));
-
-  const filteredSetLists = setListLibrary.filter((s) => matchesSearch(search, [
+  const libraryList = useServerList(
+    () => querySetListLibrary({ page, pageSize: 25, search, sort: 'name', direction: 'asc' }),
+    [page, search],
+  );
+  const legacyFiltered = setListLibrary.filter((s) => matchesSearch(search, [
     s.name,
     s.description,
     ...(s.items || []).flatMap((item) => [item.songTitle, item.description]),
   ]));
+  const displayedSetLists = libraryList.error ? legacyFiltered : libraryList.items;
+  useEffect(() => { setPage(1); }, [search]);
+
+  useEffect(() => {
+    const ids = [...new Set(displayedSetLists.flatMap((item) => item.eventIds || (item.eventId ? [item.eventId] : [])))];
+    Promise.allSettled(ids.map(loadEvent));
+  }, [displayedSetLists, loadEvent]);
+
+  useContractorHydration(events.flatMap((event) => (event.contractorBookings || []).map((booking) => booking.contractorId)));
 
   function openAdd() {
     setEditingSetList(null);
@@ -60,13 +70,15 @@ export default function SetListLibraryPage() {
     setModalOpen(true);
   }
 
-  function handleDelete() {
+  async function handleDelete() {
+    await deleteSetListLibraryItem(deleteTarget.id);
     // Songs' PDFs don't cascade-delete on their own — clean them up here so
     // deleting a whole set list doesn't orphan its attachments in storage.
     deleteTarget.items?.forEach((item) => {
       if (item.documentId) deleteDocument(item.documentId).catch(() => {});
     });
-    deleteSetListLibraryItem(deleteTarget.id);
+    libraryList.refresh();
+    showToast('Set list deleted');
     setDeleteTarget(null);
   }
 
@@ -141,7 +153,8 @@ export default function SetListLibraryPage() {
       } else {
         showToast(`Sent ${successCount} of ${total} emails — some failed`, 'error');
       }
-      updateSetListLibraryItem(setList.id, { lastSentAt: new Date().toISOString(), lastSentCount: successCount });
+      await updateSetListLibraryItem(setList.id, { lastSentAt: new Date().toISOString(), lastSentCount: successCount });
+      libraryList.refresh();
       setEmailTarget(null);
     } catch (err) {
       showToast(err.message || 'Failed to send set list email', 'error');
@@ -192,10 +205,10 @@ export default function SetListLibraryPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredSetLists.length === 0 && (
+              {!libraryList.loading && displayedSetLists.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-4 py-10 text-center text-slate-400">
-                    {setListLibrary.length === 0 ? (
+                    {libraryList.total === 0 && !search ? (
                       <div className="flex flex-col items-center gap-3">
                         <div>
                           <p className="font-semibold text-slate-600">Create your first reusable set list</p>
@@ -211,7 +224,7 @@ export default function SetListLibraryPage() {
                   </td>
                 </tr>
               )}
-              {filteredSetLists.map((s) => {
+              {displayedSetLists.map((s) => {
                 const linked = linkedEventsFor(s);
                 const songsPresent = hasSongs(s);
                 const pdfDisabledReason = !songsPresent ? 'Add at least one song before exporting a PDF' : null;
@@ -329,7 +342,10 @@ export default function SetListLibraryPage() {
         </div>
       </div>
 
-      <SetListLibraryModal open={modalOpen} onClose={() => setModalOpen(false)} setList={editingSetList} />
+      {libraryList.error && setListLibrary.length === 0 && <div className="mt-3 text-sm text-red-600">{libraryList.error}</div>}
+      {!libraryList.error && <Pagination page={page} pageCount={libraryList.pageCount} onChange={setPage} totalItems={libraryList.total} pageSize={libraryList.pageSize} testId="setlist-library-pagination" />}
+
+      <SetListLibraryModal open={modalOpen} onClose={() => setModalOpen(false)} setList={editingSetList} onSaved={libraryList.refresh} />
       <ConfirmDialog
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
