@@ -256,7 +256,7 @@ export const HELP_CATEGORIES = [
             'General — a flat amount.',
             'Per Unit — a unit count × a rate per unit (e.g. hours, guests), with the total computed automatically as you type.',
           ] },
-          { type: 'image', src: '/help/offerings-page.png', alt: 'The Offerings page, listing saved General and Per Unit offerings with their values, plus the Ensembles section below' },
+          { type: 'image', src: '/help/offerings-page.png', alt: 'The Services & Packages page, listing saved Flat Price and Per Unit offerings with their values, plus the Ensembles section below' },
           { type: 'note', text: "Editing a saved Offering later never changes copies of it already sitting on a proposal, contract, or invoice — each copy is independent from the moment it's added." },
         ],
       },

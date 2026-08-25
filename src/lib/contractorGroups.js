@@ -6,6 +6,19 @@ export function queryContractorGroups(params) {
   return queryList('/contractor-groups', 'contractorGroups', params);
 }
 
+export async function getAllContractorGroups() {
+  const items = [];
+  let cursor = '';
+  do {
+    const query = new URLSearchParams({ limit: '500' });
+    if (cursor) query.set('cursor', cursor);
+    const data = await apiFetch(`/contractor-groups?${query}`);
+    items.push(...(data.contractorGroups || []));
+    cursor = data.nextCursor || '';
+  } while (cursor);
+  return items;
+}
+
 export async function getContractorGroup(id) {
   const data = await apiFetch(`/contractor-groups/${encodeURIComponent(id)}`);
   return data.contractorGroup;

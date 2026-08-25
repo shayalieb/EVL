@@ -9,6 +9,8 @@ import { queryClients, getClient, createClient as createClientApi, updateClientA
 import { queryBookings, getBooking, createBooking as createBookingApi, updateBookingApi } from '../lib/bookings';
 import { queryEvents, getEvent, createEvent as createEventApi, updateEventApi } from '../lib/events';
 import { queryVenues, getVenue, createVenue as createVenueApi, updateVenueApi, deleteVenueApi } from '../lib/venues';
+import { getAllOfferings, createOffering as createOfferingApi, updateOfferingApi, deleteOfferingApi } from '../lib/offerings';
+import { getAllContractorGroups, createContractorGroup as createContractorGroupApi, updateContractorGroupApi, deleteContractorGroupApi } from '../lib/contractorGroups';
 import { dispositionInfo } from '../lib/bookingDisposition';
 
 function statusLabel(statuses, id) {
@@ -87,11 +89,9 @@ const LIST_FIELDS = {
   inquiryStatuses: 'inquiryStatuses',
   bookingStatuses: 'bookingStatuses',
   emailTemplates: 'emailTemplates',
-  offerings: 'offerings',
   proposalTemplates: 'proposalTemplates',
   contractTemplates: 'contractTemplates',
   setListLibrary: 'setListLibrary',
-  contractorGroups: 'contractorGroups',
 };
 
 export function DataProvider({ children }) {
@@ -121,6 +121,32 @@ export function DataProvider({ children }) {
   useEffect(() => {
     setVenues([]);
     venueSavePromises.current.clear();
+  }, [currentUser?.accountId]);
+
+  const [offerings, setOfferings] = useState([]);
+  const [contractorGroups, setContractorGroups] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const legacyOfferings = currentUser?.offerings || [];
+    const legacyGroups = currentUser?.contractorGroups || [];
+    setOfferings(legacyOfferings);
+    setContractorGroups(legacyGroups);
+    if (!currentUser?.accountId) return undefined;
+    setCatalogLoading(true);
+    Promise.all([getAllOfferings(), getAllContractorGroups()])
+      .then(([nextOfferings, nextGroups]) => {
+        if (!cancelled) {
+          setOfferings(nextOfferings.length || !legacyOfferings.length ? nextOfferings : legacyOfferings);
+          setContractorGroups(nextGroups.length || !legacyGroups.length ? nextGroups : legacyGroups);
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setCatalogLoading(false); });
+    return () => { cancelled = true; };
+    // Legacy arrays are a rollout-only fallback captured at account load;
+    // later blob edits must not restart the table-backed catalog fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.accountId]);
 
   // Same real-table-not-blob treatment as contractors/clients above — see
@@ -623,22 +649,22 @@ export function DataProvider({ children }) {
   }, [currentUser, patchList]);
 
   // ---- Offerings (reusable line items for proposals/contracts) ----
-  const addOffering = useCallback((offering) => {
-    if (!currentUser) return;
-    const record = { id: uid('off'), createdAt: new Date().toISOString(), ...offering };
-    patchList(LIST_FIELDS.offerings, [...(currentUser.offerings || []), record]);
+  const addOffering = useCallback(async (offering) => {
+    const record = await createOfferingApi({ id: uid('off'), ...offering });
+    setOfferings((previous) => [...previous, record]);
     return record;
-  }, [currentUser, patchList]);
+  }, []);
 
-  const updateOffering = useCallback((id, patch) => {
-    if (!currentUser) return;
-    patchList(LIST_FIELDS.offerings, (currentUser.offerings || []).map((o) => (o.id === id ? { ...o, ...patch } : o)));
-  }, [currentUser, patchList]);
+  const updateOffering = useCallback(async (id, patch) => {
+    const record = await updateOfferingApi(id, patch);
+    setOfferings((previous) => previous.map((item) => (item.id === id ? record : item)));
+    return record;
+  }, []);
 
-  const deleteOffering = useCallback((id) => {
-    if (!currentUser) return;
-    patchList(LIST_FIELDS.offerings, (currentUser.offerings || []).filter((o) => o.id !== id));
-  }, [currentUser, patchList]);
+  const deleteOffering = useCallback(async (id) => {
+    await deleteOfferingApi(id);
+    setOfferings((previous) => previous.filter((item) => item.id !== id));
+  }, []);
 
   // ---- Set List Library (reusable set lists, band/orchestra only —
   // pulled into a specific event's own setLists via a deep clone, see
@@ -667,22 +693,22 @@ export function DataProvider({ children }) {
   // copy is independent from then on" contract as Set List Library above.
   // Just { id, name, contractorIds }, no per-slot roles — a saved group is
   // a specific set of people, not a staffing template. ) ----
-  const addContractorGroup = useCallback((group) => {
-    if (!currentUser) return;
-    const record = { id: uid('cgroup'), createdAt: new Date().toISOString(), ...group };
-    patchList(LIST_FIELDS.contractorGroups, [...(currentUser.contractorGroups || []), record]);
+  const addContractorGroup = useCallback(async (group) => {
+    const record = await createContractorGroupApi({ id: uid('cgroup'), ...group });
+    setContractorGroups((previous) => [...previous, record]);
     return record;
-  }, [currentUser, patchList]);
+  }, []);
 
-  const updateContractorGroup = useCallback((id, patch) => {
-    if (!currentUser) return;
-    patchList(LIST_FIELDS.contractorGroups, (currentUser.contractorGroups || []).map((g) => (g.id === id ? { ...g, ...patch } : g)));
-  }, [currentUser, patchList]);
+  const updateContractorGroup = useCallback(async (id, patch) => {
+    const record = await updateContractorGroupApi(id, patch);
+    setContractorGroups((previous) => previous.map((item) => (item.id === id ? record : item)));
+    return record;
+  }, []);
 
-  const deleteContractorGroup = useCallback((id) => {
-    if (!currentUser) return;
-    patchList(LIST_FIELDS.contractorGroups, (currentUser.contractorGroups || []).filter((g) => g.id !== id));
-  }, [currentUser, patchList]);
+  const deleteContractorGroup = useCallback(async (id) => {
+    await deleteContractorGroupApi(id);
+    setContractorGroups((previous) => previous.filter((item) => item.id !== id));
+  }, []);
 
   // ---- Derived helpers ----
   const getContractorById = useCallback((id) => contractors.find((c) => c.id === id), [contractors]);
@@ -753,11 +779,12 @@ export function DataProvider({ children }) {
     inquiryStatuses: currentUser?.inquiryStatuses || [],
     bookingStatuses: currentUser?.bookingStatuses || [],
     emailTemplates: currentUser?.emailTemplates || [],
-    offerings: currentUser?.offerings || [],
+    offerings,
+    catalogLoading,
     proposalTemplates: currentUser?.proposalTemplates || [],
     contractTemplates: currentUser?.contractTemplates || [],
     setListLibrary: currentUser?.setListLibrary || [],
-    contractorGroups: currentUser?.contractorGroups || [],
+    contractorGroups,
     addContractor,
     searchContractors,
     loadContractor,
@@ -820,7 +847,7 @@ export function DataProvider({ children }) {
     computeEventTotalCost,
     computeVendorStatus,
   }), [
-    currentUser, contractors, clients, venues, searchVenues, loadVenue, bookings, events, searchEvents, loadEvent, searchBookings, loadBooking,
+    currentUser, contractors, clients, venues, offerings, contractorGroups, catalogLoading, searchVenues, loadVenue, bookings, events, searchEvents, loadEvent, searchBookings, loadBooking,
     addContractor, searchContractors, loadContractor, loadContractors, updateContractor, deleteContractor,
     addClient, searchClients, loadClient, updateClient, deleteClient, computeClientEventCounts,
     addVenue, updateVenue, deleteVenue,

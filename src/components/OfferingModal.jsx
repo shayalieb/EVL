@@ -15,6 +15,7 @@ export default function OfferingModal({ open, onClose, offering, onSaved }) {
   const { addOffering, updateOffering } = useData();
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -27,6 +28,7 @@ export default function OfferingModal({ open, onClose, offering, onSaved }) {
         ratePerUnit: offering.ratePerUnit ?? '',
       } : emptyForm);
       setError('');
+      setSaving(false);
     }
   }, [open, offering]);
 
@@ -34,16 +36,23 @@ export default function OfferingModal({ open, onClose, offering, onSaved }) {
     setForm((f) => ({ ...f, [field]: val }));
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     if (!form.name.trim()) {
       setError('Offering name is required.');
       return;
     }
-    const record = offering ? { ...offering, ...form } : addOffering(form);
-    if (offering) updateOffering(offering.id, form);
-    onSaved?.(record);
-    onClose();
+    setSaving(true);
+    setError('');
+    try {
+      const record = offering ? await updateOffering(offering.id, form) : await addOffering(form);
+      onSaved?.(record);
+      onClose();
+    } catch (err) {
+      setError(err.message || 'Unable to save this offering.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -72,7 +81,7 @@ export default function OfferingModal({ open, onClose, offering, onSaved }) {
                 form.type === 'general' ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
               }`}
             >
-              General
+              Flat Price
             </button>
             <button
               type="button"
@@ -110,9 +119,9 @@ export default function OfferingModal({ open, onClose, offering, onSaved }) {
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} data-testid="offering-modal-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
-          <button type="submit" data-testid="offering-modal-save-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
-            {offering ? 'Save Changes' : 'Add Offering'}
+          <button type="button" onClick={onClose} disabled={saving} data-testid="offering-modal-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50">Cancel</button>
+          <button type="submit" disabled={saving} data-testid="offering-modal-save-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50">
+            {saving ? 'Saving…' : offering ? 'Save Changes' : 'Add Offering'}
           </button>
         </div>
       </form>

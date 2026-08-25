@@ -28,6 +28,7 @@ export default function ContractorGroupModal({ open, onClose, group, onSaved }) 
   const [contractorIds, setContractorIds] = useState([]);
   const [price, setPrice] = useState('');
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -35,6 +36,7 @@ export default function ContractorGroupModal({ open, onClose, group, onSaved }) 
       setContractorIds(group?.contractorIds || []);
       setPrice(group?.price ?? '');
       setError('');
+      setSaving(false);
     }
   }, [open, group]);
 
@@ -51,7 +53,7 @@ export default function ContractorGroupModal({ open, onClose, group, onSaved }) 
     setContractorIds((prev) => prev.filter((id) => id !== contractorId));
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     if (!name.trim()) {
       setError('Group name is required.');
@@ -62,10 +64,17 @@ export default function ContractorGroupModal({ open, onClose, group, onSaved }) 
       return;
     }
     const payload = { name: name.trim(), contractorIds, price };
-    const record = group ? { ...group, ...payload } : addContractorGroup(payload);
-    if (group) updateContractorGroup(group.id, payload);
-    onSaved?.(record);
-    onClose();
+    setSaving(true);
+    setError('');
+    try {
+      const record = group ? await updateContractorGroup(group.id, payload) : await addContractorGroup(payload);
+      onSaved?.(record);
+      onClose();
+    } catch (err) {
+      setError(err.message || 'Unable to save this ensemble.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -115,9 +124,9 @@ export default function ContractorGroupModal({ open, onClose, group, onSaved }) 
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} data-testid="contractor-group-modal-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
-          <button type="submit" data-testid="contractor-group-modal-save-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
-            {group ? 'Save Changes' : 'Add Ensemble'}
+          <button type="button" onClick={onClose} disabled={saving} data-testid="contractor-group-modal-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50">Cancel</button>
+          <button type="submit" disabled={saving} data-testid="contractor-group-modal-save-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50">
+            {saving ? 'Saving…' : group ? 'Save Changes' : 'Add Ensemble'}
           </button>
         </div>
       </form>

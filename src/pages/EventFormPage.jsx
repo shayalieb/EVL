@@ -192,7 +192,7 @@ export default function EventFormPage() {
   const {
     eventTypes, addEventType, eventStatuses, inquiryStatuses, addInquiryStatus, emailTemplates, loadEvent, loadContractors,
     contractors, searchContractors, contractorTypes, addEvent, updateEvent, computeDurationHours,
-    updateBooking, computeEventTotalCost, contractorGroups,
+    updateBooking, computeEventTotalCost, contractorGroups, catalogLoading,
   } = useData();
   const { can, currentUser, role } = useAuth();
   const { showToast } = useToast();
@@ -1325,9 +1325,11 @@ export default function EventFormPage() {
         <>
           <div className="fixed inset-0 z-10" onClick={() => setEnsemblePickerOpen(false)} />
           <div className="absolute right-0 mt-1 w-72 max-h-64 overflow-y-auto bg-white rounded-lg shadow-lg border border-slate-100 z-20">
-            {contractorGroups.length === 0 && (
+            {catalogLoading ? (
+              <div className="px-3 py-3 text-xs text-slate-400">Loading ensembles…</div>
+            ) : contractorGroups.length === 0 && (
               <div className="px-3 py-3 text-xs text-slate-400">
-                No saved groups yet — add one from the Contractors page.
+                No saved ensembles yet — add one from Services &amp; Packages.
               </div>
             )}
             {contractorGroups.map((g) => (

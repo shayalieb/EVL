@@ -63,7 +63,7 @@ function QuickItemForm({ onAdd, onCancel }) {
 }
 
 export default function OfferingPickerModal({ open, onClose, onSelect, allowEnsemble = false }) {
-  const { offerings, contractorGroups, contractors } = useData();
+  const { offerings, contractorGroups, contractors, catalogLoading } = useData();
   useContractorHydration(open && allowEnsemble ? contractorGroups.flatMap((group) => group.contractorIds || []) : []);
   const [query, setQuery] = useState('');
   const [addingQuickItem, setAddingQuickItem] = useState(false);
@@ -117,7 +117,9 @@ export default function OfferingPickerModal({ open, onClose, onSelect, allowEnse
                 Cancel
               </button>
             </div>
-            {contractorGroups.length === 0 ? (
+            {catalogLoading ? (
+              <div className="text-sm text-slate-400 text-center py-4">Loading ensembles…</div>
+            ) : contractorGroups.length === 0 ? (
               <div className="text-sm text-slate-400 text-center py-4">
                 No saved ensembles yet — add one from the Offerings page.
               </div>
@@ -181,7 +183,9 @@ export default function OfferingPickerModal({ open, onClose, onSelect, allowEnse
             className={inputClass}
           />
         )}
-        {offerings.length === 0 ? (
+        {catalogLoading ? (
+          <div className="text-sm text-slate-400 text-center py-8">Loading saved services and packages…</div>
+        ) : offerings.length === 0 ? (
           <div className="text-sm text-slate-400 text-center py-8">
             No saved offerings yet — use the buttons above to add a one-time item or create a reusable one.
           </div>
@@ -199,7 +203,7 @@ export default function OfferingPickerModal({ open, onClose, onSelect, allowEnse
               >
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-slate-800 truncate">{o.name}</div>
-                  <div className="text-xs text-slate-400">{o.type === 'perUnit' ? 'Per Unit' : 'General'}</div>
+                  <div className="text-xs text-slate-400">{o.type === 'perUnit' ? 'Per Unit' : 'Flat Price'}</div>
                 </div>
                 <div className="text-sm font-semibold text-slate-600 shrink-0">{currency(computeOfferingTotal(o))}</div>
               </button>
