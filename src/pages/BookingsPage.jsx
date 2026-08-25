@@ -387,11 +387,20 @@ export default function BookingsPage() {
               {!loading && pagedBookings.length === 0 && (
                 <tr>
                   <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
-                    {error || (activeTab === 'completed'
-                      ? 'No completed bookings yet.'
-                      : totalItems === 0 && !hasFilters
-                        ? 'No bookings yet. Add an inquiry or quote to start tracking the sales pipeline.'
-                        : 'No bookings match your search or filters.')}
+                    {error || (activeTab === 'completed' ? 'No completed bookings yet.' : totalItems === 0 && !hasFilters ? (
+                      <div className="flex flex-col items-center gap-3">
+                        <div>
+                          <p className="font-semibold text-slate-600">Create your first booking</p>
+                          <p className="text-sm mt-1">Add one yourself, or send a client an inquiry link to collect their details.</p>
+                        </div>
+                        {canEdit && (
+                          <div className="flex flex-wrap justify-center gap-2">
+                            <button type="button" onClick={openAdd} className="min-h-11 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">+ Add Booking</button>
+                            <button type="button" onClick={() => setSendInquiryModalOpen(true)} className="min-h-11 rounded-lg border border-indigo-300 px-4 py-2 text-sm font-semibold text-indigo-600 hover:bg-indigo-50">Send Inquiry Link</button>
+                          </div>
+                        )}
+                      </div>
+                    ) : 'No bookings match your search or filters.')}
                   </td>
                 </tr>
               )}

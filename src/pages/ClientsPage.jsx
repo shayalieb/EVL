@@ -129,9 +129,15 @@ export default function ClientsPage() {
               {!loading && pagedClients.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
-                    {error || (totalItems === 0 && !hasFilters
-                      ? 'No clients yet. Add your first client to start tracking their events.'
-                      : 'No clients match your search.')}
+                    {error || (totalItems === 0 && !hasFilters ? (
+                      <div className="flex flex-col items-center gap-3">
+                        <div>
+                          <p className="font-semibold text-slate-600">Add your first client</p>
+                          <p className="text-sm mt-1">Keep their contact details ready for future bookings and events.</p>
+                        </div>
+                        {canEdit && <button type="button" onClick={openAdd} className="min-h-11 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">+ Add Client</button>}
+                      </div>
+                    ) : 'No clients match your search.')}
                   </td>
                 </tr>
               )}

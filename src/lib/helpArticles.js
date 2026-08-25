@@ -411,12 +411,14 @@ export const HELP_CATEGORIES = [
       {
         id: 'reminders',
         title: 'Reminders',
-        summary: 'Manual follow-ups, plus seven things GigWorks watches for automatically.',
+        summary: 'Manual and recurring follow-ups, plus the conditions GigWorks watches automatically.',
         blocks: [
           { type: 'p', text: 'The Reminders page is a flat, filterable to-do list, each item optionally tied to a client, contractor, event, invoice, or booking. Click "+ Add Reminder" for a manual one, then search and pick the related record if you want one, a date and time (three "Quick set" buttons cover the common cases — Tomorrow, In 3 days, Next week), a note, and an optional "Email me when this reminder is due" checkbox.' },
           { type: 'h', text: 'Filtering the list' },
           { type: 'p', text: 'The status filter buttons — Open, Overdue, Completed — each show a live count. Open covers everything not yet completed, including anything overdue.' },
-          { type: 'h', text: "Seven things GigWorks flags on its own" },
+          { type: 'h', text: 'Recurring reminders' },
+          { type: 'p', text: 'A manual reminder can repeat Daily, Weekly, or Monthly, with an optional end date. The next occurrence is created only when you mark the current one done. Delete the current open occurrence to stop the series.' },
+          { type: 'h', text: "Things GigWorks flags on its own" },
           { type: 'list', items: [
             'Unconfirmed vendor — an event within a few days that still has at least one contractor who hasn\'t confirmed.',
             'Unsigned contract — an event within a few days whose contract still isn\'t fully signed.',
@@ -427,7 +429,7 @@ export const HELP_CATEGORIES = [
             'Proposal awaiting response — a sent proposal that\'s gone several days without the client responding.',
           ] },
           { type: 'note', text: 'Each rule\'s exact threshold (how many days out or overdue it fires) is configurable under Settings → Reminder Rules, visible to owners/admins only. The list above uses each rule\'s default.' },
-          { type: 'p', text: 'These auto-generated reminders always email the account owner and never duplicate, no matter how often the check re-runs.' },
+          { type: 'p', text: 'Auto-generated reminders go to the user who owns the reminder, falling back to the account owner when needed, and never duplicate no matter how often the check re-runs.' },
           { type: 'image', src: '/help/reminders-list.png', alt: 'The Reminders list, showing an open reminder tied to a client, with its date/time, note, and a Mark Done button' },
         ],
       },

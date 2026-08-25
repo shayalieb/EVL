@@ -117,14 +117,16 @@ export default function HomePage() {
               title="Add your business details"
               description="Your name and logo show up on every invoice, contract, and client-facing form — right now they'd just say “Your Business.”"
               actionLabel="Go to Settings"
-              onClick={() => navigate('/settings')}
+              onClick={() => navigate('/settings?tab=business')}
               testId="home-welcome-step-business-info"
             />
             <WelcomeStep
               icon={<WrenchIcon className="w-4 h-4" />}
-              title={`Check your contractor roster (${dashboard.counts.contractors} added)`}
-              description="A few sample contractors are already in there so you can see how it looks — edit them or add your own."
-              actionLabel="View Contractors"
+              title={dashboard.counts.contractors ? `Check your contractor roster (${dashboard.counts.contractors} added)` : 'Add your first contractor'}
+              description={dashboard.counts.contractors
+                ? 'Confirm names, contact information, roles, and pricing before assigning the roster to an event.'
+                : 'Add the people or vendors you hire, including their role and pricing, so they are ready for future events.'}
+              actionLabel={dashboard.counts.contractors ? 'View Contractors' : 'Add a Contractor'}
               onClick={() => navigate('/contractors')}
               testId="home-welcome-step-contractors"
             />
@@ -136,6 +138,12 @@ export default function HomePage() {
               onClick={() => navigate('/bookings/new')}
               testId="home-welcome-step-booking"
             />
+          </div>
+          <div className="flex items-center justify-center gap-2 text-sm text-slate-500">
+            <span>Not sure how Bookings and Events fit together?</span>
+            <button type="button" onClick={() => navigate('/help?article=bookings-vs-events')} className="font-semibold text-indigo-600 hover:underline">
+              Read the quick guide →
+            </button>
           </div>
         </div>
       ) : (

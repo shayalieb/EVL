@@ -3,9 +3,20 @@ import { useSearchParams } from 'react-router-dom';
 import { HELP_CATEGORIES, HELP_ARTICLES_FLAT } from '../lib/helpArticles';
 import HelpArticleContent from '../components/HelpArticleContent';
 import HelpContactSupport from '../components/HelpContactSupport';
+import SearchInput from '../components/ui/SearchInput';
 
 const CONTACT_ID = 'contact-support';
 const DEFAULT_ARTICLE_ID = HELP_CATEGORIES[0].articles[0].id;
+const START_HERE = [
+  { id: 'welcome', label: 'How GigWorks works' },
+  { id: 'setup', label: 'Set up your business' },
+  { id: 'bookings-vs-events', label: 'Bookings vs. Events' },
+];
+
+function searchableArticleText(article) {
+  const blockText = (article.blocks || []).flatMap((block) => [block.text, ...(block.items || [])]).filter(Boolean);
+  return [article.title, article.summary, ...blockText].join(' ').toLowerCase();
+}
 
 const navLinkClass = (active) => `block w-full text-left px-3 py-1.5 rounded-lg text-sm transition-colors ${
   active ? 'bg-indigo-50 text-indigo-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'
@@ -29,7 +40,7 @@ export default function HelpPage() {
     const q = query.trim().toLowerCase();
     if (!q) return HELP_CATEGORIES;
     return HELP_CATEGORIES
-      .map((cat) => ({ ...cat, articles: cat.articles.filter((a) => `${a.title} ${a.summary}`.toLowerCase().includes(q)) }))
+      .map((cat) => ({ ...cat, articles: cat.articles.filter((a) => searchableArticleText(a).includes(q)) }))
       .filter((cat) => cat.articles.length > 0);
   }, [query]);
 
@@ -42,15 +53,20 @@ export default function HelpPage() {
       <h2 className="text-2xl font-bold text-slate-800 mb-1">Help Center</h2>
       <p className="text-sm text-slate-500 mb-5">Everything the app does, and how to actually do it.</p>
 
+      <div className="mb-5 rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
+        <div className="text-xs font-bold uppercase tracking-wide text-indigo-700 mb-2">New to GigWorks? Start here</div>
+        <div className="flex flex-wrap gap-2">
+          {START_HERE.map((article) => (
+            <button key={article.id} type="button" onClick={() => selectArticle(article.id)} className="min-h-11 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50">
+              {article.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="flex flex-col lg:flex-row gap-6">
-        <nav className="w-full lg:w-64 shrink-0">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search articles…"
-            data-testid="help-search-input"
-            className="w-full mb-4 px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-          />
+        <nav className="w-full lg:w-64 shrink-0" aria-label="Help topics">
+          <SearchInput value={query} onChange={setQuery} placeholder="Search all help content…" className="w-full mb-4" testId="help-search-input" />
           <div className="space-y-5 max-h-[65vh] overflow-y-auto pr-1">
             {filteredCategories.length === 0 && (
               <p className="text-sm text-slate-400">No articles match "{query}."</p>
