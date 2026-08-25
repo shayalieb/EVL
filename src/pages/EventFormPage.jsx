@@ -198,27 +198,20 @@ export default function EventFormPage() {
   }, [can, navigate]);
 
   const isEditing = !!eventId;
-  // The list-lite record from context (see server/src/routes/events.js) —
-  // enough to confirm the id exists, but missing categoryTabs/schedule/
-  // prepGroups/requests/shotList/secondShooters/otherExpenses/history. The
-  // form itself hydrates from `event` below, which waits for the
-  // full-detail fetch.
-  const eventLite = isEditing ? events.find((e) => e.id === eventId) : null;
-  const eventLiteId = eventLite?.id;
   const [fullEvent, setFullEvent] = useState(null);
   const [eventDetailLoaded, setEventDetailLoaded] = useState(false);
   const event = isEditing ? fullEvent : null;
 
   useEffect(() => {
-    if (!eventLiteId) { setFullEvent(null); setEventDetailLoaded(false); return; }
+    if (!eventId) { setFullEvent(null); setEventDetailLoaded(false); return; }
     let cancelled = false;
     setEventDetailLoaded(false);
-    getEvent(eventLiteId)
+    getEvent(eventId)
       .then((full) => { if (!cancelled) setFullEvent(full); })
       .catch(() => { if (!cancelled) setFullEvent(null); })
       .finally(() => { if (!cancelled) setEventDetailLoaded(true); });
     return () => { cancelled = true; };
-  }, [eventLiteId]);
+  }, [eventId]);
 
   // Profit/loss is sensitive financial data — same owner/admin-only gate
   // already used for Settings -> Users/Billing.

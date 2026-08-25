@@ -433,7 +433,7 @@ export default function BookingFormPage() {
   const { bookingId } = useParams();
   const navigate = useNavigate();
   const {
-    bookings, clients, searchClients, venues, eventTypes, addEventType, bookingStatuses,
+    clients, searchClients, venues, eventTypes, addEventType, bookingStatuses,
     addClient, addBooking, updateBooking, convertBookingToEvent, addEvent,
     proposalTemplates, addProposalTemplate, contractTemplates, addContractTemplate,
   } = useData();
@@ -446,26 +446,20 @@ export default function BookingFormPage() {
   }, [can, navigate]);
 
   const isEditing = !!bookingId;
-  // The list-lite record from context (see server/src/routes/bookings.js) —
-  // enough to confirm the id exists, but missing schedule/activityLog/the
-  // full proposal. The form itself hydrates from `booking` below, which
-  // waits for the full-detail fetch.
-  const bookingLite = isEditing ? bookings.find((b) => b.id === bookingId) : null;
-  const bookingLiteId = bookingLite?.id;
   const [fullBooking, setFullBooking] = useState(null);
   const [bookingDetailLoaded, setBookingDetailLoaded] = useState(false);
   const booking = isEditing ? fullBooking : null;
 
   useEffect(() => {
-    if (!bookingLiteId) { setFullBooking(null); setBookingDetailLoaded(false); return; }
+    if (!bookingId) { setFullBooking(null); setBookingDetailLoaded(false); return; }
     let cancelled = false;
     setBookingDetailLoaded(false);
-    getBooking(bookingLiteId)
+    getBooking(bookingId)
       .then((full) => { if (!cancelled) setFullBooking(full); })
       .catch(() => { if (!cancelled) setFullBooking(null); })
       .finally(() => { if (!cancelled) setBookingDetailLoaded(true); });
     return () => { cancelled = true; };
-  }, [bookingLiteId]);
+  }, [bookingId]);
 
   const [form, setForm] = useState(emptyForm());
   const [error, setError] = useState('');

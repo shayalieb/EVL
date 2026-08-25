@@ -10,6 +10,7 @@ import StagePlotChannelList from '../components/StagePlotChannelList';
 import StagePlotBacklineList from '../components/StagePlotBacklineList';
 import StagePlotEmailModal from '../components/StagePlotEmailModal';
 import EmailThreadModal from '../components/EmailThreadModal';
+import { getEvent } from '../lib/events';
 
 function formatTimeAgo(iso) {
   if (!iso) return '';
@@ -27,8 +28,8 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   const { eventId } = useParams();
   const isModal = !!onClose;
   const { currentUser } = useAuth();
-  const { events, contractors } = useData();
-  const event = events.find((e) => e.id === eventId);
+  const { contractors } = useData();
+  const [event, setEvent] = useState(null);
   const [plot, setPlot] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [activePageId, setActivePageId] = useState(null);
@@ -52,6 +53,8 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   }, [eventId]);
 
   useEffect(() => {
+    let cancelled = false;
+    getEvent(eventId).then((record) => { if (!cancelled) setEvent(record); }).catch(() => {});
     getOrCreateStagePlot(eventId)
       .then((p) => {
         setPlot(p);
@@ -59,6 +62,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
       })
       .catch((err) => setLoadError(err.message));
     refreshThreadSummaries();
+    return () => { cancelled = true; };
   }, [eventId, refreshThreadSummaries]);
 
   // A selected icon only means something on the page it was selected on —

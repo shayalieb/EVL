@@ -35,21 +35,16 @@ function emptySetListItem() {
 export default function SetListsEditorPage() {
   const { eventId } = useParams();
   const { currentUser } = useAuth();
-  const { events, updateEvent, contractors, setListLibrary } = useData();
+  const { updateEvent, contractors, setListLibrary } = useData();
   const { showToast } = useToast();
-  // events (from context) is the list-lite shape — setLists is edit-only
-  // content excluded from it (see server/src/routes/events.js), so this
-  // page fetches its own full record, same pattern as EventFormPage.jsx.
-  const eventLite = events.find((e) => e.id === eventId);
-  const eventLiteId = eventLite?.id;
   const [event, setEvent] = useState(null);
 
   useEffect(() => {
-    if (!eventLiteId) { setEvent(null); return; }
+    if (!eventId) { setEvent(null); return; }
     let cancelled = false;
-    getEvent(eventLiteId).then((full) => { if (!cancelled) setEvent(full); }).catch(() => { if (!cancelled) setEvent(null); });
+    getEvent(eventId).then((full) => { if (!cancelled) setEvent(full); }).catch(() => { if (!cancelled) setEvent(null); });
     return () => { cancelled = true; };
-  }, [eventLiteId]);
+  }, [eventId]);
 
   const [setLists, setSetLists] = useState([]);
   const [activeSetListId, setActiveSetListId] = useState(null);

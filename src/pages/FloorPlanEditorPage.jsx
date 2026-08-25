@@ -1,28 +1,30 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useData } from '../context/DataContext';
 import { getOrCreateFloorPlan, addFloorPlanPage, deleteFloorPlanPage } from '../lib/floorPlans';
 import { generateFloorPlanPdf } from '../lib/floorPlanPdf';
 import FloorPlanPageEditor from '../components/FloorPlanPageEditor';
+import { getEvent } from '../lib/events';
 
 export default function FloorPlanEditorPage() {
   const { eventId } = useParams();
   const { currentUser } = useAuth();
-  const { events } = useData();
-  const event = events.find((e) => e.id === eventId);
+  const [event, setEvent] = useState(null);
   const [plan, setPlan] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [activePageId, setActivePageId] = useState(null);
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+    getEvent(eventId).then((record) => { if (!cancelled) setEvent(record); }).catch(() => {});
     getOrCreateFloorPlan(eventId)
       .then((p) => {
         setPlan(p);
         setActivePageId(p.pages[0]?.id || null);
       })
       .catch((err) => setLoadError(err.message));
+    return () => { cancelled = true; };
   }, [eventId]);
 
   function handlePageSaved(pageId, patch) {
