@@ -16,6 +16,7 @@ import Pagination from '../components/ui/Pagination';
 import { formatCurrency as currency } from '../lib/format';
 import { matchesSearch } from '../lib/search';
 import { usePagination } from '../lib/usePagination';
+import { eventCostingStatus } from '../lib/eventCosting';
 
 const VIEW_TABS = [
   { id: 'list', label: 'List View' },
@@ -32,7 +33,7 @@ function formatDateWithWeekday(dateStr) {
 
 export default function EventsPage() {
   const {
-    events, bookings, eventStatuses, eventTypes,
+    events, bookings, contractors, inquiryStatuses, eventStatuses, eventTypes,
     deleteEvent, completeEvent, restoreEvent, completeBooking,
     computeEventTotalCost, computeVendorStatus, getContractorById,
   } = useData();
@@ -198,13 +199,18 @@ export default function EventsPage() {
               {pagedEvents.map((evt) => {
                 const status = eventStatuses.find((s) => s.id === evt.eventStatus);
                 const total = computeEventTotalCost(evt);
+                const costing = eventCostingStatus(evt, contractors, inquiryStatuses);
                 const vendor = computeVendorStatus(evt);
                 const count = evt.contractorBookings.length;
 
                 return (
                   <tr key={evt.id} data-testid="event-row" className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                     <td className="px-4 py-3">
-                      {status && <Badge color={status.color}>{status.label}</Badge>}
+                      {status ? (
+                        <Badge color={status.color}>{status.label}</Badge>
+                      ) : (
+                        <button type="button" onClick={() => navigate(`/events/${evt.id}`)} className="text-amber-700 font-semibold hover:underline">Status required</button>
+                      )}
                     </td>
                     <td className="px-4 py-3 font-medium text-slate-800">
                       {canEdit ? (
@@ -223,7 +229,9 @@ export default function EventsPage() {
                     <td className="px-4 py-3 text-slate-600">{formatDateWithWeekday(evt.eventDate)}</td>
                     <td className="hidden sm:table-cell px-4 py-3">
                       {count === 0 ? (
-                        <span className="text-slate-400">0</span>
+                        <span className={evt.noOutsideContractorsNeeded ? 'text-slate-500' : 'text-amber-700 font-semibold'}>
+                          {evt.noOutsideContractorsNeeded ? 'Not needed' : 'Not staffed'}
+                        </span>
                       ) : (
                         <Tooltip content={
                           <div className="space-y-1">
@@ -242,10 +250,18 @@ export default function EventsPage() {
                         </Tooltip>
                       )}
                     </td>
-                    <td className="hidden sm:table-cell px-4 py-3 text-slate-700 font-medium">{currency(total)}</td>
+                    <td className="hidden sm:table-cell px-4 py-3 text-slate-700 font-medium">
+                      {costing.complete ? (
+                        total > 0 ? currency(total) : <span className="text-slate-500">No contractor costs</span>
+                      ) : (
+                        <button type="button" onClick={() => navigate(`/events/${evt.id}`)} className="text-amber-700 font-semibold hover:underline">Costing incomplete</button>
+                      )}
+                    </td>
                     <td className="hidden sm:table-cell px-4 py-3">
                       {vendor.status === 'none' ? (
-                        <span className="text-slate-300">—</span>
+                        <span className={evt.noOutsideContractorsNeeded ? 'text-slate-500' : 'text-amber-700'}>
+                          {evt.noOutsideContractorsNeeded ? 'Not needed' : 'Not started'}
+                        </span>
                       ) : (
                         <Tooltip content={
                           <div className="space-y-2">

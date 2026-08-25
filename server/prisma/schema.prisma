@@ -1096,26 +1096,27 @@ model Event {
   accountId String
   account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
-  name              String?
-  eventType         String?
-  eventDate         String?
-  eventDayOfTheWeek String?
-  clientId          String?
-  brideName         String?
-  groomName         String?
+  name                       String?
+  eventType                  String?
+  eventDate                  String?
+  eventDayOfTheWeek          String?
+  clientId                   String?
+  brideName                  String?
+  groomName                  String?
   // String, not Int — same reasoning as Booking.guestCount above.
-  guestCount        String?
-  contactPhone      String?
-  contactPhoneExt   String?
-  contactEmail      String?
-  startTime         String?
-  endTime           String?
-  eventNote         String?   @db.Text
-  prepNotes         String?   @db.Text
-  eventStatus       String?
-  deletedAt         DateTime?
+  guestCount                 String?
+  contactPhone               String?
+  contactPhoneExt            String?
+  contactEmail               String?
+  startTime                  String?
+  endTime                    String?
+  eventNote                  String?   @db.Text
+  prepNotes                  String?   @db.Text
+  eventStatus                String?
+  noOutsideContractorsNeeded Boolean   @default(false)
+  deletedAt                  DateTime?
   // Same "done, not gone" reasoning as Booking.completedAt above.
-  completedAt       DateTime?
+  completedAt                DateTime?
 
   venue              Json @default("{}")
   contractorBookings Json @default("[]")

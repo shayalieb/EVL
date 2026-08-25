@@ -8,6 +8,7 @@ import { listInvoices } from '../lib/invoices';
 import { CalendarIcon, ClockIcon, DollarIcon, UsersIcon, WrenchIcon, AlertIcon, ClipboardIcon } from '../components/ui/icons';
 
 import Skeleton from '../components/ui/Skeleton';
+import { eventCostingStatus } from '../lib/eventCosting';
 
 // At-risk window for the "needs attention soon" panel below — events inside
 // this many days that still have unconfirmed vendors are the ones actually
@@ -111,7 +112,8 @@ export default function HomePage() {
       .filter((e) => e.eventDate >= today && !isCancelled(e) && !e.completedAt)
       .sort((a, b) => a.eventDate.localeCompare(b.eventDate));
 
-    const pipelineValue = upcoming.reduce((sum, e) => sum + computeEventTotalCost(e), 0);
+    const fullyCostedUpcoming = upcoming.filter((event) => eventCostingStatus(event, contractors, currentUser?.inquiryStatuses || []).complete);
+    const pipelineValue = fullyCostedUpcoming.reduce((sum, e) => sum + computeEventTotalCost(e), 0);
     const needsConfirmation = upcoming.filter((e) => computeVendorStatus(e).status === 'pending').length;
 
     const atRiskCutoff = new Date();
@@ -149,7 +151,7 @@ export default function HomePage() {
       topContractors,
       followUpClients,
     };
-  }, [events, clients, eventStatuses, computeEventTotalCost, computeVendorStatus, computeClientEventCounts, getContractorById]);
+  }, [events, clients, contractors, currentUser, eventStatuses, computeEventTotalCost, computeVendorStatus, computeClientEventCounts, getContractorById]);
 
   const overdueInvoices = useMemo(() => {
     const today = todayISO();
@@ -171,6 +173,7 @@ export default function HomePage() {
   // isn't shown as both the best AND the worst result.
   const financialsSnapshot = useMemo(() => {
     const gigs = [];
+    const incomplete = [];
     let totalRevenue = 0;
     let totalCosts = 0;
     for (const evt of events) {
@@ -181,21 +184,27 @@ export default function HomePage() {
         .reduce((sum, inv) => sum + (inv.total || 0), 0);
       if (evtRevenue <= 0) continue;
       const evtCost = computeEventTotalCost(evt);
+      const costing = eventCostingStatus(evt, contractors, currentUser?.inquiryStatuses || []);
+      if (!costing.complete) {
+        incomplete.push({ id: evt.id, name: evt.name, reason: costing.reason });
+        continue;
+      }
+      gigs.push({ id: evt.id, name: evt.name, margin: ((evtRevenue - evtCost) / evtRevenue) * 100 });
       totalRevenue += evtRevenue;
       totalCosts += evtCost;
-      gigs.push({ id: evt.id, name: evt.name, margin: ((evtRevenue - evtCost) / evtRevenue) * 100 });
     }
-    const avgMargin = gigs.length ? gigs.reduce((sum, g) => sum + g.margin, 0) / gigs.length : null;
+    const avgMargin = totalRevenue > 0 ? ((totalRevenue - totalCosts) / totalRevenue) * 100 : null;
     const sorted = [...gigs].sort((a, b) => b.margin - a.margin);
     return {
       totalRevenue,
       totalCosts,
       avgMargin,
       count: gigs.length,
+      incomplete,
       bestGig: sorted[0] || null,
       worstGig: sorted.length > 1 ? sorted[sorted.length - 1] : null,
     };
-  }, [events, bookings, invoices, computeEventTotalCost]);
+  }, [events, bookings, invoices, computeEventTotalCost, contractors, currentUser]);
 
   return (
     <div>
@@ -244,7 +253,7 @@ export default function HomePage() {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
         <StatTile label="Total Events" value={stats.totalEvents} color="#64748b" icon={<CalendarIcon />} testId="home-stat-total-events" />
         <StatTile label="Upcoming Events" value={stats.upcomingCount} color="#2563eb" icon={<ClockIcon />} testId="home-stat-upcoming-events" />
-        <StatTile label="Pipeline Value" value={currency(stats.pipelineValue)} color="#4f46e5" icon={<DollarIcon />} testId="home-stat-pipeline-value" />
+        <StatTile label="Upcoming Costs" value={currency(stats.pipelineValue)} color="#4f46e5" icon={<DollarIcon />} testId="home-stat-pipeline-value" />
         <StatTile label="Total Clients" value={clients.length} color="#7c3aed" icon={<UsersIcon />} testId="home-stat-total-clients" />
         <StatTile label="Total Contractors" value={contractors.length} color="#0d9488" icon={<WrenchIcon />} testId="home-stat-total-contractors" />
         <StatTile
@@ -258,25 +267,39 @@ export default function HomePage() {
 
       {invoicesLoading ? (
         <Skeleton className="h-40 w-full rounded-xl mb-6" />
-      ) : financialsSnapshot.count > 0 && (
+      ) : (financialsSnapshot.count > 0 || financialsSnapshot.incomplete.length > 0) && (
         <div className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
           <PanelHeading color="#0d9488" icon={<DollarIcon className="w-3.5 h-3.5" />}>Financials Snapshot</PanelHeading>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
             <div>
-              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Total Revenue</div>
+              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Reviewed Revenue</div>
               <div className="text-xl font-bold text-slate-800" data-testid="home-financials-total-revenue">{currency(financialsSnapshot.totalRevenue)}</div>
             </div>
             <div>
-              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Total Contractor Costs</div>
+              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Reviewed Contractor Costs</div>
               <div className="text-xl font-bold text-slate-800" data-testid="home-financials-total-costs">{currency(financialsSnapshot.totalCosts)}</div>
             </div>
             <div>
               <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Average Margin</div>
               <div className="text-xl font-bold text-slate-800" data-testid="home-financials-avg-margin">
-                {financialsSnapshot.avgMargin.toFixed(1)}%
+                {financialsSnapshot.avgMargin == null ? '—' : `${financialsSnapshot.avgMargin.toFixed(1)}%`}
               </div>
+              <div className="text-xs text-slate-400 mt-1">Weighted across {financialsSnapshot.count} fully costed {financialsSnapshot.count === 1 ? 'event' : 'events'}</div>
             </div>
           </div>
+          {financialsSnapshot.incomplete.length > 0 && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3" data-testid="home-financials-incomplete-panel">
+              <div className="text-xs font-bold uppercase tracking-wide text-amber-800 mb-2">Costing needs review</div>
+              <div className="space-y-1">
+                {financialsSnapshot.incomplete.slice(0, 5).map((event) => (
+                  <button key={event.id} type="button" onClick={() => navigate(`/events/${event.id}`)} className="w-full flex items-center justify-between gap-3 text-left text-sm text-amber-900 hover:underline">
+                    <span className="truncate">{event.name || 'Unnamed event'}</span>
+                    <span className="text-xs text-amber-700 shrink-0">{event.reason} →</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {(financialsSnapshot.bestGig || financialsSnapshot.worstGig) && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-slate-100">
               {financialsSnapshot.bestGig && (

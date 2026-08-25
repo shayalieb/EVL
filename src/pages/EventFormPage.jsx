@@ -127,6 +127,7 @@ function emptyForm() {
     contactPhone: '', contactPhoneExt: '', contactEmail: '',
     startTime: '', endTime: '',
     eventNote: '',
+    noOutsideContractorsNeeded: false,
     contractorBookings: [],
     // Which category/group tabs have been added to this event's Contractors
     // tab — starts empty; tabs are added explicitly via the selector.
@@ -313,6 +314,7 @@ export default function EventFormPage() {
         contactPhone: event.contactPhone, contactPhoneExt: event.contactPhoneExt || '', contactEmail: event.contactEmail,
         startTime: event.startTime, endTime: event.endTime,
         eventNote: event.eventNote || '',
+        noOutsideContractorsNeeded: !!event.noOutsideContractorsNeeded,
         contractorBookings: [...event.contractorBookings],
         categoryTabs,
         schedule: event.schedule || [emptyScheduleItem()],
@@ -1591,6 +1593,20 @@ export default function EventFormPage() {
                   className={`${inputClass} max-w-[10rem]`}
                 />
               </div>
+
+              <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-3">
+                <input
+                  type="checkbox"
+                  checked={form.noOutsideContractorsNeeded}
+                  onChange={(e) => update('noOutsideContractorsNeeded', e.target.checked)}
+                  data-testid="event-form-no-outside-contractors-checkbox"
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-slate-700">No outside contractors needed</span>
+                  <span className="block text-xs text-slate-500 mt-0.5">Use this when the owner performs the event or external staffing genuinely costs $0.</span>
+                </span>
+              </label>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="flex gap-2">
