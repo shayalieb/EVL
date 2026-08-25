@@ -99,6 +99,10 @@ test('primary signed-in workflows remain usable at phone width', async ({ page }
 
 test('keyboard users can skip navigation and contain focus inside a modal', async ({ page }) => {
   await signIn(page);
+  // Sign-in is a client-side navigation, so Chromium can retain focus on
+  // the submit control after the destination renders. Start this assertion
+  // from a neutral document focus just as a fresh page keyboard visit does.
+  await page.evaluate(() => document.activeElement?.blur());
   await page.keyboard.press('Tab');
   const skipLink = page.getByRole('link', { name: 'Skip to main content' });
   await expect(skipLink).toBeFocused();

@@ -1,4 +1,5 @@
 import { prisma } from './prisma.js';
+import { withBackgroundJobLease } from './backgroundJobLease.js';
 
 // Events/bookings are soft-deleted (deletedAt set, see DataContext's
 // deleteEvent/deleteBooking) so they stay recoverable and keep an audit
@@ -9,6 +10,7 @@ import { prisma } from './prisma.js';
 // tight polling, hence the much longer interval than that scheduler's 60s.
 const POLL_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const RETENTION_DAYS = 30;
+const PURGE_BATCH_SIZE = 100;
 
 function cutoffDate() {
   return new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
@@ -53,26 +55,28 @@ export async function tick() {
   if (running) return;
   running = true;
   try {
-    const before = cutoffDate();
-    const [events, bookings] = await Promise.all([
-      prisma.event.findMany({ where: { deletedAt: { not: null, lt: before } }, select: { id: true } }),
-      prisma.booking.findMany({ where: { deletedAt: { not: null, lt: before } }, select: { id: true } }),
-    ]);
+    await withBackgroundJobLease('deleted-record-purger', async () => {
+      const before = cutoffDate();
+      const [events, bookings] = await Promise.all([
+        prisma.event.findMany({ where: { deletedAt: { not: null, lt: before } }, select: { id: true }, orderBy: { deletedAt: 'asc' }, take: PURGE_BATCH_SIZE }),
+        prisma.booking.findMany({ where: { deletedAt: { not: null, lt: before } }, select: { id: true }, orderBy: { deletedAt: 'asc' }, take: PURGE_BATCH_SIZE }),
+      ]);
 
-    for (const event of events) {
-      try {
-        await purgeEvent(event);
-      } catch (err) {
-        console.error(`Failed to purge event ${event.id}:`, err);
+      for (const event of events) {
+        try {
+          await purgeEvent(event);
+        } catch (err) {
+          console.error(`Failed to purge event ${event.id}:`, err);
+        }
       }
-    }
-    for (const booking of bookings) {
-      try {
-        await purgeBooking(booking);
-      } catch (err) {
-        console.error(`Failed to purge booking ${booking.id}:`, err);
+      for (const booking of bookings) {
+        try {
+          await purgeBooking(booking);
+        } catch (err) {
+          console.error(`Failed to purge booking ${booking.id}:`, err);
+        }
       }
-    }
+    }, POLL_INTERVAL_MS);
   } catch (err) {
     console.error('Deleted-record purge tick failed:', err);
   } finally {

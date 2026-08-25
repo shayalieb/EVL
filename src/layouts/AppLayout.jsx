@@ -118,7 +118,7 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      <a href="#main-content" className="fixed left-3 top-3 z-[100] -translate-y-20 focus:translate-y-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-lg">
+      <a href="#main-content" onClick={() => requestAnimationFrame(() => document.getElementById('main-content')?.focus())} className="fixed left-3 top-3 z-[100] -translate-y-20 focus:translate-y-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-lg">
         Skip to main content
       </a>
       <header className="h-20 border-b border-slate-200 bg-white flex items-center justify-between px-4 sm:px-6 shrink-0">

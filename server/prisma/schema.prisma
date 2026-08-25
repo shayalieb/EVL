@@ -590,6 +590,8 @@ model InquiryLink {
   sentAt    DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+  // Partial retention indexes for the two sentAt branches live in the
+  // migration because Prisma cannot express partial indexes in this schema.
 
   @@index([accountId])
   @@index([accountId, bookingId])
@@ -1268,6 +1270,7 @@ model Booking {
 
   @@index([accountId])
   @@index([accountId, deletedAt, createdAt, id])
+  @@index([deletedAt])
   // Queried directly by the reminder rule engine and the deleted-record
   // purger (both scan across accounts), not just filtered client-side —
   // see server/src/lib/reminderRuleEngine.js and deletedRecordPurger.js.
@@ -1325,6 +1328,7 @@ model Event {
   @@index([accountId])
   @@index([accountId, deletedAt, createdAt, id])
   @@index([accountId, deletedAt, completedAt, eventDate, id])
+  @@index([deletedAt])
 }
 
 // The one shareable RSVP link per event — a guest visiting it adds
