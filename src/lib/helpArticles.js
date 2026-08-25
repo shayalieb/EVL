@@ -386,7 +386,7 @@ export const HELP_CATEGORIES = [
         title: 'Set Lists',
         summary: 'A saved library, pulled into any event in one click.',
         blocks: [
-          { type: 'p', text: "Set List Library (its own page) is where you build and save reusable songs/sets. On any event's Set Lists tab, click \"+ From Library\" to pull a saved set list straight in — it's copied in, not linked, so editing it on this event never touches the saved original." },
+          { type: 'p', text: "Set List Library (its own page) is where you build and save reusable songs/sets. On any event's Set Lists tab, click \"+ Add from Library\" to copy a saved set list straight in. Review the copy and save the event; editing it afterward never touches the saved original." },
           { type: 'p', text: "From there you can reorder songs, and send the finished set list by email with a PDF and any downloadable sheet-music links attached." },
           { type: 'image', src: '/help/setlist-editor.png', alt: 'A set list editor showing a "Reception" set list with three songs added' },
         ],

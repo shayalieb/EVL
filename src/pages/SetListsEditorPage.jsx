@@ -13,7 +13,9 @@ import DocumentPreviewModal from '../components/DocumentPreviewModal';
 import SetListEmailModal from '../components/SetListEmailModal';
 import Modal from '../components/ui/Modal';
 import Tooltip from '../components/ui/Tooltip';
+import SearchInput from '../components/ui/SearchInput';
 import { useContractorHydration } from '../lib/useContractorHydration';
+import { matchesSearch } from '../lib/search';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -59,6 +61,7 @@ export default function SetListsEditorPage() {
   const hydratedRef = useRef(null);
   const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
   const [pullingLibraryId, setPullingLibraryId] = useState(null);
+  const [librarySearch, setLibrarySearch] = useState('');
 
   useContractorHydration((event?.contractorBookings || []).map((booking) => booking.contractorId));
 
@@ -72,6 +75,21 @@ export default function SetListsEditorPage() {
 
   const dirty = JSON.stringify(setLists) !== JSON.stringify(event?.setLists || []);
   const activeSetList = setLists.find((s) => s.id === activeSetListId);
+  const filteredLibrary = setListLibrary.filter((setList) => matchesSearch(librarySearch, [
+    setList.name,
+    setList.description,
+    ...(setList.items || []).flatMap((item) => [item.songTitle, item.description]),
+  ]));
+
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const warnBeforeUnload = (browserEvent) => {
+      browserEvent.preventDefault();
+      browserEvent.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [dirty]);
 
   // Whoever's booked on this event, not just prep-group members (unlike
   // PrepEmailModal's recipient pool) — a set list is relevant to whoever's
@@ -100,7 +118,8 @@ export default function SetListsEditorPage() {
   async function pullFromLibrary(libraryEntry) {
     setPullingLibraryId(libraryEntry.id);
     try {
-      const items = await Promise.all(libraryEntry.items.map(async (it) => {
+      let attachmentFailures = 0;
+      const items = await Promise.all((libraryEntry.items || []).map(async (it) => {
         let doc = { documentId: null, documentName: null, documentContentType: null, documentShareToken: null };
         if (it.documentId) {
           try {
@@ -110,19 +129,29 @@ export default function SetListsEditorPage() {
             // Copy failed (e.g. a pre-storage-migration document with no
             // storageKey) — pull the song in without its attachment rather
             // than blocking the whole set list.
+            attachmentFailures++;
           }
         }
         return { id: uid('song'), songTitle: it.songTitle, description: it.description, link: it.link, ...doc };
       }));
-      const list = { id: uid('setlist'), name: libraryEntry.name, items };
+      const list = { id: uid('setlist'), librarySourceId: libraryEntry.id, name: libraryEntry.name, items };
       setSetLists((prev) => [...prev, list]);
       setActiveSetListId(list.id);
       setLibraryPickerOpen(false);
+      setLibrarySearch('');
+      showToast(attachmentFailures
+        ? `Added “${libraryEntry.name},” but ${attachmentFailures} attachment${attachmentFailures === 1 ? '' : 's'} could not be copied. Review the list, then save changes.`
+        : `Added “${libraryEntry.name}.” Save changes to keep it on this event.`, attachmentFailures ? 'error' : 'success');
     } catch (err) {
       showToast(err.message || 'Failed to pull set list from library', 'error');
     } finally {
       setPullingLibraryId(null);
     }
+  }
+
+  function openLibraryPicker() {
+    setLibrarySearch('');
+    setLibraryPickerOpen(true);
   }
 
   function renameSetList(id, name) {
@@ -333,14 +362,19 @@ export default function SetListsEditorPage() {
         <button type="button" onClick={addSetList} data-testid="setlist-add-button" className="px-3 py-2 text-sm text-indigo-600 font-semibold">
           + Add Set List
         </button>
-        <button type="button" onClick={() => setLibraryPickerOpen(true)} data-testid="setlist-from-library-button" className="px-3 py-2 text-sm text-indigo-600 font-semibold">
-          + From Library
+        <button type="button" onClick={openLibraryPicker} data-testid="setlist-from-library-button" className="px-3 py-2 text-sm text-indigo-600 font-semibold">
+          + Add from Library
         </button>
       </div>
 
       {!activeSetList ? (
         <div className="text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-8 text-center">
-          No set lists yet — click "+ Add Set List" to start one.
+          <p className="font-semibold text-slate-600">No set lists on this event yet</p>
+          <p className="mt-1">Start a blank list or copy a reusable one from your library.</p>
+          <div className="flex items-center justify-center gap-2 mt-4 flex-wrap">
+            <button type="button" onClick={addSetList} className="px-3 py-2 rounded-lg border border-indigo-300 text-indigo-600 font-semibold hover:bg-indigo-50">+ Start Blank</button>
+            <button type="button" onClick={openLibraryPicker} className="px-3 py-2 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700">+ Add from Library</button>
+          </div>
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 p-5">
@@ -455,7 +489,10 @@ export default function SetListsEditorPage() {
         </div>
       )}
 
-      <Modal open={libraryPickerOpen} onClose={() => setLibraryPickerOpen(false)} title="Pull From Library">
+      <Modal open={libraryPickerOpen} onClose={() => setLibraryPickerOpen(false)} title="Add from Set List Library" widthClass="max-w-xl">
+        <div className="text-sm text-slate-500 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 mb-3">
+          This creates an independent event copy. Changes here will not alter the library original, and later library edits will not change this event.
+        </div>
         {setListLibrary.length === 0 ? (
           <div className="text-sm text-slate-400 text-center py-6">
             No saved set lists yet.
@@ -463,25 +500,32 @@ export default function SetListsEditorPage() {
             Add one under <Link to="/set-lists" className="text-indigo-600 font-semibold hover:underline">Resources &gt; Set Lists</Link> to reuse it across gigs.
           </div>
         ) : (
-          <div className="space-y-1.5 max-h-96 overflow-y-auto">
-            {setListLibrary.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => pullFromLibrary(s)}
-                disabled={!!pullingLibraryId}
-                data-testid="setlist-library-picker-item"
-                className="w-full text-left px-3 py-2 rounded-lg border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 flex items-center justify-between disabled:opacity-50 disabled:cursor-wait"
-              >
-                <span>
-                  <span className="font-medium text-slate-700 block">{s.name}</span>
-                  {s.description && <span className="text-xs text-slate-400">{s.description}</span>}
-                </span>
-                <span className="text-xs text-slate-400 shrink-0 ml-2">
-                  {pullingLibraryId === s.id ? 'Pulling…' : `${s.items?.length || 0} song${s.items?.length === 1 ? '' : 's'}`}
-                </span>
-              </button>
-            ))}
+          <div>
+            <SearchInput value={librarySearch} onChange={setLibrarySearch} placeholder="Search lists or songs…" className="w-full mb-3" testId="setlist-library-picker-search-input" />
+            <div className="space-y-1.5 max-h-96 overflow-y-auto">
+              {filteredLibrary.length === 0 && <div className="text-sm text-slate-400 text-center py-6">No library set lists match your search.</div>}
+              {filteredLibrary.map((s) => {
+                const alreadyAdded = setLists.some((eventList) => eventList.librarySourceId === s.id);
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => pullFromLibrary(s)}
+                    disabled={!!pullingLibraryId || alreadyAdded}
+                    data-testid="setlist-library-picker-item"
+                    className="w-full text-left px-3 py-2 rounded-lg border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 flex items-center justify-between disabled:opacity-50 disabled:cursor-wait"
+                  >
+                    <span>
+                      <span className="font-medium text-slate-700 block">{s.name}</span>
+                      {s.description && <span className="text-xs text-slate-400">{s.description}</span>}
+                    </span>
+                    <span className="text-xs text-slate-400 shrink-0 ml-2">
+                      {pullingLibraryId === s.id ? 'Adding…' : alreadyAdded ? 'Already added' : `${s.items?.length || 0} song${s.items?.length === 1 ? '' : 's'}`}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
       </Modal>
