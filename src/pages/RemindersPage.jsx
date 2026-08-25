@@ -177,7 +177,7 @@ export default function RemindersPage() {
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-3 mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Reminders</h2>
           <p className="text-sm text-slate-500 mt-1">Track follow-ups here. Open includes upcoming and overdue reminders; optional emails are sent when reminders become due.</p>
@@ -186,7 +186,7 @@ export default function RemindersPage() {
           type="button"
           onClick={openAdd}
           data-testid="reminders-add-button"
-          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
+          className="w-full sm:w-auto px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
         >
           + Add Reminder
         </button>

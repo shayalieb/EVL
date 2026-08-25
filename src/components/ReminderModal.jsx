@@ -59,6 +59,8 @@ export default function ReminderModal({ open, onClose, reminder, onSaved }) {
   const [relatedQuery, setRelatedQuery] = useState('');
   const [relatedResults, setRelatedResults] = useState([]);
   const [relatedLoading, setRelatedLoading] = useState(false);
+  const relatedType = form.relatedType;
+  const relatedId = form.relatedId;
 
   useEffect(() => {
     if (open) {
@@ -90,15 +92,15 @@ export default function ReminderModal({ open, onClose, reminder, onSaved }) {
   }, [open, reminder?.relatedId, reminder?.relatedType, loadClient, loadContractor, loadEvent, loadBooking]);
 
   useEffect(() => {
-    if (!open || !['client', 'contractor', 'event', 'booking'].includes(form.relatedType)) return undefined;
+    if (!open || !['client', 'contractor', 'event', 'booking'].includes(relatedType)) return undefined;
     let cancelled = false;
     const searches = { client: searchClients, contractor: searchContractors, event: searchEvents, booking: searchBookings };
     const timer = setTimeout(() => {
       setRelatedLoading(true);
-      searches[form.relatedType](relatedQuery)
+      searches[relatedType](relatedQuery)
         .then((items) => {
           if (!cancelled) setRelatedResults((previous) => {
-            const selected = previous.find((item) => item.id === form.relatedId);
+            const selected = previous.find((item) => item.id === relatedId);
             return selected && !items.some((item) => item.id === selected.id) ? [selected, ...items] : items;
           });
         })
@@ -106,7 +108,7 @@ export default function ReminderModal({ open, onClose, reminder, onSaved }) {
         .finally(() => { if (!cancelled) setRelatedLoading(false); });
     }, 200);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [open, form.relatedType, relatedQuery, searchClients, searchContractors, searchEvents, searchBookings]);
+  }, [open, relatedType, relatedId, relatedQuery, searchClients, searchContractors, searchEvents, searchBookings]);
 
   function update(field, val) {
     setForm((f) => ({ ...f, [field]: val }));
@@ -225,7 +227,7 @@ export default function ReminderModal({ open, onClose, reminder, onSaved }) {
                 data-testid="reminder-modal-related-type-select"
                 className={inputClass}
               >
-                <option value="">None</option>
+                <option value="">None (standalone)</option>
                 <option value="client">Client</option>
                 <option value="contractor">Contractor</option>
                 <option value="event">Event</option>
@@ -240,6 +242,7 @@ export default function ReminderModal({ open, onClose, reminder, onSaved }) {
                   value={relatedQuery}
                   onChange={(e) => setRelatedQuery(e.target.value)}
                   placeholder={`Search ${RELATED_TYPE_LABELS[form.relatedType]?.toLowerCase() || 'records'}…`}
+                  aria-label={`Search ${RELATED_TYPE_LABELS[form.relatedType]?.toLowerCase() || 'related records'}`}
                   data-testid="reminder-modal-related-search-input"
                   className={`${inputClass} mb-2`}
                 />
@@ -248,6 +251,7 @@ export default function ReminderModal({ open, onClose, reminder, onSaved }) {
                 value={form.relatedId}
                 onChange={(e) => update('relatedId', e.target.value)}
                 disabled={!form.relatedType}
+                aria-label={form.relatedType ? `Select related ${RELATED_TYPE_LABELS[form.relatedType].toLowerCase()}` : 'No related record type selected'}
                 data-testid="reminder-modal-related-id-select"
                 className={`${inputClass} disabled:bg-slate-50 disabled:text-slate-400`}
               >
@@ -263,7 +267,7 @@ export default function ReminderModal({ open, onClose, reminder, onSaved }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>Reminder Date *</label>
-            <input required type="date" value={form.date} onChange={(e) => update('date', e.target.value)} data-testid="reminder-modal-date-input" className={inputClass} />
+            <input required type="date" min={!reminder ? toDateInputValue(new Date()) : undefined} value={form.date} onChange={(e) => update('date', e.target.value)} data-testid="reminder-modal-date-input" className={inputClass} />
           </div>
           <div>
             <label className={labelClass}>Reminder Time *</label>
