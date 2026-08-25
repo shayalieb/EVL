@@ -6,15 +6,11 @@ import { formatPhoneNumber } from '../lib/format';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
-// Keep in sync with server/src/lib/verticals.js's VERTICALS list. `active`
-// gates new signups only (server/src/lib/verticals.js's SIGNUP_VERTICALS is
-// the real enforcement) — existing accounts on a deactivated vertical are
-// untouched. Flip back to true here + add back to SIGNUP_VERTICALS to
-// reactivate.
+// Keep in sync with server/src/lib/verticals.js's SIGNUP_VERTICALS list.
+// party_planning and photography are pulled from signup entirely to keep
+// launch focused — add them back here (and to SIGNUP_VERTICALS) to reopen.
 const VERTICAL_OPTIONS = [
   { id: 'band_orchestra', label: 'Band & Orchestra', description: 'Book musicians and crew for gigs', active: true },
-  { id: 'party_planning', label: 'Event and Party Planning', description: 'Coordinate vendors for events', active: false },
-  { id: 'photography', label: 'Photography', description: 'Manage shoots and shot lists', active: false },
 ];
 
 export default function AuthPage() {
