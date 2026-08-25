@@ -119,6 +119,9 @@ async function migrateVenuesOutOfBlob(blob) {
   return next;
 }
 
+// Phase 5C cleanup. Keep this idempotent login-time migration for dormant
+// accounts that never opened the app during 5A/5B; active accounts lose
+// both legacy arrays as soon as the table reconciliation succeeds.
 async function migrateCatalogOutOfBlob(blob) {
   await syncCatalog(blob.offerings || [], blob.contractorGroups || []);
   const next = { ...blob };

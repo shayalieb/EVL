@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { attachMembership } from '../lib/membership.js';
+import { attachMembership, effectivePermissions } from '../lib/membership.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -25,11 +25,12 @@ function validGroup(item) {
     && (item.price == null || ['string', 'number'].includes(typeof item.price));
 }
 
-// Phase 5B's one-time source cutover. The blob is authoritative for this
+// Phase 5C's legacy cleanup. The blob is authoritative for this
 // request: upsert its current records and remove table rows deleted during
 // the 5A compatibility window. Only after this succeeds does the client
 // remove the legacy arrays from AccountData.
 router.post('/sync', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageOfferings) return res.status(403).json({ error: 'Not authorized.' });
   const offerings = req.body?.offerings;
   const contractorGroups = req.body?.contractorGroups;
   if (!Array.isArray(offerings) || !offerings.every(validOffering)) return res.status(400).json({ error: 'Invalid offerings.' });

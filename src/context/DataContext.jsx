@@ -128,25 +128,20 @@ export function DataProvider({ children }) {
   const [catalogLoading, setCatalogLoading] = useState(false);
   useEffect(() => {
     let cancelled = false;
-    const legacyOfferings = currentUser?.offerings || [];
-    const legacyGroups = currentUser?.contractorGroups || [];
-    setOfferings(legacyOfferings);
-    setContractorGroups(legacyGroups);
+    setOfferings([]);
+    setContractorGroups([]);
     if (!currentUser?.accountId) return undefined;
     setCatalogLoading(true);
     Promise.all([getAllOfferings(), getAllContractorGroups()])
       .then(([nextOfferings, nextGroups]) => {
         if (!cancelled) {
-          setOfferings(nextOfferings.length || !legacyOfferings.length ? nextOfferings : legacyOfferings);
-          setContractorGroups(nextGroups.length || !legacyGroups.length ? nextGroups : legacyGroups);
+          setOfferings(nextOfferings);
+          setContractorGroups(nextGroups);
         }
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setCatalogLoading(false); });
     return () => { cancelled = true; };
-    // Legacy arrays are a rollout-only fallback captured at account load;
-    // later blob edits must not restart the table-backed catalog fetch.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.accountId]);
 
   // Same real-table-not-blob treatment as contractors/clients above — see
