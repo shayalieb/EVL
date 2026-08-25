@@ -68,6 +68,8 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
   const canvasApiRef = useRef(null);
   const canvasContainerRef = useRef(null);
   const saveTimer = useRef(null);
+  const hasEditedRef = useRef(false);
+  const dirtyRef = useRef(false);
   const sceneRef = useRef(scene);
   sceneRef.current = scene;
 
@@ -91,14 +93,15 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const thumbnailBase64 = stageRef.current ? captureCleanThumbnail(stageRef.current) : undefined;
       setCleanCapture(false);
-      const saved = await onSavePage(page.id, { scene: sceneRef.current, thumbnailBase64 });
-      onSaved({ scene: saved.scene, hasThumbnail: saved.hasThumbnail });
+      const saved = await onSavePage(page.id, { scene: sceneRef.current, thumbnailBase64, expectedUpdatedAt: page.updatedAt });
+      onSaved({ scene: saved.scene, hasThumbnail: saved.hasThumbnail, updatedAt: saved.updatedAt });
+      dirtyRef.current = false;
       setSaveStatus('saved');
-    } catch {
+    } catch (err) {
       setCleanCapture(false);
-      setSaveStatus('unsaved');
+      setSaveStatus(err?.status === 409 ? 'conflict' : 'unsaved');
     }
-  }, [onSavePage, page.id, onSaved]);
+  }, [onSavePage, page.id, page.updatedAt, onSaved]);
 
   // persist's identity changes on every save (onSaved is a fresh closure
   // from the parent each render) — a ref lets the debounce/unmount-flush
@@ -116,6 +119,11 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
   }), []);
 
   useEffect(() => {
+    if (!hasEditedRef.current) {
+      hasEditedRef.current = true;
+      return undefined;
+    }
+    dirtyRef.current = true;
     setSaveStatus('unsaved');
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => persistRef.current(), AUTOSAVE_DELAY_MS);
@@ -126,7 +134,10 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
   // losing up to AUTOSAVE_DELAY_MS of edits to a debounce timer that never
   // fires. Empty deps — this must run its cleanup exactly once, on unmount,
   // not on every persist() identity change (see persistRef comment above).
-  useEffect(() => () => { clearTimeout(saveTimer.current); persistRef.current(); }, []);
+  useEffect(() => () => {
+    clearTimeout(saveTimer.current);
+    if (dirtyRef.current) persistRef.current();
+  }, []);
 
   // Undo/redo (history.js) only reverts the scene snapshot — it never
   // touches selection state, which lives here in the parent. Without this,
@@ -482,7 +493,9 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
           Delete Selected{multiSelectedIds.size > 1 ? ` (${multiSelectedIds.size})` : ''}
         </button>
         <span data-testid="stageplot-save-status" className="text-xs text-slate-400 ml-auto">
-          {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'unsaved' ? 'Unsaved changes' : 'Saved'}
+          {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'unsaved' ? 'Unsaved changes' : saveStatus === 'conflict' ? (
+            <button type="button" className="font-semibold text-red-600 underline" onClick={() => window.location.reload()}>Updated elsewhere — reload</button>
+          ) : 'Saved'}
         </span>
       </div>
 

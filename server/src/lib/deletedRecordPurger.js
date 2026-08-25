@@ -1,5 +1,6 @@
 import { prisma } from './prisma.js';
 import { withBackgroundJobLease } from './backgroundJobLease.js';
+import { deleteStagePlotThumbnailIfUnused } from './stagePlotThumbnails.js';
 
 // Events/bookings are soft-deleted (deletedAt set, see DataContext's
 // deleteEvent/deleteBooking) so they stay recoverable and keep an audit
@@ -23,6 +24,10 @@ function cutoffDate() {
 // (StagePlotPage/Channel, FloorPlanPage) DO have real onDelete: Cascade FKs
 // back to them, so deleting the StagePlot/FloorPlan row is enough there.
 async function purgeEvent({ id: eventId }) {
+  const thumbnails = await prisma.stagePlotPage.findMany({
+    where: { stagePlot: { eventId } },
+    select: { thumbnailStorageKey: true },
+  });
   await prisma.$transaction([
     prisma.emailThread.deleteMany({ where: { eventId } }),
     prisma.eventDocument.deleteMany({ where: { eventId } }),
@@ -36,6 +41,7 @@ async function purgeEvent({ id: eventId }) {
     prisma.booking.updateMany({ where: { convertedEventId: eventId }, data: { convertedEventId: null } }),
     prisma.event.delete({ where: { id: eventId } }),
   ]);
+  await Promise.all(thumbnails.map((page) => deleteStagePlotThumbnailIfUnused(page.thumbnailStorageKey)));
 }
 
 async function purgeBooking({ id: bookingId }) {

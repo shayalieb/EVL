@@ -45,6 +45,20 @@ test('owner creates and then edits an event', async ({ page }) => {
   await expect(page.getByTestId('event-form-name-input')).toHaveValue('Browser Event Updated');
 });
 
+test('stage plot library clearly separates reusable templates from gig copies', async ({ page }) => {
+  await signIn(page);
+  await page.goto('/stage-plot-library');
+  await expect(page.getByRole('heading', { name: 'Stage Plot Library' })).toBeVisible();
+  await page.getByTestId('stageplot-library-add-button').click();
+  await page.getByTestId('stageplot-library-add-name-input').fill('Browser Stage Template');
+  await page.getByTestId('stageplot-library-add-confirm-button').click();
+  await expect(page.getByText('Reusable template', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Changes here affect future copies only/)).toBeVisible();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  await page.waitForTimeout(2200);
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+});
+
 test('proposal recipient reviews and accepts a proposal', async ({ page }) => {
   await page.goto(`/proposal/${E2E.proposalToken}`);
   await expect(page.getByTestId('proposal-respond-accept-button')).toBeVisible();

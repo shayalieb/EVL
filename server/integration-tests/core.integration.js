@@ -105,6 +105,48 @@ test('tenant-scoped lists never return another account’s records', async () =>
   assert.deepEqual(body.clients.map((client) => client.id), ['client-first']);
 });
 
+test('stage plots enforce tenant ownership and reject stale canvas saves', async () => {
+  const first = await createIdentity({ email: 'stage-first@example.com' });
+  const second = await createIdentity({ email: 'stage-second@example.com' });
+  await prisma.account.updateMany({ where: { id: { in: [first.account.id, second.account.id] } }, data: { vertical: 'band_orchestra' } });
+  await prisma.event.createMany({ data: [
+    { id: 'stage-event-first', accountId: first.account.id, name: 'First event' },
+    { id: 'stage-event-second', accountId: second.account.id, name: 'Second event' },
+  ] });
+  const cookie = await login(first);
+
+  const foreign = await request('/api/stage-plots/stage-event-second', { cookie });
+  assert.equal(foreign.status, 404);
+
+  const own = await request('/api/stage-plots/stage-event-first', { cookie });
+  assert.equal(own.status, 200);
+  const page = (await own.json()).stagePlot.pages[0];
+  assert.ok(page.updatedAt);
+
+  const firstSave = await request(`/api/stage-plots/stage-event-first/pages/${page.id}`, {
+    method: 'PATCH', cookie, body: JSON.stringify({ scene: { layers: [], elements: [] }, expectedUpdatedAt: page.updatedAt }),
+  });
+  assert.equal(firstSave.status, 200);
+  const staleSave = await request(`/api/stage-plots/stage-event-first/pages/${page.id}`, {
+    method: 'PATCH', cookie, body: JSON.stringify({ scene: { layers: [], elements: [{ id: 'late' }] }, expectedUpdatedAt: page.updatedAt }),
+  });
+  assert.equal(staleSave.status, 409);
+  assert.equal((await staleSave.json()).code, 'STALE_STAGE_PLOT_PAGE');
+});
+
+test('all stage plot tables exposed by Supabase have row-level security enabled', async () => {
+  const rows = await prisma.$queryRawUnsafe(`
+    SELECT relname, relrowsecurity
+    FROM pg_class
+    WHERE relname IN (
+      'StagePlot', 'StagePlotPage', 'StagePlotChannel', 'StagePlotBacklineItem',
+      'StagePlotLibraryItem', 'StagePlotLibraryPage', 'StagePlotLibraryChannel', 'StagePlotLibraryBacklineItem'
+    )
+  `);
+  assert.equal(rows.length, 8);
+  assert.ok(rows.every((row) => row.relrowsecurity), JSON.stringify(rows));
+});
+
 test('threaded email rejects a member without booking permission before sending', async () => {
   const member = await createIdentity({
     email: 'member@example.com',

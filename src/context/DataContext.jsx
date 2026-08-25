@@ -166,15 +166,17 @@ export function DataProvider({ children }) {
 
   const [stagePlotLibrary, setStagePlotLibrary] = useState([]);
   const [stagePlotLibraryLoading, setStagePlotLibraryLoading] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    if (!currentUser?.accountId) return undefined;
+  useEffect(() => { setStagePlotLibrary([]); }, [currentUser?.accountId]);
+  const refreshStagePlotLibrary = useCallback(async (search = '') => {
+    if (!currentUser?.accountId) return [];
     setStagePlotLibraryLoading(true);
-    getAllStagePlotLibraryItems()
-      .then((items) => { if (!cancelled) setStagePlotLibrary(items); })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setStagePlotLibraryLoading(false); });
-    return () => { cancelled = true; };
+    try {
+      const items = await getAllStagePlotLibraryItems(search);
+      setStagePlotLibrary(items);
+      return items;
+    } finally {
+      setStagePlotLibraryLoading(false);
+    }
   }, [currentUser?.accountId]);
 
   // Same real-table-not-blob treatment as contractors/clients above — see
@@ -844,6 +846,7 @@ export function DataProvider({ children }) {
     setListLibraryLoading,
     stagePlotLibrary,
     stagePlotLibraryLoading,
+    refreshStagePlotLibrary,
     contractorGroups,
     addContractor,
     searchContractors,
@@ -926,7 +929,7 @@ export function DataProvider({ children }) {
     addContractTemplate, updateContractTemplate, removeContractTemplate,
     addOffering, updateOffering, deleteOffering,
     addSetListLibraryItem, updateSetListLibraryItem, deleteSetListLibraryItem,
-    saveStagePlotToLibrary, addBlankStagePlotLibraryItem, renameStagePlotLibraryItem, deleteStagePlotLibraryItem,
+    refreshStagePlotLibrary, saveStagePlotToLibrary, addBlankStagePlotLibraryItem, renameStagePlotLibraryItem, deleteStagePlotLibraryItem,
     addContractorGroup, updateContractorGroup, deleteContractorGroup,
     addEvent, updateEvent, deleteEvent, completeEvent, restoreEvent,
     getContractorById, computeDurationHours, computeEventTotalCost, computeVendorStatus,

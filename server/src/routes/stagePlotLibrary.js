@@ -6,6 +6,7 @@ import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { requireVertical } from '../lib/verticals.js';
 import { uploadFile, getSignedDownloadUrl } from '../lib/fileStorage.js';
 import { getOrCreatePlot } from './stagePlots.js';
+import { decodeStagePlotThumbnail, deleteStagePlotThumbnailIfUnused } from '../lib/stagePlotThumbnails.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership), requireVertical('band_orchestra'));
@@ -38,7 +39,7 @@ function serializeDetail(item) {
     pages: item.pages
       .slice()
       .sort((a, b) => a.order - b.order)
-      .map((p) => ({ id: p.id, order: p.order, name: p.name, scene: p.scene, hasThumbnail: !!p.thumbnailStorageKey })),
+      .map((p) => ({ id: p.id, order: p.order, name: p.name, scene: p.scene, hasThumbnail: !!p.thumbnailStorageKey, updatedAt: p.updatedAt })),
     channels: item.channels.slice().sort((a, b) => a.channelNumber - b.channelNumber),
     backlineItems: item.backlineItems.slice().sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)),
   };
@@ -52,15 +53,22 @@ async function loadOwnedItem(accountId, id) {
 
 router.get('/', asyncHandler(async (req, res) => {
   const search = String(req.query.search || '').trim();
-  const items = await prisma.stagePlotLibraryItem.findMany({
+  const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+  const pageSize = Math.min(50, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 25));
+  const where = {
+    accountId: req.membership.accountId,
+    ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}),
+  };
+  const [items, total] = await Promise.all([prisma.stagePlotLibraryItem.findMany({
     where: {
-      accountId: req.membership.accountId,
-      ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}),
+      ...where,
     },
     include: { pages: { select: { thumbnailStorageKey: true } }, channels: { select: { id: true } }, backlineItems: { select: { id: true } } },
-    orderBy: { updatedAt: 'desc' },
-  });
-  res.json({ stagePlotLibrary: items.map(serializeSummary) });
+    orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+    skip: (page - 1) * pageSize,
+    take: pageSize,
+  }), prisma.stagePlotLibraryItem.count({ where })]);
+  res.json({ stagePlotLibrary: items.map(serializeSummary), pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } });
 }));
 
 // "+ Add Stage Plot" — a blank template built directly in the library, with
@@ -113,6 +121,7 @@ router.post('/from-event/:eventId', asyncHandler(async (req, res) => {
   if (!name) return res.status(400).json({ error: 'name is required.' });
 
   const plot = await getOrCreatePlot(req.membership.accountId, req.params.eventId);
+  if (!plot) return res.status(404).json({ error: 'Event not found.' });
 
   const item = await prisma.stagePlotLibraryItem.create({
     data: {
@@ -154,29 +163,51 @@ router.patch('/:id/pages/:pageId', asyncHandler(async (req, res) => {
   const page = item.pages.find((p) => p.id === req.params.pageId);
   if (!page) return res.status(404).json({ error: 'Page not found.' });
 
-  const { scene, name, thumbnailBase64 } = req.body || {};
+  const { scene, name, thumbnailBase64, expectedUpdatedAt } = req.body || {};
   const data = {};
   if (scene !== undefined) data.scene = scene;
   if (name !== undefined) data.name = name;
+  if (expectedUpdatedAt && new Date(expectedUpdatedAt).getTime() !== page.updatedAt.getTime()) {
+    return res.status(409).json({ error: 'This template page was updated in another session. Reload before saving again.', code: 'STALE_STAGE_PLOT_PAGE' });
+  }
   if (thumbnailBase64) {
-    const buffer = Buffer.from(thumbnailBase64.replace(/^data:image\/png;base64,/, ''), 'base64');
+    const buffer = decodeStagePlotThumbnail(thumbnailBase64);
     data.thumbnailStorageKey = await uploadFile({ accountId: req.membership.accountId, buffer, contentType: 'image/png' });
   }
   if (Object.keys(data).length === 0) return res.status(400).json({ error: 'Nothing to update.' });
 
-  const updated = await prisma.stagePlotLibraryPage.update({ where: { id: page.id }, data });
-  res.json({ page: { id: updated.id, order: updated.order, name: updated.name, scene: updated.scene, hasThumbnail: !!updated.thumbnailStorageKey } });
+  const write = expectedUpdatedAt
+    ? await prisma.stagePlotLibraryPage.updateMany({ where: { id: page.id, updatedAt: new Date(expectedUpdatedAt) }, data })
+    : { count: 1 };
+  if (write.count === 0) {
+    await deleteStagePlotThumbnailIfUnused(data.thumbnailStorageKey);
+    return res.status(409).json({ error: 'This template page was updated in another session. Reload before saving again.', code: 'STALE_STAGE_PLOT_PAGE' });
+  }
+  const updated = expectedUpdatedAt
+    ? await prisma.stagePlotLibraryPage.findUnique({ where: { id: page.id } })
+    : await prisma.stagePlotLibraryPage.update({ where: { id: page.id }, data });
+  if (page.thumbnailStorageKey && page.thumbnailStorageKey !== updated.thumbnailStorageKey) {
+    await deleteStagePlotThumbnailIfUnused(page.thumbnailStorageKey);
+  }
+  res.json({ page: { id: updated.id, order: updated.order, name: updated.name, scene: updated.scene, hasThumbnail: !!updated.thumbnailStorageKey, updatedAt: updated.updatedAt } });
 }));
 
 router.post('/:id/pages', asyncHandler(async (req, res) => {
   if (!canManage(req)) return res.status(403).json({ error: 'Not authorized.' });
   const item = await loadOwnedItem(req.membership.accountId, req.params.id);
   if (!item) return res.status(404).json({ error: 'Saved stage plot not found.' });
-  const nextOrder = item.pages.reduce((max, p) => Math.max(max, p.order), -1) + 1;
-  const page = await prisma.stagePlotLibraryPage.create({
-    data: { libraryItemId: item.id, order: nextOrder, name: req.body?.name || `Page ${nextOrder + 1}` },
-  });
-  res.status(201).json({ page: { id: page.id, order: page.order, name: page.name, scene: page.scene, hasThumbnail: false } });
+  let page;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const pages = await prisma.stagePlotLibraryPage.findMany({ where: { libraryItemId: item.id }, select: { order: true } });
+    const nextOrder = pages.reduce((max, candidate) => Math.max(max, candidate.order), -1) + 1;
+    try {
+      page = await prisma.stagePlotLibraryPage.create({ data: { libraryItemId: item.id, order: nextOrder, name: req.body?.name || `Page ${nextOrder + 1}` } });
+      break;
+    } catch (err) {
+      if (err.code !== 'P2002' || attempt === 4) throw err;
+    }
+  }
+  res.status(201).json({ page: { id: page.id, order: page.order, name: page.name, scene: page.scene, hasThumbnail: false, updatedAt: page.updatedAt } });
 }));
 
 // Same "always keep at least one page" + orphaned-channel cleanup as
@@ -203,6 +234,7 @@ router.delete('/:id/pages/:pageId', asyncHandler(async (req, res) => {
   }
 
   await prisma.stagePlotLibraryPage.delete({ where: { id: page.id } });
+  await deleteStagePlotThumbnailIfUnused(page.thumbnailStorageKey);
   res.json({ ok: true, deletedChannelIds });
 }));
 
@@ -364,7 +396,9 @@ router.delete('/:id', asyncHandler(async (req, res) => {
   if (!canManage(req)) return res.status(403).json({ error: 'Not authorized.' });
   const existing = await prisma.stagePlotLibraryItem.findUnique({ where: { id: req.params.id } });
   if (!existing || existing.accountId !== req.membership.accountId) return res.status(404).json({ error: 'Saved stage plot not found.' });
+  const pages = await prisma.stagePlotLibraryPage.findMany({ where: { libraryItemId: existing.id }, select: { thumbnailStorageKey: true } });
   await prisma.stagePlotLibraryItem.delete({ where: { id: existing.id } });
+  await Promise.all(pages.map((page) => deleteStagePlotThumbnailIfUnused(page.thumbnailStorageKey)));
   res.json({ ok: true });
 }));
 

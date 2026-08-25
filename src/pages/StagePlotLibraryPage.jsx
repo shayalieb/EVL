@@ -35,7 +35,7 @@ function Thumbnail({ item }) {
 // jsx's "+ Add from Library") deep-clones it server-side (see stagePlots.
 // js's apply-library route), so editing one side never touches the other.
 export default function StagePlotLibraryPage() {
-  const { stagePlotLibrary, stagePlotLibraryLoading, addBlankStagePlotLibraryItem, renameStagePlotLibraryItem, deleteStagePlotLibraryItem } = useData();
+  const { stagePlotLibrary, stagePlotLibraryLoading, refreshStagePlotLibrary, addBlankStagePlotLibraryItem, renameStagePlotLibraryItem, deleteStagePlotLibraryItem } = useData();
   const { can } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -47,6 +47,11 @@ export default function StagePlotLibraryPage() {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addName, setAddName] = useState('Stage Plot');
   const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => refreshStagePlotLibrary(search).catch(() => {}), 250);
+    return () => clearTimeout(timer);
+  }, [refreshStagePlotLibrary, search]);
 
   const filtered = stagePlotLibrary.filter((item) => matchesSearch(search, [item.name]));
 
@@ -96,7 +101,7 @@ export default function StagePlotLibraryPage() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Stage Plots</h2>
+          <h2 className="text-2xl font-bold text-slate-800">Stage Plot Library</h2>
           <p className="text-sm text-slate-500 mt-1">Saved stage plots, ready to reuse for a similar event — same venue, same lineup. Save one from any event's Stage Plot page, or build one from scratch here; copies added to an event stay independent of the saved original.</p>
         </div>
         <button
@@ -134,7 +139,7 @@ export default function StagePlotLibraryPage() {
                     {stagePlotLibrary.length === 0 && !search ? (
                       <div className="flex flex-col items-center gap-3">
                         <div>
-                          <p className="font-semibold text-slate-600">No saved stage plots yet</p>
+                          <p className="font-semibold text-slate-600">No reusable stage plot templates yet</p>
                           <p className="text-sm mt-1">Click "+ Add Stage Plot" to build one from scratch, or open any event's Stage Plot page and click "Save to Library."</p>
                         </div>
                         {canEdit && (

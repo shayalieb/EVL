@@ -1131,6 +1131,7 @@ model StagePlotLibraryItem {
 
   @@index([accountId])
   @@index([accountId, createdAt, id])
+  @@index([accountId, updatedAt, id])
 }
 
 model StagePlotLibraryPage {

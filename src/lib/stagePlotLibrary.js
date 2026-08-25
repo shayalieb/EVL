@@ -1,8 +1,14 @@
 import { apiFetch } from '../context/AuthContext';
 
-export async function getAllStagePlotLibraryItems() {
-  const data = await apiFetch('/stage-plot-library');
-  return data.stagePlotLibrary || [];
+export async function queryStagePlotLibrary({ search = '', page = 1, pageSize = 25 } = {}) {
+  const params = new URLSearchParams({ search, page: String(page), pageSize: String(pageSize) });
+  const data = await apiFetch(`/stage-plot-library?${params}`);
+  return { items: data.stagePlotLibrary || [], pagination: data.pagination };
+}
+
+export async function getAllStagePlotLibraryItems(search = '') {
+  const result = await queryStagePlotLibrary({ search, page: 1, pageSize: 50 });
+  return result.items;
 }
 
 export async function saveEventStagePlotToLibrary(eventId, name) {
@@ -27,10 +33,10 @@ export async function getStagePlotLibraryItemDetail(id) {
   return data.stagePlot;
 }
 
-export async function saveStagePlotLibraryPage(id, pageId, { scene, name, thumbnailBase64 } = {}) {
+export async function saveStagePlotLibraryPage(id, pageId, { scene, name, thumbnailBase64, expectedUpdatedAt } = {}) {
   const data = await apiFetch(`/stage-plot-library/${encodeURIComponent(id)}/pages/${pageId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ scene, name, thumbnailBase64 }),
+    body: JSON.stringify({ scene, name, thumbnailBase64, expectedUpdatedAt }),
   });
   return data.page;
 }

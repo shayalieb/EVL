@@ -5,10 +5,10 @@ export async function getOrCreateStagePlot(eventId) {
   return data.stagePlot;
 }
 
-export async function saveStagePlotPage(eventId, pageId, { scene, name, thumbnailBase64 } = {}) {
+export async function saveStagePlotPage(eventId, pageId, { scene, name, thumbnailBase64, expectedUpdatedAt } = {}) {
   const data = await apiFetch(`/stage-plots/${encodeURIComponent(eventId)}/pages/${pageId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ scene, name, thumbnailBase64 }),
+    body: JSON.stringify({ scene, name, thumbnailBase64, expectedUpdatedAt }),
   });
   return data.page;
 }
@@ -83,9 +83,10 @@ export async function deleteStagePlotBacklineItem(eventId, itemId) {
 // (server-side clone, since the target is normalized across several tables
 // rather than one JSON blob). Returns the full merged plot in the same
 // shape as getOrCreateStagePlot, so callers can just replace local state.
-export async function applyStagePlotLibraryItem(eventId, libraryItemId) {
+export async function applyStagePlotLibraryItem(eventId, libraryItemId, options = {}) {
   const data = await apiFetch(`/stage-plots/${encodeURIComponent(eventId)}/apply-library/${encodeURIComponent(libraryItemId)}`, {
     method: 'POST',
+    body: JSON.stringify(options),
   });
   return data.stagePlot;
 }

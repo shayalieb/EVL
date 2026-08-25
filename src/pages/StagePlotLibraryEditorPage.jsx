@@ -130,7 +130,8 @@ export default function StagePlotLibraryEditorPage() {
     <div className="p-6 w-full">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <Link to="/stage-plot-library" className="text-xs font-semibold text-slate-400 hover:text-slate-600">&larr; Back to Stage Plots</Link>
+          <Link to="/stage-plot-library" className="text-xs font-semibold text-slate-400 hover:text-slate-600">&larr; Back to Stage Plot Library</Link>
+          <div className="mt-1 text-xs font-bold uppercase tracking-wide text-indigo-600">Reusable template</div>
           {editingName ? (
             <form onSubmit={handleRenameSubmit} className="mt-0.5">
               <input
@@ -148,6 +149,10 @@ export default function StagePlotLibraryEditorPage() {
             </button>
           )}
         </div>
+      </div>
+
+      <div className="mb-4 rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+        Changes here affect future copies only. Stage plots already added to gigs remain independent and will not change.
       </div>
 
       <div className="flex items-center gap-1 mb-3 border-b border-slate-200 overflow-x-auto">

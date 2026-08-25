@@ -40,7 +40,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   const { eventId } = useParams();
   const isModal = !!onClose;
   const { currentUser } = useAuth();
-  const { contractors, stagePlotLibrary, saveStagePlotToLibrary } = useData();
+  const { contractors, stagePlotLibrary, refreshStagePlotLibrary, saveStagePlotToLibrary } = useData();
   const { showToast } = useToast();
   const [event, setEvent] = useState(null);
   const [plot, setPlot] = useState(null);
@@ -57,6 +57,8 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
   const [librarySearch, setLibrarySearch] = useState('');
   const [applyingLibraryId, setApplyingLibraryId] = useState(null);
+  const [libraryImportMode, setLibraryImportMode] = useState('append');
+  const [libraryImportInclude, setLibraryImportInclude] = useState({ pages: true, channels: true, backlineItems: true });
   const pageEditorRef = useRef(null);
 
   useContractorHydration([
@@ -95,6 +97,12 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   useEffect(() => {
     setSelectedElementId(null);
   }, [activePageId]);
+
+  useEffect(() => {
+    if (!libraryPickerOpen) return undefined;
+    const timer = setTimeout(() => refreshStagePlotLibrary(librarySearch).catch(() => {}), 250);
+    return () => clearTimeout(timer);
+  }, [libraryPickerOpen, librarySearch, refreshStagePlotLibrary]);
 
   function handlePageSaved(pageId, patch) {
     setPlot((prev) => (prev ? { ...prev, pages: prev.pages.map((pg) => (pg.id === pageId ? { ...pg, ...patch } : pg)) } : prev));
@@ -199,11 +207,11 @@ export default function StagePlotEditorPage({ onClose } = {}) {
     setApplyingLibraryId(item.id);
     try {
       const existingPageIds = new Set(plot.pages.map((p) => p.id));
-      const merged = await applyStagePlotLibraryItem(eventId, item.id);
+      const merged = await applyStagePlotLibraryItem(eventId, item.id, { mode: libraryImportMode, include: libraryImportInclude });
       setPlot(merged);
       const firstNewPage = merged.pages.slice().sort((a, b) => a.order - b.order).find((p) => !existingPageIds.has(p.id));
       if (firstNewPage) setActivePageId(firstNewPage.id);
-      showToast(`Added "${item.name}"`);
+      showToast(libraryImportMode === 'replace' ? `Replaced selected sections with "${item.name}"` : `Added "${item.name}"`);
       setLibraryPickerOpen(false);
     } catch (err) {
       showToast(err.message || 'Failed to add from library', 'error');
@@ -261,6 +269,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
         ) : (
           <div>
             <Link to={`/events/${eventId}`} className="text-xs font-semibold text-slate-400 hover:text-slate-600">&larr; Back to event</Link>
+            <div className="mt-1 text-xs font-bold uppercase tracking-wide text-indigo-600">Gig stage plot</div>
             <h1 className="text-lg font-bold text-slate-800">Stage Plot{event?.name ? ` — ${event.name}` : ''}</h1>
           </div>
         )}
@@ -458,8 +467,28 @@ export default function StagePlotEditorPage({ onClose } = {}) {
 
       <Modal open={libraryPickerOpen} onClose={() => setLibraryPickerOpen(false)} title="Add from Stage Plot Library" widthClass="max-w-xl">
         <p className="text-sm text-slate-500 mb-3">
-          Adds the saved plot's pages, channel list, and backline as new additions to this event's stage plot — nothing already here is replaced. This creates an independent copy: changes here won't alter the library original, and later library edits won't change this event.
+          Choose whether to add the template alongside the current gig or replace selected sections. Either way, this creates an independent copy: later edits here will not alter the library original, and later template edits will not change this gig.
         </p>
+        <fieldset className="mb-3 rounded-lg border border-slate-200 p-3">
+          <legend className="px-1 text-xs font-bold uppercase tracking-wide text-slate-500">How to apply it</legend>
+          <label className="mr-5 inline-flex items-center gap-2 text-sm text-slate-700">
+            <input type="radio" name="stage-plot-import-mode" checked={libraryImportMode === 'append'} onChange={() => setLibraryImportMode('append')} />
+            Add alongside current work
+          </label>
+          <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+            <input type="radio" name="stage-plot-import-mode" checked={libraryImportMode === 'replace'} onChange={() => setLibraryImportMode('replace')} />
+            Replace selected sections
+          </label>
+          {libraryImportMode === 'replace' && <p className="mt-2 text-xs font-semibold text-red-600">The selected sections already on this gig will be permanently replaced.</p>}
+          <div className="mt-3 flex flex-wrap gap-4 border-t border-slate-100 pt-3">
+            {[['pages', 'Canvas pages'], ['channels', 'Production list'], ['backlineItems', 'Backline list']].map(([key, label]) => (
+              <label key={key} className="inline-flex items-center gap-2 text-sm text-slate-700">
+                <input type="checkbox" checked={libraryImportInclude[key]} onChange={(e) => setLibraryImportInclude((current) => ({ ...current, [key]: e.target.checked }))} />
+                {label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
         <SearchInput value={librarySearch} onChange={setLibrarySearch} placeholder="Search saved stage plots…" className="w-full mb-3" testId="stageplot-library-picker-search-input" />
         <div className="max-h-80 overflow-y-auto space-y-1.5">
           {stagePlotLibrary.length === 0 && <div className="text-sm text-slate-400 text-center py-6">No saved stage plots yet — use "Save to Library" on any event's Stage Plot to start one.</div>}
@@ -471,13 +500,13 @@ export default function StagePlotEditorPage({ onClose } = {}) {
               key={item.id}
               type="button"
               onClick={() => handleAddFromLibrary(item)}
-              disabled={applyingLibraryId === item.id}
+              disabled={applyingLibraryId === item.id || !Object.values(libraryImportInclude).some(Boolean)}
               data-testid="stageplot-library-picker-item"
               className="w-full text-left px-3 py-2 rounded-lg border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 flex items-center justify-between disabled:opacity-50"
             >
               <span className="font-medium text-slate-700">{item.name}</span>
               <span className="text-xs text-slate-400 shrink-0 ml-2">
-                {applyingLibraryId === item.id ? 'Adding…' : `${item.pageCount} page${item.pageCount === 1 ? '' : 's'} · ${item.channelCount} channel${item.channelCount === 1 ? '' : 's'}`}
+                {applyingLibraryId === item.id ? 'Applying…' : `${item.pageCount} page${item.pageCount === 1 ? '' : 's'} · ${item.channelCount} channel${item.channelCount === 1 ? '' : 's'} · ${item.backlineCount || 0} backline`}
               </span>
             </button>
           ))}
