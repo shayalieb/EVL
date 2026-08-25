@@ -71,6 +71,29 @@ jobs:
         run: npm run test:integration
         working-directory: server
 
+      - name: Run bounded capacity regression
+        working-directory: server
+        shell: bash
+        run: |
+          set -euo pipefail
+          NODE_ENV=development PORT=4101 REQUEST_LOG_SAMPLE_RATE=0 node src/index.js > /tmp/evl-capacity-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4101/api/ready >/dev/null; then break; fi
+            sleep 1
+          done
+          LOAD_TEST_BASE_URL=http://127.0.0.1:4101 \
+          LOAD_TEST_EMAIL=stripe@example.com \
+          LOAD_TEST_PASSWORD=password-123 \
+          LOAD_TEST_PROFILE=mixed \
+          LOAD_TEST_CONCURRENCY=10 \
+          LOAD_TEST_WARMUP_MS=500 \
+          LOAD_TEST_DURATION_MS=3000 \
+          LOAD_TEST_P95_BUDGET_MS=1000 \
+          LOAD_TEST_MAX_ERROR_RATE=0 \
+          node scripts/loadTest.js
+
       - name: Install browser runtime
         run: npx playwright install --with-deps chromium
 

@@ -1,0 +1,55 @@
+name: Staging load test
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: Disposable staging API origin, without /api
+        required: true
+        type: string
+      profile:
+        description: Traffic profile
+        required: true
+        default: mixed
+        type: choice
+        options: [mixed, clients, bookings, events, readiness]
+      concurrency:
+        description: Concurrent workers (1-200)
+        required: true
+        default: '20'
+        type: string
+      duration_ms:
+        description: Measured duration in milliseconds (1000-300000)
+        required: true
+        default: '30000'
+        type: string
+      confirmation:
+        description: Type LOAD to confirm this is a disposable environment
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  load:
+    if: inputs.confirmation == 'LOAD'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: load-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run bounded staging load test
+        run: node scripts/loadTest.js
+        working-directory: server
+        env:
+          LOAD_TEST_BASE_URL: ${{ inputs.api_url }}
+          LOAD_TEST_EMAIL: ${{ secrets.LOAD_TEST_EMAIL }}
+          LOAD_TEST_PASSWORD: ${{ secrets.LOAD_TEST_PASSWORD }}
+          LOAD_TEST_PROFILE: ${{ inputs.profile }}
+          LOAD_TEST_CONCURRENCY: ${{ inputs.concurrency }}
+          LOAD_TEST_DURATION_MS: ${{ inputs.duration_ms }}
+          LOAD_TEST_ALLOW_REMOTE: 'true'
