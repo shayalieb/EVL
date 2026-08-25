@@ -1609,20 +1609,6 @@ export default function EventFormPage() {
                 />
               </div>
 
-              <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-3">
-                <input
-                  type="checkbox"
-                  checked={form.noOutsideContractorsNeeded}
-                  onChange={(e) => update('noOutsideContractorsNeeded', e.target.checked)}
-                  data-testid="event-form-no-outside-contractors-checkbox"
-                  className="mt-0.5"
-                />
-                <span>
-                  <span className="block text-sm font-semibold text-slate-700">No outside contractors needed</span>
-                  <span className="block text-xs text-slate-500 mt-0.5">Use this when the owner performs the event or external staffing genuinely costs $0.</span>
-                </span>
-              </label>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="flex gap-2">
                   <div className="flex-1">
@@ -1868,6 +1854,20 @@ export default function EventFormPage() {
               </div>
             )}
           </div>
+
+          <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-3 mb-5">
+            <input
+              type="checkbox"
+              checked={form.noOutsideContractorsNeeded}
+              onChange={(e) => update('noOutsideContractorsNeeded', e.target.checked)}
+              data-testid="event-form-no-outside-contractors-checkbox"
+              className="mt-0.5"
+            />
+            <span>
+              <span className="block text-sm font-semibold text-slate-700">No outside staffing required</span>
+              <span className="block text-xs text-slate-500 mt-0.5">The owner or internal team will cover this event without paid contractors.</span>
+            </span>
+          </label>
 
           {hasCategories && (
             <GroupChipSelector
