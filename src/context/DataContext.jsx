@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { uid } from '../lib/storage';
 import { getBookingTotal, computeDurationHours as computeDurationHoursUtil } from '../lib/pricingTiers';
@@ -117,8 +117,10 @@ export function DataProvider({ children }) {
   }, [currentUser?.accountId]);
 
   const [venues, setVenues] = useState([]);
+  const venueSavePromises = useRef(new Map());
   useEffect(() => {
     setVenues([]);
+    venueSavePromises.current.clear();
   }, [currentUser?.accountId]);
 
   // Same real-table-not-blob treatment as contractors/clients above — see
@@ -260,10 +262,15 @@ export function DataProvider({ children }) {
   const ensureVenueSaved = useCallback(async (venue) => {
     if (!venue?.name?.trim()) return;
     const name = venue.name.trim();
-    const matches = await searchVenues(name);
-    const exists = matches.some((v) => v.name?.trim().toLowerCase() === name.toLowerCase());
-    if (exists) return;
-    await addVenue({ ...venue, name });
+    const key = name.toLowerCase();
+    if (venueSavePromises.current.has(key)) return venueSavePromises.current.get(key);
+    const save = (async () => {
+      const matches = await searchVenues(name);
+      const exists = matches.some((v) => v.name?.trim().toLowerCase() === key);
+      if (!exists) await addVenue({ ...venue, name });
+    })().finally(() => venueSavePromises.current.delete(key));
+    venueSavePromises.current.set(key, save);
+    return save;
   }, [searchVenues, addVenue]);
 
   // ---- Bookings (real API, not the blob — see the fetch effect above) ----

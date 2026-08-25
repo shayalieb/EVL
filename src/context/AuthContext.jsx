@@ -106,12 +106,16 @@ async function migrateClientsOutOfBlob(blob) {
   return next;
 }
 
-// Phase 4A dual-write migration: copy saved venues into their dedicated
-// table but deliberately retain blob.venues until the 4B UI release reads
-// the new API. Re-running is safe because POST /venues is idempotent by id.
-async function copyVenuesOutOfBlob(blob) {
-  await Promise.allSettled((blob.venues || []).map((venue) => createVenue(venue)));
-  return blob;
+// Phase 4C cleanup: every venue is now read from its dedicated table. Copy
+// legacy records idempotently, remove successful ones from the account
+// blob, and retain only failures so a later hydrate can retry them.
+async function migrateVenuesOutOfBlob(blob) {
+  const results = await Promise.allSettled(blob.venues.map((venue) => createVenue(venue)));
+  const stillEmbedded = blob.venues.filter((_, index) => results[index].status === 'rejected');
+  const next = { ...blob };
+  if (stillEmbedded.length) next.venues = stillEmbedded;
+  else delete next.venues;
+  return next;
 }
 
 // Same idea again, for Booking/Event (see server/prisma/schema.prisma's
@@ -174,8 +178,8 @@ export function AuthProvider({ children }) {
       if (hadClients) blob = await migrateClientsOutOfBlob(blob);
       if (hadBookings) blob = await migrateBookingsOutOfBlob(blob);
       if (hadEvents) blob = await migrateEventsOutOfBlob(blob);
-      if (hadVenues) blob = await copyVenuesOutOfBlob(blob);
-      if (hadContractors || hadClients || hadBookings || hadEvents) {
+      if (hadVenues) blob = await migrateVenuesOutOfBlob(blob);
+      if (hadContractors || hadClients || hadBookings || hadEvents || hadVenues) {
         // Non-fatal: two tabs (or two logins close together) hydrating
         // concurrently both see the embedded arrays and both attempt this
         // shrink-and-write-back; the second one loses the optimistic-
@@ -230,7 +234,7 @@ export function AuthProvider({ children }) {
         if (migrated.clients?.length) migrated = await migrateClientsOutOfBlob(migrated);
         if (migrated.bookings?.length) migrated = await migrateBookingsOutOfBlob(migrated);
         if (migrated.events?.length) migrated = await migrateEventsOutOfBlob(migrated);
-        if (migrated.venues?.length) migrated = await copyVenuesOutOfBlob(migrated);
+        if (migrated.venues?.length) migrated = await migrateVenuesOutOfBlob(migrated);
         if (migrated !== blob) {
           const saved = await apiFetch('/account-data', { method: 'PUT', body: JSON.stringify({ data: migrated, version: versionRef.current }) });
           versionRef.current = saved.version;
