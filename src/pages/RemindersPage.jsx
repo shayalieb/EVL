@@ -27,6 +27,8 @@ const SNOOZE_OPTIONS = [
   { label: 'Next week, 9 AM', date: () => { const date = new Date(); date.setDate(date.getDate() + 7); date.setHours(9, 0, 0, 0); return date; } },
 ];
 
+const RECURRENCE_LABELS = { daily: 'Repeats daily', weekly: 'Repeats weekly', monthly: 'Repeats monthly' };
+
 function RelatedBadge({ reminder }) {
   if (!reminder.relatedName) return '—';
   const badge = <Badge color={RELATED_TYPE_COLORS[reminder.relatedType] || '#0ea5e9'}>{reminder.relatedName}</Badge>;
@@ -157,7 +159,10 @@ export default function RemindersPage() {
     try {
       const updated = await completeReminder(reminder.id, completed);
       setReminders((prev) => prev.map((r) => (r.id === reminder.id ? updated : r)));
-      showToast(completed ? 'Reminder marked done' : 'Reminder reopened');
+      if (completed && reminder.recurrenceFrequency) {
+        fetchReminders().then(setReminders).catch(() => {});
+      }
+      showToast(completed && reminder.recurrenceFrequency ? 'Reminder marked done; next occurrence scheduled' : completed ? 'Reminder marked done' : 'Reminder reopened');
     } catch {
       showToast('Failed to update reminder', 'error');
     }
@@ -193,6 +198,9 @@ export default function RemindersPage() {
     const updatedById = new Map();
     results.forEach((r, i) => { if (r.status === 'fulfilled') updatedById.set(ids[i], r.value); });
     setReminders((prev) => prev.map((r) => (updatedById.has(r.id) ? updatedById.get(r.id) : r)));
+    if (ids.some((id) => reminders.find((reminder) => reminder.id === id)?.recurrenceFrequency)) {
+      fetchReminders().then(setReminders).catch(() => {});
+    }
     const failed = results.filter((r) => r.status === 'rejected').length;
     showToast(failed ? `Marked ${ids.length - failed} done, ${failed} failed` : `Marked ${ids.length} reminder${ids.length === 1 ? '' : 's'} done`, failed ? 'error' : 'success');
     setSelectedIds(new Set());
@@ -342,6 +350,12 @@ export default function RemindersPage() {
                       >
                         {r.note}
                       </button>
+                      {r.recurrenceFrequency && (
+                        <div className="mt-1 text-[11px] font-semibold text-violet-600">
+                          ↻ {RECURRENCE_LABELS[r.recurrenceFrequency]}
+                          {r.recurrenceEndsAt ? ` until ${new Date(r.recurrenceEndsAt).toLocaleDateString()}` : ''}
+                        </div>
+                      )}
                       <div className="sm:hidden mt-1 flex items-center gap-2 flex-wrap text-xs text-slate-400">
                         {r.relatedName && <RelatedBadge reminder={r} />}
                         <EmailDeliveryStatus reminder={r} mobile />
@@ -382,14 +396,16 @@ export default function RemindersPage() {
                             )}
                           </div>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => handleToggleComplete(r)}
-                          data-testid="reminder-row-complete-button"
-                          className="px-2.5 py-1 rounded-lg text-xs font-semibold border border-slate-200 text-slate-500 hover:bg-slate-50"
-                        >
-                          {r.completedAt ? 'Reopen' : 'Mark Done'}
-                        </button>
+                        {!(r.completedAt && r.recurrenceFrequency) && (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleComplete(r)}
+                            data-testid="reminder-row-complete-button"
+                            className="px-2.5 py-1 rounded-lg text-xs font-semibold border border-slate-200 text-slate-500 hover:bg-slate-50"
+                          >
+                            {r.completedAt ? 'Reopen' : 'Mark Done'}
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => openEdit(r)}
@@ -425,7 +441,9 @@ export default function RemindersPage() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
         title="Delete reminder?"
-        description={`This permanently removes this reminder${deleteTarget?.emailEnabled && !deleteTarget?.emailSentAt ? ' and cancels its scheduled email' : ''}.`}
+        description={deleteTarget?.recurrenceFrequency && !deleteTarget?.completedAt
+          ? 'This permanently removes the current reminder and stops future occurrences in this series.'
+          : `This permanently removes this reminder${deleteTarget?.emailEnabled && !deleteTarget?.emailSentAt ? ' and cancels its scheduled email' : ''}.`}
       />
       <ConfirmDialog
         open={bulkDeleteOpen}
