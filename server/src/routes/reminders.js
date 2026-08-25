@@ -15,6 +15,16 @@ router.use(requireAuth, asyncHandler(attachMembership));
 // there since they get resolved or completed, not left to pile up.
 const COMPLETED_HISTORY_DAYS = 90;
 
+function validTimeZone(value) {
+  if (!value) return null;
+  try {
+    Intl.DateTimeFormat('en-US', { timeZone: value }).format();
+    return value;
+  } catch {
+    return null;
+  }
+}
+
 router.get('/', asyncHandler(async (req, res) => {
   const includeAll = req.query.all === 'true';
   const historyCutoff = new Date();
@@ -31,7 +41,7 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 router.post('/', asyncHandler(async (req, res) => {
-  const { relatedType, relatedId, relatedName, note, remindAt, emailEnabled } = req.body || {};
+  const { relatedType, relatedId, relatedName, note, remindAt, emailEnabled, emailTimeZone } = req.body || {};
   if (!note?.trim()) return res.status(400).json({ error: 'note is required.' });
   if (!remindAt || Number.isNaN(new Date(remindAt).getTime())) {
     return res.status(400).json({ error: 'remindAt is required.' });
@@ -47,6 +57,7 @@ router.post('/', asyncHandler(async (req, res) => {
       note: note.trim(),
       remindAt: new Date(remindAt),
       emailEnabled: !!emailEnabled,
+      emailTimeZone: validTimeZone(emailTimeZone),
     },
   });
   res.status(201).json({ reminder });
@@ -58,7 +69,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     return res.status(404).json({ error: 'Reminder not found.' });
   }
 
-  const { relatedType, relatedId, relatedName, note, remindAt, emailEnabled } = req.body || {};
+  const { relatedType, relatedId, relatedName, note, remindAt, emailEnabled, emailTimeZone } = req.body || {};
   const data = {};
   if (relatedType !== undefined) data.relatedType = relatedType || null;
   if (relatedId !== undefined) data.relatedId = relatedId || null;
@@ -72,8 +83,19 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     data.remindAt = new Date(remindAt);
     // Un-send so an edited-forward reminder can still email at its new time.
     data.emailSentAt = null;
+    data.emailClaimedAt = null;
+    data.emailLastFailedAt = null;
+    data.emailAttemptCount = 0;
   }
-  if (emailEnabled !== undefined) data.emailEnabled = !!emailEnabled;
+  if (emailEnabled !== undefined) {
+    data.emailEnabled = !!emailEnabled;
+    if (!emailEnabled) {
+      data.emailClaimedAt = null;
+      data.emailLastFailedAt = null;
+      data.emailAttemptCount = 0;
+    }
+  }
+  if (emailTimeZone !== undefined) data.emailTimeZone = validTimeZone(emailTimeZone);
 
   const reminder = await prisma.reminder.update({ where: { id: existing.id }, data });
   res.json({ reminder });

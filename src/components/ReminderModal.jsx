@@ -161,6 +161,7 @@ export default function ReminderModal({ open, onClose, reminder, onSaved }) {
       note: form.note.trim(),
       remindAt: remindAt.toISOString(),
       emailEnabled: form.emailEnabled,
+      emailTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     };
 
     setSaving(true);

@@ -1,0 +1,4 @@
+ALTER TABLE "Reminder"
+ADD COLUMN "emailTimeZone" TEXT,
+ADD COLUMN "emailLastFailedAt" TIMESTAMP(3),
+ADD COLUMN "emailAttemptCount" INTEGER NOT NULL DEFAULT 0;

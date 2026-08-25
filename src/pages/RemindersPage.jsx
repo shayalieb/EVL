@@ -34,6 +34,26 @@ function RelatedBadge({ reminder }) {
   return path ? <Link to={path} className="hover:opacity-80">{badge}</Link> : badge;
 }
 
+function EmailDeliveryStatus({ reminder, mobile = false }) {
+  if (!reminder.emailEnabled) return mobile ? null : <span className="text-slate-300">—</span>;
+  if (reminder.emailSentAt) {
+    const sentAt = new Date(reminder.emailSentAt).toLocaleString();
+    return <span className="text-xs font-semibold text-emerald-600" title={`Sent ${sentAt}`}>Email sent</span>;
+  }
+  if (reminder.emailLastFailedAt) {
+    const failedAt = new Date(reminder.emailLastFailedAt).toLocaleString();
+    return (
+      <span className="text-xs font-semibold text-amber-700" title={`Last attempt failed ${failedAt}. Automatic retries continue every few minutes.`}>
+        Delivery failed · retrying
+      </span>
+    );
+  }
+  if (new Date(reminder.remindAt) <= new Date()) {
+    return <span className="text-xs font-semibold text-indigo-600">Email queued</span>;
+  }
+  return <span className="text-xs font-semibold text-slate-500">Email scheduled</span>;
+}
+
 export default function RemindersPage() {
   const { showToast } = useToast();
   const [reminders, setReminders] = useState([]);
@@ -63,6 +83,17 @@ export default function RemindersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter === 'completed']);
 
+  // Keep delivery states current while the user is looking at active
+  // reminders. This is intentionally a quiet refresh: a transient polling
+  // failure should not flash an error or replace the table they already have.
+  useEffect(() => {
+    if (statusFilter === 'completed') return undefined;
+    const timer = setInterval(() => {
+      fetchReminders().then(setReminders).catch(() => {});
+    }, 60 * 1000);
+    return () => clearInterval(timer);
+  }, [statusFilter]);
+
   useEffect(() => {
     setSelectedIds(new Set());
   }, [statusFilter, search]);
@@ -81,6 +112,9 @@ export default function RemindersPage() {
     overdue: reminders.filter((reminder) => !reminder.completedAt && new Date(reminder.remindAt) <= new Date()).length,
     completed: reminders.filter((reminder) => !!reminder.completedAt).length,
   };
+  const deliveryFailureCount = reminders.filter((reminder) => (
+    reminder.emailEnabled && !reminder.emailSentAt && !reminder.completedAt && reminder.emailLastFailedAt
+  )).length;
 
   const allOnPageSelected = pagedReminders.length > 0 && pagedReminders.every((r) => selectedIds.has(r.id));
   function toggleSelectAllOnPage() {
@@ -234,6 +268,12 @@ export default function RemindersPage() {
         )}
       </div>
 
+      {deliveryFailureCount > 0 && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800" role="status">
+          {deliveryFailureCount} reminder email{deliveryFailureCount === 1 ? '' : 's'} could not be delivered. Automatic retries are continuing; confirm the reminder creator has a valid account email.
+        </div>
+      )}
+
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -304,15 +344,11 @@ export default function RemindersPage() {
                       </button>
                       <div className="sm:hidden mt-1 flex items-center gap-2 flex-wrap text-xs text-slate-400">
                         {r.relatedName && <RelatedBadge reminder={r} />}
-                        {r.emailEnabled && <span>{r.emailSentAt ? 'Email sent' : 'Email scheduled'}</span>}
+                        <EmailDeliveryStatus reminder={r} mobile />
                       </div>
                     </td>
                     <td className="hidden sm:table-cell px-4 py-3 text-center">
-                      {r.emailEnabled ? (
-                        <span className="text-xs font-semibold text-emerald-600" title={r.emailSentAt ? `Sent ${new Date(r.emailSentAt).toLocaleString()}` : 'Will be emailed'}>{r.emailSentAt ? 'Sent' : 'Scheduled'}</span>
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
+                      <EmailDeliveryStatus reminder={r} />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-1 relative">

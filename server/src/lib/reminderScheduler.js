@@ -8,10 +8,11 @@ const POLL_INTERVAL_MS = 60 * 1000;
 // comment in tick() below.
 const CLAIM_STALE_MS = 5 * 60 * 1000;
 
-function formatRemindAt(date) {
+function formatRemindAt(date, timeZone) {
   return date.toLocaleString('en-US', {
     dateStyle: 'medium',
     timeStyle: 'short',
+    ...(timeZone ? { timeZone } : {}),
   });
 }
 
@@ -54,7 +55,7 @@ async function sendReminderEmail(reminder) {
     html: buildActionEmailHtml({
       businessInfo,
       heading: 'Reminder',
-      bodyHtml: `${relatedLine}<p>${escapeHtml(reminder.note)}</p><p style="color:#94a3b8;">Was due ${escapeHtml(formatRemindAt(reminder.remindAt))}</p>`,
+      bodyHtml: `${relatedLine}<p>${escapeHtml(reminder.note)}</p><p style="color:#94a3b8;">Was due ${escapeHtml(formatRemindAt(reminder.remindAt, reminder.emailTimeZone))}</p>`,
     }),
   });
   return true;
@@ -97,13 +98,21 @@ export async function tick() {
           emailSentAt: null,
           OR: [{ emailClaimedAt: null }, { emailClaimedAt: { lt: staleBefore } }],
         },
-        data: { emailClaimedAt: new Date() },
+        data: { emailClaimedAt: new Date(), emailAttemptCount: { increment: 1 } },
       });
       if (claim.count === 0) return; // another instance claimed it first this tick
 
       const sent = await sendReminderEmail(reminder);
       if (sent) {
-        await prisma.reminder.update({ where: { id: reminder.id }, data: { emailSentAt: new Date() } });
+        await prisma.reminder.update({
+          where: { id: reminder.id },
+          data: { emailSentAt: new Date(), emailClaimedAt: null, emailLastFailedAt: null },
+        });
+      } else {
+        await prisma.reminder.update({
+          where: { id: reminder.id },
+          data: { emailLastFailedAt: new Date() },
+        });
       }
       // Not sent (no resolvable recipient): leave emailSentAt null and
       // emailClaimedAt stands until it goes stale, so this logs again and
@@ -115,6 +124,14 @@ export async function tick() {
         console.error(`Failed to send reminder email for reminder ${dueReminders[i].id}:`, result.reason);
       }
     });
+    await Promise.all(results.map((result, i) => (
+      result.status === 'rejected'
+        ? prisma.reminder.update({
+          where: { id: dueReminders[i].id },
+          data: { emailLastFailedAt: new Date() },
+        }).catch((error) => console.error(`Failed to record reminder delivery failure for ${dueReminders[i].id}:`, error))
+        : null
+    )));
   } catch (err) {
     console.error('Reminder scheduler tick failed:', err);
   } finally {
