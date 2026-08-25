@@ -139,7 +139,13 @@ router.get('/', asyncHandler(async (req, res) => {
       prisma.booking.findMany({ where, orderBy: [{ [pagination.sort]: pagination.direction }, { id: pagination.direction }], skip: pagination.skip, take: pagination.pageSize }),
       prisma.booking.count({ where }),
     ]);
-    return res.json({ bookings: listPageResponse(items.map(serializeBookingLite), total, pagination) });
+    const rowClientIds = [...new Set(items.map((item) => item.clientId).filter(Boolean))];
+    const clients = rowClientIds.length ? await prisma.client.findMany({
+      where: { accountId: req.membership.accountId, id: { in: rowClientIds } },
+      select: { id: true, firstName: true, lastName: true, email: true, phone: true },
+    }) : [];
+    const clientById = new Map(clients.map((client) => [client.id, client]));
+    return res.json({ bookings: listPageResponse(items.map((item) => ({ ...serializeBookingLite(item), client: clientById.get(item.clientId) || null })), total, pagination) });
   }
   const pagination = paginationFromRequest(req);
   if (!pagination) return res.status(400).json({ error: 'Invalid pagination cursor.' });

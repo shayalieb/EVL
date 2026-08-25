@@ -54,7 +54,7 @@ const VIEW_TABS = [
 
 export default function BookingsPage() {
   const {
-    bookingStatuses, eventTypes, clients,
+    bookingStatuses, eventTypes,
     deleteBooking, completeBooking, restoreBooking, completeEvent, convertBookingToEvent,
   } = useData();
   const { can } = useAuth();
@@ -154,7 +154,7 @@ export default function BookingsPage() {
   function deleteTargetLabel() {
     if (!deleteTarget) return '';
     if (deleteTarget.eventName) return deleteTarget.eventName;
-    const client = clients.find((c) => c.id === deleteTarget.clientId);
+    const client = deleteTarget.client;
     if (client) return `${client.firstName} ${client.lastName}`;
     return deleteTarget.eventType || '';
   }
@@ -397,7 +397,7 @@ export default function BookingsPage() {
               )}
               {pagedBookings.map((b) => {
                 const disposition = dispositionInfo(b.bookingStatus, bookingStatuses);
-                const client = clients.find((c) => c.id === b.clientId);
+                const client = b.client;
                 const canConvert = !b.convertedEventId;
                 const priority = PRIORITIES.find((p) => p.value === b.priority);
                 const tone = followUpTone(b.nextFollowUpDate);

@@ -36,7 +36,7 @@ function Row({ label, value }) {
 // autosave) instead of going through DataContext.updateBooking, which the
 // currently-open form's one-time hydration effect wouldn't pick up live.
 export default function ReviewInquiryModal({ open, link, onClose, onApplied, onApplyOverride, navigateAfterApply = true }) {
-  const { clients, venues, addClient, addBooking, updateBooking } = useData();
+  const { clients, searchClients, venues, addClient, addBooking, updateBooking } = useData();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [applying, setApplying] = useState(false);
@@ -44,12 +44,16 @@ export default function ReviewInquiryModal({ open, link, onClose, onApplied, onA
   const [targetBookingLoading, setTargetBookingLoading] = useState(false);
 
   useEffect(() => {
+    if (open && link?.response) {
+      const response = link.response;
+      searchClients(response.email || `${response.firstName || ''} ${response.lastName || ''}`.trim()).catch(() => {});
+    }
     if (!open || !link?.bookingId || onApplyOverride) { setTargetBooking(null); setTargetBookingLoading(false); return; }
     let cancelled = false;
     setTargetBookingLoading(true);
     getBooking(link.bookingId).then((record) => { if (!cancelled) setTargetBooking(record); }).catch(() => { if (!cancelled) setTargetBooking(null); }).finally(() => { if (!cancelled) setTargetBookingLoading(false); });
     return () => { cancelled = true; };
-  }, [open, link?.bookingId, onApplyOverride]);
+  }, [open, link, onApplyOverride, searchClients]);
 
   if (!link) return null;
   const r = link.response || {};

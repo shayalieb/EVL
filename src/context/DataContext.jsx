@@ -6,7 +6,7 @@ import { getBookingTotal, computeDurationHours as computeDurationHoursUtil } fro
 import { statusBucket } from '../lib/inquiryStatusBucket';
 import { formatEventDate, formatCurrency } from '../lib/format';
 import { listContractors, queryContractors, getContractor, createContractor as createContractorApi, updateContractorApi, deleteContractorApi } from '../lib/contractors';
-import { listClients, queryClients, getClient, createClient as createClientApi, updateClientApi, deleteClientApi } from '../lib/clients';
+import { queryClients, getClient, createClient as createClientApi, updateClientApi, deleteClientApi } from '../lib/clients';
 import { queryBookings, getBooking, createBooking as createBookingApi, updateBookingApi } from '../lib/bookings';
 import { queryEvents, getEvent, createEvent as createEventApi, updateEventApi } from '../lib/events';
 import { dispositionInfo } from '../lib/bookingDisposition';
@@ -98,7 +98,6 @@ const LIST_FIELDS = {
 export function DataProvider({ children }) {
   const { currentUser, updateCurrentUser } = useAuth();
   const { pathname } = useLocation();
-  const needsClients = /^\/(clients|bookings|events)(\/|$)/.test(pathname);
   const needsContractors = /^\/(contractors|events|offerings|set-lists)(\/|$)/.test(pathname) || pathname.startsWith('/bookings/');
 
   const patchList = useCallback((field, nextList) => {
@@ -130,19 +129,9 @@ export function DataProvider({ children }) {
   // Same real-table-not-blob treatment as contractors above — see
   // server/prisma/schema.prisma's Client model comment.
   const [clients, setClients] = useState([]);
-  const [clientsLoaded, setClientsLoaded] = useState(false);
   useEffect(() => {
     setClients([]);
-    setClientsLoaded(false);
   }, [currentUser?.accountId]);
-  useEffect(() => {
-    if (!currentUser || !needsClients || clientsLoaded) return;
-    let cancelled = false;
-    listClients()
-      .then((list) => { if (!cancelled) setClients(list); })
-      .finally(() => { if (!cancelled) setClientsLoaded(true); });
-    return () => { cancelled = true; };
-  }, [currentUser, needsClients, clientsLoaded]);
 
   // Same real-table-not-blob treatment as contractors/clients above — see
   // server/prisma/schema.prisma's Booking/Event model comments. Bookings and
@@ -838,7 +827,7 @@ export function DataProvider({ children }) {
   // `events` are synchronously populated (.find(...) inline in render
   // bodies, no loading states of their own), so this keeps that assumption
   // true rather than pushing a loading state into every consuming file.
-  if (currentUser && ((needsContractors && !contractorsLoaded) || (needsClients && !clientsLoaded))) return null;
+  if (currentUser && needsContractors && !contractorsLoaded) return null;
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import ClientModal from '../components/ClientModal';
+import ClientCombobox from '../components/ClientCombobox';
 import VenueCombobox from '../components/VenueCombobox';
 import SendInquiryLinkModal from '../components/SendInquiryLinkModal';
 import ReviewInquiryModal from '../components/ReviewInquiryModal';
@@ -334,65 +335,6 @@ function CollapsibleSection({ title, subtitle, defaultOpen, badge, children, cla
         </div>
       </button>
       {open && <div className="mt-4">{children}</div>}
-    </div>
-  );
-}
-
-// Type-to-filter client picker — a plain <select> doesn't scale once an
-// account has more than a handful of clients.
-function ClientCombobox({ clients, value, onChange, onSearch }) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const selected = clients.find((c) => c.id === value);
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      setLoading(true);
-      onSearch(query).then((items) => { if (!cancelled) setResults(items); }).finally(() => { if (!cancelled) setLoading(false); });
-    }, 200);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [open, query, onSearch]);
-
-  return (
-    <div className="relative">
-      <input
-        value={open ? query : (selected ? `${selected.firstName} ${selected.lastName}` : '')}
-        onChange={(e) => setQuery(e.target.value)}
-        onFocus={() => { setQuery(''); setOpen(true); }}
-        placeholder="Search clients…"
-        data-testid="booking-form-client-combobox-input"
-        className={inputClass}
-      />
-      {open && (
-        <>
-          {/* Closing without picking a result must not touch the committed
-              selection — only clear the transient search text. */}
-          <div className="fixed inset-0 z-10" onClick={() => { setOpen(false); setQuery(''); }} />
-          <div className="absolute left-0 right-0 mt-1 max-h-64 overflow-y-auto bg-white rounded-lg shadow-lg border border-slate-100 z-20">
-            {!loading && results.length === 0 && (
-              <div className="px-3 py-3 text-xs text-slate-400">No clients found.</div>
-            )}
-            {loading && <div className="px-3 py-3 text-xs text-slate-400">Searching…</div>}
-            {results.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => { onChange(c.id); setQuery(''); setOpen(false); }}
-                data-testid="booking-form-client-combobox-option"
-                className="block w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
-              >
-                <div className="font-medium text-slate-700">{c.firstName} {c.lastName}</div>
-                {(c.email || c.phone) && (
-                  <div className="text-xs text-slate-400">{[c.email, c.phone].filter(Boolean).join(' · ')}</div>
-                )}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
     </div>
   );
 }
@@ -913,8 +855,10 @@ export default function BookingFormPage() {
   // updateBooking() call wouldn't be reflected here without a reload. The
   // existing 800ms autosave effect persists it normally from here.
   async function handleApplyInquiryOverride(response) {
+    const matches = await searchClients(response.email || `${response.firstName || ''} ${response.lastName || ''}`.trim()).catch(() => []);
     const patch = buildBookingMergePatch(response, form, venues);
-    const resolved = await resolveClientForMerge(response, { clients, addClient, currentClientId: form.clientId });
+    const candidateClients = [...clients, ...matches.filter((match) => !clients.some((client) => client.id === match.id))];
+    const resolved = await resolveClientForMerge(response, { clients: candidateClients, addClient, currentClientId: form.clientId });
     setForm((f) => ({ ...f, ...patch, clientId: resolved.clientId }));
     return { bookingId: form.id, clientId: resolved.clientId };
   }
@@ -1884,7 +1828,7 @@ export default function BookingFormPage() {
                 <label className={labelClass}>Client *</label>
                 <div className="flex gap-2">
                   <div className="flex-1 min-w-0">
-                    <ClientCombobox clients={clients} value={form.clientId} onChange={(id) => update('clientId', id)} onSearch={searchClients} />
+                    <ClientCombobox value={form.clientId} onChange={(id) => update('clientId', id)} testId="booking-form-client-combobox" />
                   </div>
                   <button
                     type="button"

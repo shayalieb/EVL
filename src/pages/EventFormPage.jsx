@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import ContractorPickerRow from '../components/ContractorPickerRow';
 import ContractorModal from '../components/ContractorModal';
+import ClientCombobox from '../components/ClientCombobox';
 import AcceptPaymentModal from '../components/AcceptPaymentModal';
 import EmailPreviewModal from '../components/EmailPreviewModal';
 import EmailThreadModal from '../components/EmailThreadModal';
@@ -188,7 +189,7 @@ export default function EventFormPage() {
   const navigate = useNavigate();
   const {
     eventTypes, addEventType, eventStatuses, inquiryStatuses, addInquiryStatus, emailTemplates, loadEvent,
-    contractors, contractorTypes, clients, venues, addEvent, updateEvent, computeDurationHours,
+    contractors, searchContractors, contractorTypes, venues, addEvent, updateEvent, computeDurationHours,
     updateBooking, computeEventTotalCost, contractorGroups,
   } = useData();
   const { can, currentUser, role } = useAuth();
@@ -225,6 +226,9 @@ export default function EventFormPage() {
   const [emailHistoryEntries, setEmailHistoryEntries] = useState([]);
   const [newTypeLabel, setNewTypeLabel] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [contractorQuery, setContractorQuery] = useState('');
+  const [contractorSearchResults, setContractorSearchResults] = useState([]);
+  const [contractorSearchLoading, setContractorSearchLoading] = useState(false);
   const [ensemblePickerOpen, setEnsemblePickerOpen] = useState(false);
   const [tierPickerContractor, setTierPickerContractor] = useState(null);
   const [editingContractor, setEditingContractor] = useState(null);
@@ -249,6 +253,18 @@ export default function EventFormPage() {
   const [uploadingRequestId, setUploadingRequestId] = useState(null);
 
   const hasCategories = contractorTypes.length > 0;
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      setContractorSearchLoading(true);
+      searchContractors(contractorQuery)
+        .then((items) => { if (!cancelled) setContractorSearchResults(items); })
+        .finally(() => { if (!cancelled) setContractorSearchLoading(false); });
+    }, 200);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [pickerOpen, contractorQuery, searchContractors]);
 
   useEffect(() => {
     if (form.categoryTabs.length === 0) {
@@ -526,7 +542,6 @@ export default function EventFormPage() {
   }
 
   const duration = computeDurationHours(form.startTime, form.endTime);
-  const availableContractors = contractors.filter((c) => !form.contractorBookings.some((b) => b.contractorId === c.id));
   const prepContractors = getPrepContractors(form, contractors);
   const prepEmailDraft = renderPrepSheetEmail(form, prepContractors, form.requests, undefined, currentUser.businessInfo, currentUser.vertical, contractors);
   // Documents attached directly to a request are shown inline on that
@@ -580,7 +595,9 @@ export default function EventFormPage() {
     const status = inquiryStatuses.find((s) => s.id === entry.booking.inquiryStatusId);
     entriesByBucket[statusBucket(status)].push(entry);
   });
-  const availableContractorsForActiveTab = availableContractors.filter((c) => matchesActiveCategoryTab(c.id));
+  const availableContractorsForActiveTab = contractorSearchResults
+    .filter((c) => !form.contractorBookings.some((booking) => booking.contractorId === c.id))
+    .filter((c) => !hasCategories || c.contractorType1 === activeCategoryTab);
 
   const totalCost = computeEventTotalCost(form);
 
@@ -1250,7 +1267,18 @@ export default function EventFormPage() {
         <>
           <div className="fixed inset-0 z-10" onClick={() => setPickerOpen(false)} />
           <div className="absolute right-0 mt-1 w-72 max-h-64 overflow-y-auto bg-white rounded-lg shadow-lg border border-slate-100 z-20">
-            {availableContractorsForActiveTab.length === 0 && (
+            <div className="sticky top-0 bg-white p-2 border-b border-slate-100">
+              <input
+                autoFocus
+                value={contractorQuery}
+                onChange={(e) => setContractorQuery(e.target.value)}
+                placeholder="Search contractors…"
+                data-testid="event-form-contractor-search-input"
+                className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-sm"
+              />
+            </div>
+            {contractorSearchLoading && <div className="px-3 py-3 text-xs text-slate-400">Searching…</div>}
+            {!contractorSearchLoading && availableContractorsForActiveTab.length === 0 && (
               <div className="px-3 py-3 text-xs text-slate-400">
                 {hasCategories ? 'No available contractors in this category.' : 'All contractors already added.'}
               </div>
@@ -1487,10 +1515,7 @@ export default function EventFormPage() {
 
               <div>
                 <label className={labelClass}>Client</label>
-                <select value={form.clientId} onChange={(e) => update('clientId', e.target.value)} data-testid="event-form-client-select" className={inputClass}>
-                  <option value="">No client linked</option>
-                  {clients.map((c) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
-                </select>
+                <ClientCombobox value={form.clientId} onChange={(id) => update('clientId', id)} testId="event-form-client-combobox" />
               </div>
 
               {isWedding(form.eventType) && (

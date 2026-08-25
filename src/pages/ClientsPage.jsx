@@ -20,7 +20,7 @@ const ENGAGEMENT_OPTIONS = [
 ];
 
 export default function ClientsPage() {
-  const { clients, deleteClient, computeClientEventCounts } = useData();
+  const { loadClient, deleteClient, computeClientEventCounts } = useData();
   const { can } = useAuth();
   const canEdit = can('manageClients');
   const { showToast } = useToast();
@@ -39,14 +39,10 @@ export default function ClientsPage() {
   useEffect(() => {
     const openId = searchParams.get('open');
     if (!openId) return;
-    const match = clients.find((c) => c.id === openId);
-    if (match) {
-      setEditingClient(match);
-      setModalOpen(true);
-    }
+    loadClient(openId).then((match) => { setEditingClient(match); setModalOpen(true); }).catch(() => {});
     setSearchParams((prev) => { prev.delete('open'); return prev; }, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, clients]);
+  }, [searchParams, loadClient]);
 
   const hasFilters = !!(search || engagementFilter);
   const { items: pagedClients, pageCount, pageSize, total: totalItems, loading, error, refresh } = useServerList(
@@ -133,7 +129,7 @@ export default function ClientsPage() {
               {!loading && pagedClients.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
-                    {error || (clients.length === 0
+                    {error || (totalItems === 0 && !hasFilters
                       ? 'No clients yet. Add your first client to start tracking their events.'
                       : 'No clients match your search.')}
                   </td>
