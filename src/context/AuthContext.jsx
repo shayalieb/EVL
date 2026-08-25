@@ -5,6 +5,7 @@ import { createContractor } from '../lib/contractors';
 import { createClient } from '../lib/clients';
 import { createBooking } from '../lib/bookings';
 import { createEvent } from '../lib/events';
+import { createVenue } from '../lib/venues';
 
 // Relative in production (e.g. `/api`) — vercel.json proxies /api/* to the
 // Railway backend so the browser only ever talks to the frontend's own
@@ -105,6 +106,14 @@ async function migrateClientsOutOfBlob(blob) {
   return next;
 }
 
+// Phase 4A dual-write migration: copy saved venues into their dedicated
+// table but deliberately retain blob.venues until the 4B UI release reads
+// the new API. Re-running is safe because POST /venues is idempotent by id.
+async function copyVenuesOutOfBlob(blob) {
+  await Promise.allSettled((blob.venues || []).map((venue) => createVenue(venue)));
+  return blob;
+}
+
 // Same idea again, for Booking/Event (see server/prisma/schema.prisma's
 // Booking/Event model comments) — the biggest of this whole graduation
 // series, since they're the two most actively-edited record types in the
@@ -160,10 +169,12 @@ export function AuthProvider({ children }) {
       const hadClients = blob.clients?.length;
       const hadBookings = blob.bookings?.length;
       const hadEvents = blob.events?.length;
+      const hadVenues = blob.venues?.length;
       if (hadContractors) blob = await migrateContractorsOutOfBlob(blob);
       if (hadClients) blob = await migrateClientsOutOfBlob(blob);
       if (hadBookings) blob = await migrateBookingsOutOfBlob(blob);
       if (hadEvents) blob = await migrateEventsOutOfBlob(blob);
+      if (hadVenues) blob = await copyVenuesOutOfBlob(blob);
       if (hadContractors || hadClients || hadBookings || hadEvents) {
         // Non-fatal: two tabs (or two logins close together) hydrating
         // concurrently both see the embedded arrays and both attempt this
@@ -219,6 +230,7 @@ export function AuthProvider({ children }) {
         if (migrated.clients?.length) migrated = await migrateClientsOutOfBlob(migrated);
         if (migrated.bookings?.length) migrated = await migrateBookingsOutOfBlob(migrated);
         if (migrated.events?.length) migrated = await migrateEventsOutOfBlob(migrated);
+        if (migrated.venues?.length) migrated = await copyVenuesOutOfBlob(migrated);
         if (migrated !== blob) {
           const saved = await apiFetch('/account-data', { method: 'PUT', body: JSON.stringify({ data: migrated, version: versionRef.current }) });
           versionRef.current = saved.version;

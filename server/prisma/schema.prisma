@@ -77,6 +77,7 @@ model Account {
   contractorCalendarLinks ContractorCalendarLink[]
   contractors             Contractor[]
   clients                 Client[]
+  venues                  Venue[]
   bookings                Booking[]
   events                  Event[]
 
@@ -986,6 +987,34 @@ model Client {
   notes     String? @db.Text
 
   portalTokens ClientPortalToken[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([accountId])
+  @@index([accountId, createdAt, id])
+}
+
+// Saved venue address book. Bookings and Events deliberately keep a copied
+// venue snapshot, so editing this reusable record never rewrites historical
+// documents or event logistics.
+model Venue {
+  id              String  @id
+  accountId       String
+  account         Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  name            String
+  address1        String?
+  address2        String?
+  city            String?
+  state           String?
+  zip             String?
+  contactName     String?
+  contactPhone    String?
+  contactPhoneExt String?
+  contactEmail    String?
+  locationNote    String? @db.Text
+  loadInInfo      String? @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
