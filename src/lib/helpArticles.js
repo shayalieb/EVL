@@ -399,15 +399,6 @@ export const HELP_CATEGORIES = [
           { type: 'p', text: 'An event\'s prep/schedule tools let you lay out the day\'s timeline and group requests/notes by category (band, photo, video, etc.) — the same schedule you build here is what a proposal\'s optional Schedule section pulls from.' },
         ],
       },
-      {
-        id: 'floor-plan',
-        title: 'Floor Plan',
-        summary: 'A seating/layout canvas for party-planning accounts.',
-        blocks: [
-          { type: 'note', text: 'Floor Plan only shows up on accounts set up for party/event planning rather than band/orchestra booking. Party/event planning isn\'t offered to new signups right now — this only applies to accounts already set up for it before that changed.' },
-          { type: 'p', text: 'Where it is available, it works like Stage Plot — a drag-and-drop canvas, but for tables, chairs, and room layout instead of instruments, with an auto-generated item breakdown (including seat counts) for handing to a caterer or venue.' },
-        ],
-      },
     ],
   },
   {
