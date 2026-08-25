@@ -125,15 +125,15 @@ export default function ContractorsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <h2 className="text-2xl font-bold text-slate-800">Contractors</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           {selectedIds.size > 0 && canEdit && (
             <button
               type="button"
               onClick={() => setBulkEmailOpen(true)}
               data-testid="contractors-bulk-email-button"
-              className="px-4 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
+              className="min-h-11 px-4 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
             >
               ✉️ Email Selected ({selectedIds.size})
             </button>
@@ -143,7 +143,7 @@ export default function ContractorsPage() {
             onClick={openAdd}
             disabled={!canEdit}
             data-testid="contractors-add-button"
-            className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="min-h-11 flex-1 sm:flex-none px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             + Add Contractor
           </button>

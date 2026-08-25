@@ -82,7 +82,7 @@ export default function OfferingsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Services &amp; Packages</h2>
           <p className="text-sm text-slate-500 mt-1">Create reusable pricing for proposals and contracts. Added items are independent copies, so later catalog changes never alter existing documents.</p>
@@ -92,7 +92,7 @@ export default function OfferingsPage() {
           onClick={openAdd}
           disabled={!canEdit}
           data-testid="offerings-add-button"
-          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-full sm:w-auto min-h-11 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           + Add Offering
         </button>

@@ -9,6 +9,10 @@ async function signIn(page) {
   await expect(page).toHaveURL(/\/home$/);
 }
 
+async function expectNoPageOverflow(page) {
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+}
+
 test('owner signs in and reaches the authenticated application', async ({ page }) => {
   await signIn(page);
   await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible();
@@ -73,4 +77,40 @@ test('client enters the portal through a single-use magic link', async ({ page }
   await expect(page).toHaveURL(/\/portal$/);
   await expect(page.getByText('Hi, Casey')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Your Events' })).toBeVisible();
+});
+
+test('primary signed-in workflows remain usable at phone width', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signIn(page);
+
+  const menuButton = page.getByRole('button', { name: 'Toggle navigation' });
+  await expect(menuButton).toBeVisible();
+  await menuButton.click();
+  await expect(menuButton).toHaveAttribute('aria-expanded', 'true');
+  await page.getByRole('link', { name: 'Bookings' }).click();
+  await expect(page).toHaveURL(/\/bookings$/);
+  await expectNoPageOverflow(page);
+
+  for (const path of ['/events', '/clients', '/contractors', '/reminders', '/help', '/settings']) {
+    await page.goto(path);
+    await expectNoPageOverflow(page);
+  }
+});
+
+test('keyboard users can skip navigation and contain focus inside a modal', async ({ page }) => {
+  await signIn(page);
+  await page.keyboard.press('Tab');
+  const skipLink = page.getByRole('link', { name: 'Skip to main content' });
+  await expect(skipLink).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#main-content')).toBeFocused();
+
+  await page.goto('/reminders');
+  await page.getByTestId('reminders-add-button').click();
+  const dialog = page.getByRole('dialog', { name: 'Add Reminder' });
+  await expect(dialog).toBeVisible();
+  await expect.poll(() => dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(page.getByTestId('reminders-add-button')).toBeFocused();
 });
