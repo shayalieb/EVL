@@ -16,11 +16,13 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2" aria-label="Notifications">
         {toasts.map((toast) => (
           <div
             key={toast.id}
             data-testid="toast-message"
+            role={toast.variant === 'error' ? 'alert' : 'status'}
+            aria-live={toast.variant === 'error' ? 'assertive' : 'polite'}
             className={`animate-toast-in px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium text-white ${
               toast.variant === 'error' ? 'bg-red-600' : 'bg-slate-800'
             }`}

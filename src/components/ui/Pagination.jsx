@@ -23,13 +23,13 @@ export default function Pagination({ page, pageCount, onChange, totalItems, page
   return (
     <div className="flex items-center justify-between gap-3 flex-wrap px-4 py-3 border-t border-slate-100">
       <div className="text-xs text-slate-500">Showing {start}–{end} of {totalItems}</div>
-      <div className="flex items-center gap-1" data-testid={testId}>
+      <div className="flex items-center gap-1 max-w-full overflow-x-auto" data-testid={testId} aria-label="Pagination">
         <button
           type="button"
           onClick={() => onChange(page - 1)}
           disabled={page <= 1}
           data-testid={testId ? `${testId}-prev-button` : undefined}
-          className="px-2 py-1 rounded-lg text-sm font-semibold text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+          className="min-w-11 min-h-11 px-2 py-2 rounded-lg text-sm font-semibold text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed"
           aria-label="Previous page"
         >
           ‹
@@ -43,7 +43,9 @@ export default function Pagination({ page, pageCount, onChange, totalItems, page
               type="button"
               onClick={() => onChange(p)}
               data-testid={testId ? `${testId}-page-${p}-button` : undefined}
-              className={`min-w-[28px] px-2 py-1 rounded-lg text-sm font-semibold ${p === page ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
+              aria-label={`Page ${p}`}
+              aria-current={p === page ? 'page' : undefined}
+              className={`min-w-11 min-h-11 px-2 py-2 rounded-lg text-sm font-semibold ${p === page ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
             >
               {p}
             </button>
@@ -54,7 +56,7 @@ export default function Pagination({ page, pageCount, onChange, totalItems, page
           onClick={() => onChange(page + 1)}
           disabled={page >= pageCount}
           data-testid={testId ? `${testId}-next-button` : undefined}
-          className="px-2 py-1 rounded-lg text-sm font-semibold text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+          className="min-w-11 min-h-11 px-2 py-2 rounded-lg text-sm font-semibold text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed"
           aria-label="Next page"
         >
           ›

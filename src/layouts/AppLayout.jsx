@@ -70,6 +70,17 @@ export default function AppLayout() {
     };
   }, []);
 
+  useEffect(() => {
+    function closeMenus(event) {
+      if (event.key !== 'Escape') return;
+      setMenuOpen(false);
+      setBellOpen(false);
+      setMobileNavOpen(false);
+    }
+    document.addEventListener('keydown', closeMenus);
+    return () => document.removeEventListener('keydown', closeMenus);
+  }, []);
+
   const pendingReminders = reminders
     .filter((r) => !r.completedAt)
     .sort((a, b) => new Date(a.remindAt) - new Date(b.remindAt));
@@ -107,13 +118,18 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
+      <a href="#main-content" className="fixed left-3 top-3 z-[100] -translate-y-20 focus:translate-y-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-lg">
+        Skip to main content
+      </a>
       <header className="h-20 border-b border-slate-200 bg-white flex items-center justify-between px-4 sm:px-6 shrink-0">
         <div className="flex items-center gap-3">
           <button
             type="button"
-            className="sm:hidden text-slate-500 p-1"
+            className="sm:hidden min-w-11 min-h-11 text-slate-500 p-2 rounded-lg"
             onClick={() => setMobileNavOpen((v) => !v)}
             aria-label="Toggle navigation"
+            aria-expanded={mobileNavOpen}
+            aria-controls="primary-navigation"
           >
             ☰
           </button>
@@ -142,8 +158,10 @@ export default function AppLayout() {
             type="button"
             onClick={() => setBellOpen((v) => !v)}
             data-testid="reminders-bell-button"
-            className="relative p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            className="relative min-w-11 min-h-11 p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700"
             aria-label="Reminders"
+            aria-expanded={bellOpen}
+            aria-haspopup="dialog"
           >
             <BellIcon className="w-5 h-5" />
             {dueReminders.length > 0 && (
@@ -158,7 +176,7 @@ export default function AppLayout() {
           {bellOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setBellOpen(false)} />
-              <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-slate-100 z-20 overflow-hidden">
+              <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-slate-100 z-20 overflow-hidden" role="dialog" aria-label="Reminder notifications">
                 <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold text-slate-700">Reminders</div>
                 {pendingReminders.length === 0 ? (
                   <div className="px-4 py-6 text-sm text-slate-400 text-center">No reminders</div>
@@ -189,7 +207,7 @@ export default function AppLayout() {
                             type="button"
                             onClick={() => handleMarkDone(r.id)}
                             data-testid={`reminders-bell-markdone-${r.id}`}
-                            className="shrink-0 text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                            className="shrink-0 min-h-11 px-2 text-xs font-semibold text-indigo-600 hover:text-indigo-700"
                           >
                             Done
                           </button>
@@ -213,7 +231,10 @@ export default function AppLayout() {
           <button
             type="button"
             onClick={() => setMenuOpen((v) => !v)}
-            className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-100"
+            className="min-h-11 flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-100"
+            aria-label="Account menu"
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
           >
             <span className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-semibold flex items-center justify-center text-sm">
               {initials || '?'}
@@ -225,11 +246,12 @@ export default function AppLayout() {
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-0 mt-2 w-44 bg-white rounded-lg shadow-lg border border-slate-100 z-20 overflow-hidden">
+              <div className="absolute right-0 mt-2 w-44 bg-white rounded-lg shadow-lg border border-slate-100 z-20 overflow-hidden" role="menu">
                 <NavLink
                   to="/settings"
                   onClick={() => setMenuOpen(false)}
                   className="block px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
+                  role="menuitem"
                 >
                   Settings
                 </NavLink>
@@ -237,6 +259,7 @@ export default function AppLayout() {
                   type="button"
                   onClick={handleLogout}
                   className="block w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
+                  role="menuitem"
                 >
                   Logout
                 </button>
@@ -249,6 +272,8 @@ export default function AppLayout() {
 
       <div className="flex flex-1 min-h-0">
         <nav
+          id="primary-navigation"
+          aria-label="Primary navigation"
           className={`${mobileNavOpen ? 'block' : 'hidden'} sm:block w-full sm:w-56 shrink-0 border-r border-slate-200 bg-white sm:min-h-0`}
         >
           <div className="p-3 space-y-4">
@@ -266,7 +291,7 @@ export default function AppLayout() {
                       }`
                     }
                   >
-                    <span>{item.icon}</span>
+                    <span aria-hidden="true">{item.icon}</span>
                     {item.label}
                   </NavLink>
                 ))}
@@ -275,7 +300,7 @@ export default function AppLayout() {
           </div>
         </nav>
 
-        <main className="flex-1 min-w-0 p-4 sm:p-6 overflow-y-auto">
+        <main id="main-content" tabIndex={-1} className="flex-1 min-w-0 p-4 sm:p-6 overflow-y-auto">
           {sizeWarning && !sizeWarningDismissed && (
             <div data-testid="account-size-warning-banner" className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               <span>{sizeWarning.message}</span>
