@@ -40,6 +40,7 @@ import { DEFAULT_ACCENT_COLOR } from '../lib/colorTheme';
 import { isWedding } from '../lib/eventType';
 import { pipelineSteps, proposalStatusInfo, contractStatusInfo } from '../lib/bookingPipeline';
 import { PRIORITIES } from '../lib/bookingPriorities';
+import { BOOKING_DISPOSITIONS, bookingDisposition } from '../lib/bookingDisposition';
 import { emptyForm, emptyVenue } from '../lib/bookingDefaults';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -587,7 +588,7 @@ export default function BookingFormPage() {
         depositPaid: !!booking.depositPaid,
         depositType: booking.depositType || 'fixed',
         depositPercent: booking.depositPercent ?? '',
-        bookingStatus: booking.bookingStatus || (bookingStatuses[0]?.id || ''),
+        bookingStatus: bookingDisposition(booking.bookingStatus, bookingStatuses),
         priority: booking.priority || '',
         nextFollowUpDate: booking.nextFollowUpDate || '',
         contractSignedDate: booking.contractSignedDate || '',
@@ -1940,10 +1941,11 @@ export default function BookingFormPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className={labelClass}>Booking Status</label>
+                  <label className={labelClass}>Disposition</label>
                   <select value={form.bookingStatus} onChange={(e) => update('bookingStatus', e.target.value)} data-testid="booking-form-status-select" className={inputClass}>
-                    {bookingStatuses.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                    {BOOKING_DISPOSITIONS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
                   </select>
+                  <p className="mt-1 text-xs text-slate-400">Workflow progress is updated automatically from proposals, contracts, events, and payments.</p>
                 </div>
                 <div>
                   <label className={labelClass}>Priority</label>

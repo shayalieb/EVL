@@ -8,6 +8,7 @@ import { listContractors, createContractor as createContractorApi, updateContrac
 import { listClients, createClient as createClientApi, updateClientApi, deleteClientApi } from '../lib/clients';
 import { listBookings, getBooking, createBooking as createBookingApi, updateBookingApi } from '../lib/bookings';
 import { listEvents, createEvent as createEventApi, updateEventApi } from '../lib/events';
+import { dispositionInfo } from '../lib/bookingDisposition';
 
 function statusLabel(statuses, id) {
   return statuses?.find((s) => s.id === id)?.label || id || '(none)';
@@ -62,7 +63,11 @@ function diffContractorAssignments(before, after, contractors) {
 function diffBookingFields(before, after, bookingStatuses) {
   const changes = [];
   if ((before.bookingStatus || '') !== (after.bookingStatus || '')) {
-    changes.push({ label: 'Status', from: statusLabel(bookingStatuses, before.bookingStatus), to: statusLabel(bookingStatuses, after.bookingStatus) });
+    changes.push({
+      label: 'Disposition',
+      from: dispositionInfo(before.bookingStatus, bookingStatuses).label,
+      to: dispositionInfo(after.bookingStatus, bookingStatuses).label,
+    });
   }
   const beforeDeposit = Number(before.depositAmount) || 0;
   const afterDeposit = Number(after.depositAmount) || 0;
@@ -387,13 +392,11 @@ export function DataProvider({ children }) {
       },
       schedule: fullBooking.schedule || [],
     });
-    const convertedStatus = (currentUser?.bookingStatuses || []).find((s) => s.label.toLowerCase() === 'converted');
     await updateBooking(bookingId, {
       convertedEventId: event.id,
-      ...(convertedStatus ? { bookingStatus: convertedStatus.id } : {}),
     });
     return event;
-  }, [bookings, currentUser, addEvent, updateBooking, clients]);
+  }, [bookings, addEvent, updateBooking, clients]);
 
   // ---- Contractors (real API, not the blob — see the fetch effect above) ----
   // Callers don't await these (matching the fire-and-forget feel of every

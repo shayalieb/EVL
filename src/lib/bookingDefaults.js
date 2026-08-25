@@ -20,7 +20,7 @@ export function emptyForm() {
     venue: emptyVenue(),
     schedule: [emptyScheduleItem()],
     depositAmount: '', depositDueDate: '', depositPaid: false, depositType: 'fixed', depositPercent: '',
-    bookingStatus: '', priority: '', nextFollowUpDate: '',
+    bookingStatus: 'active', priority: '', nextFollowUpDate: '',
     contractSignedDate: '', referralSource: '', notes: '', activityLog: [],
     proposal: null,
   };

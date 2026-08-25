@@ -312,7 +312,12 @@ function CustomFieldsTab() {
         placeholder="New event status"
       />
       <InquiryStatusListField canEdit={canEdit} />
-      <BookingStatusListField canEdit={canEdit} />
+      <div>
+        <h3 className="text-sm font-bold text-slate-700 mb-1">Booking workflow</h3>
+        <p className="text-xs text-slate-400">
+          Workflow Stage advances automatically as proposals, contracts, events, and payments are completed. Disposition is reserved for Active, On Hold, Lost, or Cancelled bookings.
+        </p>
+      </div>
     </div>
   );
 }
@@ -490,58 +495,6 @@ function InquiryStatusListField({ canEdit }) {
           <ColorPicker value={color} onChange={setColor} />
           <BucketPicker value={bucket} onChange={setBucket} testIdPrefix="settings-inquiry-status-add-bucket" />
           <button type="submit" data-testid="settings-inquiry-status-add-button" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 self-start">Add Status</button>
-        </form>
-      )}
-    </div>
-  );
-}
-
-function BookingStatusListField({ canEdit }) {
-  const { bookingStatuses, addBookingStatus, updateBookingStatus, removeBookingStatus } = useData();
-  const [label, setLabel] = useState('');
-  const [color, setColor] = useState('#6366f1');
-  const [isBooked, setIsBooked] = useState(false);
-
-  function handleAdd(e) {
-    e.preventDefault();
-    if (!label.trim()) return;
-    addBookingStatus({ label: label.trim(), color, isBooked });
-    setLabel('');
-    setIsBooked(false);
-  }
-
-  return (
-    <div>
-      <h3 className="text-sm font-bold text-slate-700 mb-1">Booking Statuses</h3>
-      <p className="text-xs text-slate-400 mb-2">
-        Tracks a booking through the sales pipeline. Statuses marked "unlocks convert to event" make the "Convert to Event" action available on a booking.
-      </p>
-      <div className="space-y-2 mb-3">
-        {bookingStatuses.map((s) => (
-          <div key={s.id} className="flex items-center gap-3 border border-slate-200 rounded-lg px-3 py-2">
-            <Badge color={s.color}>{s.label}</Badge>
-            <div className="flex-1">
-              <ColorPicker value={s.color} onChange={(c) => updateBookingStatus(s.id, { color: c })} />
-            </div>
-            <label className="flex items-center gap-1.5 text-xs text-slate-500 whitespace-nowrap">
-              <input type="checkbox" checked={!!s.isBooked} onChange={(e) => updateBookingStatus(s.id, { isBooked: e.target.checked })} data-testid="settings-booking-status-row-isbooked-checkbox" />
-              Unlocks convert to event
-            </label>
-            {canEdit && (
-              <button type="button" onClick={() => removeBookingStatus(s.id)} data-testid="settings-booking-status-remove-button" className="text-slate-400 hover:text-red-600 px-1" aria-label={`Remove ${s.label}`}>✕</button>
-            )}
-          </div>
-        ))}
-      </div>
-      {canEdit && (
-        <form onSubmit={handleAdd} className="flex flex-col gap-2 max-w-sm">
-          <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="New booking status" data-testid="settings-booking-status-input" className={inputClass} />
-          <ColorPicker value={color} onChange={setColor} />
-          <label className="flex items-center gap-1.5 text-xs text-slate-500">
-            <input type="checkbox" checked={isBooked} onChange={(e) => setIsBooked(e.target.checked)} data-testid="settings-booking-status-isbooked-checkbox" />
-            Unlocks convert to event
-          </label>
-          <button type="submit" data-testid="settings-booking-status-add-button" className="shrink-0 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 self-start">Add Status</button>
         </form>
       )}
     </div>

@@ -21,6 +21,7 @@ import { listContracts } from '../lib/contracts';
 import { listProposalResponses } from '../lib/proposalResponses';
 import { listInvoices } from '../lib/invoices';
 import { pipelineSteps, currentPipelineStep } from '../lib/bookingPipeline';
+import { BOOKING_DISPOSITIONS, bookingDisposition, dispositionInfo } from '../lib/bookingDisposition';
 import SendInquiryLinkModal from '../components/SendInquiryLinkModal';
 import ReviewInquiryModal from '../components/ReviewInquiryModal';
 
@@ -32,14 +33,6 @@ function stageColor(stage) {
   if (stage.label === 'Payment' && stage.state === 'done') return '#22c55e';
   if (stage.label === 'Booking' || stage.label === 'Proposal') return '#94a3b8';
   return '#6366f1';
-}
-
-// Soft, informational-only signal that the manually-set bookingStatus badge
-// may no longer reflect reality — never blocks or auto-corrects anything.
-// Heuristic: once the real pipeline is at Signed or later, a status that
-// still isn't flagged `isBooked` is worth a second look.
-function stageAheadOfStatus(stage, status) {
-  return ['Signed', 'Event', 'Payment'].includes(stage.label) && !status?.isBooked;
 }
 
 function todayISO() {
@@ -140,7 +133,7 @@ export default function BookingsPage() {
   const hasFilters = !!(search || statusFilter || priorityFilter || eventTypeFilter || depositFilter);
   const filteredBookings = bookings.filter((b) => {
     if (activeTab === 'completed' ? !b.completedAt : !!b.completedAt) return false;
-    if (statusFilter && b.bookingStatus !== statusFilter) return false;
+    if (statusFilter && bookingDisposition(b.bookingStatus, bookingStatuses) !== statusFilter) return false;
     if (priorityFilter && b.priority !== priorityFilter) return false;
     if (eventTypeFilter && b.eventType !== eventTypeFilter) return false;
     if (depositFilter && depositStatus(b) !== depositFilter) return false;
@@ -327,8 +320,8 @@ export default function BookingsPage() {
         <FilterSelect
           value={statusFilter}
           onChange={setStatusFilter}
-          allLabel="All Statuses"
-          options={bookingStatuses.map((s) => ({ value: s.id, label: s.label }))}
+          allLabel="All Dispositions"
+          options={BOOKING_DISPOSITIONS.map((item) => ({ value: item.id, label: item.label }))}
           testId="bookings-status-filter"
         />
         <FilterSelect
@@ -373,8 +366,8 @@ export default function BookingsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                <th className="px-4 py-3">Status</th>
-                <th className="hidden sm:table-cell px-4 py-3">Stage</th>
+                <th className="px-4 py-3">Workflow Stage</th>
+                <th className="hidden sm:table-cell px-4 py-3">Disposition</th>
                 <th className="px-4 py-3">Client</th>
                 <th className="px-4 py-3">Event</th>
                 <th className="hidden sm:table-cell px-4 py-3">Follow-up</th>
@@ -398,7 +391,7 @@ export default function BookingsPage() {
                 </tr>
               )}
               {pagedBookings.map((b) => {
-                const status = bookingStatuses.find((s) => s.id === b.bookingStatus);
+                const disposition = dispositionInfo(b.bookingStatus, bookingStatuses);
                 const client = clients.find((c) => c.id === b.clientId);
                 const canConvert = !b.convertedEventId;
                 const priority = PRIORITIES.find((p) => p.value === b.priority);
@@ -408,19 +401,13 @@ export default function BookingsPage() {
                   .sort((x, y) => new Date(y.createdAt) - new Date(x.createdAt))[0] || null;
                 const bookingInvoices = invoices.filter((inv) => inv.bookingId === b.id);
                 const stage = currentPipelineStep(pipelineSteps(b, b.proposal, contract, bookingInvoices, latestProposalResponseByBooking.get(b.id)));
-                const stageMismatch = stageAheadOfStatus(stage, status);
                 const proposalRevisionRequested = latestProposalResponseByBooking.get(b.id)?.status === 'revision_requested';
 
                 return (
                   <tr key={b.id} data-testid="booking-row" className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
-                        {status && <Badge color={status.color}>{status.label}</Badge>}
-                        {stageMismatch && (
-                          <Tooltip content={`Pipeline shows this is at "${stage.label}" already — status may be out of date.`}>
-                            <span data-testid="booking-row-stage-mismatch-hint" className="text-amber-500 cursor-default" aria-label="Status may be out of date">⚠</span>
-                          </Tooltip>
-                        )}
+                        <Badge color={stageColor(stage)}>{stage.label}</Badge>
                         {proposalRevisionRequested && (
                           <Tooltip content="The client requested changes to the proposal">
                             <span data-testid="booking-row-revision-requested-hint" className="text-red-500 cursor-default" aria-label="Proposal revision requested">✎</span>
@@ -429,7 +416,7 @@ export default function BookingsPage() {
                       </div>
                     </td>
                     <td className="hidden sm:table-cell px-4 py-3">
-                      <Badge color={stageColor(stage)}>{stage.label}</Badge>
+                      <Badge color={disposition.color}>{disposition.label}</Badge>
                     </td>
                     <td className="px-4 py-3 font-medium text-slate-800">
                       <div className="flex items-center gap-2">
