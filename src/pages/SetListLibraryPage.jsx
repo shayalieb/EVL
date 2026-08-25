@@ -13,6 +13,7 @@ import { formatEventDate } from '../lib/format';
 import { deleteDocument } from '../lib/documents';
 import { generateSetListPdf } from '../lib/setListPdf';
 import { renderSetListEmail, sendSetListEmail } from '../lib/setList';
+import { useContractorHydration } from '../lib/useContractorHydration';
 
 // Resources-section ListView for reusable set lists (band/orchestra only —
 // gated at the nav item in AppLayout.jsx and the route in App.jsx). Editing
@@ -40,6 +41,8 @@ export default function SetListLibraryPage() {
     const ids = [...new Set(setListLibrary.flatMap((item) => item.eventIds || (item.eventId ? [item.eventId] : [])))];
     Promise.allSettled(ids.map(loadEvent));
   }, [setListLibrary, loadEvent]);
+
+  useContractorHydration(events.flatMap((event) => (event.contractorBookings || []).map((booking) => booking.contractorId)));
 
   const filteredSetLists = setListLibrary.filter((s) => matchesSearch(search, [s.name]));
 

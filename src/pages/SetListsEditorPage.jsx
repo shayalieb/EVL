@@ -13,6 +13,7 @@ import DocumentPreviewModal from '../components/DocumentPreviewModal';
 import SetListEmailModal from '../components/SetListEmailModal';
 import Modal from '../components/ui/Modal';
 import Tooltip from '../components/ui/Tooltip';
+import { useContractorHydration } from '../lib/useContractorHydration';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -58,6 +59,8 @@ export default function SetListsEditorPage() {
   const hydratedRef = useRef(null);
   const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
   const [pullingLibraryId, setPullingLibraryId] = useState(null);
+
+  useContractorHydration((event?.contractorBookings || []).map((booking) => booking.contractorId));
 
   useEffect(() => {
     if (!event || hydratedRef.current === event.id) return;

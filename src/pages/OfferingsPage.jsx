@@ -11,6 +11,7 @@ import { computeOfferingTotal } from '../lib/offerings';
 import { computeGroupPrice } from '../lib/contractorGroups';
 import { formatCurrency as currency } from '../lib/format';
 import { matchesSearch } from '../lib/search';
+import { useContractorHydration } from '../lib/useContractorHydration';
 
 export default function OfferingsPage() {
   const { offerings, deleteOffering, contractors, contractorGroups, deleteContractorGroup } = useData();
@@ -25,6 +26,8 @@ export default function OfferingsPage() {
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState(null);
   const [deleteGroupTarget, setDeleteGroupTarget] = useState(null);
+
+  useContractorHydration(contractorGroups.flatMap((group) => group.contractorIds || []));
 
   const hasFilters = !!(search || typeFilter);
   const filteredOfferings = offerings.filter((o) => {

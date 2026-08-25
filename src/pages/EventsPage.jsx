@@ -17,6 +17,7 @@ import { formatCurrency as currency } from '../lib/format';
 import { queryEventRange, queryEvents } from '../lib/events';
 import { getBookingByEvent } from '../lib/bookings';
 import { useServerList } from '../lib/useServerList';
+import { useContractorHydration } from '../lib/useContractorHydration';
 import { eventCostingStatus } from '../lib/eventCosting';
 
 const VIEW_TABS = [
@@ -97,6 +98,7 @@ export default function EventsPage() {
     () => queryEvents({ page, pageSize: 25, view: activeTab === 'completed' ? 'completed' : 'active', search, status: statusFilter, vendor: vendorFilter, eventType: eventTypeFilter, contractors: contractorsFilter, sort, direction: sort === 'createdAt' || sort === 'updatedAt' ? 'desc' : 'asc' }),
     [page, activeTab, search, statusFilter, vendorFilter, eventTypeFilter, contractorsFilter, sort],
   );
+  useContractorHydration([...pagedEvents, ...calendarEvents].flatMap((event) => (event.contractorBookings || []).map((booking) => booking.contractorId)));
   useEffect(() => { setPage(1); }, [activeTab, search, statusFilter, vendorFilter, eventTypeFilter, contractorsFilter]);
 
   const loadCalendarRange = useCallback(async (from, to) => {

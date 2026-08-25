@@ -5,6 +5,7 @@ import ContractorCombobox from './ContractorCombobox';
 import { useData } from '../context/DataContext';
 import { computeGroupSuggestedPrice } from '../lib/contractorGroups';
 import { formatCurrency as currency } from '../lib/format';
+import { useContractorHydration } from '../lib/useContractorHydration';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const moneyInputClass = 'w-full py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -36,6 +37,8 @@ export default function ContractorGroupModal({ open, onClose, group, onSaved }) 
       setError('');
     }
   }, [open, group]);
+
+  useContractorHydration(open ? contractorIds : []);
 
   const selectedContractors = contractorIds.map((id) => contractors.find((c) => c.id === id)).filter(Boolean);
   const suggestedPrice = computeGroupSuggestedPrice({ contractorIds }, contractors);

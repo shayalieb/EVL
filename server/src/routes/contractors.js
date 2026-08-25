@@ -82,6 +82,37 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ contractors: page.map(serializeContractor), nextCursor });
 }));
 
+// Hydrate the small contractor subset referenced by the current event,
+// ensemble, or editor. This replaces downloading the account's entire
+// roster merely to resolve a handful of stored contractor ids.
+router.get('/facets', asyncHandler(async (req, res) => {
+  const [categories, roles] = await Promise.all([
+    prisma.contractor.findMany({
+      where: { accountId: req.membership.accountId, contractorType1: { not: null } },
+      distinct: ['contractorType1'],
+      select: { contractorType1: true },
+    }),
+    prisma.contractor.findMany({
+      where: { accountId: req.membership.accountId, contractorType2: { not: null } },
+      distinct: ['contractorType2'],
+      select: { contractorType2: true },
+    }),
+  ]);
+  res.json({
+    categories: categories.map((item) => item.contractorType1).filter(Boolean).sort(),
+    roles: roles.map((item) => item.contractorType2).filter(Boolean).sort(),
+  });
+}));
+
+router.get('/batch', asyncHandler(async (req, res) => {
+  const ids = [...new Set(String(req.query.ids || '').split(',').map((id) => id.trim()).filter(Boolean))].slice(0, 100);
+  if (!ids.length) return res.json({ contractors: [] });
+  const contractors = await prisma.contractor.findMany({
+    where: { accountId: req.membership.accountId, id: { in: ids } },
+  });
+  res.json({ contractors: contractors.map(serializeContractor) });
+}));
+
 router.get('/:id', asyncHandler(async (req, res) => {
   const contractor = await prisma.contractor.findUnique({ where: { id: req.params.id } });
   if (!contractor || contractor.accountId !== req.membership.accountId) return res.status(404).json({ error: 'Contractor not found.' });

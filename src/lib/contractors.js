@@ -1,13 +1,28 @@
 import { apiFetch } from '../context/AuthContext';
-import { fetchAllPages } from './fetchAllPages';
 import { queryList } from './listQuery';
-
-export async function listContractors() {
-  return fetchAllPages('/contractors', 'contractors');
-}
 
 export function queryContractors(params) {
   return queryList('/contractors', 'contractors', params);
+}
+
+export async function getContractors(ids) {
+  const uniqueIds = [...new Set((ids || []).filter(Boolean))];
+  if (!uniqueIds.length) return [];
+  try {
+    const data = await apiFetch(`/contractors/batch?ids=${encodeURIComponent(uniqueIds.join(','))}`);
+    return data.contractors || [];
+  } catch (error) {
+    // During a rolling deploy the new browser bundle can briefly reach an
+    // older API instance that does not have /batch yet. Preserve the edit
+    // screen by falling back to bounded direct-id reads for this one record.
+    if (error.status !== 404) throw error;
+    const settled = await Promise.allSettled(uniqueIds.map(getContractor));
+    return settled.filter((result) => result.status === 'fulfilled').map((result) => result.value);
+  }
+}
+
+export async function getContractorFacets() {
+  return apiFetch('/contractors/facets');
 }
 
 export async function getContractor(id) {

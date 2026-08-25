@@ -7,6 +7,7 @@ import { uid } from '../lib/storage';
 import { computeOfferingTotal } from '../lib/offerings';
 import { computeGroupPrice, formatInstrumentLine } from '../lib/contractorGroups';
 import { formatCurrency as currency } from '../lib/format';
+import { useContractorHydration } from '../lib/useContractorHydration';
 
 // Instrument + role, never names — a musician can be swapped for another
 // playing the same part without misrepresenting who's contracted to
@@ -63,6 +64,7 @@ function QuickItemForm({ onAdd, onCancel }) {
 
 export default function OfferingPickerModal({ open, onClose, onSelect, allowEnsemble = false }) {
   const { offerings, contractorGroups, contractors } = useData();
+  useContractorHydration(open && allowEnsemble ? contractorGroups.flatMap((group) => group.contractorIds || []) : []);
   const [query, setQuery] = useState('');
   const [addingQuickItem, setAddingQuickItem] = useState(false);
   const [creatingOffering, setCreatingOffering] = useState(false);

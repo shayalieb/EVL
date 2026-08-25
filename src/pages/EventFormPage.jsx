@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import ContractorPickerRow from '../components/ContractorPickerRow';
+import ContractorSelect from '../components/ContractorSelect';
 import ContractorModal from '../components/ContractorModal';
 import ClientCombobox from '../components/ClientCombobox';
 import AcceptPaymentModal from '../components/AcceptPaymentModal';
@@ -22,6 +23,7 @@ import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
 import { formatCurrency as currency, formatEventDate, formatEventTime, formatPhoneNumber } from '../lib/format';
 import { getPricingTiers, getPricingTier, getTierPrice, getBookingTotal, getOvertimeHours, getOvertimeAmount } from '../lib/pricingTiers';
 import { getPrepContractors, renderPrepSheetEmail, requestsLabels } from '../lib/prepSheet';
+import { useContractorHydration } from '../lib/useContractorHydration';
 import { generatePrepSheetPdf, generatePrepSheetPdfAttachment } from '../lib/prepSheetPdf';
 import { listDocuments, uploadDocument, deleteDocument, documentDownloadUrl } from '../lib/documents';
 import { getBookingByEvent } from '../lib/bookings';
@@ -188,7 +190,7 @@ export default function EventFormPage() {
   const { eventId } = useParams();
   const navigate = useNavigate();
   const {
-    eventTypes, addEventType, eventStatuses, inquiryStatuses, addInquiryStatus, emailTemplates, loadEvent,
+    eventTypes, addEventType, eventStatuses, inquiryStatuses, addInquiryStatus, emailTemplates, loadEvent, loadContractors,
     contractors, searchContractors, contractorTypes, venues, addEvent, updateEvent, computeDurationHours,
     updateBooking, computeEventTotalCost, contractorGroups,
   } = useData();
@@ -209,11 +211,14 @@ export default function EventFormPage() {
     let cancelled = false;
     setEventDetailLoaded(false);
     loadEvent(eventId)
-      .then((full) => { if (!cancelled) setFullEvent(full); })
+      .then(async (full) => {
+        await loadContractors((full.contractorBookings || []).map((booking) => booking.contractorId));
+        if (!cancelled) setFullEvent(full);
+      })
       .catch(() => { if (!cancelled) setFullEvent(null); })
       .finally(() => { if (!cancelled) setEventDetailLoaded(true); });
     return () => { cancelled = true; };
-  }, [eventId, loadEvent]);
+  }, [eventId, loadEvent, loadContractors]);
 
   // Profit/loss is sensitive financial data — same owner/admin-only gate
   // already used for Settings -> Users/Billing.
@@ -253,6 +258,12 @@ export default function EventFormPage() {
   const [uploadingRequestId, setUploadingRequestId] = useState(null);
 
   const hasCategories = contractorTypes.length > 0;
+
+  useContractorHydration([
+    ...form.contractorBookings.map((booking) => booking.contractorId),
+    ...form.secondShooters.map((shooter) => shooter.contractorId),
+    ...contractorGroups.flatMap((group) => group.contractorIds || []),
+  ]);
 
   useEffect(() => {
     if (!pickerOpen) return;
@@ -2374,15 +2385,11 @@ export default function EventFormPage() {
                   <div className="space-y-2">
                     {form.secondShooters.map((s) => (
                       <div key={s.id} data-testid="event-form-second-shooter-row" className="border border-slate-200 rounded-lg p-3 grid grid-cols-1 sm:grid-cols-3 gap-2 items-start">
-                        <select
+                        <ContractorSelect
                           value={s.contractorId}
-                          onChange={(e) => updateSecondShooter(s.id, { contractorId: e.target.value })}
-                          data-testid="event-form-second-shooter-contractor-select"
-                          className={inputClass}
-                        >
-                          <option value="">Select contractor…</option>
-                          {contractors.map((c) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
-                        </select>
+                          onChange={(contractorId) => updateSecondShooter(s.id, { contractorId })}
+                          testId="event-form-second-shooter-contractor-select"
+                        />
                         <input
                           placeholder="Role (e.g. Second Shooter)"
                           value={s.role}

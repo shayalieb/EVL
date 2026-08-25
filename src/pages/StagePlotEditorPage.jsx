@@ -11,6 +11,7 @@ import StagePlotBacklineList from '../components/StagePlotBacklineList';
 import StagePlotEmailModal from '../components/StagePlotEmailModal';
 import EmailThreadModal from '../components/EmailThreadModal';
 import { getEvent } from '../lib/events';
+import { useContractorHydration } from '../lib/useContractorHydration';
 
 function formatTimeAgo(iso) {
   if (!iso) return '';
@@ -39,6 +40,11 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   const [threadSummaries, setThreadSummaries] = useState({});
   const [activeThreadContractorId, setActiveThreadContractorId] = useState(null);
   const pageEditorRef = useRef(null);
+
+  useContractorHydration([
+    ...(event?.contractorBookings || []).map((booking) => booking.contractorId),
+    ...Object.keys(threadSummaries),
+  ]);
 
   // Same "own by contractor, event-scoped" thread system used everywhere
   // else contractor email lives (see EventFormPage.jsx) — a Stage Plot

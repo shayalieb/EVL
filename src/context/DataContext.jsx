@@ -1,11 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import { uid } from '../lib/storage';
 import { getBookingTotal, computeDurationHours as computeDurationHoursUtil } from '../lib/pricingTiers';
 import { statusBucket } from '../lib/inquiryStatusBucket';
 import { formatEventDate, formatCurrency } from '../lib/format';
-import { listContractors, queryContractors, getContractor, createContractor as createContractorApi, updateContractorApi, deleteContractorApi } from '../lib/contractors';
+import { queryContractors, getContractor, getContractors, createContractor as createContractorApi, updateContractorApi, deleteContractorApi } from '../lib/contractors';
 import { queryClients, getClient, createClient as createClientApi, updateClientApi, deleteClientApi } from '../lib/clients';
 import { queryBookings, getBooking, createBooking as createBookingApi, updateBookingApi } from '../lib/bookings';
 import { queryEvents, getEvent, createEvent as createEventApi, updateEventApi } from '../lib/events';
@@ -97,34 +96,18 @@ const LIST_FIELDS = {
 
 export function DataProvider({ children }) {
   const { currentUser, updateCurrentUser } = useAuth();
-  const { pathname } = useLocation();
-  const needsContractors = /^\/(contractors|events|offerings|set-lists)(\/|$)/.test(pathname) || pathname.startsWith('/bookings/');
 
   const patchList = useCallback((field, nextList) => {
     updateCurrentUser({ [field]: nextList });
   }, [updateCurrentUser]);
 
-  // Contractors are real DB rows (see server/prisma/schema.prisma's
-  // Contractor model comment for why — blob-size, not a public-route
-  // requirement like Guest), fetched once per account rather than living in
-  // the AccountData blob like everything else here. Blocks rendering
-  // `children` until loaded, same as AuthProvider's own authLoading gate,
-  // so every other page can keep assuming `contractors` is synchronously
-  // populated exactly like before this migration.
+  // Contractors are cached on demand. Search results and the small sets of
+  // ids referenced by the current record are merged here; the full account
+  // roster is never downloaded as an application prerequisite.
   const [contractors, setContractors] = useState([]);
-  const [contractorsLoaded, setContractorsLoaded] = useState(false);
   useEffect(() => {
     setContractors([]);
-    setContractorsLoaded(false);
   }, [currentUser?.accountId]);
-  useEffect(() => {
-    if (!currentUser || !needsContractors || contractorsLoaded) return;
-    let cancelled = false;
-    listContractors()
-      .then((list) => { if (!cancelled) setContractors(list); })
-      .finally(() => { if (!cancelled) setContractorsLoaded(true); });
-    return () => { cancelled = true; };
-  }, [currentUser, needsContractors, contractorsLoaded]);
 
   // Same real-table-not-blob treatment as contractors above — see
   // server/prisma/schema.prisma's Client model comment.
@@ -176,6 +159,15 @@ export function DataProvider({ children }) {
   const loadContractor = useCallback(async (id) => {
     const cached = contractors.find((record) => record.id === id);
     return cached || mergeCachedRecord(setContractors, await getContractor(id));
+  }, [contractors, mergeCachedRecord]);
+
+  const loadContractors = useCallback(async (ids = []) => {
+    const cachedIds = new Set(contractors.map((record) => record.id));
+    const missingIds = [...new Set(ids.filter(Boolean))].filter((id) => !cachedIds.has(id));
+    if (!missingIds.length) return contractors.filter((record) => ids.includes(record.id));
+    const records = await getContractors(missingIds);
+    records.forEach((record) => mergeCachedRecord(setContractors, record));
+    return records;
   }, [contractors, mergeCachedRecord]);
 
   const searchEvents = useCallback(async (search = '') => {
@@ -744,6 +736,7 @@ export function DataProvider({ children }) {
     addContractor,
     searchContractors,
     loadContractor,
+    loadContractors,
     updateContractor,
     deleteContractor,
     addClient,
@@ -803,7 +796,7 @@ export function DataProvider({ children }) {
     computeVendorStatus,
   }), [
     currentUser, contractors, clients, bookings, events, searchEvents, loadEvent, searchBookings, loadBooking,
-    addContractor, searchContractors, loadContractor, updateContractor, deleteContractor,
+    addContractor, searchContractors, loadContractor, loadContractors, updateContractor, deleteContractor,
     addClient, searchClients, loadClient, updateClient, deleteClient, computeClientEventCounts,
     addVenue, updateVenue, deleteVenue,
     addBooking, updateBooking, deleteBooking, completeBooking, restoreBooking, convertBookingToEvent,
@@ -822,12 +815,6 @@ export function DataProvider({ children }) {
     getContractorById, computeDurationHours, computeEventTotalCost, computeVendorStatus,
   ]);
 
-  // Same blank-while-loading behavior as AuthProvider's own authLoading gate
-  // — every page here already assumes `contractors`/`clients`/`bookings`/
-  // `events` are synchronously populated (.find(...) inline in render
-  // bodies, no loading states of their own), so this keeps that assumption
-  // true rather than pushing a loading state into every consuming file.
-  if (currentUser && needsContractors && !contractorsLoaded) return null;
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

@@ -13,7 +13,7 @@ import Pagination from '../components/ui/Pagination';
 import { useToast } from '../components/ui/Toast';
 import { formatCurrency as currency, formatEventDate } from '../lib/format';
 import { getPricingTiers } from '../lib/pricingTiers';
-import { queryContractors } from '../lib/contractors';
+import { getContractorFacets, queryContractors } from '../lib/contractors';
 import { useServerList } from '../lib/useServerList';
 import { getRosterSummary } from '../lib/email/threads';
 
@@ -30,7 +30,7 @@ function lastContactLabel(iso) {
 }
 
 export default function ContractorsPage() {
-  const { contractors, deleteContractor } = useData();
+  const { contractors, loadContractor, loadContractors, deleteContractor } = useData();
   const { can } = useAuth();
   const canEdit = can('manageContractors');
   const { showToast } = useToast();
@@ -49,11 +49,13 @@ export default function ContractorsPage() {
   // elsewhere (HomePage.jsx's invoices, BookingsPage.jsx's contracts) for
   // data that isn't otherwise read on this page.
   const [contactSummary, setContactSummary] = useState({});
+  const [facets, setFacets] = useState({ categories: [], roles: [] });
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     let cancelled = false;
     getRosterSummary().then((summaries) => { if (!cancelled) setContactSummary(summaries); }).catch(() => {});
+    getContractorFacets().then((next) => { if (!cancelled) setFacets(next); }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
@@ -63,27 +65,23 @@ export default function ContractorsPage() {
   useEffect(() => {
     const openId = searchParams.get('open');
     if (!openId) return;
-    const match = contractors.find((c) => c.id === openId);
-    if (match) {
+    loadContractor(openId).then((match) => {
       setEditingContractor(match);
       setModalOpen(true);
-    }
+    }).catch(() => {});
     setSearchParams((prev) => { prev.delete('open'); return prev; }, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, contractors]);
+  }, [searchParams, loadContractor]);
 
-  const categoryOptions = [...new Set(contractors.map((c) => c.contractorType1).filter(Boolean))]
-    .sort()
-    .map((cat) => ({ value: cat, label: cat }));
-  const roleOptions = [...new Set(contractors.map((c) => c.contractorType2).filter(Boolean))]
-    .sort()
-    .map((role) => ({ value: role, label: role }));
+  const categoryOptions = facets.categories.map((cat) => ({ value: cat, label: cat }));
+  const roleOptions = facets.roles.map((role) => ({ value: role, label: role }));
 
   const hasFilters = !!(search || categoryFilter || roleFilter || priceFilter);
   const { items: pagedContractors, pageCount, pageSize, total: totalItems, loading, error, refresh } = useServerList(
     () => queryContractors({ page, pageSize: 25, search, category: categoryFilter, role: roleFilter, price: priceFilter, sort, direction: sort === 'createdAt' || sort === 'updatedAt' ? 'desc' : 'asc' }),
     [page, search, categoryFilter, roleFilter, priceFilter, sort],
   );
+  useEffect(() => { loadContractors(pagedContractors.map((contractor) => contractor.id)).catch(() => {}); }, [pagedContractors, loadContractors]);
   useEffect(() => { setPage(1); }, [search, categoryFilter, roleFilter, priceFilter]);
 
   // Selection persists across pages/filters (by id, not by row) so picking
