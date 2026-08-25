@@ -180,7 +180,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   const activeThreadContractor = activeThreadContractorId ? contractors.find((c) => c.id === activeThreadContractorId) : null;
 
   return (
-    <div className={isModal ? '' : 'p-6 max-w-[1500px] mx-auto'}>
+    <div className={isModal ? 'w-full' : 'p-6 w-full'}>
       <div className="flex items-center justify-between mb-4">
         {isModal ? (
           <div />
@@ -250,7 +250,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
         )}
       </div>
 
-      <div className="flex flex-wrap gap-4 items-start">
+      <div className="flex flex-wrap gap-4 items-start w-full min-w-0">
         {activePage && (
           <StagePlotPageEditor
             ref={pageEditorRef}

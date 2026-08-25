@@ -9,7 +9,8 @@ import { saveStagePlotPage } from '../lib/stagePlots';
 import CanvasIconPalette from './CanvasIconPalette';
 
 const AUTOSAVE_DELAY_MS = 2000;
-const STAGE_WIDTH = 820;
+const MIN_STAGE_WIDTH = 420;
+const DEFAULT_STAGE_WIDTH = 820;
 const STAGE_HEIGHT = 580;
 const toolbarButtonClass = 'px-3 py-1.5 rounded-lg border border-slate-300 text-sm disabled:opacity-40';
 const alignActionClass = 'w-full text-left px-3 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed';
@@ -62,20 +63,40 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, p
   const [pendingIconId, setPendingIconId] = useState(null);
   const [saveStatus, setSaveStatus] = useState('saved');
   const [alignPopoverOpen, setAlignPopoverOpen] = useState(false);
+  const [cleanCapture, setCleanCapture] = useState(false);
+  const [stageWidth, setStageWidth] = useState(DEFAULT_STAGE_WIDTH);
   const stageRef = useRef(null);
   const canvasApiRef = useRef(null);
+  const canvasContainerRef = useRef(null);
   const saveTimer = useRef(null);
   const sceneRef = useRef(scene);
   sceneRef.current = scene;
 
+  useEffect(() => {
+    const container = canvasContainerRef.current;
+    if (!container) return;
+    const resize = () => setStageWidth(Math.max(MIN_STAGE_WIDTH, Math.floor(container.getBoundingClientRect().width)));
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
   const persist = useCallback(async () => {
     setSaveStatus('saving');
     try {
+      // Render one editor-free frame before capturing. Selection outlines,
+      // resize handles, smart guides, and rotation readouts are interaction
+      // affordances and must never appear in emailed/PDF thumbnails.
+      setCleanCapture(true);
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const thumbnailBase64 = stageRef.current ? captureCleanThumbnail(stageRef.current) : undefined;
+      setCleanCapture(false);
       const saved = await saveStagePlotPage(eventId, page.id, { scene: sceneRef.current, thumbnailBase64 });
       onSaved({ scene: saved.scene, hasThumbnail: saved.hasThumbnail });
       setSaveStatus('saved');
     } catch {
+      setCleanCapture(false);
       setSaveStatus('unsaved');
     }
   }, [eventId, page.id, onSaved]);
@@ -348,7 +369,7 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, p
     // flex-wrap row) dropping to its own line first. Leaving this as a
     // plain block keeps its default min-width:auto, so the browser wraps
     // the Production List away before it ever squeezes this.
-    <div>
+    <div className="w-full min-w-0">
       <div className="flex flex-wrap items-center gap-2 mb-3 overflow-x-auto">
         <button type="button" onClick={undo} disabled={!canUndo} data-testid="stageplot-undo-button" className={toolbarButtonClass}>Undo</button>
         <button type="button" onClick={redo} disabled={!canRedo} data-testid="stageplot-redo-button" className={toolbarButtonClass}>Redo</button>
@@ -466,7 +487,7 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, p
         </span>
       </div>
 
-      <div className="flex flex-wrap gap-4">
+      <div className="flex gap-4 w-full min-w-0">
         <div className="w-44 shrink-0 space-y-4">
           <CanvasIconPalette
             icons={STAGE_PLOT_ICON_LIST}
@@ -502,7 +523,7 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, p
           </div>
         </div>
 
-        <div className="overflow-x-auto max-w-full">
+        <div ref={canvasContainerRef} className="flex-1 min-w-0 overflow-x-auto max-w-full">
           <CanvasStage
             ref={canvasApiRef}
             scene={scene}
@@ -517,7 +538,7 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, p
             selectedStrokeId={selectedStrokeId}
             onSelectStroke={setSelectedStrokeId}
             stageRef={stageRef}
-            width={STAGE_WIDTH}
+            width={stageWidth}
             height={STAGE_HEIGHT}
             showGrid={false}
             iconRegistry={STAGE_PLOT_ICONS}
@@ -528,6 +549,7 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ eventId, p
             onElementAdded={onElementAdded}
             pendingIconId={pendingIconId}
             onCalibrate={handleCalibrate}
+            cleanRender={cleanCapture}
           />
         </div>
       </div>

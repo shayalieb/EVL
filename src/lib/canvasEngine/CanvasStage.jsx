@@ -352,6 +352,7 @@ const CanvasStage = forwardRef(function CanvasStage({
   // no separate "add" step, so leaving this unset there keeps its popup
   // exactly as it already was.
   addToListLabel,
+  cleanRender = false,
 }, ref) {
   const internalStageRef = useRef(null);
   const trRef = useRef(null);
@@ -907,7 +908,7 @@ const CanvasStage = forwardRef(function CanvasStage({
 
         <Layer>
           {scene.strokes.filter((s) => visibleLayerIds.has(s.layerId)).map((s) => {
-            const isSelectedStroke = s.id === selectedStrokeId;
+            const isSelectedStroke = !cleanRender && s.id === selectedStrokeId;
             const resolvedColor = isSelectedStroke ? '#4f46e5' : s.color;
             const resolvedWidth = isSelectedStroke ? s.strokeWidth + 1 : s.strokeWidth;
             const common = {
@@ -953,8 +954,8 @@ const CanvasStage = forwardRef(function CanvasStage({
               element={el}
               icon={iconRegistry?.[el.iconId]}
               number={elementNumbers?.[el.id]}
-              isSelected={el.id === selectedElementId}
-              isMultiSelected={!!multiSelectedIds?.has(el.id)}
+              isSelected={!cleanRender && el.id === selectedElementId}
+              isMultiSelected={!cleanRender && !!multiSelectedIds?.has(el.id)}
               onSelect={(e) => {
                 const shiftKey = !!e?.evt?.shiftKey;
                 onSelectElement?.(el.id, shiftKey);
@@ -984,7 +985,7 @@ const CanvasStage = forwardRef(function CanvasStage({
             <AnnotationNote
               key={a.id}
               annotation={a}
-              isSelected={a.id === selectedAnnotationId}
+              isSelected={!cleanRender && a.id === selectedAnnotationId}
               isEditing={a.id === editingAnnotationId}
               onSelect={() => { onSelectAnnotation?.(a.id); onSelectElement?.(null); onSelectStroke?.(null); }}
               onEdit={() => startEditingAnnotation(a)}
@@ -995,7 +996,7 @@ const CanvasStage = forwardRef(function CanvasStage({
             />
           ))}
 
-          {liveRotation != null && selectedElement && (
+          {!cleanRender && liveRotation != null && selectedElement && (
             <Group x={selectedElement.x} y={selectedElement.y - (selectedIsLinear ? LINEAR_HEIGHT : ICON_SIZE) / 2 - 26} listening={false}>
               <Rect width={44} height={20} offsetX={22} offsetY={10} fill="#1e293b" cornerRadius={4} />
               <Text
@@ -1025,6 +1026,7 @@ const CanvasStage = forwardRef(function CanvasStage({
 
           <Transformer
             ref={trRef}
+            visible={!cleanRender}
             rotateEnabled
             rotationSnaps={ROTATION_SNAPS}
             enabledAnchors={selectedIsLinear ? ['middle-left', 'middle-right'] : undefined}
