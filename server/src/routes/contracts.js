@@ -6,6 +6,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
+import { withSerializableTransaction } from '../lib/serializableTransaction.js';
 
 const router = Router();
 
@@ -280,9 +281,9 @@ router.post('/:id/regenerate-client-link', asyncHandler(async (req, res) => {
 
 export const publicContractsRouter = Router();
 
-async function findByToken(token) {
+async function findByToken(token, database = prisma) {
   const hash = hashToken(token);
-  const contract = await prisma.contract.findFirst({
+  const contract = await database.contract.findFirst({
     where: { OR: [{ clientTokenHash: hash }, { ownerTokenHash: hash }] },
   });
   if (!contract) return null;
@@ -320,32 +321,45 @@ publicContractsRouter.post('/:token/submit', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Signature name and signature image are required.' });
   }
 
-  const found = await findByToken(req.params.token);
-  if (!found) return res.status(404).json({ error: 'This link is invalid or has expired.' });
+  const result = await withSerializableTransaction(prisma, async (tx) => {
+    const found = await findByToken(req.params.token, tx);
+    if (!found) return { error: { status: 404, message: 'This link is invalid or has expired.' } };
 
-  const { contract, role } = found;
-  if (email?.trim()) {
-    const expectedEmail = role === 'client' ? contract.recipientEmail : contract.ownerEmail;
-    if (expectedEmail && email.trim().toLowerCase() !== expectedEmail.toLowerCase()) {
-      return res.status(403).json({ error: "That email doesn't match this link." });
+    const { contract, role } = found;
+    if (email?.trim()) {
+      const expectedEmail = role === 'client' ? contract.recipientEmail : contract.ownerEmail;
+      if (expectedEmail && email.trim().toLowerCase() !== expectedEmail.toLowerCase()) {
+        return { error: { status: 403, message: "That email doesn't match this link." } };
+      }
     }
-  }
+
+    const signedAt = role === 'client' ? contract.clientSignedAt : contract.ownerSignedAt;
+    if (signedAt) return { error: { status: 409, message: "You've already signed this contract." } };
+
+    const ownerAlreadySigned = !!contract.ownerSignedAt;
+    const data = role === 'client'
+      ? {
+          clientSignedAt: new Date(),
+          clientSignatureName: signatureName.trim(),
+          clientSignatureImage: signatureImage,
+          status: statusFor({ clientSigned: true, ownerSigned: ownerAlreadySigned }),
+          log: withLogEntry(contract.log, { type: 'client_signed', actorEmail: contract.recipientEmail, note: null }),
+        }
+      : {
+          ownerSignedAt: new Date(),
+          ownerSignatureName: signatureName.trim(),
+          ownerSignatureImage: signatureImage,
+          status: statusFor({ clientSigned: !!contract.clientSignedAt, ownerSigned: true }),
+          log: withLogEntry(contract.log, { type: 'owner_signed', actorEmail: contract.ownerEmail, note: null }),
+        };
+    const updated = await tx.contract.update({ where: { id: contract.id }, data });
+    return { contract, role, ownerAlreadySigned, updated };
+  });
+
+  if (result.error) return res.status(result.error.status).json({ error: result.error.message });
+  const { contract, role, ownerAlreadySigned, updated } = result;
 
   if (role === 'client') {
-    if (contract.clientSignedAt) {
-      return res.status(400).json({ error: "You've already signed this contract." });
-    }
-    const ownerAlreadySigned = !!contract.ownerSignedAt;
-    const updated = await prisma.contract.update({
-      where: { id: contract.id },
-      data: {
-        clientSignedAt: new Date(),
-        clientSignatureName: signatureName.trim(),
-        clientSignatureImage: signatureImage,
-        status: statusFor({ clientSigned: true, ownerSigned: ownerAlreadySigned }),
-        log: withLogEntry(contract.log, { type: 'client_signed', actorEmail: contract.recipientEmail, note: null }),
-      },
-    });
 
     // Only nudge the owner if they haven't already signed — nothing to do
     // once both signatures are in. Their sign token was generated at send
@@ -353,7 +367,16 @@ publicContractsRouter.post('/:token/submit', asyncHandler(async (req, res) => {
     // one has to be issued here to put a working link in this notification.
     if (!ownerAlreadySigned) {
       const ownerToken = generateToken();
-      await prisma.contract.update({ where: { id: contract.id }, data: { ownerTokenHash: hashToken(ownerToken) } });
+      const tokenRotated = await prisma.contract.updateMany({
+        where: { id: contract.id, ownerSignedAt: null },
+        data: { ownerTokenHash: hashToken(ownerToken) },
+      });
+      // The owner may have countersigned just after the serializable signing
+      // transaction committed. In that case, do not rotate their link or send
+      // a stale "your signature is next" notification.
+      if (tokenRotated.count !== 1) {
+        return res.json({ contract: serializeForPublic(updated, role) });
+      }
 
       const fromName = contract.snapshot?.businessInfo?.name || 'GigWorks';
       const ownerSignUrl = `${frontendUrl()}/sign/${ownerToken}`;
@@ -379,20 +402,6 @@ publicContractsRouter.post('/:token/submit', asyncHandler(async (req, res) => {
     return res.json({ contract: serializeForPublic(updated, role) });
   }
 
-  // role === 'owner'
-  if (contract.ownerSignedAt) {
-    return res.status(400).json({ error: "You've already signed this contract." });
-  }
-  const updated = await prisma.contract.update({
-    where: { id: contract.id },
-    data: {
-      ownerSignedAt: new Date(),
-      ownerSignatureName: signatureName.trim(),
-      ownerSignatureImage: signatureImage,
-      status: statusFor({ clientSigned: !!contract.clientSignedAt, ownerSigned: true }),
-      log: withLogEntry(contract.log, { type: 'owner_signed', actorEmail: contract.ownerEmail, note: null }),
-    },
-  });
   res.json({ contract: serializeForPublic(updated, role) });
 }));
 

@@ -190,10 +190,11 @@ publicProposalResponsesRouter.post('/:token/respond', asyncHandler(async (req, r
 
   const pr = await findByToken(req.params.token);
   if (!pr) return res.status(404).json({ error: 'This link is invalid or has expired.' });
+  if (pr.status !== 'sent') return res.status(409).json({ error: 'This proposal has already received a response.' });
 
   const status = action === 'accept' ? 'accepted' : 'revision_requested';
-  const updated = await prisma.proposalResponse.update({
-    where: { id: pr.id },
+  const claimed = await prisma.proposalResponse.updateMany({
+    where: { id: pr.id, status: 'sent' },
     data: {
       status,
       respondedAt: new Date(),
@@ -201,6 +202,8 @@ publicProposalResponsesRouter.post('/:token/respond', asyncHandler(async (req, r
       log: withLogEntry(pr.log, { type: status, actorEmail: pr.recipientEmail, note: trimmedNote || null }),
     },
   });
+  if (claimed.count !== 1) return res.status(409).json({ error: 'This proposal has already received a response.' });
+  const updated = await prisma.proposalResponse.findUniqueOrThrow({ where: { id: pr.id } });
 
   await notifyOwner(updated, { status, note: trimmedNote });
 

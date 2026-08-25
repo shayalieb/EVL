@@ -416,10 +416,11 @@ publicInvoicesRouter.get('/:token', asyncHandler(async (req, res) => {
       const stripe = getStripeClient();
       const session = await stripe.checkout.sessions.retrieve(sessionId, { stripeAccount: account.stripeAccountId });
       if (paidCheckoutSessionMatchesInvoice(session, invoice)) {
-        invoice = await prisma.invoice.update({
-          where: { id: invoice.id },
+        await prisma.invoice.updateMany({
+          where: { id: invoice.id, status: 'sent', stripeCheckoutSessionId: session.id },
           data: { status: 'paid', paidAmount: invoiceTotal(invoice), paidAt: new Date(), stripePaymentIntentId: session.payment_intent },
         });
+        invoice = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
       }
     } catch {
       // best effort — the webhook will still catch this shortly if this check fails
@@ -444,10 +445,11 @@ publicInvoicesRouter.post('/:token/view', asyncHandler(async (req, res) => {
       const stripe = getStripeClient();
       const session = await stripe.checkout.sessions.retrieve(sessionId, { stripeAccount: account.stripeAccountId });
       if (paidCheckoutSessionMatchesInvoice(session, invoice)) {
-        invoice = await prisma.invoice.update({
-          where: { id: invoice.id },
+        await prisma.invoice.updateMany({
+          where: { id: invoice.id, status: 'sent', stripeCheckoutSessionId: session.id },
           data: { status: 'paid', paidAmount: invoiceTotal(invoice), paidAt: new Date(), stripePaymentIntentId: session.payment_intent },
         });
+        invoice = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
       }
     } catch {
       // best effort — the webhook will still catch this shortly if this check fails

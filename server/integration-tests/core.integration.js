@@ -181,6 +181,38 @@ test('a password-reset token can only be consumed by one concurrent request', as
   assert.equal(matches.filter(Boolean).length, 1);
 });
 
+test('a contract signing token can only record one concurrent signature', async () => {
+  const identity = await createIdentity({ email: 'contract-owner@example.com' });
+  const token = 'integration-contract-token';
+  const contract = await prisma.contract.create({
+    data: {
+      accountId: identity.account.id,
+      bookingId: 'booking-contract',
+      snapshot: {},
+      status: 'owner_signed',
+      recipientEmail: 'client@example.com',
+      ownerEmail: identity.user.email,
+      clientTokenHash: createHash('sha256').update(token).digest('hex'),
+      ownerSignedAt: new Date(),
+      ownerSignatureName: 'Owner',
+      ownerSignatureImage: 'owner-signature',
+      log: [{ id: 'owner-log', at: new Date().toISOString(), type: 'owner_signed' }],
+    },
+  });
+
+  const submit = (signatureName) => request(`/api/contract-sign/${token}/submit`, {
+    method: 'POST',
+    body: JSON.stringify({ email: 'client@example.com', signatureName, signatureImage: 'client-signature' }),
+  });
+  const responses = await Promise.all([submit('First'), submit('Second')]);
+  assert.deepEqual(responses.map((response) => response.status).sort(), [200, 409]);
+
+  const updated = await prisma.contract.findUniqueOrThrow({ where: { id: contract.id } });
+  assert.equal(updated.status, 'fully_signed');
+  assert.ok(['First', 'Second'].includes(updated.clientSignatureName));
+  assert.equal(updated.log.filter((entry) => entry.type === 'client_signed').length, 1);
+});
+
 test('the database lease admits only one concurrent global job', async () => {
   let releaseFirst;
   const holdFirst = new Promise((resolve) => { releaseFirst = resolve; });
@@ -259,7 +291,8 @@ test('a redelivered Stripe checkout webhook does not apply invoice payment twice
     headers: { 'content-type': 'application/json', 'stripe-signature': signature },
     body: payload,
   });
-  assert.equal((await deliver()).status, 200);
+  const concurrentDeliveries = await Promise.all([deliver(), deliver()]);
+  assert.deepEqual(concurrentDeliveries.map((response) => response.status), [200, 200]);
   const afterFirst = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
   assert.equal(afterFirst.status, 'paid');
   assert.equal(afterFirst.paidAmount, 125);

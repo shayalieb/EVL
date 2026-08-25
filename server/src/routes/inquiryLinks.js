@@ -333,25 +333,32 @@ publicInquiryLinksRouter.post('/:token/submit', asyncHandler(async (req, res) =>
   // through the normal owner review/apply path (see the isReusable model
   // comment). A regular per-recipient link just updates itself in place, as
   // before.
-  const updated = link.isReusable
-    ? await prisma.inquiryLink.create({
-        data: {
-          accountId: link.accountId,
-          tokenHash: hashToken(generateToken()),
-          status: 'submitted',
-          isReusable: false,
-          expiresAt: null,
-          ownerEmail: link.ownerEmail,
-          recipientEmail: response.email || null,
-          recipientName: `${response.firstName} ${response.lastName}`.trim(),
-          submittedAt: new Date(),
-          response,
-        },
-      })
-    : await prisma.inquiryLink.update({
-        where: { id: link.id },
-        data: { status: 'submitted', submittedAt: new Date(), response },
-      });
+  let updated;
+  if (link.isReusable) {
+    updated = await prisma.inquiryLink.create({
+      data: {
+        accountId: link.accountId,
+        tokenHash: hashToken(generateToken()),
+        status: 'submitted',
+        isReusable: false,
+        expiresAt: null,
+        ownerEmail: link.ownerEmail,
+        recipientEmail: response.email || null,
+        recipientName: `${response.firstName} ${response.lastName}`.trim(),
+        submittedAt: new Date(),
+        response,
+      },
+    });
+  } else {
+    const claimed = await prisma.inquiryLink.updateMany({
+      where: { id: link.id, status: 'open' },
+      data: { status: 'submitted', submittedAt: new Date(), response },
+    });
+    if (claimed.count !== 1) {
+      return res.status(409).json({ error: 'This inquiry link has already been submitted.' });
+    }
+    updated = await prisma.inquiryLink.findUniqueOrThrow({ where: { id: link.id } });
+  }
 
   // Best-effort nudge to the owner — the in-app "new inquiry response"
   // indicator on the Bookings page is the real notification, this is just

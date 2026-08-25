@@ -53,8 +53,8 @@ router.post('/stripe', asyncHandler(async (req, res) => {
         && event.account === account?.stripeAccountId
         && paidCheckoutSessionMatchesInvoice(session, invoice)
       ) {
-        await prisma.invoice.update({
-          where: { id: invoiceId },
+        await prisma.invoice.updateMany({
+          where: { id: invoiceId, status: { not: 'paid' }, stripeCheckoutSessionId: session.id },
           data: { status: 'paid', paidAmount: invoiceTotal(invoice), paidAt: new Date(), stripePaymentIntentId: session.payment_intent },
         });
       }
