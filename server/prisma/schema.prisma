@@ -994,16 +994,19 @@ model Client {
   accountId String
   account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
-  firstName String
-  lastName  String
-  email     String?
-  phone     String?
-  address1  String?
-  address2  String?
-  city      String?
-  state     String?
-  zip       String?
-  notes     String? @db.Text
+  firstName       String
+  lastName        String
+  email           String?
+  phone           String?
+  emailNormalized String?
+  phoneNormalized String?
+  nameNormalized  String?
+  address1        String?
+  address2        String?
+  city            String?
+  state           String?
+  zip             String?
+  notes           String? @db.Text
 
   portalTokens ClientPortalToken[]
 
@@ -1012,6 +1015,8 @@ model Client {
 
   @@index([accountId])
   @@index([accountId, createdAt, id])
+  @@index([accountId, emailNormalized])
+  @@index([accountId, phoneNormalized])
 }
 
 // Saved venue address book. Bookings and Events deliberately keep a copied

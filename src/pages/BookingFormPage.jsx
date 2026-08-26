@@ -374,7 +374,7 @@ export default function BookingFormPage() {
   const { bookingId } = useParams();
   const navigate = useNavigate();
   const {
-    clients, searchClients, loadBooking, venues, searchVenues, eventTypes, addEventType, bookingStatuses,
+    clients, loadBooking, venues, searchVenues, eventTypes, addEventType, bookingStatuses,
     addClient, addBooking, updateBooking, convertBookingToEvent, addEvent,
     proposalTemplates, addProposalTemplate, contractTemplates, addContractTemplate,
   } = useData();
@@ -854,13 +854,11 @@ export default function BookingFormPage() {
   // hydration effect only ever runs once per booking id, so a live
   // updateBooking() call wouldn't be reflected here without a reload. The
   // existing 800ms autosave effect persists it normally from here.
-  async function handleApplyInquiryOverride(response) {
-    const matches = await searchClients(response.email || `${response.firstName || ''} ${response.lastName || ''}`.trim()).catch(() => []);
+  async function handleApplyInquiryOverride(response, { selectedClientId = null, candidates = [] } = {}) {
     const venueMatches = response.venueName ? await searchVenues(response.venueName).catch(() => []) : [];
     const candidateVenues = [...venues, ...venueMatches.filter((match) => !venues.some((venue) => venue.id === match.id))];
     const patch = buildBookingMergePatch(response, form, candidateVenues);
-    const candidateClients = [...clients, ...matches.filter((match) => !clients.some((client) => client.id === match.id))];
-    const resolved = await resolveClientForMerge(response, { clients: candidateClients, addClient, currentClientId: form.clientId });
+    const resolved = await resolveClientForMerge(response, { clients, addClient, currentClientId: form.clientId, selectedClientId, candidates });
     setForm((f) => ({ ...f, ...patch, clientId: resolved.clientId }));
     return { bookingId: form.id, clientId: resolved.clientId };
   }
@@ -3460,6 +3458,7 @@ export default function BookingFormPage() {
         onClose={() => setReviewingInquiry(false)}
         onApplied={() => setSubmittedInquiryLink(null)}
         onApplyOverride={handleApplyInquiryOverride}
+        currentClientId={form.clientId || null}
         navigateAfterApply={false}
       />
 

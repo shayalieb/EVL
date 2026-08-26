@@ -4,9 +4,10 @@ import Modal from './ui/Modal';
 import { useData } from '../context/DataContext';
 import { useToast } from './ui/Toast';
 import { applyInquiryLink } from '../lib/inquiryLinks';
-import { applyInquiryResponse, buildBookingMergePatch, findMatchingClient, resolveClientForMerge } from '../lib/applyInquiry';
+import { applyInquiryResponse, buildBookingMergePatch, resolveClientForMerge } from '../lib/applyInquiry';
 import { formatEventDate } from '../lib/format';
 import { getBooking } from '../lib/bookings';
+import { findInquiryClientCandidates } from '../lib/clients';
 
 const rowClass = 'flex justify-between gap-4 py-1.5 text-sm';
 const labelSpanClass = 'text-slate-400';
@@ -35,34 +36,49 @@ function Row({ label, value }) {
 // page's already-open form state (and gets picked up by its normal
 // autosave) instead of going through DataContext.updateBooking, which the
 // currently-open form's one-time hydration effect wouldn't pick up live.
-export default function ReviewInquiryModal({ open, link, onClose, onApplied, onApplyOverride, navigateAfterApply = true }) {
-  const { clients, searchClients, venues, searchVenues, addClient, addBooking, updateBooking } = useData();
+export default function ReviewInquiryModal({ open, link, onClose, onApplied, onApplyOverride, navigateAfterApply = true, currentClientId = null }) {
+  const { clients, venues, searchVenues, addClient, addBooking, updateBooking } = useData();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [applying, setApplying] = useState(false);
   const [targetBooking, setTargetBooking] = useState(null);
   const [targetBookingLoading, setTargetBookingLoading] = useState(false);
+  const [clientCandidates, setClientCandidates] = useState([]);
+  const [candidatesLoading, setCandidatesLoading] = useState(false);
+  const [clientChoice, setClientChoice] = useState(null);
 
   useEffect(() => {
     if (open && link?.response) {
       const response = link.response;
-      searchClients(response.email || `${response.firstName || ''} ${response.lastName || ''}`.trim()).catch(() => {});
       if (response.venueName) searchVenues(response.venueName).catch(() => {});
+      if (currentClientId) {
+        setClientCandidates([]);
+        setClientChoice('new');
+        setCandidatesLoading(false);
+      } else {
+      setCandidatesLoading(true);
+      setClientChoice(null);
+      findInquiryClientCandidates(response)
+        .then((candidates) => { setClientCandidates(candidates); setClientChoice(candidates.length ? null : 'new'); })
+        .catch(() => { setClientCandidates([]); setClientChoice('new'); })
+        .finally(() => setCandidatesLoading(false));
+      }
     }
     if (!open || !link?.bookingId || onApplyOverride) { setTargetBooking(null); setTargetBookingLoading(false); return; }
     let cancelled = false;
     setTargetBookingLoading(true);
     getBooking(link.bookingId).then((record) => { if (!cancelled) setTargetBooking(record); }).catch(() => { if (!cancelled) setTargetBooking(null); }).finally(() => { if (!cancelled) setTargetBookingLoading(false); });
     return () => { cancelled = true; };
-  }, [open, link, onApplyOverride, searchClients, searchVenues]);
+  }, [currentClientId, open, link, onApplyOverride, searchVenues]);
 
   if (!link) return null;
   const r = link.response || {};
 
   // Preview-only — never creates/mutates anything itself, just informs the
   // "what will Apply do" note below so a duplicate client isn't a surprise.
-  const alreadyLinkedClient = targetBooking?.clientId ? clients.find((c) => c.id === targetBooking.clientId) : null;
-  const matchedClient = !alreadyLinkedClient ? findMatchingClient(clients, r) : null;
+  const linkedClientId = currentClientId || targetBooking?.clientId || null;
+  const alreadyLinkedClient = linkedClientId ? clients.find((c) => c.id === linkedClientId) : null;
+  const needsClientDecision = !linkedClientId && clientCandidates.length > 0;
 
   async function handleApply() {
     setApplying(true);
@@ -72,16 +88,16 @@ export default function ReviewInquiryModal({ open, link, onClose, onApplied, onA
       let bookingId;
       let clientId;
       if (onApplyOverride) {
-        ({ bookingId, clientId } = await onApplyOverride(r));
+        ({ bookingId, clientId } = await onApplyOverride(r, { selectedClientId: clientChoice === 'new' ? null : clientChoice, candidates: clientCandidates }));
       } else if (link.bookingId) {
         if (!targetBooking) throw new Error('The booking this was sent from no longer exists.');
-        const resolved = await resolveClientForMerge(r, { clients, addClient, currentClientId: targetBooking.clientId });
+        const resolved = await resolveClientForMerge(r, { clients, addClient, currentClientId: targetBooking.clientId, selectedClientId: clientChoice === 'new' ? null : clientChoice, candidates: clientCandidates });
         const patch = buildBookingMergePatch(r, targetBooking, candidateVenues);
         await updateBooking(targetBooking.id, { ...patch, clientId: resolved.clientId });
         bookingId = targetBooking.id;
         clientId = resolved.clientId;
       } else {
-        const created = await applyInquiryResponse(r, { clients, venues: candidateVenues, addClient, addBooking });
+        const created = await applyInquiryResponse(r, { clients, venues: candidateVenues, addClient, addBooking, selectedClientId: clientChoice === 'new' ? null : clientChoice, candidates: clientCandidates });
         bookingId = created.booking.id;
         clientId = created.client.id;
       }
@@ -140,22 +156,42 @@ export default function ReviewInquiryModal({ open, link, onClose, onApplied, onA
           </div>
         )}
 
-        {!onApplyOverride && (
-          <div data-testid="review-inquiry-modal-client-note" className="text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
-            {alreadyLinkedClient
-              ? `Already linked to client ${alreadyLinkedClient.firstName} ${alreadyLinkedClient.lastName} — won't be changed.`
-              : matchedClient
-                ? `Matches existing client ${matchedClient.firstName} ${matchedClient.lastName} (${matchedClient.email || matchedClient.phone}) — will link to it instead of creating a new one.`
-                : 'No matching client found — a new one will be created.'}
-          </div>
-        )}
+        <div data-testid="review-inquiry-modal-client-note" className="text-xs text-slate-600 bg-slate-50 border border-slate-100 rounded-lg px-3 py-3">
+          {linkedClientId ? (
+            `Already linked to ${alreadyLinkedClient ? `${alreadyLinkedClient.firstName} ${alreadyLinkedClient.lastName}` : 'an existing client'} — that link will be preserved.`
+          ) : candidatesLoading ? 'Checking for similar clients…' : needsClientDecision ? (
+            <fieldset>
+              <legend className="font-bold text-slate-700 mb-2">Possible existing client found — compare and choose</legend>
+              <div className="mb-2 rounded-md border border-indigo-100 bg-white p-2">
+                <div className="font-semibold text-slate-700">Inquiry: {r.firstName} {r.lastName}</div>
+                <div>{r.email || 'No email'} · {r.phone || 'No phone'}</div>
+              </div>
+              <div className="space-y-2">
+                {clientCandidates.map((candidate) => (
+                  <label key={candidate.id} className="flex cursor-pointer gap-2 rounded-md border border-slate-200 bg-white p-2">
+                    <input type="radio" name="inquiry-client-choice" value={candidate.id} checked={clientChoice === candidate.id} onChange={() => setClientChoice(candidate.id)} />
+                    <span>
+                      <span className="block font-semibold text-slate-700">Use {candidate.firstName} {candidate.lastName}</span>
+                      <span className="block">{candidate.email || 'No email'} · {candidate.phone || 'No phone'}</span>
+                      <span className="block text-indigo-600">{candidate.match.emailExact ? 'Same email' : candidate.match.phoneExact ? 'Same phone' : `${Math.round(candidate.match.nameScore * 100)}% name similarity`}</span>
+                    </span>
+                  </label>
+                ))}
+                <label className="flex cursor-pointer gap-2 rounded-md border border-slate-200 bg-white p-2">
+                  <input type="radio" name="inquiry-client-choice" value="new" checked={clientChoice === 'new'} onChange={() => setClientChoice('new')} />
+                  <span><span className="block font-semibold text-slate-700">Create a new client</span><span className="block">Keep this inquiry as a separate person.</span></span>
+                </label>
+              </div>
+            </fieldset>
+          ) : 'No similar client found — a new client will be created automatically.'}
+        </div>
 
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} data-testid="review-inquiry-modal-dismiss-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Dismiss</button>
           <button
             type="button"
             onClick={handleApply}
-            disabled={applying || targetBookingLoading}
+            disabled={applying || targetBookingLoading || candidatesLoading || (needsClientDecision && !clientChoice)}
             data-testid="review-inquiry-modal-apply-button"
             className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60"
           >

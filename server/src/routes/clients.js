@@ -9,6 +9,13 @@ import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPage
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
 
+function normalizedClientFields({ firstName, lastName, email, phone }) {
+  const emailNormalized = String(email || '').trim().toLowerCase() || null;
+  const phoneNormalized = String(phone || '').replace(/\D/g, '') || null;
+  const nameNormalized = `${String(firstName || '').trim()} ${String(lastName || '').trim()}`.trim().toLowerCase() || null;
+  return { emailNormalized, phoneNormalized, nameNormalized };
+}
+
 function serializeClient(c) {
   return {
     id: c.id,
@@ -89,6 +96,35 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ clients: page.map(serializeClient), nextCursor });
 }));
 
+// Indexed, bounded candidate lookup for inquiry reconciliation. Exact
+// email/phone matches rank first; pg_trgm handles spelling differences in
+// names without loading an account's entire client roster into the browser.
+router.get('/matches/inquiry', asyncHandler(async (req, res) => {
+  const email = String(req.query.email || '').trim().toLowerCase();
+  const phone = String(req.query.phone || '').replace(/\D/g, '');
+  const name = `${String(req.query.firstName || '').trim()} ${String(req.query.lastName || '').trim()}`.trim().toLowerCase();
+  if (!email && !phone && !name) return res.json({ candidates: [] });
+  const candidates = await prisma.$queryRaw`
+    SELECT "id", "firstName", "lastName", "email", "phone", "address1", "address2", "city", "state", "zip", "notes", "createdAt", "updatedAt",
+      CASE WHEN ${email || null}::text IS NOT NULL AND "emailNormalized" = ${email || null} THEN 1 ELSE 0 END AS "emailExact",
+      CASE WHEN ${phone || null}::text IS NOT NULL AND "phoneNormalized" = ${phone || null} THEN 1 ELSE 0 END AS "phoneExact",
+      CASE WHEN ${name || null}::text IS NOT NULL THEN similarity("nameNormalized", ${name || null}) ELSE 0 END AS "nameScore"
+    FROM "Client"
+    WHERE "accountId" = ${req.membership.accountId}
+      AND (
+        (${email || null}::text IS NOT NULL AND "emailNormalized" = ${email || null}) OR
+        (${phone || null}::text IS NOT NULL AND "phoneNormalized" = ${phone || null}) OR
+        (${name || null}::text IS NOT NULL AND "nameNormalized" % ${name || null})
+      )
+    ORDER BY "emailExact" DESC, "phoneExact" DESC, "nameScore" DESC, "updatedAt" DESC
+    LIMIT 8
+  `;
+  res.json({ candidates: candidates.map((candidate) => ({
+    ...serializeClient(candidate),
+    match: { emailExact: !!candidate.emailExact, phoneExact: !!candidate.phoneExact, nameScore: Number(candidate.nameScore) },
+  })) });
+}));
+
 router.get('/:id', asyncHandler(async (req, res) => {
   const client = await prisma.client.findUnique({ where: { id: req.params.id } });
   if (!client || client.accountId !== req.membership.accountId) return res.status(404).json({ error: 'Client not found.' });
@@ -120,6 +156,7 @@ router.post('/', asyncHandler(async (req, res) => {
     state: state?.trim() || null,
     zip: zip?.trim() || null,
     notes: notes?.trim() || null,
+    ...normalizedClientFields({ firstName, lastName, email, phone }),
   }, req.membership.accountId);
   res.status(201).json({ client: serializeClient(client) });
 }));
@@ -151,6 +188,12 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   if (state !== undefined) data.state = state?.trim() || null;
   if (zip !== undefined) data.zip = zip?.trim() || null;
   if (notes !== undefined) data.notes = notes?.trim() || null;
+  Object.assign(data, normalizedClientFields({
+    firstName: firstName === undefined ? existing.firstName : firstName,
+    lastName: lastName === undefined ? existing.lastName : lastName,
+    email: email === undefined ? existing.email : email,
+    phone: phone === undefined ? existing.phone : phone,
+  }));
 
   const client = await prisma.client.update({ where: { id: existing.id }, data });
   res.json({ client: serializeClient(client) });

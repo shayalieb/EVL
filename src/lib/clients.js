@@ -1,6 +1,12 @@
 import { apiFetch } from '../context/AuthContext';
 import { queryList } from './listQuery';
 
+export async function findInquiryClientCandidates({ firstName = '', lastName = '', email = '', phone = '' } = {}) {
+  const params = new URLSearchParams({ firstName, lastName, email, phone });
+  const data = await apiFetch(`/clients/matches/inquiry?${params}`);
+  return data.candidates || [];
+}
+
 export function queryClients(params) {
   return queryList('/clients', 'clients', params);
 }
