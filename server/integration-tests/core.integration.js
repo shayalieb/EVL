@@ -95,33 +95,26 @@ test('tenant-scoped lists never return another account’s records', async () =>
   const second = await createIdentity({ email: 'second@example.com' });
   await prisma.client.createMany({ data: [
     { id: 'client-first', accountId: first.account.id, firstName: 'First', lastName: 'Client' },
+    { id: 'match-email', accountId: first.account.id, firstName: 'Jon', lastName: 'Smyth', email: 'jon@example.com', emailNormalized: 'jon@example.com', phone: '(212) 555-0101', phoneNormalized: '2125550101', nameNormalized: 'jon smyth' },
+    { id: 'match-name', accountId: first.account.id, firstName: 'John', lastName: 'Smith', nameNormalized: 'john smith' },
     { id: 'client-second', accountId: second.account.id, firstName: 'Second', lastName: 'Client' },
+    { id: 'foreign-match', accountId: second.account.id, firstName: 'John', lastName: 'Smith', email: 'jon@example.com', emailNormalized: 'jon@example.com', nameNormalized: 'john smith' },
   ] });
 
   const cookie = await login(first);
   const response = await request('/api/clients?limit=100', { cookie });
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.deepEqual(body.clients.map((client) => client.id), ['client-first']);
-});
+  assert.deepEqual(body.clients.map((client) => client.id).sort(), ['client-first', 'match-email', 'match-name']);
 
-test('inquiry client matching is tenant-scoped, ranked, and bounded', async () => {
-  const first = await createIdentity({ email: 'matching-first@example.com' });
-  const second = await createIdentity({ email: 'matching-second@example.com' });
-  await prisma.client.createMany({ data: [
-    { id: 'match-email', accountId: first.account.id, firstName: 'Jon', lastName: 'Smyth', email: 'jon@example.com', emailNormalized: 'jon@example.com', phone: '(212) 555-0101', phoneNormalized: '2125550101', nameNormalized: 'jon smyth' },
-    { id: 'match-name', accountId: first.account.id, firstName: 'John', lastName: 'Smith', nameNormalized: 'john smith' },
-    { id: 'foreign-match', accountId: second.account.id, firstName: 'John', lastName: 'Smith', email: 'jon@example.com', emailNormalized: 'jon@example.com', nameNormalized: 'john smith' },
-  ] });
-  const cookie = await login(first);
-  const response = await request('/api/clients/matches/inquiry?firstName=John&lastName=Smith&email=jon%40example.com&phone=2125550101', { cookie });
-  assert.equal(response.status, 200);
-  const body = await response.json();
-  assert.equal(body.candidates[0].id, 'match-email');
-  assert.equal(body.candidates[0].match.emailExact, true);
-  assert.ok(body.candidates.some((candidate) => candidate.id === 'match-name'));
-  assert.ok(body.candidates.every((candidate) => candidate.id !== 'foreign-match'));
-  assert.ok(body.candidates.length <= 8);
+  const matches = await request('/api/clients/matches/inquiry?firstName=John&lastName=Smith&email=jon%40example.com&phone=2125550101', { cookie });
+  assert.equal(matches.status, 200);
+  const matchesBody = await matches.json();
+  assert.equal(matchesBody.candidates[0].id, 'match-email');
+  assert.equal(matchesBody.candidates[0].match.emailExact, true);
+  assert.ok(matchesBody.candidates.some((candidate) => candidate.id === 'match-name'));
+  assert.ok(matchesBody.candidates.every((candidate) => candidate.id !== 'foreign-match'));
+  assert.ok(matchesBody.candidates.length <= 8);
 });
 
 test('stage plots enforce tenant ownership and reject stale canvas saves', async () => {
