@@ -68,8 +68,8 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
   const canvasApiRef = useRef(null);
   const canvasContainerRef = useRef(null);
   const saveTimer = useRef(null);
-  const hasEditedRef = useRef(false);
   const dirtyRef = useRef(false);
+  const persistedSceneRef = useRef(JSON.stringify(initialScene));
   const sceneRef = useRef(scene);
   sceneRef.current = scene;
 
@@ -95,6 +95,7 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
       setCleanCapture(false);
       const saved = await onSavePage(page.id, { scene: sceneRef.current, thumbnailBase64, expectedUpdatedAt: page.updatedAt });
       onSaved({ scene: saved.scene, hasThumbnail: saved.hasThumbnail, updatedAt: saved.updatedAt });
+      persistedSceneRef.current = JSON.stringify(saved.scene);
       dirtyRef.current = false;
       setSaveStatus('saved');
     } catch (err) {
@@ -119,10 +120,7 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
   }), []);
 
   useEffect(() => {
-    if (!hasEditedRef.current) {
-      hasEditedRef.current = true;
-      return undefined;
-    }
+    if (JSON.stringify(scene) === persistedSceneRef.current) return undefined;
     dirtyRef.current = true;
     setSaveStatus('unsaved');
     clearTimeout(saveTimer.current);
