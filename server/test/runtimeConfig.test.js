@@ -37,3 +37,36 @@ test('valid production configuration passes', () => {
     SUPABASE_SERVICE_ROLE_KEY: 'service-role-key',
   }));
 });
+
+test('Railway storage can replace Supabase after migration', () => {
+  assert.doesNotThrow(() => validateRuntimeConfig({
+    NODE_ENV: 'production',
+    DATABASE_URL: 'postgresql://database',
+    SESSION_SECRET: 'a'.repeat(32),
+    FRONTEND_URL: 'https://app.example.com',
+    EXTRA_CLIENT_ORIGINS: 'https://app.example.com',
+    REDIS_URL: 'redis://redis.internal:6379',
+    STORAGE_PROVIDER: 'railway',
+    AWS_ENDPOINT_URL: 'https://storage.railway.app',
+    AWS_ACCESS_KEY_ID: 'access-key',
+    AWS_SECRET_ACCESS_KEY: 'secret-key',
+    AWS_S3_BUCKET_NAME: 'evl-files',
+  }));
+});
+
+test('Railway migration fallback still requires Supabase credentials', () => {
+  assert.throws(() => validateRuntimeConfig({
+    NODE_ENV: 'production',
+    DATABASE_URL: 'postgresql://database',
+    SESSION_SECRET: 'a'.repeat(32),
+    FRONTEND_URL: 'https://app.example.com',
+    EXTRA_CLIENT_ORIGINS: 'https://app.example.com',
+    REDIS_URL: 'redis://redis.internal:6379',
+    STORAGE_PROVIDER: 'railway',
+    STORAGE_FALLBACK_SUPABASE: 'true',
+    AWS_ENDPOINT_URL: 'https://storage.railway.app',
+    AWS_ACCESS_KEY_ID: 'access-key',
+    AWS_SECRET_ACCESS_KEY: 'secret-key',
+    AWS_S3_BUCKET_NAME: 'evl-files',
+  }), /SUPABASE_URL must be a valid HTTPS URL/);
+});

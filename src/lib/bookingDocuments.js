@@ -9,9 +9,9 @@ export async function listBookingDocuments(bookingId, category) {
 export async function uploadBookingDocument(bookingId, category, file) {
   const upload = await apiFetch('/booking-documents/upload-url', {
     method: 'POST',
-    body: JSON.stringify({ filename: file.name, size: file.size }),
+    body: JSON.stringify({ filename: file.name, size: file.size, contentType: file.type || 'application/octet-stream' }),
   });
-  await uploadToSignedUrl(upload.signedUrl, file);
+  await uploadToSignedUrl(upload, file);
   const result = await apiFetch('/booking-documents/upload-complete', {
     method: 'POST',
     body: JSON.stringify({ storageKey: upload.storageKey, bookingId, category, filename: file.name, contentType: file.type || 'application/octet-stream', size: file.size }),

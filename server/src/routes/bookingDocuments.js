@@ -25,12 +25,12 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 router.post('/upload-url', asyncHandler(async (req, res) => {
-  const { filename, size } = req.body || {};
+  const { filename, size, contentType } = req.body || {};
   if (!filename?.trim() || !Number.isInteger(size) || size <= 0) {
     return res.status(400).json({ error: 'A valid filename and size are required.' });
   }
   if (size > MAX_FILE_SIZE) return res.status(413).json({ error: 'File is too large (10MB max).' });
-  res.json(await createSignedUpload({ accountId: req.membership.accountId }));
+  res.json(await createSignedUpload({ accountId: req.membership.accountId, contentType }));
 }));
 
 router.post('/upload-complete', asyncHandler(async (req, res) => {

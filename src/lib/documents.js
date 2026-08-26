@@ -11,9 +11,9 @@ export async function listDocuments(eventId) {
 export async function uploadDocument(eventId, file) {
   const upload = await apiFetch('/documents/upload-url', {
     method: 'POST',
-    body: JSON.stringify({ filename: file.name, size: file.size }),
+    body: JSON.stringify({ filename: file.name, size: file.size, contentType: file.type || 'application/octet-stream' }),
   });
-  await uploadToSignedUrl(upload.signedUrl, file);
+  await uploadToSignedUrl(upload, file);
   const result = await apiFetch('/documents/upload-complete', {
     method: 'POST',
     body: JSON.stringify({ storageKey: upload.storageKey, eventId, filename: file.name, contentType: file.type || 'application/octet-stream', size: file.size }),

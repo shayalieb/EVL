@@ -1,74 +1,147 @@
 import { randomUUID } from 'crypto';
+import {
+  CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client,
+} from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createClient } from '@supabase/supabase-js';
 
-const BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'documents';
-
-// Constructed lazily (not at module load) — same reasoning as
-// server/src/lib/resend.js: a missing key would otherwise crash the entire
-// server on boot, not just the file-upload feature.
-let client = null;
-
-// A hung Supabase Storage call shouldn't hold a request handler's DB
-// connection open indefinitely under load — supabase-js has no direct
-// timeout option, so this injects a custom fetch that aborts after 15s
-// (the officially documented way to customize its transport).
+const SUPABASE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'documents';
 const STORAGE_TIMEOUT_MS = 15000;
+const SIGNED_URL_TTL_SECONDS = 60;
 
-function getClient() {
-  if (client) return client;
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error('File storage is not configured yet (SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY are missing).');
-  }
-  client = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+let supabaseClient = null;
+let railwayClient = null;
+let supabaseBucketReady = false;
+
+function provider() {
+  return (process.env.STORAGE_PROVIDER || 'supabase').trim().toLowerCase();
+}
+
+function hasSupabaseFallback() {
+  return provider() === 'railway' && process.env.STORAGE_FALLBACK_SUPABASE === 'true';
+}
+
+function getSupabaseClient() {
+  if (supabaseClient) return supabaseClient;
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error('Supabase file storage is not configured.');
+  supabaseClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
     global: { fetch: (url, options) => fetch(url, { ...options, signal: AbortSignal.timeout(STORAGE_TIMEOUT_MS) }) },
   });
-  return client;
+  return supabaseClient;
 }
 
-let bucketReady = false;
+function railwayBucket() {
+  if (!process.env.AWS_S3_BUCKET_NAME) throw new Error('Railway file storage bucket is not configured.');
+  return process.env.AWS_S3_BUCKET_NAME;
+}
 
-// Private bucket, created on first use — mirrors the get-or-create pattern
-// already used for the account's reusable inquiry link (server/src/routes/
-// inquiryLinks.js) rather than requiring a manual one-time dashboard step.
-async function ensureBucket() {
-  if (bucketReady) return;
-  const supabase = getClient();
+function getRailwayClient() {
+  if (railwayClient) return railwayClient;
+  railwayClient = new S3Client({
+    endpoint: process.env.AWS_ENDPOINT_URL,
+    region: process.env.AWS_DEFAULT_REGION || 'auto',
+    forcePathStyle: process.env.AWS_S3_URL_STYLE === 'path',
+    credentials: {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    },
+  });
+  return railwayClient;
+}
+
+async function ensureSupabaseBucket() {
+  if (supabaseBucketReady) return;
+  const supabase = getSupabaseClient();
   const { data: buckets, error: listError } = await supabase.storage.listBuckets();
   if (listError) throw listError;
-  if (!buckets.some((b) => b.name === BUCKET)) {
-    const { error: createError } = await supabase.storage.createBucket(BUCKET, { public: false });
-    // A concurrent request may have created it first — that's fine.
-    if (createError && !/already exists/i.test(createError.message)) throw createError;
+  if (!buckets.some((bucket) => bucket.name === SUPABASE_BUCKET)) {
+    const { error } = await supabase.storage.createBucket(SUPABASE_BUCKET, { public: false });
+    if (error && !/already exists/i.test(error.message)) throw error;
   }
-  bucketReady = true;
+  supabaseBucketReady = true;
 }
 
-// Key is not derived from the filename — the human-readable name stays in
-// the DB row (as it always has), the storage key just needs to be unique.
+function isS3NotFound(error) {
+  return error?.name === 'NotFound' || error?.$metadata?.httpStatusCode === 404;
+}
+
+async function railwayObjectExists(storageKey) {
+  try {
+    await getRailwayClient().send(new HeadObjectCommand({ Bucket: railwayBucket(), Key: storageKey }));
+    return true;
+  } catch (error) {
+    if (isS3NotFound(error)) return false;
+    throw error;
+  }
+}
+
+async function supabaseDownload(storageKey) {
+  const { data, error } = await getSupabaseClient().storage.from(SUPABASE_BUCKET).download(storageKey);
+  if (error) throw error;
+  return Buffer.from(await data.arrayBuffer());
+}
+
+async function putRailwayObject(storageKey, buffer, contentType) {
+  await getRailwayClient().send(new PutObjectCommand({
+    Bucket: railwayBucket(), Key: storageKey, Body: buffer, ContentType: contentType || 'application/octet-stream',
+  }));
+}
+
+// Idempotent migration primitive: preserve the database's existing key so no
+// row rewrite is needed, skip objects already copied, and verify byte length
+// after upload before reporting success.
+export async function copySupabaseObjectToRailway({ storageKey, contentType }) {
+  if (await railwayObjectExists(storageKey)) return { copied: false };
+  const buffer = await supabaseDownload(storageKey);
+  await putRailwayObject(storageKey, buffer, contentType);
+  const metadata = await getRailwayClient().send(new HeadObjectCommand({ Bucket: railwayBucket(), Key: storageKey }));
+  if (Number(metadata.ContentLength) !== buffer.length) throw new Error(`Size verification failed for ${storageKey}.`);
+  return { copied: true, size: buffer.length };
+}
+
 export async function uploadFile({ accountId, buffer, contentType }) {
-  await ensureBucket();
-  const key = `${accountId}/${randomUUID()}`;
-  const { error } = await getClient().storage.from(BUCKET).upload(key, buffer, {
-    contentType: contentType || 'application/octet-stream',
-    upsert: false,
-  });
-  if (error) throw error;
-  return key;
+  const storageKey = `${accountId}/${randomUUID()}`;
+  if (provider() === 'railway') {
+    await putRailwayObject(storageKey, buffer, contentType);
+  } else {
+    await ensureSupabaseBucket();
+    const { error } = await getSupabaseClient().storage.from(SUPABASE_BUCKET).upload(storageKey, buffer, {
+      contentType: contentType || 'application/octet-stream', upsert: false,
+    });
+    if (error) throw error;
+  }
+  return storageKey;
 }
 
-// Lets browsers send large document bytes straight to object storage. The
-// API still chooses the account-scoped key and later creates the database
-// row, but never buffers or proxies the file contents itself.
-export async function createSignedUpload({ accountId }) {
-  await ensureBucket();
+export async function createSignedUpload({ accountId, contentType }) {
   const storageKey = `${accountId}/${randomUUID()}`;
-  const { data, error } = await getClient().storage.from(BUCKET).createSignedUploadUrl(storageKey, { upsert: false });
+  if (provider() === 'railway') {
+    const command = new PutObjectCommand({
+      Bucket: railwayBucket(), Key: storageKey, ContentType: contentType || 'application/octet-stream',
+    });
+    return {
+      storageKey,
+      signedUrl: await getSignedUrl(getRailwayClient(), command, { expiresIn: SIGNED_URL_TTL_SECONDS }),
+      uploadFormat: 'raw',
+    };
+  }
+  await ensureSupabaseBucket();
+  const { data, error } = await getSupabaseClient().storage.from(SUPABASE_BUCKET).createSignedUploadUrl(storageKey, { upsert: false });
   if (error) throw error;
-  return { storageKey, signedUrl: data.signedUrl, token: data.token };
+  return { storageKey, signedUrl: data.signedUrl, token: data.token, uploadFormat: 'form' };
 }
 
 export async function uploadedFileSize(storageKey) {
-  const { data, error } = await getClient().storage.from(BUCKET).info(storageKey);
+  if (provider() === 'railway') {
+    try {
+      const data = await getRailwayClient().send(new HeadObjectCommand({ Bucket: railwayBucket(), Key: storageKey }));
+      return Number(data.ContentLength || 0);
+    } catch (error) {
+      if (!isS3NotFound(error)) throw error;
+      if (!hasSupabaseFallback()) return null;
+    }
+  }
+  const { data, error } = await getSupabaseClient().storage.from(SUPABASE_BUCKET).info(storageKey);
   if (error) {
     if (error.status === 404 || error.statusCode === '404') return null;
     throw error;
@@ -76,58 +149,84 @@ export async function uploadedFileSize(storageKey) {
   return Number(data.metadata?.size ?? data.metadata?.contentLength ?? 0);
 }
 
-// Short-lived — minted fresh on every download click rather than stored,
-// same reasoning as every other one-time link in this codebase. Supabase
-// serves the original contentType and sets the download filename itself, so
-// callers just redirect the browser here.
+async function signedSupabaseUrl(storageKey, filename) {
+  const options = filename ? { download: filename } : undefined;
+  const { data, error } = await getSupabaseClient().storage.from(SUPABASE_BUCKET).createSignedUrl(storageKey, SIGNED_URL_TTL_SECONDS, options);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+async function signedRailwayUrl(storageKey, filename) {
+  const command = new GetObjectCommand({
+    Bucket: railwayBucket(),
+    Key: storageKey,
+    ...(filename ? { ResponseContentDisposition: `attachment; filename="${filename.replace(/["\\\r\n]/g, '_')}"` } : {}),
+  });
+  return getSignedUrl(getRailwayClient(), command, { expiresIn: SIGNED_URL_TTL_SECONDS });
+}
+
 export async function getSignedDownloadUrl(storageKey, filename) {
-  const { data, error } = await getClient().storage.from(BUCKET).createSignedUrl(storageKey, 60, { download: filename });
-  if (error) throw error;
-  return data.signedUrl;
+  if (provider() === 'railway') {
+    if (await railwayObjectExists(storageKey)) return signedRailwayUrl(storageKey, filename);
+    if (!hasSupabaseFallback()) throw new Error('Stored file was not found.');
+  }
+  return signedSupabaseUrl(storageKey, filename);
 }
 
-// Same as getSignedDownloadUrl but WITHOUT Supabase's `download` option —
-// that option forces Content-Disposition: attachment, which makes a browser
-// download the file instead of rendering it, so it's wrong for anything
-// meant to display inline (an <iframe>/<img> preview). Still short-lived
-// and safe to redirect a browser to directly (see eventDocuments.js's
-// /:id/preview route) — unlike a credentialed fetch() of a download URL,
-// simple resource loads like iframe/img navigation aren't affected by
-// Supabase's signed-URL CORS headers.
 export async function getSignedPreviewUrl(storageKey) {
-  const { data, error } = await getClient().storage.from(BUCKET).createSignedUrl(storageKey, 60);
-  if (error) throw error;
-  return data.signedUrl;
-}
-
-// Server-side copy (bytes never leave Supabase, let alone round-trip
-// through this process) — used when a Set List library song's PDF gets
-// pulled into a specific event: the event's copy needs its own independent
-// storage object so deleting it (or the library original) never affects
-// the other, matching how every other field on a pulled set list is a full
-// deep clone, not a shared reference. See SetListsEditorPage.jsx's
-// pullFromLibrary.
-export async function copyFile(sourceKey, accountId) {
-  await ensureBucket();
-  const destKey = `${accountId}/${randomUUID()}`;
-  const { error } = await getClient().storage.from(BUCKET).copy(sourceKey, destKey);
-  if (error) throw error;
-  return destKey;
+  if (provider() === 'railway') {
+    if (await railwayObjectExists(storageKey)) return signedRailwayUrl(storageKey);
+    if (!hasSupabaseFallback()) throw new Error('Stored file was not found.');
+  }
+  return signedSupabaseUrl(storageKey);
 }
 
 export async function downloadFileBuffer(storageKey) {
-  const { data, error } = await getClient().storage.from(BUCKET).download(storageKey);
-  if (error) throw error;
-  return Buffer.from(await data.arrayBuffer());
+  if (provider() === 'railway') {
+    try {
+      const data = await getRailwayClient().send(new GetObjectCommand({ Bucket: railwayBucket(), Key: storageKey }));
+      return Buffer.from(await data.Body.transformToByteArray());
+    } catch (error) {
+      if (!isS3NotFound(error) || !hasSupabaseFallback()) throw error;
+    }
+  }
+  return supabaseDownload(storageKey);
 }
 
-// Best-effort — a storage hiccup should never block the DB delete the user
-// actually asked for (same reasoning as support.js's notifyAdmin).
-export async function deleteFile(storageKey) {
-  try {
-    const { error } = await getClient().storage.from(BUCKET).remove([storageKey]);
+export async function copyFile(sourceKey, accountId, contentType = 'application/octet-stream') {
+  const destinationKey = `${accountId}/${randomUUID()}`;
+  if (provider() === 'railway') {
+    if (await railwayObjectExists(sourceKey)) {
+      await getRailwayClient().send(new CopyObjectCommand({ Bucket: railwayBucket(), CopySource: `${railwayBucket()}/${sourceKey}`, Key: destinationKey }));
+    } else if (hasSupabaseFallback()) {
+      await putRailwayObject(destinationKey, await supabaseDownload(sourceKey), contentType);
+    } else {
+      throw new Error('Stored file was not found.');
+    }
+  } else {
+    await ensureSupabaseBucket();
+    const { error } = await getSupabaseClient().storage.from(SUPABASE_BUCKET).copy(sourceKey, destinationKey);
     if (error) throw error;
-  } catch (err) {
-    console.error(`Failed to delete storage object ${storageKey}:`, err);
   }
+  return destinationKey;
+}
+
+export async function deleteFile(storageKey) {
+  const failures = [];
+  if (provider() === 'railway') {
+    try {
+      await getRailwayClient().send(new DeleteObjectCommand({ Bucket: railwayBucket(), Key: storageKey }));
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (provider() === 'supabase' || hasSupabaseFallback()) {
+    try {
+      const { error } = await getSupabaseClient().storage.from(SUPABASE_BUCKET).remove([storageKey]);
+      if (error) throw error;
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length) console.error(`Failed to delete storage object ${storageKey}:`, failures[0]);
 }
