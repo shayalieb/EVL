@@ -7,7 +7,7 @@ import { ClientsPipelinePreview, RosterConfirmPreview, DayOfPreview, StayOnTopPr
 import { FileIcon, UsersIcon, ClipboardIcon, BellIcon, ChevronDownIcon } from '../components/ui/icons';
 import { getLandingConfig, joinWaitlist, sendContactMessage } from '../lib/landing';
 
-const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
+const inputClass = 'w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 outline-none transition';
 const DEFAULT_PUBLIC_SIGNUPS_ENABLED = import.meta.env.VITE_PUBLIC_SIGNUPS_ENABLED === 'true';
 
 const PRICING_TIERS = [
@@ -336,7 +336,7 @@ export default function LandingPage() {
           </button>
         </div>
         {mobileMenuOpen && (
-          <div className="sm:hidden border-t border-slate-100 px-4 py-3 space-y-1 bg-white">
+          <div className="sm:hidden border-t border-slate-100 px-4 py-3 space-y-1 bg-white shadow-lg">
             {navLinks.map((l) => (
               <a
                 key={l.href} href={l.href} onClick={() => setMobileMenuOpen(false)}
@@ -361,14 +361,15 @@ export default function LandingPage() {
       <section className="relative overflow-hidden bg-gradient-to-b from-indigo-950 via-indigo-900 to-white">
         <div className="pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
           <div className="absolute left-1/2 top-[-8rem] w-[46rem] h-[46rem] -translate-x-1/2 rounded-full bg-indigo-500/30 blur-3xl" />
-          <div className="absolute right-[-10rem] top-[2rem] w-[28rem] h-[28rem] rounded-full bg-fuchsia-400/10 blur-3xl" />
+          <div className="absolute right-[-10rem] top-[2rem] w-[28rem] h-[28rem] rounded-full bg-fuchsia-500/15 blur-3xl" />
+          <div className="absolute left-[-10rem] bottom-[6rem] w-[26rem] h-[26rem] rounded-full bg-fuchsia-500/10 blur-3xl" />
           <div className="absolute left-[-8rem] top-[10rem] w-[24rem] h-[24rem] rounded-full bg-indigo-300/10 blur-3xl" />
         </div>
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-16 pb-0 text-center">
-          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-300 mb-4">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-16 sm:pt-20 pb-0 text-center">
+          <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 backdrop-blur px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-200 mb-6">
             {hero?.eyebrow || 'For bands, DJs & orchestras booking out a roster'}
-          </p>
-          <h1 className="text-3xl sm:text-5xl font-bold text-white leading-tight max-w-3xl mx-auto">
+          </span>
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-white leading-[1.1] max-w-3xl mx-auto">
             {hero?.headline || 'Built by a musician who spent 20 years chasing confirmations instead of chasing gigs.'}
           </h1>
           <p className="mt-5 text-lg text-indigo-200 max-w-2xl mx-auto">
@@ -376,11 +377,11 @@ export default function LandingPage() {
           </p>
           <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
             {publicSignupsEnabled ? (
-              <a href="#pricing" data-testid="landing-hero-plans-link" className="px-6 py-3 rounded-lg bg-white text-indigo-700 text-sm font-semibold hover:bg-indigo-50">{navigation?.signup || 'View Plans'}</a>
+              <a href="#pricing" data-testid="landing-hero-plans-link" className="px-6 py-3 rounded-xl bg-white text-indigo-700 text-sm font-semibold shadow-lg shadow-black/10 hover:shadow-xl hover:-translate-y-0.5 hover:bg-indigo-50 transition-all">{navigation?.signup || 'View Plans'}</a>
             ) : (
-              <a href="#waitlist" data-testid="landing-hero-waitlist-link" className="px-6 py-3 rounded-lg bg-white text-indigo-700 text-sm font-semibold hover:bg-indigo-50">{navigation?.waitlist || 'Join Waitlist'}</a>
+              <a href="#waitlist" data-testid="landing-hero-waitlist-link" className="px-6 py-3 rounded-xl bg-white text-indigo-700 text-sm font-semibold shadow-lg shadow-black/10 hover:shadow-xl hover:-translate-y-0.5 hover:bg-indigo-50 transition-all">{navigation?.waitlist || 'Join Waitlist'}</a>
             )}
-            <a href="#contact" data-testid="landing-hero-contact-link" className="px-6 py-3 rounded-lg border border-white/30 text-white text-sm font-semibold hover:bg-white/10">
+            <a href="#contact" data-testid="landing-hero-contact-link" className="px-6 py-3 rounded-xl border border-white/30 text-white text-sm font-semibold hover:bg-white/10 hover:-translate-y-0.5 transition-all">
               {hero?.contactButton || 'Get in Touch'}
             </a>
           </div>
@@ -392,8 +393,8 @@ export default function LandingPage() {
 
       {/* Founder story */}
       <section id="story" className="bg-slate-50 border-y border-slate-100 scroll-mt-16">
-        <Reveal className="max-w-3xl mx-auto px-4 sm:px-6 py-14">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-4">{story?.label || 'Built from the gig, not a guess'}</h2>
+        <Reveal className="max-w-3xl mx-auto px-4 sm:px-6 py-16 md:py-20">
+          <h2 className="inline-flex items-center rounded-full bg-indigo-100 text-indigo-700 px-3.5 py-1 text-xs font-semibold uppercase tracking-wide mb-6">{story?.label || 'Built from the gig, not a guess'}</h2>
           <div className="relative pl-6 sm:pl-8">
             <span className="absolute left-0 top-0 text-5xl sm:text-6xl leading-none text-indigo-200 font-serif select-none" aria-hidden="true">&ldquo;</span>
             {(story?.paragraphs || []).map((paragraph, index) => <p key={index} className={`${index ? 'mt-4 ' : ''}text-lg text-slate-700 leading-relaxed`}>{paragraph}</p>)}
@@ -402,12 +403,12 @@ export default function LandingPage() {
       </section>
 
       {/* Pain points */}
-      <section className="max-w-5xl mx-auto px-4 sm:px-6 py-16">
-        <h2 className="text-2xl font-bold text-slate-900 text-center">{painSection?.heading || 'Sound familiar?'}</h2>
+      <section className="max-w-5xl mx-auto px-4 sm:px-6 py-16 md:py-24">
+        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 text-center">{painSection?.heading || 'Sound familiar?'}</h2>
         <p className="text-slate-500 text-center mt-2 mb-10 max-w-xl mx-auto">{painSection?.description}</p>
         <div className="space-y-4">
           {painPoints.map((p, i) => (
-            <Reveal key={p.title} delay={i * 60} data-testid="landing-pain-point" className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-sm">
+            <Reveal key={p.title} delay={i * 60} data-testid="landing-pain-point" className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
               <h3 className="font-semibold text-slate-800 text-base">{p.title}</h3>
               <p className="text-sm text-slate-500 mt-1">{p.problem}</p>
               <div className="mt-3 flex items-start gap-2 text-sm text-indigo-700 bg-indigo-50 rounded-lg px-3 py-2">
@@ -421,8 +422,8 @@ export default function LandingPage() {
 
       {/* Feature groups */}
       <section id="features" className="bg-slate-50 border-y border-slate-100 scroll-mt-16">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16">
-          <h2 className="text-2xl font-bold text-slate-900 text-center mb-16">{featureSection?.heading || 'One place for the whole gig'}</h2>
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16 md:py-24">
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 text-center mb-16">{featureSection?.heading || 'One place for the whole gig'}</h2>
           <div className="space-y-20">
             {featureGroups.map((g, i) => (
               <Reveal
@@ -433,7 +434,7 @@ export default function LandingPage() {
                   <g.Preview />
                 </div>
                 <div className="flex-1 w-full max-w-sm">
-                  <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-50 to-indigo-100 text-indigo-600 flex items-center justify-center mb-3 shadow-sm">
                     <g.Icon className="w-5 h-5" />
                   </div>
                   <h3 className="font-semibold text-slate-800 text-lg mb-3">{g.title}</h3>
@@ -493,20 +494,28 @@ export default function LandingPage() {
 
       {/* Pricing is visible during early access; only the action changes at launch. */}
       <section id="pricing" className="bg-white scroll-mt-16">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16 md:py-24">
           <div className="text-center max-w-2xl mx-auto">
             <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-3">{pricing?.label || 'Simple pricing'}</p>
-            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">{pricing?.heading || 'Every plan runs the whole gig'}</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">{pricing?.heading || 'Every plan runs the whole gig'}</h2>
             <p className="text-slate-500 mt-3">{pricing?.description || 'Choose based on the size of your team—not which tools you’re allowed to use.'}</p>
             <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 mt-7" aria-label="Billing interval">
               <button type="button" onClick={() => setPricingInterval('month')} data-testid="landing-pricing-month" className={`px-4 py-2 rounded-lg text-sm font-semibold ${pricingInterval === 'month' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>{pricing?.monthlyLabel || 'Monthly'}</button>
               <button type="button" onClick={() => setPricingInterval('year')} data-testid="landing-pricing-year" className={`px-4 py-2 rounded-lg text-sm font-semibold ${pricingInterval === 'year' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>{pricing?.annualLabel || 'Annual'} <span className="text-emerald-600">{pricing?.annualSavingsLabel || 'Save up to 20%'}</span></button>
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-10 items-stretch">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mt-10 items-stretch">
             {pricingTiers.map((tier) => (
-              <Reveal key={tier.id} className={`relative rounded-2xl p-6 flex flex-col ${tier.featured ? 'border-2 border-indigo-500 shadow-lg' : 'border border-slate-200 shadow-sm'}`} data-testid={`landing-pricing-${tier.id}`}>
-                {tier.featured && <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-wide px-3 py-1 rounded-full">{pricing?.featuredLabel || 'Most popular'}</span>}
+              <Reveal
+                key={tier.id}
+                className={`relative rounded-2xl p-6 flex flex-col transition-all duration-200 ${
+                  tier.featured
+                    ? 'border-2 border-indigo-500 shadow-xl shadow-indigo-500/20 bg-gradient-to-b from-indigo-50/60 to-white lg:scale-[1.03]'
+                    : 'border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5'
+                }`}
+                data-testid={`landing-pricing-${tier.id}`}
+              >
+                {tier.featured && <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-wide px-3 py-1 rounded-full shadow-sm">{pricing?.featuredLabel || 'Most popular'}</span>}
                 <h3 className="text-lg font-bold text-slate-900">{tier.name}</h3>
                 <p className="text-sm text-slate-500 mt-1 min-h-10">{tier.description}</p>
                 <div className="mt-5"><span className="text-4xl font-bold text-slate-900">${pricingInterval === 'year' ? tier.annualMonthly : tier.monthly}</span><span className="text-sm text-slate-500"> {pricing?.perMonthLabel || '/month'}</span></div>
@@ -516,9 +525,9 @@ export default function LandingPage() {
                   {includedFeatures.map((feature) => <li key={feature} className="flex gap-2"><span className="text-emerald-500" aria-hidden="true">✓</span><span>{feature}</span></li>)}
                 </ul>
                 {publicSignupsEnabled ? (
-                  <Link to={signupHref(tier.id, pricingInterval)} className={`text-center rounded-lg px-4 py-2.5 text-sm font-semibold ${tier.featured ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}>{(pricing?.trialButtonLabel || 'Start {days}-day free trial').replace('{days}', trialDays)}</Link>
+                  <Link to={signupHref(tier.id, pricingInterval)} className={`text-center rounded-xl px-4 py-2.5 text-sm font-semibold transition-all ${tier.featured ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25 hover:bg-indigo-700 hover:shadow-lg' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}>{(pricing?.trialButtonLabel || 'Start {days}-day free trial').replace('{days}', trialDays)}</Link>
                 ) : (
-                  <a href="#waitlist" onClick={() => setWaitlistForm((current) => ({ ...current, selectedPlan: tier.id, billingInterval: pricingInterval }))} className={`text-center rounded-lg px-4 py-2.5 text-sm font-semibold ${tier.featured ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}>Join the waitlist</a>
+                  <a href="#waitlist" onClick={() => setWaitlistForm((current) => ({ ...current, selectedPlan: tier.id, billingInterval: pricingInterval }))} className={`text-center rounded-xl px-4 py-2.5 text-sm font-semibold transition-all ${tier.featured ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25 hover:bg-indigo-700 hover:shadow-lg' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}>Join the waitlist</a>
                 )}
               </Reveal>
             ))}
@@ -528,10 +537,10 @@ export default function LandingPage() {
       </section>
 
       {/* FAQ */}
-      <section id="faq" className="max-w-3xl mx-auto px-4 sm:px-6 py-16 scroll-mt-16">
-        <h2 className="text-2xl font-bold text-slate-900 text-center mb-2">{faqSection?.heading || 'Questions bandleaders actually ask'}</h2>
+      <section id="faq" className="max-w-3xl mx-auto px-4 sm:px-6 py-16 md:py-24 scroll-mt-16">
+        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 text-center mb-2">{faqSection?.heading || 'Questions bandleaders actually ask'}</h2>
         <p className="text-slate-500 text-center mb-10">{faqSection?.description || 'Most critical first — scroll down for the smaller stuff.'}</p>
-        <Reveal className="bg-white border border-slate-200 rounded-xl px-5 sm:px-6 shadow-sm divide-y divide-slate-100">
+        <Reveal className="bg-white border border-slate-200 rounded-2xl px-5 sm:px-6 shadow-sm divide-y divide-slate-100">
           {faqs.map((item, i) => (
             <FAQItem
               key={item.q}
@@ -545,9 +554,9 @@ export default function LandingPage() {
       </section>
 
       {/* Waitlist + Contact */}
-      <section className="max-w-5xl mx-auto px-4 sm:px-6 py-16">
+      <section className="max-w-5xl mx-auto px-4 sm:px-6 py-16 md:py-24">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-          <div id="waitlist" className="bg-white border border-slate-200 rounded-xl p-6 sm:p-7 shadow-sm scroll-mt-20">
+          <div id="waitlist" className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-sm hover:shadow-md transition-shadow scroll-mt-20">
             <h2 className="text-xl font-bold text-slate-900">{waitlistContent?.heading || 'Get Waitlisted'}</h2>
             <p className="text-sm text-slate-500 mt-1 mb-5">{waitlistContent?.description}</p>
             {waitlistForm.selectedPlan && !waitlistDone && (
@@ -584,7 +593,7 @@ export default function LandingPage() {
             )}
           </div>
 
-          <div id="contact" className="bg-white border border-slate-200 rounded-xl p-6 sm:p-7 shadow-sm scroll-mt-20">
+          <div id="contact" className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-sm hover:shadow-md transition-shadow scroll-mt-20">
             <h2 className="text-xl font-bold text-slate-900">{contactContent?.heading || 'Get in Touch'}</h2>
             <p className="text-sm text-slate-500 mt-1 mb-5">{contactContent?.description}</p>
             {contactDone ? (
@@ -618,10 +627,21 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer className="border-t border-slate-100">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <Logo className="h-6 w-auto" />
-          <p className="text-xs text-slate-400">{footerContent?.tagline || 'GigWorks — built for the gig.'}</p>
+      <footer className="border-t border-slate-100 bg-slate-50">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-5">
+            <Logo className="h-6 w-auto" />
+            <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+              {navLinks.map((l) => (
+                <a key={l.href} href={l.href} className="text-sm font-medium text-slate-500 hover:text-indigo-700 transition-colors">{l.label}</a>
+              ))}
+              <Link to="/auth" className="text-sm font-medium text-slate-500 hover:text-indigo-700 transition-colors">{navigation?.login || 'Log In'}</Link>
+            </nav>
+          </div>
+          <div className="mt-6 pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-400">
+            <p>{footerContent?.tagline || 'GigWorks — built for the gig.'}</p>
+            <p>© {new Date().getFullYear()} GigWorks. All rights reserved.</p>
+          </div>
         </div>
       </footer>
     </div>
