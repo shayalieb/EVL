@@ -4,63 +4,69 @@ import { useToast } from '../../components/ui/Toast';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
+const TABS = [
+  ['launch', 'Launch'], ['hero', 'Navigation & Hero'], ['story', 'Story'], ['problems', 'Problems'],
+  ['features', 'Features'], ['pricing', 'Pricing'], ['faq', 'FAQ'], ['forms', 'Forms & Footer'],
+];
 
-function dollars(cents) { return `$${(cents / 100).toFixed(cents % 100 ? 2 : 0)}`; }
+function Field({ label, value, onChange, rows = 0, type = 'text', min, max, step }) {
+  const props = { value, onChange: (e) => onChange(e.target.value), className: inputClass };
+  return <div><label className={labelClass}>{label}</label>{rows ? <textarea rows={rows} {...props} /> : <input type={type} min={min} max={max} step={step} {...props} />}</div>;
+}
+
+function Card({ title, children }) {
+  return <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-4"><h3 className="font-bold text-slate-800">{title}</h3>{children}</section>;
+}
+
+function StringList({ items, onChange, label = 'Items' }) {
+  return <div className="space-y-2"><label className={labelClass}>{label}</label>{items.map((item, index) => <input key={index} className={inputClass} value={item} onChange={(e) => onChange(items.map((current, i) => i === index ? e.target.value : current))} />)}</div>;
+}
 
 export default function AdminWebsitePage() {
   const { showToast } = useToast();
   const [config, setConfig] = useState(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState('launch');
 
-  useEffect(() => {
-    apiFetch('/admin/website/config').then((data) => setConfig(data.config)).catch((err) => setError(err.message));
-  }, []);
+  useEffect(() => { apiFetch('/admin/website/config').then((data) => setConfig(data.config)).catch((err) => setError(err.message)); }, []);
 
-  function updateHero(key, value) { setConfig((current) => ({ ...current, hero: { ...current.hero, [key]: value } })); }
-  function updatePricing(key, value) { setConfig((current) => ({ ...current, pricing: { ...current.pricing, [key]: value } })); }
-  function updateTier(index, key, value) {
-    setConfig((current) => ({ ...current, pricing: { ...current.pricing, tiers: current.pricing.tiers.map((tier, i) => i === index ? { ...tier, [key]: value } : tier) } }));
+  function updateSection(section, key, value) { setConfig((current) => ({ ...current, [section]: { ...current[section], [key]: value } })); }
+  function updateNested(section, collection, index, key, value) {
+    setConfig((current) => ({ ...current, [section]: { ...current[section], [collection]: current[section][collection].map((item, i) => i === index ? { ...item, [key]: value } : item) } }));
   }
-  function updateTierDollars(index, key, value) {
-    const cents = Math.round(Number(value) * 100);
-    updateTier(index, key, Number.isFinite(cents) ? cents : 0);
-  }
+  function updateTier(index, key, value) { updateNested('pricing', 'tiers', index, key, value); }
+  function updateTierDollars(index, key, value) { const cents = Math.round(Number(value) * 100); updateTier(index, key, Number.isFinite(cents) ? cents : 0); }
 
   async function save(e) {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      const data = await apiFetch('/admin/website/config', { method: 'PUT', body: JSON.stringify({ config }) });
-      setConfig(data.config);
-      showToast('Website settings published');
-    } catch (err) { showToast(err.message, 'error'); } finally { setSaving(false); }
+    e.preventDefault(); setSaving(true);
+    try { const data = await apiFetch('/admin/website/config', { method: 'PUT', body: JSON.stringify({ config }) }); setConfig(data.config); showToast('Website settings published'); }
+    catch (err) { showToast(err.message, 'error'); } finally { setSaving(false); }
   }
 
   if (error) return <div className="text-sm text-red-600">{error}</div>;
   if (!config) return <div className="text-sm text-slate-400">Loading…</div>;
 
   return (
-    <form onSubmit={save} className="max-w-4xl space-y-6">
-      <div className="flex items-center justify-between gap-4"><div><h2 className="text-2xl font-bold text-slate-800">Website</h2><p className="text-sm text-slate-500 mt-1">Control public landing-page content and launch access.</p></div><button disabled={saving} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold disabled:opacity-50">{saving ? 'Publishing…' : 'Publish changes'}</button></div>
+    <form onSubmit={save} className="max-w-6xl space-y-5">
+      <div className="flex items-center justify-between gap-4"><div><h2 className="text-2xl font-bold text-slate-800">Website</h2><p className="text-sm text-slate-500 mt-1">Edit and publish every section of the public landing page.</p></div><button disabled={saving} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold disabled:opacity-50">{saving ? 'Publishing…' : 'Publish changes'}</button></div>
+      <div className="overflow-x-auto border-b border-slate-200"><div className="flex min-w-max gap-1">{TABS.map(([id, label]) => <button key={id} type="button" onClick={() => setTab(id)} className={`px-4 py-2.5 text-sm font-semibold border-b-2 ${tab === id ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>{label}</button>)}</div></div>
 
-      <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
-        <div className="flex items-start justify-between gap-4"><div><h3 className="font-bold text-slate-800">Public signup</h3><p className="text-sm text-slate-500">When off, visitors join the waitlist. When on, plan buttons open account signup.</p></div><label className="flex items-center gap-2 text-sm font-semibold text-slate-700"><input type="checkbox" checked={config.publicSignupsEnabled} onChange={(e) => setConfig((current) => ({ ...current, publicSignupsEnabled: e.target.checked }))} className="w-4 h-4 rounded" />Live</label></div>
-      </section>
+      {tab === 'launch' && <Card title="Public signup"><div className="flex items-start justify-between gap-4"><p className="text-sm text-slate-500 max-w-xl">When disabled, visitors join the waitlist. When enabled, pricing buttons create accounts and start checkout.</p><label className="flex items-center gap-2 text-sm font-semibold text-slate-700"><input type="checkbox" checked={config.publicSignupsEnabled} onChange={(e) => setConfig((current) => ({ ...current, publicSignupsEnabled: e.target.checked }))} className="w-4 h-4 rounded" />Public signup live</label></div></Card>}
 
-      <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
-        <h3 className="font-bold text-slate-800">Hero content</h3>
-        <div><label className={labelClass}>Audience label</label><input className={inputClass} value={config.hero.eyebrow} onChange={(e) => updateHero('eyebrow', e.target.value)} /></div>
-        <div><label className={labelClass}>Headline</label><textarea rows={2} className={inputClass} value={config.hero.headline} onChange={(e) => updateHero('headline', e.target.value)} /></div>
-        <div><label className={labelClass}>Description</label><textarea rows={3} className={inputClass} value={config.hero.description} onChange={(e) => updateHero('description', e.target.value)} /></div>
-      </section>
+      {tab === 'hero' && <div className="space-y-5"><Card title="Navigation labels"><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">{Object.entries(config.navigation).map(([key, value]) => <Field key={key} label={key.replace(/([A-Z])/g, ' $1')} value={value} onChange={(next) => updateSection('navigation', key, next)} />)}</div></Card><Card title="Hero"><Field label="Audience label" value={config.hero.eyebrow} onChange={(v) => updateSection('hero', 'eyebrow', v)} /><Field label="Headline" rows={2} value={config.hero.headline} onChange={(v) => updateSection('hero', 'headline', v)} /><Field label="Description" rows={4} value={config.hero.description} onChange={(v) => updateSection('hero', 'description', v)} /><Field label="Contact button" value={config.hero.contactButton} onChange={(v) => updateSection('hero', 'contactButton', v)} /></Card></div>}
 
-      <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
-        <div><h3 className="font-bold text-slate-800">Pricing</h3><p className="text-xs text-slate-500 mt-1">Price changes create new Stripe prices for future customers. Existing subscribers remain on their current price until they change plans.</p></div>
-        <div className="grid sm:grid-cols-2 gap-3"><div><label className={labelClass}>Section heading</label><input className={inputClass} value={config.pricing.heading} onChange={(e) => updatePricing('heading', e.target.value)} /></div><div><label className={labelClass}>Trial days</label><input type="number" min="0" max="60" className={inputClass} value={config.pricing.trialDays} onChange={(e) => updatePricing('trialDays', e.target.value)} /></div></div>
-        <div><label className={labelClass}>Section description</label><input className={inputClass} value={config.pricing.description} onChange={(e) => updatePricing('description', e.target.value)} /></div>
-        <div className="grid md:grid-cols-3 gap-4 pt-2">{config.pricing.tiers.map((tier, index) => <div key={tier.id} className="rounded-xl border border-slate-200 p-4 space-y-3"><div className="text-xs font-semibold uppercase text-slate-400">{tier.seatLimit} seat{tier.seatLimit === 1 ? '' : 's'}</div><div><label className={labelClass}>Plan name</label><input className={inputClass} value={tier.name} onChange={(e) => updateTier(index, 'name', e.target.value)} /></div><div className="grid grid-cols-2 gap-2"><div><label className={labelClass}>Monthly $</label><input type="number" min="1" step="0.01" className={inputClass} value={(tier.monthlyAmountCents / 100).toFixed(2)} onChange={(e) => updateTierDollars(index, 'monthlyAmountCents', e.target.value)} /></div><div><label className={labelClass}>Annual $</label><input type="number" min="1" step="0.01" className={inputClass} value={(tier.annualAmountCents / 100).toFixed(2)} onChange={(e) => updateTierDollars(index, 'annualAmountCents', e.target.value)} /></div></div><div><label className={labelClass}>Description</label><textarea rows={3} className={inputClass} value={tier.description} onChange={(e) => updateTier(index, 'description', e.target.value)} /></div><label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={tier.featured} onChange={(e) => updateTier(index, 'featured', e.target.checked)} />Featured plan</label><div className="text-[11px] text-slate-400">{dollars(tier.monthlyAmountCents)}/mo · {dollars(tier.annualAmountCents)}/yr</div></div>)}</div>
-      </section>
+      {tab === 'story' && <Card title="Founder story"><Field label="Section label" value={config.story.label} onChange={(v) => updateSection('story', 'label', v)} />{config.story.paragraphs.map((paragraph, index) => <Field key={index} label={`Paragraph ${index + 1}`} rows={5} value={paragraph} onChange={(value) => updateSection('story', 'paragraphs', config.story.paragraphs.map((item, i) => i === index ? value : item))} />)}</Card>}
+
+      {tab === 'problems' && <div className="space-y-5"><Card title="Section introduction"><Field label="Heading" value={config.painPoints.heading} onChange={(v) => updateSection('painPoints', 'heading', v)} /><Field label="Description" rows={2} value={config.painPoints.description} onChange={(v) => updateSection('painPoints', 'description', v)} /></Card>{config.painPoints.items.map((item, index) => <Card key={index} title={`Problem ${index + 1}`}><Field label="Title" value={item.title} onChange={(v) => updateNested('painPoints', 'items', index, 'title', v)} /><Field label="Problem" rows={2} value={item.problem} onChange={(v) => updateNested('painPoints', 'items', index, 'problem', v)} /><Field label="Solution" rows={2} value={item.fix} onChange={(v) => updateNested('painPoints', 'items', index, 'fix', v)} /></Card>)}</div>}
+
+      {tab === 'features' && <div className="space-y-5"><Card title="Feature section"><Field label="Heading" value={config.features.heading} onChange={(v) => updateSection('features', 'heading', v)} /></Card><div className="grid md:grid-cols-2 gap-5">{config.features.groups.map((group, index) => <Card key={group.id} title={`Feature group ${index + 1}`}><Field label="Title" value={group.title} onChange={(v) => updateNested('features', 'groups', index, 'title', v)} /><StringList items={group.items} onChange={(items) => updateNested('features', 'groups', index, 'items', items)} /></Card>)}</div></div>}
+
+      {tab === 'pricing' && <div className="space-y-5"><Card title="Pricing section"><div className="grid sm:grid-cols-2 gap-3"><Field label="Section label" value={config.pricing.label} onChange={(v) => updateSection('pricing', 'label', v)} /><Field label="Heading" value={config.pricing.heading} onChange={(v) => updateSection('pricing', 'heading', v)} /></div><Field label="Description" value={config.pricing.description} onChange={(v) => updateSection('pricing', 'description', v)} /><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3"><Field label="Monthly label" value={config.pricing.monthlyLabel} onChange={(v) => updateSection('pricing', 'monthlyLabel', v)} /><Field label="Annual label" value={config.pricing.annualLabel} onChange={(v) => updateSection('pricing', 'annualLabel', v)} /><Field label="Savings badge" value={config.pricing.annualSavingsLabel} onChange={(v) => updateSection('pricing', 'annualSavingsLabel', v)} /><Field label="Featured badge" value={config.pricing.featuredLabel} onChange={(v) => updateSection('pricing', 'featuredLabel', v)} /></div><div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3"><Field label="Per-month suffix" value={config.pricing.perMonthLabel} onChange={(v) => updateSection('pricing', 'perMonthLabel', v)} /><Field label="Annual billing label" value={config.pricing.billedAnnuallyLabel} onChange={(v) => updateSection('pricing', 'billedAnnuallyLabel', v)} /><Field label="Monthly billing label" value={config.pricing.billedMonthlyLabel} onChange={(v) => updateSection('pricing', 'billedMonthlyLabel', v)} /><Field label="Trial button ({days} supported)" value={config.pricing.trialButtonLabel} onChange={(v) => updateSection('pricing', 'trialButtonLabel', v)} /><Field label="Trial footer ({days} supported)" value={config.pricing.trialFooterLabel} onChange={(v) => updateSection('pricing', 'trialFooterLabel', v)} /></div><div className="grid sm:grid-cols-2 gap-3"><Field label="Trial days" type="number" min="0" max="60" value={config.pricing.trialDays} onChange={(v) => updateSection('pricing', 'trialDays', v)} /><Field label="Pricing footer" value={config.pricing.footer} onChange={(v) => updateSection('pricing', 'footer', v)} /></div><StringList label="Features included in every plan" items={config.pricing.includedFeatures} onChange={(items) => updateSection('pricing', 'includedFeatures', items)} /></Card><div className="grid md:grid-cols-3 gap-5">{config.pricing.tiers.map((tier, index) => <Card key={tier.id} title={tier.name}><Field label="Plan name" value={tier.name} onChange={(v) => updateTier(index, 'name', v)} /><div className="grid grid-cols-2 gap-2"><Field label="Monthly $" type="number" min="1" step="0.01" value={(tier.monthlyAmountCents / 100).toFixed(2)} onChange={(v) => updateTierDollars(index, 'monthlyAmountCents', v)} /><Field label="Annual $" type="number" min="1" step="0.01" value={(tier.annualAmountCents / 100).toFixed(2)} onChange={(v) => updateTierDollars(index, 'annualAmountCents', v)} /></div><Field label="Description" rows={3} value={tier.description} onChange={(v) => updateTier(index, 'description', v)} /><label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={tier.featured} onChange={(e) => updateTier(index, 'featured', e.target.checked)} />Featured plan</label></Card>)}</div><p className="text-xs text-slate-500">Changing an amount creates a new Stripe price for future customers. Existing subscribers keep their current rate.</p></div>}
+
+      {tab === 'faq' && <div className="space-y-5"><Card title="FAQ introduction"><Field label="Heading" value={config.faq.heading} onChange={(v) => updateSection('faq', 'heading', v)} /><Field label="Description" value={config.faq.description} onChange={(v) => updateSection('faq', 'description', v)} /></Card>{config.faq.items.map((item, index) => <Card key={index} title={`Question ${index + 1}`}><Field label="Question" value={item.question} onChange={(v) => updateNested('faq', 'items', index, 'question', v)} /><Field label="Answer" rows={4} value={item.answer} onChange={(v) => updateNested('faq', 'items', index, 'answer', v)} /></Card>)}</div>}
+
+      {tab === 'forms' && <div className="grid md:grid-cols-2 gap-5"><Card title="Waitlist"><Field label="Heading" value={config.waitlist.heading} onChange={(v) => updateSection('waitlist', 'heading', v)} /><Field label="Description" rows={3} value={config.waitlist.description} onChange={(v) => updateSection('waitlist', 'description', v)} /><Field label="Success message" rows={2} value={config.waitlist.success} onChange={(v) => updateSection('waitlist', 'success', v)} /><Field label="Submit button" value={config.waitlist.submitLabel} onChange={(v) => updateSection('waitlist', 'submitLabel', v)} /><Field label="Name placeholder" value={config.waitlist.namePlaceholder} onChange={(v) => updateSection('waitlist', 'namePlaceholder', v)} /><Field label="Email placeholder" value={config.waitlist.emailPlaceholder} onChange={(v) => updateSection('waitlist', 'emailPlaceholder', v)} /><Field label="Business placeholder" value={config.waitlist.businessPlaceholder} onChange={(v) => updateSection('waitlist', 'businessPlaceholder', v)} /></Card><Card title="Contact"><Field label="Heading" value={config.contact.heading} onChange={(v) => updateSection('contact', 'heading', v)} /><Field label="Description" rows={3} value={config.contact.description} onChange={(v) => updateSection('contact', 'description', v)} /><Field label="Success message" rows={2} value={config.contact.success} onChange={(v) => updateSection('contact', 'success', v)} /><Field label="Submit button" value={config.contact.submitLabel} onChange={(v) => updateSection('contact', 'submitLabel', v)} /><Field label="Name placeholder" value={config.contact.namePlaceholder} onChange={(v) => updateSection('contact', 'namePlaceholder', v)} /><Field label="Email placeholder" value={config.contact.emailPlaceholder} onChange={(v) => updateSection('contact', 'emailPlaceholder', v)} /><Field label="Message placeholder" value={config.contact.messagePlaceholder} onChange={(v) => updateSection('contact', 'messagePlaceholder', v)} /></Card><Card title="Footer"><Field label="Tagline" value={config.footer.tagline} onChange={(v) => updateSection('footer', 'tagline', v)} /></Card></div>}
     </form>
   );
 }

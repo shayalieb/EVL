@@ -216,8 +216,26 @@ export default function LandingPage() {
   const [pricingInterval, setPricingInterval] = useState('year');
   const [websiteConfig, setWebsiteConfig] = useState(null);
   const publicSignupsEnabled = websiteConfig?.publicSignupsEnabled ?? DEFAULT_PUBLIC_SIGNUPS_ENABLED;
+  const navigation = websiteConfig?.navigation;
   const hero = websiteConfig?.hero;
+  const story = websiteConfig?.story;
+  const painSection = websiteConfig?.painPoints;
+  const painPoints = painSection?.items || PAIN_POINTS;
+  const featureSection = websiteConfig?.features;
+  const featureGroups = FEATURE_GROUPS.map((fallback, index) => ({ ...fallback, ...(featureSection?.groups?.[index] || {}) }));
   const pricing = websiteConfig?.pricing;
+  const includedFeatures = pricing?.includedFeatures || INCLUDED_FEATURES;
+  const faqSection = websiteConfig?.faq;
+  const faqs = faqSection?.items?.map((item) => ({ q: item.question, a: item.answer })) || FAQS;
+  const waitlistContent = websiteConfig?.waitlist;
+  const contactContent = websiteConfig?.contact;
+  const footerContent = websiteConfig?.footer;
+  const navLinks = [
+    { href: '#story', label: navigation?.story || NAV_LINKS[0].label },
+    { href: '#features', label: navigation?.features || NAV_LINKS[1].label },
+    { href: '#pricing', label: navigation?.pricing || NAV_LINKS[2].label },
+    { href: '#faq', label: navigation?.faq || NAV_LINKS[3].label },
+  ];
   const pricingTiers = pricing?.tiers?.map((tier) => ({
     id: tier.id,
     name: tier.name,
@@ -229,13 +247,6 @@ export default function LandingPage() {
     featured: tier.featured,
   })) || PRICING_TIERS;
   const trialDays = pricing?.trialDays ?? 14;
-  const faqs = FAQS.map((item, index) => index === FAQS.length - 1 ? {
-    ...item,
-    a: publicSignupsEnabled
-      ? `You can start with a ${trialDays}-day free trial. Plans start at $${pricingTiers[0].monthly}/month, with annual savings. Cancel anytime.`
-      : `GigWorks is currently onboarding a small first group directly. Plans start at $${pricingTiers[0].monthly}/month, with annual savings. Join the waitlist and we’ll let you know when public signup opens.`,
-  } : item);
-
   useEffect(() => {
     getLandingConfig().then((data) => setWebsiteConfig(data.config)).catch(() => {});
   }, []);
@@ -291,7 +302,7 @@ export default function LandingPage() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Logo className="h-8 w-auto" />
           <nav className="hidden sm:flex items-center gap-1">
-            {NAV_LINKS.map((l) => (
+            {navLinks.map((l) => (
               <a
                 key={l.href} href={l.href}
                 className="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-indigo-700 hover:bg-indigo-50 transition-colors"
@@ -302,12 +313,12 @@ export default function LandingPage() {
           </nav>
           <div className="hidden sm:flex items-center gap-4">
             <Link to="/auth" data-testid="landing-login-link" className="text-sm font-semibold text-slate-500 hover:text-slate-700">
-              Log In
+              {navigation?.login || 'Log In'}
             </Link>
             {publicSignupsEnabled ? (
-              <Link to={signupHref()} data-testid="landing-nav-signup-link" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">Start Free Trial</Link>
+              <Link to={signupHref()} data-testid="landing-nav-signup-link" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">{navigation?.signup || 'Start Free Trial'}</Link>
             ) : (
-              <a href="#waitlist" data-testid="landing-nav-waitlist-link" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">Join Waitlist</a>
+              <a href="#waitlist" data-testid="landing-nav-waitlist-link" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">{navigation?.waitlist || 'Join Waitlist'}</a>
             )}
           </div>
           <button
@@ -325,7 +336,7 @@ export default function LandingPage() {
         </div>
         {mobileMenuOpen && (
           <div className="sm:hidden border-t border-slate-100 px-4 py-3 space-y-1 bg-white">
-            {NAV_LINKS.map((l) => (
+            {navLinks.map((l) => (
               <a
                 key={l.href} href={l.href} onClick={() => setMobileMenuOpen(false)}
                 className="block px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50"
@@ -334,12 +345,12 @@ export default function LandingPage() {
               </a>
             ))}
             <Link to="/auth" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50">
-              Log In
+              {navigation?.login || 'Log In'}
             </Link>
             {publicSignupsEnabled ? (
-              <Link to={signupHref()} onClick={() => setMobileMenuOpen(false)} className="block text-center mt-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">Start Free Trial</Link>
+              <Link to={signupHref()} onClick={() => setMobileMenuOpen(false)} className="block text-center mt-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">{navigation?.signup || 'Start Free Trial'}</Link>
             ) : (
-              <a href="#waitlist" onClick={() => setMobileMenuOpen(false)} className="block text-center mt-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">Join Waitlist</a>
+              <a href="#waitlist" onClick={() => setMobileMenuOpen(false)} className="block text-center mt-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">{navigation?.waitlist || 'Join Waitlist'}</a>
             )}
           </div>
         )}
@@ -364,12 +375,12 @@ export default function LandingPage() {
           </p>
           <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
             {publicSignupsEnabled ? (
-              <Link to={signupHref()} data-testid="landing-hero-signup-link" className="px-6 py-3 rounded-lg bg-white text-indigo-700 text-sm font-semibold hover:bg-indigo-50">Start {trialDays}-Day Free Trial</Link>
+              <Link to={signupHref()} data-testid="landing-hero-signup-link" className="px-6 py-3 rounded-lg bg-white text-indigo-700 text-sm font-semibold hover:bg-indigo-50">{(pricing?.trialButtonLabel || 'Start {days}-day free trial').replace('{days}', trialDays)}</Link>
             ) : (
-              <a href="#waitlist" data-testid="landing-hero-waitlist-link" className="px-6 py-3 rounded-lg bg-white text-indigo-700 text-sm font-semibold hover:bg-indigo-50">Join Waitlist</a>
+              <a href="#waitlist" data-testid="landing-hero-waitlist-link" className="px-6 py-3 rounded-lg bg-white text-indigo-700 text-sm font-semibold hover:bg-indigo-50">{navigation?.waitlist || 'Join Waitlist'}</a>
             )}
             <a href="#contact" data-testid="landing-hero-contact-link" className="px-6 py-3 rounded-lg border border-white/30 text-white text-sm font-semibold hover:bg-white/10">
-              Get in Touch
+              {hero?.contactButton || 'Get in Touch'}
             </a>
           </div>
           <div className="mt-14 max-w-2xl mx-auto pb-16 sm:pb-24">
@@ -381,34 +392,20 @@ export default function LandingPage() {
       {/* Founder story */}
       <section id="story" className="bg-slate-50 border-y border-slate-100 scroll-mt-16">
         <Reveal className="max-w-3xl mx-auto px-4 sm:px-6 py-14">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-4">Built from the gig, not a guess</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-4">{story?.label || 'Built from the gig, not a guess'}</h2>
           <div className="relative pl-6 sm:pl-8">
             <span className="absolute left-0 top-0 text-5xl sm:text-6xl leading-none text-indigo-200 font-serif select-none" aria-hidden="true">&ldquo;</span>
-            <p className="text-lg text-slate-700 leading-relaxed">
-              I've been a gigging musician for over 20 years — playing my own gigs, working for other bandleaders and
-              offices, and staffing musicians out to weddings and events booked through agencies. I've been on every
-              side of this business: the player waiting to hear if a gig is actually confirmed, the bandleader chasing
-              five people for a stage plot two days before a wedding, and the office trying to keep a whole roster
-              straight through a busy season.
-            </p>
-            <p className="mt-4 text-lg text-slate-700 leading-relaxed">
-              GigWorks is what I wished existed the entire time. Every feature in it came from a real pain point I've
-              personally run into over two decades of doing this work — not a guess at what musicians need from
-              someone who's never had to load in at 4pm and be ready by 6.
-            </p>
+            {(story?.paragraphs || []).map((paragraph, index) => <p key={index} className={`${index ? 'mt-4 ' : ''}text-lg text-slate-700 leading-relaxed`}>{paragraph}</p>)}
           </div>
         </Reveal>
       </section>
 
       {/* Pain points */}
       <section className="max-w-5xl mx-auto px-4 sm:px-6 py-16">
-        <h2 className="text-2xl font-bold text-slate-900 text-center">Sound familiar?</h2>
-        <p className="text-slate-500 text-center mt-2 mb-10 max-w-xl mx-auto">
-          These aren't hypothetical problems — they're what running an entertainment business actually feels like
-          without the right tools.
-        </p>
+        <h2 className="text-2xl font-bold text-slate-900 text-center">{painSection?.heading || 'Sound familiar?'}</h2>
+        <p className="text-slate-500 text-center mt-2 mb-10 max-w-xl mx-auto">{painSection?.description}</p>
         <div className="space-y-4">
-          {PAIN_POINTS.map((p, i) => (
+          {painPoints.map((p, i) => (
             <Reveal key={p.title} delay={i * 60} data-testid="landing-pain-point" className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-sm">
               <h3 className="font-semibold text-slate-800 text-base">{p.title}</h3>
               <p className="text-sm text-slate-500 mt-1">{p.problem}</p>
@@ -424,9 +421,9 @@ export default function LandingPage() {
       {/* Feature groups */}
       <section id="features" className="bg-slate-50 border-y border-slate-100 scroll-mt-16">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16">
-          <h2 className="text-2xl font-bold text-slate-900 text-center mb-16">One place for the whole gig</h2>
+          <h2 className="text-2xl font-bold text-slate-900 text-center mb-16">{featureSection?.heading || 'One place for the whole gig'}</h2>
           <div className="space-y-20">
-            {FEATURE_GROUPS.map((g, i) => (
+            {featureGroups.map((g, i) => (
               <Reveal
                 key={g.title} delay={i * 90} data-testid="landing-feature-group"
                 className={`flex flex-col ${i % 2 === 1 ? 'sm:flex-row-reverse' : 'sm:flex-row'} items-center gap-8 sm:gap-12`}
@@ -458,42 +455,42 @@ export default function LandingPage() {
       <section id="pricing" className="bg-white scroll-mt-16">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16">
           <div className="text-center max-w-2xl mx-auto">
-            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-3">Simple pricing</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-3">{pricing?.label || 'Simple pricing'}</p>
             <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">{pricing?.heading || 'Every plan runs the whole gig'}</h2>
             <p className="text-slate-500 mt-3">{pricing?.description || 'Choose based on the size of your team—not which tools you’re allowed to use.'}</p>
             <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 mt-7" aria-label="Billing interval">
-              <button type="button" onClick={() => setPricingInterval('month')} data-testid="landing-pricing-month" className={`px-4 py-2 rounded-lg text-sm font-semibold ${pricingInterval === 'month' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>Monthly</button>
-              <button type="button" onClick={() => setPricingInterval('year')} data-testid="landing-pricing-year" className={`px-4 py-2 rounded-lg text-sm font-semibold ${pricingInterval === 'year' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>Annual <span className="text-emerald-600">Save up to 20%</span></button>
+              <button type="button" onClick={() => setPricingInterval('month')} data-testid="landing-pricing-month" className={`px-4 py-2 rounded-lg text-sm font-semibold ${pricingInterval === 'month' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>{pricing?.monthlyLabel || 'Monthly'}</button>
+              <button type="button" onClick={() => setPricingInterval('year')} data-testid="landing-pricing-year" className={`px-4 py-2 rounded-lg text-sm font-semibold ${pricingInterval === 'year' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>{pricing?.annualLabel || 'Annual'} <span className="text-emerald-600">{pricing?.annualSavingsLabel || 'Save up to 20%'}</span></button>
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-10 items-stretch">
             {pricingTiers.map((tier) => (
               <Reveal key={tier.id} className={`relative rounded-2xl p-6 flex flex-col ${tier.featured ? 'border-2 border-indigo-500 shadow-lg' : 'border border-slate-200 shadow-sm'}`} data-testid={`landing-pricing-${tier.id}`}>
-                {tier.featured && <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-wide px-3 py-1 rounded-full">Most popular</span>}
+                {tier.featured && <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-wide px-3 py-1 rounded-full">{pricing?.featuredLabel || 'Most popular'}</span>}
                 <h3 className="text-lg font-bold text-slate-900">{tier.name}</h3>
                 <p className="text-sm text-slate-500 mt-1 min-h-10">{tier.description}</p>
-                <div className="mt-5"><span className="text-4xl font-bold text-slate-900">${pricingInterval === 'year' ? tier.annualMonthly : tier.monthly}</span><span className="text-sm text-slate-500"> /month</span></div>
-                <p className="text-xs text-slate-400 mt-1 h-5">{pricingInterval === 'year' ? `$${tier.annualTotal} billed annually` : 'Billed monthly'}</p>
+                <div className="mt-5"><span className="text-4xl font-bold text-slate-900">${pricingInterval === 'year' ? tier.annualMonthly : tier.monthly}</span><span className="text-sm text-slate-500"> {pricing?.perMonthLabel || '/month'}</span></div>
+                <p className="text-xs text-slate-400 mt-1 h-5">{pricingInterval === 'year' ? `$${tier.annualTotal} ${pricing?.billedAnnuallyLabel || 'billed annually'}` : (pricing?.billedMonthlyLabel || 'Billed monthly')}</p>
                 <p className="text-sm font-semibold text-indigo-700 mt-5">{tier.seats}</p>
                 <ul className="space-y-2 mt-5 mb-6 text-sm text-slate-600 flex-1">
-                  {INCLUDED_FEATURES.map((feature) => <li key={feature} className="flex gap-2"><span className="text-emerald-500" aria-hidden="true">✓</span><span>{feature}</span></li>)}
+                  {includedFeatures.map((feature) => <li key={feature} className="flex gap-2"><span className="text-emerald-500" aria-hidden="true">✓</span><span>{feature}</span></li>)}
                 </ul>
                 {publicSignupsEnabled ? (
-                  <Link to={signupHref(tier.id, pricingInterval)} className={`text-center rounded-lg px-4 py-2.5 text-sm font-semibold ${tier.featured ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}>Start {trialDays}-day free trial</Link>
+                  <Link to={signupHref(tier.id, pricingInterval)} className={`text-center rounded-lg px-4 py-2.5 text-sm font-semibold ${tier.featured ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}>{(pricing?.trialButtonLabel || 'Start {days}-day free trial').replace('{days}', trialDays)}</Link>
                 ) : (
                   <a href="#waitlist" onClick={() => setWaitlistForm((current) => ({ ...current, selectedPlan: tier.id, billingInterval: pricingInterval }))} className={`text-center rounded-lg px-4 py-2.5 text-sm font-semibold ${tier.featured ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}>Join the waitlist</a>
                 )}
               </Reveal>
             ))}
           </div>
-          <p className="text-center text-xs text-slate-400 mt-6">{trialDays}-day free trial at launch. Cancel anytime. Secure billing through Stripe.</p>
+          <p className="text-center text-xs text-slate-400 mt-6">{(pricing?.trialFooterLabel || '{days}-day free trial at launch.').replace('{days}', trialDays)} {pricing?.footer || 'Cancel anytime. Secure billing through Stripe.'}</p>
         </div>
       </section>
 
       {/* FAQ */}
       <section id="faq" className="max-w-3xl mx-auto px-4 sm:px-6 py-16 scroll-mt-16">
-        <h2 className="text-2xl font-bold text-slate-900 text-center mb-2">Questions bandleaders actually ask</h2>
-        <p className="text-slate-500 text-center mb-10">Most critical first — scroll down for the smaller stuff.</p>
+        <h2 className="text-2xl font-bold text-slate-900 text-center mb-2">{faqSection?.heading || 'Questions bandleaders actually ask'}</h2>
+        <p className="text-slate-500 text-center mb-10">{faqSection?.description || 'Most critical first — scroll down for the smaller stuff.'}</p>
         <Reveal className="bg-white border border-slate-200 rounded-xl px-5 sm:px-6 shadow-sm divide-y divide-slate-100">
           {faqs.map((item, i) => (
             <FAQItem
@@ -511,11 +508,8 @@ export default function LandingPage() {
       <section className="max-w-5xl mx-auto px-4 sm:px-6 py-16">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
           <div id="waitlist" className="bg-white border border-slate-200 rounded-xl p-6 sm:p-7 shadow-sm scroll-mt-20">
-            <h2 className="text-xl font-bold text-slate-900">Get Waitlisted</h2>
-            <p className="text-sm text-slate-500 mt-1 mb-5">
-              GigWorks is currently onboarding a small first group of agencies and bandleaders directly. Join the
-              waitlist and I'll reach out personally.
-            </p>
+            <h2 className="text-xl font-bold text-slate-900">{waitlistContent?.heading || 'Get Waitlisted'}</h2>
+            <p className="text-sm text-slate-500 mt-1 mb-5">{waitlistContent?.description}</p>
             {waitlistForm.selectedPlan && !waitlistDone && (
               <p className="text-xs font-semibold text-indigo-700 bg-indigo-50 rounded-lg px-3 py-2 mb-3">
                 Interested in {pricingTiers.find((tier) => tier.id === waitlistForm.selectedPlan)?.name} · {waitlistForm.billingInterval === 'year' ? 'Annual' : 'Monthly'}
@@ -523,63 +517,60 @@ export default function LandingPage() {
             )}
             {waitlistDone ? (
               <p data-testid="landing-waitlist-success" className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-3">
-                You're on the list — thanks for the interest. I'll be in touch soon.
+                {waitlistContent?.success || "You're on the list — thanks for the interest. I'll be in touch soon."}
               </p>
             ) : (
               <form onSubmit={handleWaitlistSubmit} className="space-y-3">
                 <input
-                  required placeholder="Your name" value={waitlistForm.name}
+                  required placeholder={waitlistContent?.namePlaceholder || 'Your name'} value={waitlistForm.name}
                   onChange={(e) => setWaitlistForm((f) => ({ ...f, name: e.target.value }))}
                   data-testid="landing-waitlist-name-input" className={inputClass}
                 />
                 <input
-                  required type="email" placeholder="Email address" value={waitlistForm.email}
+                  required type="email" placeholder={waitlistContent?.emailPlaceholder || 'Email address'} value={waitlistForm.email}
                   onChange={(e) => setWaitlistForm((f) => ({ ...f, email: e.target.value }))}
                   data-testid="landing-waitlist-email-input" className={inputClass}
                 />
                 <input
-                  placeholder="Business or band name (optional)" value={waitlistForm.businessName}
+                  placeholder={waitlistContent?.businessPlaceholder || 'Business or band name (optional)'} value={waitlistForm.businessName}
                   onChange={(e) => setWaitlistForm((f) => ({ ...f, businessName: e.target.value }))}
                   data-testid="landing-waitlist-business-input" className={inputClass}
                 />
                 <FieldError>{waitlistError}</FieldError>
                 <SubmitButton loading={waitlistSubmitting} testId="landing-waitlist-submit-button">
-                  Join the Waitlist
+                  {waitlistContent?.submitLabel || 'Join the Waitlist'}
                 </SubmitButton>
               </form>
             )}
           </div>
 
           <div id="contact" className="bg-white border border-slate-200 rounded-xl p-6 sm:p-7 shadow-sm scroll-mt-20">
-            <h2 className="text-xl font-bold text-slate-900">Get in Touch</h2>
-            <p className="text-sm text-slate-500 mt-1 mb-5">
-              Have a question, or want to talk through whether this fits how your business runs? Send a message
-              directly.
-            </p>
+            <h2 className="text-xl font-bold text-slate-900">{contactContent?.heading || 'Get in Touch'}</h2>
+            <p className="text-sm text-slate-500 mt-1 mb-5">{contactContent?.description}</p>
             {contactDone ? (
               <p data-testid="landing-contact-success" className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-3">
-                Got it — thanks for reaching out. I'll reply personally as soon as I can.
+                {contactContent?.success || "Got it — thanks for reaching out. I'll reply personally as soon as I can."}
               </p>
             ) : (
               <form onSubmit={handleContactSubmit} className="space-y-3">
                 <input
-                  required placeholder="Your name" value={contactForm.name}
+                  required placeholder={contactContent?.namePlaceholder || 'Your name'} value={contactForm.name}
                   onChange={(e) => setContactForm((f) => ({ ...f, name: e.target.value }))}
                   data-testid="landing-contact-name-input" className={inputClass}
                 />
                 <input
-                  required type="email" placeholder="Email address" value={contactForm.email}
+                  required type="email" placeholder={contactContent?.emailPlaceholder || 'Email address'} value={contactForm.email}
                   onChange={(e) => setContactForm((f) => ({ ...f, email: e.target.value }))}
                   data-testid="landing-contact-email-input" className={inputClass}
                 />
                 <textarea
-                  required rows={3} placeholder="What's on your mind?" value={contactForm.message}
+                  required rows={3} placeholder={contactContent?.messagePlaceholder || "What's on your mind?"} value={contactForm.message}
                   onChange={(e) => setContactForm((f) => ({ ...f, message: e.target.value }))}
                   data-testid="landing-contact-message-textarea" className={inputClass}
                 />
                 <FieldError>{contactError}</FieldError>
                 <SubmitButton loading={contactSubmitting} testId="landing-contact-submit-button">
-                  Send Message
+                  {contactContent?.submitLabel || 'Send Message'}
                 </SubmitButton>
               </form>
             )}
@@ -590,7 +581,7 @@ export default function LandingPage() {
       <footer className="border-t border-slate-100">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-3">
           <Logo className="h-6 w-auto" />
-          <p className="text-xs text-slate-400">GigWorks — built for the gig.</p>
+          <p className="text-xs text-slate-400">{footerContent?.tagline || 'GigWorks — built for the gig.'}</p>
         </div>
       </footer>
     </div>

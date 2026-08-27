@@ -18,6 +18,12 @@ test('website configuration preserves safe editable pricing and copy', () => {
   assert.equal(config.pricing.tiers[0].monthlyAmountCents, 2900);
   assert.equal(config.pricing.tiers[0].monthlyPriceId, 'price_new');
   assert.equal(config.pricing.tiers.length, 3);
+  assert.equal(config.navigation.signup, 'Start Free Trial');
+  assert.equal(config.story.paragraphs.length, 2);
+  assert.equal(config.painPoints.items.length, 6);
+  assert.equal(config.features.groups.length, 4);
+  assert.equal(config.faq.items.length, 7);
+  assert.equal(config.waitlist.namePlaceholder, 'Your name');
 });
 
 test('website configuration rejects unsafe price ranges and unknown tiers', () => {
