@@ -390,12 +390,12 @@ export function AuthProvider({ children }) {
       }
     : null;
 
-  const signUp = useCallback(async ({ firstName, lastName, businessName, email, phone, password, vertical }) => {
+  const signUp = useCallback(async ({ firstName, lastName, businessName, email, phone, password, vertical, selectedPlan, billingInterval }) => {
     setAuthError('');
     try {
       const data = await apiFetch('/auth/signup', {
         method: 'POST',
-        body: JSON.stringify({ firstName, lastName, email: email.trim().toLowerCase(), phone, password, vertical }),
+        body: JSON.stringify({ firstName, lastName, email: email.trim().toLowerCase(), phone, password, vertical, selectedPlan, billingInterval }),
       });
       // Pending/billing-locked accounts can't hydrate the account-data blob
       // (see the session-init effect above for why) — go straight to

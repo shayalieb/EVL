@@ -9,6 +9,9 @@ import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
 import { uploadFile, getSignedDownloadUrl } from '../lib/fileStorage.js';
 import { VERTICALS } from '../lib/verticals.js';
 import { requireCsrfHeader } from '../lib/csrf.js';
+import { getWebsiteAdminConfig, normalizeWebsiteConfig } from '../lib/websiteConfig.js';
+import { getStripeClient } from '../lib/stripe.js';
+import { priceIdFor } from '../lib/plans.js';
 
 const router = Router();
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
@@ -41,6 +44,8 @@ router.use(requireAuth, asyncHandler(attachUser), requirePlatformAdmin);
 router.use('/accounts', requireAdminPermission('manageAccounts'));
 router.use('/support', requireAdminPermission('manageSupport'));
 router.use('/platform-admins', requireAdminPermission('manageAdmins'));
+router.use('/website', requireAdminPermission('manageWebsite'));
+router.use('/waitlist', requireAdminPermission('manageAccounts'));
 
 function ownerOf(account) {
   const owner = account.memberships.find((m) => m.role === 'owner');
@@ -112,6 +117,12 @@ router.get('/accounts', asyncHandler(async (req, res) => {
       approvedBy: a.approvedBy ? { firstName: a.approvedBy.firstName, lastName: a.approvedBy.lastName } : null,
       vertical: a.vertical,
       allVerticalsEnabled: a.allVerticalsEnabled,
+      signupSource: a.signupSource,
+      signupPlan: a.signupPlan,
+      signupInterval: a.signupInterval,
+      planTier: a.planTier,
+      billingInterval: a.billingInterval,
+      subscriptionStatus: a.subscriptionStatus,
       owner: ownerOf(a),
       memberCount: a.memberships.length,
       dataSummary: dataSummaries.get(a.id) || emptyDataSummary,
@@ -123,7 +134,7 @@ router.get('/accounts', asyncHandler(async (req, res) => {
 // brand-new User (+ their own Account/Membership, so they're never stuck on
 // NoAccountAccessPage) with no password, then email a set-your-password
 // link reusing the exact forgot-password reset mechanism.
-const ADMIN_PERMISSION_KEYS = ['manageAccounts', 'manageAccountStatus', 'manageSupport', 'manageAdmins'];
+const ADMIN_PERMISSION_KEYS = ['manageAccounts', 'manageAccountStatus', 'manageSupport', 'manageAdmins', 'manageWebsite'];
 
 // Defensive allowlist — only known keys, coerced to plain booleans, so a
 // malformed/extra request-body field can never end up stored as-is.
@@ -290,6 +301,61 @@ router.delete('/accounts/:id', asyncHandler(async (req, res) => {
     prisma.account.delete({ where: { id: req.params.id } }),
   ]);
   res.json({ ok: true });
+}));
+
+router.get('/website/config', asyncHandler(async (req, res) => {
+  res.json({ config: await getWebsiteAdminConfig() });
+}));
+
+router.put('/website/config', asyncHandler(async (req, res) => {
+  const current = await getWebsiteAdminConfig();
+  const config = normalizeWebsiteConfig(req.body?.config);
+  let stripe = null;
+  for (const tier of config.pricing.tiers) {
+    const previous = current.pricing.tiers.find((item) => item.id === tier.id);
+    for (const interval of ['month', 'year']) {
+      const amountKey = interval === 'month' ? 'monthlyAmountCents' : 'annualAmountCents';
+      const priceKey = interval === 'month' ? 'monthlyPriceId' : 'annualPriceId';
+      tier[priceKey] = previous?.[priceKey] || null;
+      if (tier[amountKey] === previous?.[amountKey]) continue;
+      stripe ||= getStripeClient();
+      const oldPriceId = previous?.[priceKey] || priceIdFor(tier.id, interval);
+      if (!oldPriceId) return res.status(400).json({ error: `Stripe is not configured for the ${tier.name} ${interval}ly plan.` });
+      const oldPrice = await stripe.prices.retrieve(oldPriceId);
+      const newPrice = await stripe.prices.create({
+        currency: oldPrice.currency || 'usd',
+        unit_amount: tier[amountKey],
+        recurring: { interval },
+        product: typeof oldPrice.product === 'string' ? oldPrice.product : oldPrice.product.id,
+        metadata: { gigworksTier: tier.id, gigworksInterval: interval },
+      });
+      tier[priceKey] = newPrice.id;
+    }
+  }
+  await prisma.websiteSetting.upsert({
+    where: { id: 'main' },
+    create: { id: 'main', config, updatedById: req.user.id },
+    update: { config, updatedById: req.user.id },
+  });
+  res.json({ config });
+}));
+
+router.get('/waitlist', asyncHandler(async (req, res) => {
+  const entries = await prisma.waitlistEntry.findMany({
+    where: { type: 'waitlist' },
+    orderBy: { createdAt: 'desc' },
+  });
+  res.json({ entries });
+}));
+
+router.patch('/waitlist/:id', asyncHandler(async (req, res) => {
+  const allowed = ['new', 'contacted', 'converted', 'archived'];
+  if (!allowed.includes(req.body?.status)) return res.status(400).json({ error: 'Invalid waitlist status.' });
+  const entry = await prisma.waitlistEntry.update({
+    where: { id: req.params.id },
+    data: { status: req.body.status },
+  });
+  res.json({ entry });
 }));
 
 function serializeThread(thread) {

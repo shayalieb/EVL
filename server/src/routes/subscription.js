@@ -4,7 +4,8 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembershipForBilling, requireRole } from '../lib/membership.js';
 import { getStripeClient } from '../lib/stripe.js';
-import { PLAN_TIERS, planById, priceIdFor } from '../lib/plans.js';
+import { priceIdFor } from '../lib/plans.js';
+import { getBillingTier, getWebsiteConfig } from '../lib/websiteConfig.js';
 
 const router = Router();
 
@@ -31,22 +32,24 @@ function serializeStatus(account) {
 }
 
 router.get('/status', asyncHandler(async (req, res) => {
-  const [account, seatCount] = await Promise.all([
+  const [account, seatCount, websiteConfig] = await Promise.all([
     prisma.account.findUnique({ where: { id: req.membership.accountId } }),
     prisma.membership.count({ where: { accountId: req.membership.accountId } }),
+    getWebsiteConfig(),
   ]);
   res.json({
     ...serializeStatus(account),
     seatCount,
+    trialDays: websiteConfig.pricing.trialDays,
     // amountCents, not a Price ID — the picker just needs to display a
     // number, and this is the one config-level source of truth for it
     // (lib/plans.js) rather than a second hardcoded copy in the frontend.
-    tiers: PLAN_TIERS.map((t) => ({
+    tiers: websiteConfig.pricing.tiers.map((t) => ({
       id: t.id,
-      label: t.label,
+      label: t.name,
       seatLimit: t.seatLimit,
-      monthlyAmountCents: t.monthly.amountCents,
-      annualAmountCents: t.annual.amountCents,
+      monthlyAmountCents: t.monthlyAmountCents,
+      annualAmountCents: t.annualAmountCents,
     })),
   });
 }));
@@ -56,9 +59,13 @@ router.get('/status', asyncHandler(async (req, res) => {
 // canceled subscription, so re-subscribing shouldn't create a duplicate one.
 router.post('/checkout', asyncHandler(async (req, res) => {
   const { tier: tierId, interval } = req.body || {};
-  const tier = planById(tierId);
+  const tier = await getBillingTier(tierId);
   if (!tier) return res.status(400).json({ error: 'Unknown plan.' });
-  const priceId = priceIdFor(tierId, interval);
+  const priceId = interval === 'month'
+    ? (tier.monthlyPriceId || priceIdFor(tierId, interval))
+    : interval === 'year'
+      ? (tier.annualPriceId || priceIdFor(tierId, interval))
+      : null;
   if (!priceId) return res.status(400).json({ error: 'Invalid billing interval.' });
 
   const stripe = getStripeClient();
@@ -73,11 +80,14 @@ router.post('/checkout', asyncHandler(async (req, res) => {
       await prisma.account.update({ where: { id: account.id }, data: { stripeCustomerId: customerId } });
     }
 
+    const websiteConfig = await getWebsiteConfig();
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
       line_items: [{ price: priceId, quantity: 1 }],
-      subscription_data: { trial_period_days: 14 },
+      subscription_data: websiteConfig.pricing.trialDays > 0
+        ? { trial_period_days: websiteConfig.pricing.trialDays }
+        : {},
       // This Stripe account has Managed Payments (automatic sales-tax
       // collection) on by default, which requires a tax_code on every
       // Product to work — deliberately left off in setupBillingPlans.js

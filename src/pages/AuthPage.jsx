@@ -96,7 +96,13 @@ export default function AuthPage() {
       return;
     }
     setSubmitting(true);
-    await signUp({ firstName, lastName, businessName, email, phone, password, vertical });
+    let selected = null;
+    try { selected = JSON.parse(sessionStorage.getItem('gigworksSelectedPlan')); } catch { /* ignore malformed preference */ }
+    await signUp({
+      firstName, lastName, businessName, email, phone, password, vertical,
+      selectedPlan: selected?.plan,
+      billingInterval: selected?.interval,
+    });
     setSubmitting(false);
   }
 

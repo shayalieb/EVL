@@ -37,6 +37,8 @@ const AdminLayout = lazy(() => import('./layouts/AdminLayout'));
 const AdminAccountsPage = lazy(() => import('./pages/admin/AdminAccountsPage'));
 const AdminSupportPage = lazy(() => import('./pages/admin/AdminSupportPage'));
 const AdminAdminsPage = lazy(() => import('./pages/admin/AdminAdminsPage'));
+const AdminWaitlistPage = lazy(() => import('./pages/admin/AdminWaitlistPage'));
+const AdminWebsitePage = lazy(() => import('./pages/admin/AdminWebsitePage'));
 const CanvasEngineDemoPage = lazy(() => import('./pages/dev/CanvasEngineDemoPage'));
 const StagePlotEditorPage = lazy(() => import('./pages/StagePlotEditorPage'));
 const FloorPlanEditorPage = lazy(() => import('./pages/FloorPlanEditorPage'));
@@ -186,6 +188,8 @@ function AppRoutes() {
       <Route path="/admin" element={<PlatformAdminArea />}>
         <Route index element={<Navigate to="accounts" replace />} />
         <Route path="accounts" element={<AdminAccountsPage />} />
+        <Route path="waitlist" element={<AdminWaitlistPage />} />
+        <Route path="website" element={<AdminWebsitePage />} />
         <Route path="support" element={<AdminSupportPage />} />
         <Route path="admins" element={<AdminAdminsPage />} />
       </Route>

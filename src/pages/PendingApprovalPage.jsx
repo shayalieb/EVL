@@ -62,7 +62,7 @@ export default function PendingApprovalPage() {
         <p className="text-sm text-slate-500 max-w-md mx-auto">
           {reactivating
             ? "Your GigWorks subscription is no longer active. Pick a plan below to pick up right where you left off."
-            : 'Start a 14-day free trial — no charge until it ends, cancel anytime.'}
+            : `Start a ${status?.trialDays ?? 14}-day free trial — no charge until it ends, cancel anytime.`}
         </p>
       </div>
 
@@ -116,7 +116,7 @@ export default function PendingApprovalPage() {
                     data-testid={`plan-picker-start-${tier.id}`}
                     className="mt-auto px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    {startingTier === tier.id ? 'Starting…' : 'Start 14-day free trial'}
+                    {startingTier === tier.id ? 'Starting…' : `Start ${status.trialDays ?? 14}-day free trial`}
                   </button>
                 </div>
               );

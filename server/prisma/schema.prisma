@@ -136,6 +136,11 @@ model Account {
   // cap with a plain count query, no Stripe API call needed per invite.
   seatLimit            Int?
   trialEndsAt          DateTime?
+  // Acquisition context, captured when the account is created so platform
+  // admins can distinguish public signups from manually-created accounts.
+  signupSource         String    @default("admin") // 'public' | 'admin'
+  signupPlan           String? // landing-page selection before checkout
+  signupInterval       String? // 'month' | 'year'
 }
 
 model Membership {
@@ -1397,13 +1402,27 @@ model ContractorCalendarLink {
 // why" record either way; splitting into two models would just be two
 // near-identical tables with no behavioral difference.
 model WaitlistEntry {
-  id           String   @id @default(cuid())
-  type         String // 'waitlist' | 'contact'
-  name         String
-  email        String
-  businessName String?
-  message      String?  @db.Text
-  createdAt    DateTime @default(now())
+  id              String   @id @default(cuid())
+  type            String // 'waitlist' | 'contact'
+  name            String
+  email           String
+  businessName    String?
+  message         String?  @db.Text
+  status          String   @default("new") // 'new' | 'contacted' | 'converted' | 'archived'
+  selectedPlan    String?
+  billingInterval String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([type, createdAt])
+}
+
+// Singleton public-site configuration. JSON keeps marketing copy flexible
+// without requiring a schema migration for every new editable section;
+// server-side normalization guarantees a complete, safe public shape.
+model WebsiteSetting {
+  id          String   @id
+  config      Json
+  updatedById String?
+  updatedAt   DateTime @updatedAt
 }

@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getStripeClient } from '../lib/stripe.js';
 import { tierForPriceId } from '../lib/plans.js';
+import { getWebsiteAdminConfig } from '../lib/websiteConfig.js';
 
 const router = Router();
 
@@ -52,7 +53,14 @@ router.post('/stripe-billing', asyncHandler(async (req, res) => {
     if (!account) return res.json({ ok: true });
 
     const priceId = subscription.items?.data?.[0]?.price?.id;
-    const resolved = priceId ? tierForPriceId(priceId) : null;
+    let resolved = priceId ? tierForPriceId(priceId) : null;
+    if (priceId && !resolved) {
+      const websiteConfig = await getWebsiteAdminConfig();
+      for (const tier of websiteConfig.pricing.tiers) {
+        if (tier.monthlyPriceId === priceId) resolved = { tier: { id: tier.id, seatLimit: tier.seatLimit }, interval: 'month' };
+        if (tier.annualPriceId === priceId) resolved = { tier: { id: tier.id, seatLimit: tier.seatLimit }, interval: 'year' };
+      }
+    }
 
     await prisma.account.update({
       where: { id: account.id },

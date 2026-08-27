@@ -195,7 +195,8 @@ export default function AdminAccountsPage() {
             <tr className="border-b border-slate-100 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
               <th className="px-4 py-3">Owner</th>
               <th className="hidden sm:table-cell px-4 py-3">Members</th>
-              <th className="hidden md:table-cell px-4 py-3">Data</th>
+              <th className="hidden md:table-cell px-4 py-3">Plan</th>
+              <th className="hidden lg:table-cell px-4 py-3">Signup</th>
               <th className="hidden sm:table-cell px-4 py-3">Vertical</th>
               <th className="hidden md:table-cell px-4 py-3">Created</th>
               <th className="px-4 py-3">Status</th>
@@ -205,7 +206,7 @@ export default function AdminAccountsPage() {
           <tbody>
             {filteredAccounts.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
                   {accounts.length === 0 ? 'No accounts yet.' : 'No accounts match your search or filters.'}
                 </td>
               </tr>
@@ -218,7 +219,13 @@ export default function AdminAccountsPage() {
                 </td>
                 <td className="hidden sm:table-cell px-4 py-3 text-slate-600">{a.memberCount}</td>
                 <td className="hidden md:table-cell px-4 py-3 text-slate-500 text-xs">
-                  {a.dataSummary.contractors} contractors · {a.dataSummary.clients} clients · {a.dataSummary.events} events
+                  <div className="font-semibold text-slate-700 capitalize">{a.planTier || a.signupPlan || 'No plan'}</div>
+                  <div>{(a.billingInterval || a.signupInterval) === 'year' ? 'Annual' : (a.billingInterval || a.signupInterval) === 'month' ? 'Monthly' : 'Not selected'}</div>
+                  {a.subscriptionStatus && <div className="capitalize text-indigo-600">{a.subscriptionStatus}</div>}
+                </td>
+                <td className="hidden lg:table-cell px-4 py-3 text-slate-500 text-xs">
+                  <div className="capitalize">{a.signupSource === 'public' ? 'Website' : 'Admin'}</div>
+                  <div>{new Date(a.createdAt).toLocaleDateString()}</div>
                 </td>
                 <td className="hidden sm:table-cell px-4 py-3 text-slate-500 text-xs">
                   {canManageStatus ? (

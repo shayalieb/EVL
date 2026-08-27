@@ -16,6 +16,7 @@ const PERMISSION_OPTIONS = [
   { key: 'manageAccountStatus', label: 'Enable/Disable Accounts', hint: 'Disable, re-enable, or delete an account' },
   { key: 'manageSupport', label: 'Helpdesk', hint: 'View and reply to support threads' },
   { key: 'manageAdmins', label: 'Manage Admins', hint: 'Grant, edit, or revoke other admins’ access' },
+  { key: 'manageWebsite', label: 'Website', hint: 'Edit public website content, pricing presentation, and launch state' },
 ];
 
 function PermissionCheckboxes({ value, onChange }) {

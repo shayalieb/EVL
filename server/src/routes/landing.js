@@ -3,6 +3,7 @@ import { createRateLimiter } from '../lib/rateLimiter.js';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
+import { getWebsiteConfig } from '../lib/websiteConfig.js';
 
 // Public (unauthenticated) — submissions from the marketing site
 // (gigworks.io), someone who doesn't have an account yet. Same
@@ -16,6 +17,10 @@ const submitLimiter = createRateLimiter('landing-submit', {
 });
 
 export const publicLandingRouter = Router();
+
+publicLandingRouter.get('/config', asyncHandler(async (req, res) => {
+  res.json({ config: await getWebsiteConfig() });
+}));
 
 // Best-effort — the entry is already saved in WaitlistEntry regardless of
 // whether this send succeeds, same reasoning as support.js's notifyAdmin.
@@ -37,12 +42,19 @@ async function notifyOwner(entry) {
 }
 
 publicLandingRouter.post('/waitlist', submitLimiter, asyncHandler(async (req, res) => {
-  const { name, email, businessName } = req.body || {};
+  const { name, email, businessName, selectedPlan, billingInterval } = req.body || {};
   if (!name?.trim() || !email?.trim()) {
     return res.status(400).json({ error: 'Name and email are required.' });
   }
   const entry = await prisma.waitlistEntry.create({
-    data: { type: 'waitlist', name: name.trim(), email: email.trim(), businessName: businessName?.trim() || null },
+    data: {
+      type: 'waitlist',
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      businessName: businessName?.trim() || null,
+      selectedPlan: ['solo', 'team', 'studio'].includes(selectedPlan) ? selectedPlan : null,
+      billingInterval: ['month', 'year'].includes(billingInterval) ? billingInterval : null,
+    },
   });
   await notifyOwner(entry);
   res.status(201).json({ ok: true });

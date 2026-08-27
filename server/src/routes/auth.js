@@ -68,7 +68,7 @@ async function notifyPendingSignup(user) {
 }
 
 router.post('/signup', credentialsLimiter, asyncHandler(async (req, res) => {
-  const { firstName, lastName, email, phone, password, vertical } = req.body || {};
+  const { firstName, lastName, email, phone, password, vertical, selectedPlan, billingInterval } = req.body || {};
   if (!firstName?.trim() || !lastName?.trim() || !email?.trim() || !password) {
     return res.status(400).json({ error: 'First name, last name, email, and password are required.' });
   }
@@ -89,7 +89,14 @@ router.post('/signup', credentialsLimiter, asyncHandler(async (req, res) => {
       const user = await tx.user.create({
         data: { firstName: firstName.trim(), lastName: lastName.trim(), email: normalizedEmail, phone: phone || null, passwordHash },
       });
-      const account = await tx.account.create({ data: accountVertical ? { vertical: accountVertical } : {} });
+      const account = await tx.account.create({
+        data: {
+          ...(accountVertical ? { vertical: accountVertical } : {}),
+          signupSource: 'public',
+          signupPlan: ['solo', 'team', 'studio'].includes(selectedPlan) ? selectedPlan : null,
+          signupInterval: ['month', 'year'].includes(billingInterval) ? billingInterval : null,
+        },
+      });
       const membership = await tx.membership.create({
         data: { userId: user.id, accountId: account.id, role: 'owner', permissions: allPermissions() },
       });

@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext';
 
 const NAV_ITEMS = [
   { to: '/admin/accounts', label: 'Accounts', icon: '🏢', permission: 'manageAccounts' },
+  { to: '/admin/waitlist', label: 'Waitlist', icon: '📋', permission: 'manageAccounts' },
+  { to: '/admin/website', label: 'Website', icon: '🌐', permission: 'manageWebsite' },
   { to: '/admin/support', label: 'Support', icon: '💬', permission: 'manageSupport' },
   { to: '/admin/admins', label: 'Admins', icon: '🔑', permission: 'manageAdmins' },
 ];
