@@ -22,6 +22,8 @@ test('website configuration preserves safe editable pricing and copy', () => {
   assert.equal(config.story.paragraphs.length, 2);
   assert.equal(config.painPoints.items.length, 6);
   assert.equal(config.features.groups.length, 4);
+  assert.equal(config.features.comparison.categories.length, 4);
+  assert.equal(config.features.comparison.categories[0].rows[0].solo, 'Included');
   assert.equal(config.faq.items.length, 7);
   assert.equal(config.waitlist.namePlaceholder, 'Your name');
 });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Logo from '../components/ui/Logo';
 import SubmitButton from '../components/ui/SubmitButton';
@@ -223,6 +223,7 @@ export default function LandingPage() {
   const painPoints = painSection?.items || PAIN_POINTS;
   const featureSection = websiteConfig?.features;
   const featureGroups = FEATURE_GROUPS.map((fallback, index) => ({ ...fallback, ...(featureSection?.groups?.[index] || {}) }));
+  const featureComparison = featureSection?.comparison;
   const pricing = websiteConfig?.pricing;
   const includedFeatures = pricing?.includedFeatures || INCLUDED_FEATURES;
   const faqSection = websiteConfig?.faq;
@@ -450,6 +451,45 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* Detailed feature comparison */}
+      {featureComparison && (
+        <section className="bg-white border-b border-slate-100">
+          <Reveal className="max-w-6xl mx-auto px-4 sm:px-6 py-16">
+            <div className="text-center max-w-2xl mx-auto mb-10">
+              <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-3">{featureComparison.eyebrow}</p>
+              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">{featureComparison.heading}</h2>
+              <p className="text-slate-500 mt-3">{featureComparison.description}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-sm">
+                  <thead className="bg-slate-50">
+                    <tr className="border-b border-slate-200">
+                      <th className="sticky left-0 z-10 bg-slate-50 text-left px-5 py-4 text-xs font-bold uppercase tracking-wide text-slate-500 w-[46%]">{featureComparison.featureColumnLabel}</th>
+                      {pricingTiers.map((tier) => <th key={tier.id} className={`px-4 py-4 text-center font-bold ${tier.featured ? 'text-indigo-700 bg-indigo-50/70' : 'text-slate-700'}`}>{tier.name}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {featureComparison.categories.map((category) => (
+                      <Fragment key={category.id}>
+                        <tr><th colSpan={4} className="bg-slate-100 px-5 py-2.5 text-left text-xs font-bold uppercase tracking-wide text-slate-600">{category.name}</th></tr>
+                        {category.rows.map((row) => (
+                          <tr key={row.id} className="border-t border-slate-100">
+                            <th className="sticky left-0 z-10 bg-white px-5 py-3.5 text-left font-medium text-slate-700">{row.feature}</th>
+                            {['solo', 'team', 'studio'].map((tierId) => <td key={tierId} className={`px-4 py-3.5 text-center ${tierId === 'team' ? 'bg-indigo-50/30' : ''}`}>{row[tierId].toLowerCase() === 'included' ? <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-700"><span aria-hidden="true">✓</span><span>Included</span></span> : <span className="text-slate-600">{row[tierId]}</span>}</td>)}
+                          </tr>
+                        ))}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <p className="text-center text-xs text-slate-400 mt-5">{featureComparison.footer}</p>
+          </Reveal>
+        </section>
+      )}
 
       {/* Pricing is visible during early access; only the action changes at launch. */}
       <section id="pricing" className="bg-white scroll-mt-16">
