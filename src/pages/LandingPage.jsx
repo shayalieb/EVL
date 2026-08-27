@@ -317,7 +317,7 @@ export default function LandingPage() {
               {navigation?.login || 'Log In'}
             </Link>
             {publicSignupsEnabled ? (
-              <Link to={signupHref()} data-testid="landing-nav-signup-link" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">{navigation?.signup || 'Start Free Trial'}</Link>
+              <a href="#pricing" data-testid="landing-nav-plans-link" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">{navigation?.signup || 'View Plans'}</a>
             ) : (
               <a href="#waitlist" data-testid="landing-nav-waitlist-link" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">{navigation?.waitlist || 'Join Waitlist'}</a>
             )}
@@ -349,7 +349,7 @@ export default function LandingPage() {
               {navigation?.login || 'Log In'}
             </Link>
             {publicSignupsEnabled ? (
-              <Link to={signupHref()} onClick={() => setMobileMenuOpen(false)} className="block text-center mt-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">{navigation?.signup || 'Start Free Trial'}</Link>
+              <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="block text-center mt-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">{navigation?.signup || 'View Plans'}</a>
             ) : (
               <a href="#waitlist" onClick={() => setMobileMenuOpen(false)} className="block text-center mt-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">{navigation?.waitlist || 'Join Waitlist'}</a>
             )}
@@ -376,7 +376,7 @@ export default function LandingPage() {
           </p>
           <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
             {publicSignupsEnabled ? (
-              <Link to={signupHref()} data-testid="landing-hero-signup-link" className="px-6 py-3 rounded-lg bg-white text-indigo-700 text-sm font-semibold hover:bg-indigo-50">{(pricing?.trialButtonLabel || 'Start {days}-day free trial').replace('{days}', trialDays)}</Link>
+              <a href="#pricing" data-testid="landing-hero-plans-link" className="px-6 py-3 rounded-lg bg-white text-indigo-700 text-sm font-semibold hover:bg-indigo-50">{navigation?.signup || 'View Plans'}</a>
             ) : (
               <a href="#waitlist" data-testid="landing-hero-waitlist-link" className="px-6 py-3 rounded-lg bg-white text-indigo-700 text-sm font-semibold hover:bg-indigo-50">{navigation?.waitlist || 'Join Waitlist'}</a>
             )}

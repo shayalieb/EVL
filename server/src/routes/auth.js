@@ -10,6 +10,7 @@ import { hashToken, generateToken } from '../lib/resetToken.js';
 import { MIN_PASSWORD_LENGTH, passwordTooWeak } from '../lib/password.js';
 import { SIGNUP_VERTICALS } from '../lib/verticals.js';
 import { establishSession } from '../lib/sessionAuth.js';
+import { getWebsiteConfig } from '../lib/websiteConfig.js';
 
 const router = Router();
 const SALT_ROUNDS = 12;
@@ -69,6 +70,13 @@ async function notifyPendingSignup(user) {
 
 router.post('/signup', credentialsLimiter, asyncHandler(async (req, res) => {
   const { firstName, lastName, email, phone, password, vertical, selectedPlan, billingInterval } = req.body || {};
+  const websiteConfig = await getWebsiteConfig();
+  if (!websiteConfig.publicSignupsEnabled) {
+    return res.status(403).json({ error: 'Public signup is not currently available. Please join the waitlist or use your admin invitation link.' });
+  }
+  if (!['solo', 'team', 'studio'].includes(selectedPlan) || !['month', 'year'].includes(billingInterval)) {
+    return res.status(400).json({ error: 'Choose a plan from the pricing page before creating an account.' });
+  }
   if (!firstName?.trim() || !lastName?.trim() || !email?.trim() || !password) {
     return res.status(400).json({ error: 'First name, last name, email, and password are required.' });
   }

@@ -16,7 +16,10 @@ const VERTICAL_OPTIONS = [
 
 export default function AuthPage() {
   const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState(searchParams.get('mode') === 'signup' ? 'signup' : 'signin');
+  const selectedPlan = searchParams.get('plan');
+  const selectedInterval = searchParams.get('interval');
+  const validPlanSelection = ['solo', 'team', 'studio'].includes(selectedPlan) && ['month', 'year'].includes(selectedInterval);
+  const [tab, setTab] = useState(searchParams.get('mode') === 'signup' && validPlanSelection ? 'signup' : 'signin');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [businessName, setBusinessName] = useState('');
@@ -36,12 +39,10 @@ export default function AuthPage() {
   // pending-account screen reads this only as a UI preference; Stripe and
   // the backend still validate the tier and interval before checkout.
   useEffect(() => {
-    const plan = searchParams.get('plan');
-    const interval = searchParams.get('interval');
-    if (['solo', 'team', 'studio'].includes(plan) && ['month', 'year'].includes(interval)) {
-      sessionStorage.setItem('gigworksSelectedPlan', JSON.stringify({ plan, interval }));
+    if (validPlanSelection) {
+      sessionStorage.setItem('gigworksSelectedPlan', JSON.stringify({ plan: selectedPlan, interval: selectedInterval }));
     }
-  }, [searchParams]);
+  }, [selectedInterval, selectedPlan, validPlanSelection]);
 
   // Switches tabs and clears whatever error was showing — otherwise a
   // failed sign-in attempt's error banner (authError lives in context, not
@@ -96,12 +97,10 @@ export default function AuthPage() {
       return;
     }
     setSubmitting(true);
-    let selected = null;
-    try { selected = JSON.parse(sessionStorage.getItem('gigworksSelectedPlan')); } catch { /* ignore malformed preference */ }
     await signUp({
       firstName, lastName, businessName, email, phone, password, vertical,
-      selectedPlan: selected?.plan,
-      billingInterval: selected?.interval,
+      selectedPlan,
+      billingInterval: selectedInterval,
     });
     setSubmitting(false);
   }
@@ -114,26 +113,7 @@ export default function AuthPage() {
           <p className="text-sm text-slate-500">Event Vendor Logistics</p>
         </div>
 
-        {tab !== 'forgot' && (
-          <div className="flex border-b mb-6">
-            <button
-              type="button"
-              onClick={() => switchTab('signin')}
-              data-testid="auth-tab-signin"
-              className={`flex-1 py-2 font-semibold border-b-2 ${tab === 'signin' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}
-            >
-              Sign In
-            </button>
-            <button
-              type="button"
-              onClick={() => switchTab('signup')}
-              data-testid="auth-tab-signup"
-              className={`flex-1 py-2 font-semibold border-b-2 ${tab === 'signup' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}
-            >
-              Sign Up
-            </button>
-          </div>
-        )}
+        {tab !== 'forgot' && <h1 className="text-xl font-bold text-slate-800 text-center mb-6">{tab === 'signup' ? 'Create your account' : 'Sign in'}</h1>}
 
         {(authError || localError) && (
           <div data-testid="auth-error-banner" className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
@@ -213,6 +193,7 @@ export default function AuthPage() {
               </div>
             </div>
             <SubmitButton loading={submitting} testId="auth-signup-submit-button">Create Account</SubmitButton>
+            <button type="button" onClick={() => switchTab('signin')} className="w-full text-sm font-semibold text-slate-500 hover:text-slate-700">Back to sign in</button>
           </form>
         )}
       </div>
