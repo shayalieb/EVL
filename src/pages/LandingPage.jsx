@@ -363,57 +363,70 @@ export default function LandingPage() {
         )}
       </header>
 
-      {/* Hero — two-column on desktop (copy + CTAs left, product preview
-          right) instead of a fully-centered stack, so the actual product is
-          visible in the same first screen as the pitch, not scrolled past. */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-indigo-950 via-indigo-900 to-white">
+      {/* Hero — the whole first screen, full-bleed dark and immersive
+          instead of a short band that hands off to white almost
+          immediately. Two-column on desktop (copy + CTAs left, product
+          preview right) so the product itself is part of the first
+          impression, not something scrolled to. Trust stats live inside
+          this same dark panel (not a separate white strip right after) so
+          the bold first impression carries all the way to the fold. */}
+      <section className="relative overflow-hidden bg-gradient-to-b from-indigo-950 via-indigo-900 to-indigo-950 flex flex-col min-h-[calc(100vh-4rem)]">
         <div className="pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
-          <div className="absolute left-1/2 top-[-8rem] w-[46rem] h-[46rem] -translate-x-1/2 rounded-full bg-indigo-500/30 blur-3xl" />
-          <div className="absolute right-[-10rem] top-[2rem] w-[28rem] h-[28rem] rounded-full bg-fuchsia-500/15 blur-3xl" />
-          <div className="absolute left-[-10rem] bottom-[6rem] w-[26rem] h-[26rem] rounded-full bg-fuchsia-500/10 blur-3xl" />
+          <div className="absolute left-1/2 top-[-8rem] w-[50rem] h-[50rem] -translate-x-1/2 rounded-full bg-indigo-500/35 blur-3xl" />
+          <div className="absolute right-[-10rem] top-[2rem] w-[30rem] h-[30rem] rounded-full bg-fuchsia-500/20 blur-3xl" />
+          <div className="absolute left-[-10rem] bottom-[6rem] w-[28rem] h-[28rem] rounded-full bg-fuchsia-500/15 blur-3xl" />
           <div className="absolute left-[-8rem] top-[10rem] w-[24rem] h-[24rem] rounded-full bg-indigo-300/10 blur-3xl" />
+          <div
+            className="absolute inset-0 opacity-[0.06]"
+            style={{ backgroundImage: 'linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)', backgroundSize: '56px 56px' }}
+          />
         </div>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-16 sm:pt-20 lg:pt-24 pb-16 sm:pb-24">
-          <div className="grid lg:grid-cols-[1.08fr_0.92fr] gap-12 lg:gap-10 items-center">
-            <div className="text-center lg:text-left">
-              <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 backdrop-blur px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-200 mb-6">
-                {hero?.eyebrow || 'For bands, DJs & orchestras booking out a roster'}
-              </span>
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-white leading-[1.1] max-w-3xl mx-auto lg:mx-0">
-                {hero?.headline || 'Built by a musician who spent 20 years chasing confirmations instead of chasing gigs.'}
-              </h1>
-              <p className="mt-5 text-lg text-indigo-200 max-w-2xl mx-auto lg:mx-0">
-                {hero?.description || "GigWorks is the business software for entertainment agencies and bandleaders who book out multiple musicians — proposals, contracts, and invoicing for your clients, plus the day-of details connected to who's actually on the gig."}
-              </p>
-              <div className="mt-8 flex items-center justify-center lg:justify-start gap-3 flex-wrap">
-                {publicSignupsEnabled ? (
-                  <a href="#pricing" data-testid="landing-hero-plans-link" className="px-6 py-3 rounded-xl bg-white text-indigo-700 text-sm font-semibold shadow-lg shadow-black/10 hover:shadow-xl hover:-translate-y-0.5 hover:bg-indigo-50 transition-all">{navigation?.signup || 'View Plans'}</a>
-                ) : (
-                  <a href="#waitlist" data-testid="landing-hero-waitlist-link" className="px-6 py-3 rounded-xl bg-white text-indigo-700 text-sm font-semibold shadow-lg shadow-black/10 hover:shadow-xl hover:-translate-y-0.5 hover:bg-indigo-50 transition-all">{navigation?.waitlist || 'Join Waitlist'}</a>
-                )}
-                <a href="#contact" data-testid="landing-hero-contact-link" className="px-6 py-3 rounded-xl border border-white/30 text-white text-sm font-semibold hover:bg-white/10 hover:-translate-y-0.5 transition-all">
-                  {hero?.contactButton || 'Get in Touch'}
-                </a>
-              </div>
-            </div>
-            <div className="w-full max-w-lg mx-auto lg:mx-0 lg:max-w-none">
-              <LandingDashboardPreview />
+
+        <div className="flex-1 flex items-center">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 lg:py-12 w-full">
+            <div className="grid lg:grid-cols-[1.08fr_0.92fr] gap-10 lg:gap-10 items-center">
+              <Reveal className="text-center lg:text-left">
+                <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 backdrop-blur px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-200 mb-5">
+                  {hero?.eyebrow || 'For bands, DJs & orchestras booking out a roster'}
+                </span>
+                <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-white leading-[1.1] max-w-3xl mx-auto lg:mx-0">
+                  {hero?.headline || 'Built by a musician who spent 20 years chasing confirmations instead of chasing gigs.'}
+                </h1>
+                <p className="mt-5 text-lg text-indigo-200 max-w-2xl mx-auto lg:mx-0">
+                  {hero?.description || "GigWorks is the business software for entertainment agencies and bandleaders who book out multiple musicians — proposals, contracts, and invoicing for your clients, plus the day-of details connected to who's actually on the gig."}
+                </p>
+                <div className="mt-7 flex items-center justify-center lg:justify-start gap-3 flex-wrap">
+                  {publicSignupsEnabled ? (
+                    <a href="#pricing" data-testid="landing-hero-plans-link" className="px-7 py-3.5 rounded-xl bg-white text-indigo-700 text-base font-semibold shadow-lg shadow-black/20 hover:shadow-xl hover:-translate-y-0.5 hover:bg-indigo-50 transition-all">{navigation?.signup || 'View Plans'}</a>
+                  ) : (
+                    <a href="#waitlist" data-testid="landing-hero-waitlist-link" className="px-7 py-3.5 rounded-xl bg-white text-indigo-700 text-base font-semibold shadow-lg shadow-black/20 hover:shadow-xl hover:-translate-y-0.5 hover:bg-indigo-50 transition-all">{navigation?.waitlist || 'Join Waitlist'}</a>
+                  )}
+                  <a href="#contact" data-testid="landing-hero-contact-link" className="px-7 py-3.5 rounded-xl border border-white/30 text-white text-base font-semibold hover:bg-white/10 hover:-translate-y-0.5 transition-all">
+                    {hero?.contactButton || 'Get in Touch'}
+                  </a>
+                </div>
+              </Reveal>
+              <Reveal delay={150} className="w-full max-w-lg mx-auto lg:mx-0 lg:max-w-none">
+                <div className="relative">
+                  <div className="absolute -inset-6 bg-gradient-to-br from-indigo-400/30 via-fuchsia-400/10 to-transparent blur-2xl -z-10 rounded-[2rem]" aria-hidden="true" />
+                  <LandingDashboardPreview />
+                </div>
+              </Reveal>
             </div>
           </div>
         </div>
-      </section>
 
-      {/* Trust stats — a scannable credibility strip right where a visitor
-          lands, before asking them to read a single paragraph. */}
-      <section className="bg-white border-b border-slate-100">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10 sm:py-12">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 sm:gap-4 text-center">
-            {trustStats.map((s) => (
-              <div key={s.label}>
-                <div className="text-3xl sm:text-4xl font-bold tracking-tight text-indigo-600">{s.value}</div>
-                <div className="text-xs sm:text-sm text-slate-500 mt-1.5 leading-snug">{s.label}</div>
-              </div>
-            ))}
+        {/* Trust stats, folded into the hero itself */}
+        <div className="border-t border-white/10 bg-white/[0.03]">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 py-5 sm:py-6">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-5 gap-x-4 text-center">
+              {trustStats.map((s) => (
+                <div key={s.label}>
+                  <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white">{s.value}</div>
+                  <div className="text-xs sm:text-sm text-indigo-200 mt-1 leading-snug">{s.label}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
