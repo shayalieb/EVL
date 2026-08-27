@@ -16,7 +16,21 @@ export default function PendingApprovalPage() {
   const { currentUser, logout } = useAuth();
   const [status, setStatus] = useState(null);
   const [loadError, setLoadError] = useState('');
-  const [interval, setInterval] = useState('month');
+  const [preferredPlan] = useState(() => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('gigworksSelectedPlan'));
+      return ['solo', 'team', 'studio'].includes(saved?.plan) ? saved.plan : null;
+    } catch {
+      return null;
+    }
+  });
+  const [interval, setInterval] = useState(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem('gigworksSelectedPlan'))?.interval === 'year' ? 'year' : 'month';
+    } catch {
+      return 'month';
+    }
+  });
   const [startingTier, setStartingTier] = useState(null);
   const [checkoutError, setCheckoutError] = useState('');
 
@@ -79,7 +93,12 @@ export default function PendingApprovalPage() {
               const cents = interval === 'year' ? tier.annualAmountCents : tier.monthlyAmountCents;
               const perMonth = interval === 'year' ? cents / 12 : cents;
               return (
-                <div key={tier.id} className="bg-white rounded-xl border border-slate-200 p-6 flex flex-col" data-testid={`plan-picker-card-${tier.id}`}>
+                <div key={tier.id} className={`relative bg-white rounded-xl p-6 flex flex-col ${preferredPlan === tier.id ? 'border-2 border-indigo-500 shadow-md' : 'border border-slate-200'}`} data-testid={`plan-picker-card-${tier.id}`}>
+                  {preferredPlan === tier.id && (
+                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-indigo-600 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+                      Your selection
+                    </span>
+                  )}
                   <div className="text-sm font-bold text-slate-700 mb-1">{tier.label}</div>
                   <div className="text-xs text-slate-400 mb-4">{tier.seatLimit} team member{tier.seatLimit === 1 ? '' : 's'}</div>
                   <div className="mb-1">

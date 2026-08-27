@@ -8,6 +8,21 @@ import { FileIcon, UsersIcon, ClipboardIcon, BellIcon, ChevronDownIcon } from '.
 import { joinWaitlist, sendContactMessage } from '../lib/landing';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
+const PUBLIC_SIGNUPS_ENABLED = import.meta.env.VITE_PUBLIC_SIGNUPS_ENABLED === 'true';
+
+const PRICING_TIERS = [
+  { id: 'solo', name: 'Solo', seats: '1 team member', monthly: 25, annualMonthly: 20, annualTotal: 240, description: 'For independent bandleaders and performers running their own calendar.' },
+  { id: 'team', name: 'Team', seats: 'Up to 2 team members', monthly: 45, annualMonthly: 38, annualTotal: 456, description: 'For small teams sharing bookings, staffing, and client follow-up.', featured: true },
+  { id: 'studio', name: 'Studio', seats: 'Up to 5 team members', monthly: 89, annualMonthly: 75, annualTotal: 900, description: 'For growing entertainment companies coordinating multiple people.' },
+];
+
+const INCLUDED_FEATURES = [
+  'Unlimited clients, bookings, and events',
+  'Proposals, e-sign contracts, and invoices',
+  'Contractor confirmations and availability',
+  'Stage plots, set lists, and production details',
+  'Templates, reminders, and client payment tools',
+];
 
 const PAIN_POINTS = [
   {
@@ -72,6 +87,7 @@ const FEATURE_GROUPS = [
 const NAV_LINKS = [
   { href: '#story', label: 'Story' },
   { href: '#features', label: 'Features' },
+  { href: '#pricing', label: 'Pricing' },
   { href: '#faq', label: 'FAQ' },
 ];
 
@@ -105,9 +121,15 @@ const FAQS = [
   },
   {
     q: 'When can I start using it, and what does it cost?',
-    a: "GigWorks is currently in a private early-access phase, onboarding a small first group of agencies and bandleaders directly. Join the waitlist below and pricing will be part of that conversation.",
+    a: PUBLIC_SIGNUPS_ENABLED
+      ? 'You can start with a 14-day free trial. Solo is $25/month, Team is $45/month, and Studio is $89/month, with lower effective monthly prices when billed annually. Cancel anytime.'
+      : 'GigWorks is currently onboarding a small first group directly. Plans are Solo at $25/month, Team at $45/month, and Studio at $89/month, with annual savings. Join the waitlist and we’ll let you know when public signup opens.',
   },
 ];
+
+function signupHref(plan = 'team', interval = 'month') {
+  return `/auth?mode=signup&plan=${plan}&interval=${interval}`;
+}
 
 function FieldError({ children }) {
   if (!children) return null;
@@ -193,6 +215,7 @@ export default function LandingPage() {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState(0);
+  const [pricingInterval, setPricingInterval] = useState('year');
 
   // Scoped to this page only (not a global app-wide CSS change) — added on
   // mount, removed on unmount, so an in-page "#waitlist" jump glides instead
@@ -258,9 +281,11 @@ export default function LandingPage() {
             <Link to="/auth" data-testid="landing-login-link" className="text-sm font-semibold text-slate-500 hover:text-slate-700">
               Log In
             </Link>
-            <a href="#waitlist" data-testid="landing-nav-waitlist-link" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
-              Get Waitlisted
-            </a>
+            {PUBLIC_SIGNUPS_ENABLED ? (
+              <Link to={signupHref()} data-testid="landing-nav-signup-link" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">Start Free Trial</Link>
+            ) : (
+              <a href="#waitlist" data-testid="landing-nav-waitlist-link" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">Join Waitlist</a>
+            )}
           </div>
           <button
             type="button"
@@ -288,12 +313,11 @@ export default function LandingPage() {
             <Link to="/auth" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50">
               Log In
             </Link>
-            <a
-              href="#waitlist" onClick={() => setMobileMenuOpen(false)}
-              className="block text-center mt-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold"
-            >
-              Get Waitlisted
-            </a>
+            {PUBLIC_SIGNUPS_ENABLED ? (
+              <Link to={signupHref()} onClick={() => setMobileMenuOpen(false)} className="block text-center mt-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">Start Free Trial</Link>
+            ) : (
+              <a href="#waitlist" onClick={() => setMobileMenuOpen(false)} className="block text-center mt-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">Join Waitlist</a>
+            )}
           </div>
         )}
       </header>
@@ -318,9 +342,11 @@ export default function LandingPage() {
             set lists, backline lists) connected to who's actually on the gig.
           </p>
           <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
-            <a href="#waitlist" data-testid="landing-hero-waitlist-link" className="px-6 py-3 rounded-lg bg-white text-indigo-700 text-sm font-semibold hover:bg-indigo-50">
-              Get Waitlisted
-            </a>
+            {PUBLIC_SIGNUPS_ENABLED ? (
+              <Link to={signupHref()} data-testid="landing-hero-signup-link" className="px-6 py-3 rounded-lg bg-white text-indigo-700 text-sm font-semibold hover:bg-indigo-50">Start 14-Day Free Trial</Link>
+            ) : (
+              <a href="#waitlist" data-testid="landing-hero-waitlist-link" className="px-6 py-3 rounded-lg bg-white text-indigo-700 text-sm font-semibold hover:bg-indigo-50">Join Waitlist</a>
+            )}
             <a href="#contact" data-testid="landing-hero-contact-link" className="px-6 py-3 rounded-lg border border-white/30 text-white text-sm font-semibold hover:bg-white/10">
               Get in Touch
             </a>
@@ -404,6 +430,42 @@ export default function LandingPage() {
               </Reveal>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Pricing is visible during early access; only the action changes at launch. */}
+      <section id="pricing" className="bg-white scroll-mt-16">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16">
+          <div className="text-center max-w-2xl mx-auto">
+            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-3">Simple pricing</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">Every plan runs the whole gig</h2>
+            <p className="text-slate-500 mt-3">Choose based on the size of your team—not which tools you’re allowed to use.</p>
+            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 mt-7" aria-label="Billing interval">
+              <button type="button" onClick={() => setPricingInterval('month')} data-testid="landing-pricing-month" className={`px-4 py-2 rounded-lg text-sm font-semibold ${pricingInterval === 'month' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>Monthly</button>
+              <button type="button" onClick={() => setPricingInterval('year')} data-testid="landing-pricing-year" className={`px-4 py-2 rounded-lg text-sm font-semibold ${pricingInterval === 'year' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>Annual <span className="text-emerald-600">Save up to 20%</span></button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-10 items-stretch">
+            {PRICING_TIERS.map((tier) => (
+              <Reveal key={tier.id} className={`relative rounded-2xl p-6 flex flex-col ${tier.featured ? 'border-2 border-indigo-500 shadow-lg' : 'border border-slate-200 shadow-sm'}`} data-testid={`landing-pricing-${tier.id}`}>
+                {tier.featured && <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-wide px-3 py-1 rounded-full">Most popular</span>}
+                <h3 className="text-lg font-bold text-slate-900">{tier.name}</h3>
+                <p className="text-sm text-slate-500 mt-1 min-h-10">{tier.description}</p>
+                <div className="mt-5"><span className="text-4xl font-bold text-slate-900">${pricingInterval === 'year' ? tier.annualMonthly : tier.monthly}</span><span className="text-sm text-slate-500"> /month</span></div>
+                <p className="text-xs text-slate-400 mt-1 h-5">{pricingInterval === 'year' ? `$${tier.annualTotal} billed annually` : 'Billed monthly'}</p>
+                <p className="text-sm font-semibold text-indigo-700 mt-5">{tier.seats}</p>
+                <ul className="space-y-2 mt-5 mb-6 text-sm text-slate-600 flex-1">
+                  {INCLUDED_FEATURES.map((feature) => <li key={feature} className="flex gap-2"><span className="text-emerald-500" aria-hidden="true">✓</span><span>{feature}</span></li>)}
+                </ul>
+                {PUBLIC_SIGNUPS_ENABLED ? (
+                  <Link to={signupHref(tier.id, pricingInterval)} className={`text-center rounded-lg px-4 py-2.5 text-sm font-semibold ${tier.featured ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}>Start 14-day free trial</Link>
+                ) : (
+                  <a href="#waitlist" className={`text-center rounded-lg px-4 py-2.5 text-sm font-semibold ${tier.featured ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}>Join the waitlist</a>
+                )}
+              </Reveal>
+            ))}
+          </div>
+          <p className="text-center text-xs text-slate-400 mt-6">14-day free trial at launch. Cancel anytime. Secure billing through Stripe.</p>
         </div>
       </section>
 

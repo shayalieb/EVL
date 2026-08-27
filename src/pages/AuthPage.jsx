@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Logo from '../components/ui/Logo';
 import SubmitButton from '../components/ui/SubmitButton';
@@ -14,7 +15,8 @@ const VERTICAL_OPTIONS = [
 ];
 
 export default function AuthPage() {
-  const [tab, setTab] = useState('signin');
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState(searchParams.get('mode') === 'signup' ? 'signup' : 'signin');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [businessName, setBusinessName] = useState('');
@@ -29,6 +31,17 @@ export default function AuthPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const { signIn, signUp, authError, clearAuthError, requestPasswordReset } = useAuth();
+
+  // Preserve a landing-page plan selection across account creation. The
+  // pending-account screen reads this only as a UI preference; Stripe and
+  // the backend still validate the tier and interval before checkout.
+  useEffect(() => {
+    const plan = searchParams.get('plan');
+    const interval = searchParams.get('interval');
+    if (['solo', 'team', 'studio'].includes(plan) && ['month', 'year'].includes(interval)) {
+      sessionStorage.setItem('gigworksSelectedPlan', JSON.stringify({ plan, interval }));
+    }
+  }, [searchParams]);
 
   // Switches tabs and clears whatever error was showing — otherwise a
   // failed sign-in attempt's error banner (authError lives in context, not
