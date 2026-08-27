@@ -10,12 +10,35 @@ const painItems = [
   ["No idea what's actually at risk until it's too late.", 'Realizing three days out that a client went quiet or a vendor never confirmed.', 'A real dashboard and automatic reminders that surface it before it becomes a crisis, not after.'],
 ].map(([title, problem, fix]) => ({ title, problem, fix }));
 
+// Keep in sync with ICON_KEYS below and src/components/ui/icons.jsx's
+// exports (each key here is that component's name minus "Icon", lowercased).
+export const ICON_KEYS = ['file', 'users', 'clipboard', 'bell', 'calendar', 'clock', 'dollar', 'wrench', 'alert', 'info', 'mappin', 'note', 'search', 'star', 'shield', 'chart', 'bolt'];
+function iconKey(value, fallback) { return ICON_KEYS.includes(value) ? value : fallback; }
+
 const featureGroups = [
-  ['clients', 'For your clients', ['Inquiry-to-booking pipeline', 'Proposals your client accepts online', 'Contracts with e-signature', 'Invoicing with built-in Stripe payments']],
-  ['roster', 'For your roster', ['Contractor roster & availability', 'Per-event confirm/decline tracking', 'Ensembles — save a group once, add its whole lineup in one click', 'A home-screen link every contractor can check themselves']],
-  ['dayOf', 'For the day of', ['Stage plots with a live drag-and-drop canvas', 'Set lists with email + PDF export', 'Backline & production lists', 'Prep sheets & crew schedules']],
-  ['oversight', 'For staying on top of it', ['A dashboard that surfaces what actually needs attention', 'Automatic alerts for at-risk events and overdue invoices', 'Email templates with merge fields for real event details', 'Manual reminders tied to any client or contractor']],
-].map(([id, title, items]) => ({ id, title, items }));
+  ['clients', 'file', 'For your clients', ['Inquiry-to-booking pipeline', 'Proposals your client accepts online', 'Contracts with e-signature', 'Invoicing with built-in Stripe payments']],
+  ['roster', 'users', 'For your roster', ['Contractor roster & availability', 'Per-event confirm/decline tracking', 'Ensembles — save a group once, add its whole lineup in one click', 'A home-screen link every contractor can check themselves']],
+  ['dayOf', 'clipboard', 'For the day of', ['Stage plots with a live drag-and-drop canvas', 'Set lists with email + PDF export', 'Backline & production lists', 'Prep sheets & crew schedules']],
+  ['oversight', 'bell', 'For staying on top of it', ['A dashboard that surfaces what actually needs attention', 'Automatic alerts for at-risk events and overdue invoices', 'Email templates with merge fields for real event details', 'Manual reminders tied to any client or contractor']],
+].map(([id, icon, title, items]) => ({ id, icon, title, items }));
+
+// True variable-length list (an admin can add/remove cards from
+// src/pages/admin/AdminWebsitePage.jsx's Features tab), same pattern as
+// comparison() below for categories/rows — NOT the fixed-length
+// map-over-the-default shape most other sections use, since the whole point
+// here is the count itself is admin-controlled, capped at a sane maximum.
+function featureGroupsList(input, fallback) {
+  const incoming = Array.isArray(input) && input.length ? input.slice(0, 8) : fallback;
+  return incoming.map((group, i) => {
+    const fb = fallback[i] || fallback[0];
+    return {
+      id: text(group?.id, `feature-${i + 1}`, 60),
+      icon: iconKey(group?.icon, fb?.icon || 'file'),
+      title: text(group?.title, fb?.title || 'Feature', 120),
+      items: stringList(group?.items, fb?.items || [], 8),
+    };
+  });
+}
 
 const faqItems = [
   ['Who is GigWorks actually built for?', "Bands, DJs, orchestras, and the agencies or bandleaders who book them out — anyone staffing more than one musician against a calendar of gigs. If you're assembling a roster for each event rather than just showing up yourself, this is built around that specific problem."],
@@ -112,7 +135,7 @@ export function normalizeWebsiteConfig(input = {}) {
     hero: section(input.hero, d.hero, { headline: 180, description: 700 }),
     story: { label: text(input.story?.label, d.story.label, 120), paragraphs: stringList(input.story?.paragraphs, d.story.paragraphs, 4) },
     painPoints: { heading: text(input.painPoints?.heading, d.painPoints.heading, 120), description: text(input.painPoints?.description, d.painPoints.description, 400), items: d.painPoints.items.map((fallback, i) => ({ title: text(input.painPoints?.items?.[i]?.title, fallback.title, 160), problem: text(input.painPoints?.items?.[i]?.problem, fallback.problem, 500), fix: text(input.painPoints?.items?.[i]?.fix, fallback.fix, 500) })) },
-    features: { heading: text(input.features?.heading, d.features.heading, 120), groups: d.features.groups.map((fallback, i) => ({ id: fallback.id, title: text(input.features?.groups?.[i]?.title, fallback.title, 120), items: stringList(input.features?.groups?.[i]?.items, fallback.items, 8) })), comparison: comparison(input.features?.comparison, d.features.comparison) },
+    features: { heading: text(input.features?.heading, d.features.heading, 120), groups: featureGroupsList(input.features?.groups, d.features.groups), comparison: comparison(input.features?.comparison, d.features.comparison) },
     pricing: { label: text(pricing.label, d.pricing.label, 60), heading: text(pricing.heading, d.pricing.heading, 140), description: text(pricing.description, d.pricing.description, 300), monthlyLabel: text(pricing.monthlyLabel, d.pricing.monthlyLabel, 30), annualLabel: text(pricing.annualLabel, d.pricing.annualLabel, 30), annualSavingsLabel: text(pricing.annualSavingsLabel, d.pricing.annualSavingsLabel, 60), featuredLabel: text(pricing.featuredLabel, d.pricing.featuredLabel, 40), perMonthLabel: text(pricing.perMonthLabel, d.pricing.perMonthLabel, 30), billedAnnuallyLabel: text(pricing.billedAnnuallyLabel, d.pricing.billedAnnuallyLabel, 50), billedMonthlyLabel: text(pricing.billedMonthlyLabel, d.pricing.billedMonthlyLabel, 50), trialButtonLabel: text(pricing.trialButtonLabel, d.pricing.trialButtonLabel, 80), trialFooterLabel: text(pricing.trialFooterLabel, d.pricing.trialFooterLabel, 100), trialDays: Math.min(60, Math.max(0, Number.parseInt(pricing.trialDays, 10) || 14)), footer: text(pricing.footer, d.pricing.footer, 200), includedFeatures: stringList(pricing.includedFeatures, d.pricing.includedFeatures, 12), tiers: d.pricing.tiers.map((fallback) => { const incoming = pricing.tiers?.find((tier) => tier?.id === fallback.id) || {}; return { ...fallback, name: text(incoming.name, fallback.name, 40), description: text(incoming.description, fallback.description, 220), featured: incoming.featured === true, monthlyAmountCents: amount(incoming.monthlyAmountCents, fallback.monthlyAmountCents), annualAmountCents: amount(incoming.annualAmountCents, fallback.annualAmountCents), seatLimit: fallback.seatLimit, monthlyPriceId: typeof incoming.monthlyPriceId === 'string' ? incoming.monthlyPriceId : null, annualPriceId: typeof incoming.annualPriceId === 'string' ? incoming.annualPriceId : null }; }) },
     faq: { heading: text(input.faq?.heading, d.faq.heading, 140), description: text(input.faq?.description, d.faq.description, 300), items: d.faq.items.map((fallback, i) => ({ question: text(input.faq?.items?.[i]?.question, fallback.question, 240), answer: text(input.faq?.items?.[i]?.answer, fallback.answer, 1000) })) },
     waitlist: section(input.waitlist, d.waitlist),

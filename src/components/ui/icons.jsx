@@ -20,3 +20,7 @@ export function FileIcon(props) { return <IconWrap {...props}><path d="M7 3h7l4 
 export function ChevronDownIcon(props) { return <IconWrap {...props}><path d="M6 9l6 6 6-6" /></IconWrap>; }
 export function SearchIcon(props) { return <IconWrap {...props}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></IconWrap>; }
 export function BellIcon(props) { return <IconWrap {...props}><path d="M6 9a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6Z" /><path d="M10 19a2 2 0 0 0 4 0" /></IconWrap>; }
+export function StarIcon(props) { return <IconWrap {...props}><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.8Z" /></IconWrap>; }
+export function ShieldIcon(props) { return <IconWrap {...props}><path d="M12 3l7 3v5.5c0 4.6-3 8.4-7 9.5-4-1.1-7-4.9-7-9.5V6Z" /><path d="M9 12l2 2 4-4" /></IconWrap>; }
+export function ChartIcon(props) { return <IconWrap {...props}><path d="M4 20V10M10 20V4M16 20v-7M4 20h16" /></IconWrap>; }
+export function BoltIcon(props) { return <IconWrap {...props}><path d="M13 3 5 13h5l-1 8 8-10h-5l1-8Z" /></IconWrap>; }

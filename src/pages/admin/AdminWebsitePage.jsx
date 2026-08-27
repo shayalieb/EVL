@@ -9,6 +9,15 @@ const TABS = [
   ['features', 'Features'], ['pricing', 'Pricing'], ['faq', 'FAQ'], ['forms', 'Forms & Footer'],
 ];
 
+// Keep in sync with server/src/lib/websiteConfig.js's ICON_KEYS and
+// src/components/ui/icons.jsx's exports.
+const ICON_OPTIONS = [
+  ['file', 'Document'], ['users', 'People'], ['clipboard', 'Clipboard'], ['bell', 'Bell'],
+  ['calendar', 'Calendar'], ['clock', 'Clock'], ['dollar', 'Dollar'], ['wrench', 'Wrench'],
+  ['alert', 'Alert'], ['info', 'Info'], ['mappin', 'Map Pin'], ['note', 'Note'], ['search', 'Search'],
+  ['star', 'Star'], ['shield', 'Shield'], ['chart', 'Chart'], ['bolt', 'Bolt'],
+];
+
 function Field({ label, value, onChange, rows = 0, type = 'text', min, max, step }) {
   const props = { value, onChange: (e) => onChange(e.target.value), className: inputClass };
   return <div><label className={labelClass}>{label}</label>{rows ? <textarea rows={rows} {...props} /> : <input type={type} min={min} max={max} step={step} {...props} />}</div>;
@@ -19,7 +28,26 @@ function Card({ title, children }) {
 }
 
 function StringList({ items, onChange, label = 'Items' }) {
-  return <div className="space-y-2"><label className={labelClass}>{label}</label>{items.map((item, index) => <input key={index} className={inputClass} value={item} onChange={(e) => onChange(items.map((current, i) => i === index ? e.target.value : current))} />)}</div>;
+  return (
+    <div className="space-y-2">
+      <label className={labelClass}>{label}</label>
+      {items.map((item, index) => (
+        <div key={index} className="flex gap-2 items-center">
+          <input className={`${inputClass} flex-1`} value={item} onChange={(e) => onChange(items.map((current, i) => i === index ? e.target.value : current))} />
+          <button
+            type="button"
+            onClick={() => onChange(items.filter((_, i) => i !== index))}
+            disabled={items.length <= 1}
+            aria-label={`Remove item ${index + 1}`}
+            className="shrink-0 px-2 py-1 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            ×
+          </button>
+        </div>
+      ))}
+      <button type="button" onClick={() => onChange([...items, ''])} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">+ Add item</button>
+    </div>
+  );
 }
 
 export default function AdminWebsitePage() {
@@ -44,6 +72,12 @@ export default function AdminWebsitePage() {
   function addComparisonCategory() {
     const id = `category-${Date.now()}`;
     updateComparison('categories', [...config.features.comparison.categories, { id, name: 'New category', rows: [{ id: `${id}-feature-1`, feature: 'New feature', solo: 'Included', team: 'Included', studio: 'Included' }] }]);
+  }
+  function addFeatureGroup() {
+    updateSection('features', 'groups', [...config.features.groups, { id: `feature-${Date.now()}`, icon: 'file', title: 'New feature', items: ['New benefit'] }]);
+  }
+  function removeFeatureGroup(index) {
+    updateSection('features', 'groups', config.features.groups.filter((_, i) => i !== index));
   }
 
   async function save(e) {
@@ -70,7 +104,31 @@ export default function AdminWebsitePage() {
 
       {tab === 'features' && <div className="space-y-5">
         <Card title="Feature section"><Field label="Heading" value={config.features.heading} onChange={(v) => updateSection('features', 'heading', v)} /></Card>
-        <div className="grid md:grid-cols-2 gap-5">{config.features.groups.map((group, index) => <Card key={group.id} title={`Feature group ${index + 1}`}><Field label="Title" value={group.title} onChange={(v) => updateNested('features', 'groups', index, 'title', v)} /><StringList items={group.items} onChange={(items) => updateNested('features', 'groups', index, 'items', items)} /></Card>)}</div>
+        <div className="grid md:grid-cols-2 gap-5">
+          {config.features.groups.map((group, index) => (
+            <Card key={group.id} title={`Feature card ${index + 1}`}>
+              <div className="flex gap-3">
+                <div className="w-32 shrink-0">
+                  <label className={labelClass}>Icon</label>
+                  <select className={inputClass} value={group.icon} onChange={(e) => updateNested('features', 'groups', index, 'icon', e.target.value)}>
+                    {ICON_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                  </select>
+                </div>
+                <div className="flex-1"><Field label="Title" value={group.title} onChange={(v) => updateNested('features', 'groups', index, 'title', v)} /></div>
+              </div>
+              <StringList label="Bullet points" items={group.items} onChange={(items) => updateNested('features', 'groups', index, 'items', items)} />
+              <button
+                type="button"
+                onClick={() => removeFeatureGroup(index)}
+                disabled={config.features.groups.length <= 1}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                Remove feature card
+              </button>
+            </Card>
+          ))}
+        </div>
+        <button type="button" onClick={addFeatureGroup} disabled={config.features.groups.length >= 8} className="px-4 py-2 rounded-lg border border-indigo-200 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed">+ Add feature card</button>
         <Card title="Detailed feature chart">
           <div className="grid sm:grid-cols-2 gap-3"><Field label="Eyebrow" value={config.features.comparison.eyebrow} onChange={(v) => updateComparison('eyebrow', v)} /><Field label="Heading" value={config.features.comparison.heading} onChange={(v) => updateComparison('heading', v)} /></div>
           <Field label="Description" rows={2} value={config.features.comparison.description} onChange={(v) => updateComparison('description', v)} />

@@ -3,12 +3,24 @@ import { Link } from 'react-router-dom';
 import Logo from '../components/ui/Logo';
 import SubmitButton from '../components/ui/SubmitButton';
 import LandingDashboardPreview from '../components/LandingDashboardPreview';
-import { ClientsPipelinePreview, RosterConfirmPreview, DayOfPreview, StayOnTopPreview } from '../components/LandingFeaturePreviews';
-import { FileIcon, UsersIcon, ClipboardIcon, BellIcon, ChevronDownIcon } from '../components/ui/icons';
+import {
+  FileIcon, UsersIcon, ClipboardIcon, BellIcon, ChevronDownIcon,
+  CalendarIcon, ClockIcon, DollarIcon, WrenchIcon, AlertIcon, InfoIcon, MapPinIcon, NoteIcon, SearchIcon,
+  StarIcon, ShieldIcon, ChartIcon, BoltIcon,
+} from '../components/ui/icons';
 import { getLandingConfig, joinWaitlist, sendContactMessage } from '../lib/landing';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 outline-none transition';
 const DEFAULT_PUBLIC_SIGNUPS_ENABLED = import.meta.env.VITE_PUBLIC_SIGNUPS_ENABLED === 'true';
+
+// Keyed the same way as server/src/lib/websiteConfig.js's ICON_KEYS, so an
+// admin-picked icon key resolves to the same component on both sides.
+const ICON_COMPONENTS = {
+  file: FileIcon, users: UsersIcon, clipboard: ClipboardIcon, bell: BellIcon,
+  calendar: CalendarIcon, clock: ClockIcon, dollar: DollarIcon, wrench: WrenchIcon,
+  alert: AlertIcon, info: InfoIcon, mappin: MapPinIcon, note: NoteIcon, search: SearchIcon,
+  star: StarIcon, shield: ShieldIcon, chart: ChartIcon, bolt: BoltIcon,
+};
 
 const PRICING_TIERS = [
   { id: 'solo', name: 'Solo', seats: '1 team member', monthly: 25, annualMonthly: 20, annualTotal: 240, description: 'For independent bandleaders and performers running their own calendar.' },
@@ -59,27 +71,27 @@ const PAIN_POINTS = [
 
 const FEATURE_GROUPS = [
   {
+    id: 'clients',
     title: 'For your clients',
-    Icon: FileIcon,
-    Preview: ClientsPipelinePreview,
+    icon: 'file',
     items: ['Inquiry-to-booking pipeline', 'Proposals your client accepts online', 'Contracts with e-signature', 'Invoicing with built-in Stripe payments'],
   },
   {
+    id: 'roster',
     title: 'For your roster',
-    Icon: UsersIcon,
-    Preview: RosterConfirmPreview,
+    icon: 'users',
     items: ['Contractor roster & availability', 'Per-event confirm/decline tracking', 'Ensembles — save a group once, add its whole lineup in one click', 'A home-screen link every contractor can check themselves'],
   },
   {
+    id: 'dayOf',
     title: 'For the day of',
-    Icon: ClipboardIcon,
-    Preview: DayOfPreview,
+    icon: 'clipboard',
     items: ['Stage plots with a live drag-and-drop canvas', 'Set lists with email + PDF export', 'Backline & production lists', 'Prep sheets & crew schedules'],
   },
   {
+    id: 'oversight',
     title: 'For staying on top of it',
-    Icon: BellIcon,
-    Preview: StayOnTopPreview,
+    icon: 'bell',
     items: ['A dashboard that surfaces what actually needs attention', 'Automatic alerts for at-risk events and overdue invoices', 'Email templates with merge fields for real event details', 'Manual reminders tied to any client or contractor'],
   },
 ];
@@ -222,7 +234,7 @@ export default function LandingPage() {
   const painSection = websiteConfig?.painPoints;
   const painPoints = painSection?.items || PAIN_POINTS;
   const featureSection = websiteConfig?.features;
-  const featureGroups = FEATURE_GROUPS.map((fallback, index) => ({ ...fallback, ...(featureSection?.groups?.[index] || {}) }));
+  const featureGroups = featureSection?.groups || FEATURE_GROUPS;
   const featureComparison = featureSection?.comparison;
   const pricing = websiteConfig?.pricing;
   const includedFeatures = pricing?.includedFeatures || INCLUDED_FEATURES;
@@ -466,35 +478,43 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Feature groups */}
+      {/* Feature cards — an admin-manageable grid (src/pages/admin/
+          AdminWebsitePage.jsx's Features tab can add/remove cards, so the
+          count here isn't fixed at 4). Every card uses the same rich
+          styling regardless of whether it's one of the originals or
+          admin-added, rather than pairing a fixed set of bespoke app-mockup
+          previews with plain admin-added ones. */}
       <section id="features" className="bg-slate-50 border-y border-slate-100 scroll-mt-16">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16 md:py-24">
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 text-center mb-16">{featureSection?.heading || 'One place for the whole gig'}</h2>
-          <div className="space-y-20">
-            {featureGroups.map((g, i) => (
-              <Reveal
-                key={g.title} delay={i * 90} data-testid="landing-feature-group"
-                className={`flex flex-col ${i % 2 === 1 ? 'sm:flex-row-reverse' : 'sm:flex-row'} items-center gap-8 sm:gap-12`}
-              >
-                <div className="flex-1 w-full max-w-sm">
-                  <g.Preview />
-                </div>
-                <div className="flex-1 w-full max-w-sm">
-                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-3 shadow-sm ${i % 2 === 0 ? 'bg-gradient-to-br from-indigo-50 to-indigo-100 text-indigo-600' : 'bg-gradient-to-br from-fuchsia-50 to-fuchsia-100 text-fuchsia-600'}`}>
-                    <g.Icon className="w-5 h-5" />
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 text-center mb-14">{featureSection?.heading || 'One place for the whole gig'}</h2>
+          <div className="grid sm:grid-cols-2 gap-6">
+            {featureGroups.map((g, i) => {
+              const GroupIcon = ICON_COMPONENTS[g.icon] || FileIcon;
+              const accent = i % 2 === 0 ? 'indigo' : 'fuchsia';
+              return (
+                <Reveal
+                  key={g.id || g.title} delay={i * 90} data-testid="landing-feature-group"
+                  className="relative overflow-hidden bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-200"
+                >
+                  <div
+                    className={`pointer-events-none absolute -top-10 -right-10 w-40 h-40 rounded-full blur-3xl -z-10 ${accent === 'indigo' ? 'bg-indigo-200/40' : 'bg-fuchsia-200/40'}`}
+                    aria-hidden="true"
+                  />
+                  <div className={`w-14 h-14 rounded-xl flex items-center justify-center mb-4 shadow-sm ${accent === 'indigo' ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white' : 'bg-gradient-to-br from-fuchsia-500 to-fuchsia-600 text-white'}`}>
+                    <GroupIcon className="w-7 h-7" />
                   </div>
-                  <h3 className="font-semibold text-slate-800 text-lg mb-3">{g.title}</h3>
-                  <ul className="space-y-1.5 text-sm text-slate-500">
+                  <h3 className="font-bold text-slate-900 text-xl mb-3">{g.title}</h3>
+                  <ul className="space-y-2 text-sm text-slate-500">
                     {g.items.map((item) => (
                       <li key={item} className="flex items-start gap-2">
-                        <span className="text-indigo-500 mt-0.5" aria-hidden="true">✓</span>
+                        <span className={`mt-0.5 ${accent === 'indigo' ? 'text-indigo-500' : 'text-fuchsia-500'}`} aria-hidden="true">✓</span>
                         <span>{item}</span>
                       </li>
                     ))}
                   </ul>
-                </div>
-              </Reveal>
-            ))}
+                </Reveal>
+              );
+            })}
           </div>
         </div>
       </section>
