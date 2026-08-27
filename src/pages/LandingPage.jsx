@@ -248,6 +248,12 @@ export default function LandingPage() {
     featured: tier.featured,
   })) || PRICING_TIERS;
   const trialDays = pricing?.trialDays ?? 14;
+  const trustStats = [
+    { value: '20+', label: 'Years actually gigging' },
+    { value: 'All-in-One', label: 'From first inquiry to load-out' },
+    { value: `${trialDays}-Day`, label: 'Free trial, no card needed' },
+    { value: '100%', label: 'Your money, straight via Stripe' },
+  ];
   useEffect(() => {
     getLandingConfig().then((data) => setWebsiteConfig(data.config)).catch(() => {});
   }, []);
@@ -357,7 +363,9 @@ export default function LandingPage() {
         )}
       </header>
 
-      {/* Hero */}
+      {/* Hero — two-column on desktop (copy + CTAs left, product preview
+          right) instead of a fully-centered stack, so the actual product is
+          visible in the same first screen as the pitch, not scrolled past. */}
       <section className="relative overflow-hidden bg-gradient-to-b from-indigo-950 via-indigo-900 to-white">
         <div className="pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
           <div className="absolute left-1/2 top-[-8rem] w-[46rem] h-[46rem] -translate-x-1/2 rounded-full bg-indigo-500/30 blur-3xl" />
@@ -365,28 +373,47 @@ export default function LandingPage() {
           <div className="absolute left-[-10rem] bottom-[6rem] w-[26rem] h-[26rem] rounded-full bg-fuchsia-500/10 blur-3xl" />
           <div className="absolute left-[-8rem] top-[10rem] w-[24rem] h-[24rem] rounded-full bg-indigo-300/10 blur-3xl" />
         </div>
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-16 sm:pt-20 pb-0 text-center">
-          <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 backdrop-blur px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-200 mb-6">
-            {hero?.eyebrow || 'For bands, DJs & orchestras booking out a roster'}
-          </span>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-white leading-[1.1] max-w-3xl mx-auto">
-            {hero?.headline || 'Built by a musician who spent 20 years chasing confirmations instead of chasing gigs.'}
-          </h1>
-          <p className="mt-5 text-lg text-indigo-200 max-w-2xl mx-auto">
-            {hero?.description || "GigWorks is the business software for entertainment agencies and bandleaders who book out multiple musicians — proposals, contracts, and invoicing for your clients, plus the day-of details connected to who's actually on the gig."}
-          </p>
-          <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
-            {publicSignupsEnabled ? (
-              <a href="#pricing" data-testid="landing-hero-plans-link" className="px-6 py-3 rounded-xl bg-white text-indigo-700 text-sm font-semibold shadow-lg shadow-black/10 hover:shadow-xl hover:-translate-y-0.5 hover:bg-indigo-50 transition-all">{navigation?.signup || 'View Plans'}</a>
-            ) : (
-              <a href="#waitlist" data-testid="landing-hero-waitlist-link" className="px-6 py-3 rounded-xl bg-white text-indigo-700 text-sm font-semibold shadow-lg shadow-black/10 hover:shadow-xl hover:-translate-y-0.5 hover:bg-indigo-50 transition-all">{navigation?.waitlist || 'Join Waitlist'}</a>
-            )}
-            <a href="#contact" data-testid="landing-hero-contact-link" className="px-6 py-3 rounded-xl border border-white/30 text-white text-sm font-semibold hover:bg-white/10 hover:-translate-y-0.5 transition-all">
-              {hero?.contactButton || 'Get in Touch'}
-            </a>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-16 sm:pt-20 lg:pt-24 pb-16 sm:pb-24">
+          <div className="grid lg:grid-cols-[1.08fr_0.92fr] gap-12 lg:gap-10 items-center">
+            <div className="text-center lg:text-left">
+              <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 backdrop-blur px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-200 mb-6">
+                {hero?.eyebrow || 'For bands, DJs & orchestras booking out a roster'}
+              </span>
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-white leading-[1.1] max-w-3xl mx-auto lg:mx-0">
+                {hero?.headline || 'Built by a musician who spent 20 years chasing confirmations instead of chasing gigs.'}
+              </h1>
+              <p className="mt-5 text-lg text-indigo-200 max-w-2xl mx-auto lg:mx-0">
+                {hero?.description || "GigWorks is the business software for entertainment agencies and bandleaders who book out multiple musicians — proposals, contracts, and invoicing for your clients, plus the day-of details connected to who's actually on the gig."}
+              </p>
+              <div className="mt-8 flex items-center justify-center lg:justify-start gap-3 flex-wrap">
+                {publicSignupsEnabled ? (
+                  <a href="#pricing" data-testid="landing-hero-plans-link" className="px-6 py-3 rounded-xl bg-white text-indigo-700 text-sm font-semibold shadow-lg shadow-black/10 hover:shadow-xl hover:-translate-y-0.5 hover:bg-indigo-50 transition-all">{navigation?.signup || 'View Plans'}</a>
+                ) : (
+                  <a href="#waitlist" data-testid="landing-hero-waitlist-link" className="px-6 py-3 rounded-xl bg-white text-indigo-700 text-sm font-semibold shadow-lg shadow-black/10 hover:shadow-xl hover:-translate-y-0.5 hover:bg-indigo-50 transition-all">{navigation?.waitlist || 'Join Waitlist'}</a>
+                )}
+                <a href="#contact" data-testid="landing-hero-contact-link" className="px-6 py-3 rounded-xl border border-white/30 text-white text-sm font-semibold hover:bg-white/10 hover:-translate-y-0.5 transition-all">
+                  {hero?.contactButton || 'Get in Touch'}
+                </a>
+              </div>
+            </div>
+            <div className="w-full max-w-lg mx-auto lg:mx-0 lg:max-w-none">
+              <LandingDashboardPreview />
+            </div>
           </div>
-          <div className="mt-14 max-w-2xl mx-auto pb-16 sm:pb-24">
-            <LandingDashboardPreview />
+        </div>
+      </section>
+
+      {/* Trust stats — a scannable credibility strip right where a visitor
+          lands, before asking them to read a single paragraph. */}
+      <section className="bg-white border-b border-slate-100">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10 sm:py-12">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 sm:gap-4 text-center">
+            {trustStats.map((s) => (
+              <div key={s.label}>
+                <div className="text-3xl sm:text-4xl font-bold tracking-tight text-indigo-600">{s.value}</div>
+                <div className="text-xs sm:text-sm text-slate-500 mt-1.5 leading-snug">{s.label}</div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -402,16 +429,22 @@ export default function LandingPage() {
         </Reveal>
       </section>
 
-      {/* Pain points */}
+      {/* Pain points — numbered 2-up grid instead of one long stacked list,
+          so all six are scannable in a couple of eye-sweeps instead of a
+          full-page scroll. */}
       <section className="max-w-5xl mx-auto px-4 sm:px-6 py-16 md:py-24">
         <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 text-center">{painSection?.heading || 'Sound familiar?'}</h2>
         <p className="text-slate-500 text-center mt-2 mb-10 max-w-xl mx-auto">{painSection?.description}</p>
-        <div className="space-y-4">
+        <div className="grid sm:grid-cols-2 gap-5">
           {painPoints.map((p, i) => (
-            <Reveal key={p.title} delay={i * 60} data-testid="landing-pain-point" className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
-              <h3 className="font-semibold text-slate-800 text-base">{p.title}</h3>
-              <p className="text-sm text-slate-500 mt-1">{p.problem}</p>
-              <div className="mt-3 flex items-start gap-2 text-sm text-indigo-700 bg-indigo-50 rounded-lg px-3 py-2">
+            <Reveal
+              key={p.title} delay={i * 60} data-testid="landing-pain-point"
+              className="relative overflow-hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+            >
+              <span className="absolute -top-2 right-3 text-6xl font-black text-slate-50 select-none" aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>
+              <h3 className="relative font-semibold text-slate-800 text-base pr-10">{p.title}</h3>
+              <p className="relative text-sm text-slate-500 mt-2">{p.problem}</p>
+              <div className="relative mt-4 flex items-start gap-2 text-sm text-indigo-700 bg-indigo-50 rounded-lg px-3 py-2">
                 <span aria-hidden="true">→</span>
                 <span>{p.fix}</span>
               </div>
@@ -434,7 +467,7 @@ export default function LandingPage() {
                   <g.Preview />
                 </div>
                 <div className="flex-1 w-full max-w-sm">
-                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-50 to-indigo-100 text-indigo-600 flex items-center justify-center mb-3 shadow-sm">
+                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-3 shadow-sm ${i % 2 === 0 ? 'bg-gradient-to-br from-indigo-50 to-indigo-100 text-indigo-600' : 'bg-gradient-to-br from-fuchsia-50 to-fuchsia-100 text-fuchsia-600'}`}>
                     <g.Icon className="w-5 h-5" />
                   </div>
                   <h3 className="font-semibold text-slate-800 text-lg mb-3">{g.title}</h3>
@@ -551,6 +584,28 @@ export default function LandingPage() {
             />
           ))}
         </Reveal>
+      </section>
+
+      {/* Closing CTA — a bold bookend to the hero, right before the actual
+          conversion forms below. */}
+      <section className="relative overflow-hidden bg-gradient-to-br from-indigo-700 via-indigo-600 to-fuchsia-600">
+        <div className="pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
+          <div className="absolute left-1/2 top-1/2 w-[42rem] h-[42rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/10 blur-3xl" />
+        </div>
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-16 md:py-20 text-center">
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">Stop chasing confirmations. Start running the gig.</h2>
+          <p className="mt-3 text-indigo-100 max-w-xl mx-auto">Built by someone who's actually done this job for two decades — see if it fits how you book gigs.</p>
+          <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
+            {publicSignupsEnabled ? (
+              <a href="#pricing" data-testid="landing-cta-plans-link" className="px-6 py-3 rounded-xl bg-white text-indigo-700 text-sm font-semibold shadow-lg shadow-black/10 hover:shadow-xl hover:-translate-y-0.5 transition-all">{navigation?.signup || 'View Plans'}</a>
+            ) : (
+              <a href="#waitlist" data-testid="landing-cta-waitlist-link" className="px-6 py-3 rounded-xl bg-white text-indigo-700 text-sm font-semibold shadow-lg shadow-black/10 hover:shadow-xl hover:-translate-y-0.5 transition-all">{navigation?.waitlist || 'Join Waitlist'}</a>
+            )}
+            <a href="#contact" data-testid="landing-cta-contact-link" className="px-6 py-3 rounded-xl border border-white/40 text-white text-sm font-semibold hover:bg-white/10 hover:-translate-y-0.5 transition-all">
+              {hero?.contactButton || 'Get in Touch'}
+            </a>
+          </div>
+        </div>
       </section>
 
       {/* Waitlist + Contact */}
