@@ -108,6 +108,7 @@ router.post('/signup', credentialsLimiter, asyncHandler(async (req, res) => {
       const membership = await tx.membership.create({
         data: { userId: user.id, accountId: account.id, role: 'owner', permissions: allPermissions() },
       });
+      await tx.accountActivity.create({ data: { accountId: account.id, actorUserId: user.id, type: 'account_created', summary: 'Account created from public signup', metadata: { source: 'public', selectedPlan: selectedPlan || null, billingInterval: billingInterval || null } } });
       return { user, membership, account };
     });
     await establishSession(req, { userId: user.id });

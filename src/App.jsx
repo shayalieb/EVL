@@ -35,6 +35,7 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const HelpPage = lazy(() => import('./pages/HelpPage'));
 const AdminLayout = lazy(() => import('./layouts/AdminLayout'));
 const AdminAccountsPage = lazy(() => import('./pages/admin/AdminAccountsPage'));
+const AdminAccountProfilePage = lazy(() => import('./pages/admin/AdminAccountProfilePage'));
 const AdminSupportPage = lazy(() => import('./pages/admin/AdminSupportPage'));
 const AdminAdminsPage = lazy(() => import('./pages/admin/AdminAdminsPage'));
 const AdminWaitlistPage = lazy(() => import('./pages/admin/AdminWaitlistPage'));
@@ -192,6 +193,7 @@ function AppRoutes() {
       <Route path="/admin" element={<PlatformAdminArea />}>
         <Route index element={<Navigate to="accounts" replace />} />
         <Route path="accounts" element={<AdminAccountsPage />} />
+        <Route path="accounts/:accountId" element={<AdminAccountProfilePage />} />
         <Route path="waitlist" element={<AdminWaitlistPage />} />
         <Route path="website" element={<AdminWebsitePage />} />
         <Route path="support" element={<AdminSupportPage />} />

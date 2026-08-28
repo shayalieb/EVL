@@ -131,6 +131,76 @@ router.get('/accounts', asyncHandler(async (req, res) => {
   });
 }));
 
+function activityActor(activity) {
+  return activity.actor ? { firstName: activity.actor.firstName, lastName: activity.actor.lastName } : null;
+}
+
+router.get('/accounts/:id/profile', asyncHandler(async (req, res) => {
+  const [account, dataSummary, supportSummary] = await Promise.all([
+    prisma.account.findUnique({
+      where: { id: req.params.id },
+      include: {
+        memberships: { include: { user: true }, orderBy: { createdAt: 'asc' } }, disabledBy: true, approvedBy: true, accountData: true,
+        adminNotes: { include: { author: true }, orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }] },
+        activities: { include: { actor: true }, orderBy: { createdAt: 'desc' }, take: 250 },
+      },
+    }),
+    fetchDataSummaries(),
+    prisma.supportThread.groupBy({ by: ['status'], where: { accountId: req.params.id }, _count: { _all: true } }),
+  ]);
+  if (!account) return res.status(404).json({ error: 'Account not found.' });
+  const recordedTypes = new Set(account.activities.map((activity) => activity.type));
+  const baseline = [{ id: `created-${account.id}`, type: 'account_created', summary: 'Account created', metadata: { source: account.signupSource }, createdAt: account.createdAt, actor: null }];
+  if (account.approvedAt && !recordedTypes.has('account_approved')) baseline.push({ id: `approved-${account.id}`, type: 'account_approved', summary: 'Account approved', metadata: {}, createdAt: account.approvedAt, actor: account.approvedBy ? { firstName: account.approvedBy.firstName, lastName: account.approvedBy.lastName } : null });
+  if (account.disabledAt && !recordedTypes.has('account_disabled')) baseline.push({ id: `disabled-${account.id}`, type: 'account_disabled', summary: 'Account disabled', metadata: { reason: account.disabledReason }, createdAt: account.disabledAt, actor: account.disabledBy ? { firstName: account.disabledBy.firstName, lastName: account.disabledBy.lastName } : null });
+  const activities = [...account.activities.map((activity) => ({ id: activity.id, type: activity.type, summary: activity.summary, metadata: activity.metadata, createdAt: activity.createdAt, actor: activityActor(activity) })), ...baseline].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const businessInfo = account.accountData?.data?.businessInfo || {};
+  res.json({
+    profile: {
+      id: account.id, createdAt: account.createdAt, approvedAt: account.approvedAt, disabledAt: account.disabledAt, disabledReason: account.disabledReason,
+      vertical: account.vertical, allVerticalsEnabled: account.allVerticalsEnabled, signupSource: account.signupSource, signupPlan: account.signupPlan, signupInterval: account.signupInterval,
+      planTier: account.planTier, billingInterval: account.billingInterval, subscriptionStatus: account.subscriptionStatus, trialEndsAt: account.trialEndsAt,
+      stripeConnected: !!account.stripeAccountId, stripeChargesEnabled: account.stripeChargesEnabled, stripePayoutsEnabled: account.stripePayoutsEnabled,
+      business: { name: businessInfo.name || '', email: businessInfo.email || '', phone: businessInfo.phone || '', address: businessInfo.address || '' },
+      members: account.memberships.map((membership) => ({ id: membership.id, role: membership.role, permissions: membership.permissions, joinedAt: membership.createdAt, user: { id: membership.user.id, firstName: membership.user.firstName, lastName: membership.user.lastName, email: membership.user.email, phone: membership.user.phone, hasPassword: !!membership.user.passwordHash, lastUpdatedAt: membership.user.updatedAt } })),
+      dataSummary: dataSummary.get(account.id) || emptyDataSummary,
+      supportSummary: Object.fromEntries(supportSummary.map((row) => [row.status, row._count._all])),
+      notes: account.adminNotes.map((note) => ({ id: note.id, body: note.body, category: note.category, pinned: note.pinned, followUpAt: note.followUpAt, createdAt: note.createdAt, author: note.author ? { firstName: note.author.firstName, lastName: note.author.lastName } : null })),
+      activities,
+    },
+  });
+}));
+
+const ACCOUNT_NOTE_CATEGORIES = ['general', 'sales', 'onboarding', 'billing', 'support', 'risk'];
+router.post('/accounts/:id/notes', asyncHandler(async (req, res) => {
+  const { body, category, pinned, followUpAt } = req.body || {};
+  if (!body?.trim()) return res.status(400).json({ error: 'Note text is required.' });
+  const noteCategory = ACCOUNT_NOTE_CATEGORIES.includes(category) ? category : 'general';
+  const followUp = followUpAt ? new Date(followUpAt) : null;
+  if (followUpAt && Number.isNaN(followUp.getTime())) return res.status(400).json({ error: 'Follow-up date is invalid.' });
+  const note = await prisma.$transaction(async (tx) => {
+    const created = await tx.accountAdminNote.create({ data: { accountId: req.params.id, authorUserId: req.user.id, body: body.trim().slice(0, 5000), category: noteCategory, pinned: pinned === true, followUpAt: followUp }, include: { author: true } });
+    await tx.accountActivity.create({ data: { accountId: req.params.id, actorUserId: req.user.id, type: 'admin_note_added', summary: `Admin note added · ${noteCategory}`, metadata: { noteId: created.id, category: noteCategory, followUpAt: followUp?.toISOString() || null } } });
+    return created;
+  });
+  res.status(201).json({ note: { id: note.id, body: note.body, category: note.category, pinned: note.pinned, followUpAt: note.followUpAt, createdAt: note.createdAt, author: note.author ? { firstName: note.author.firstName, lastName: note.author.lastName } : null } });
+}));
+
+router.patch('/accounts/:accountId/notes/:noteId', asyncHandler(async (req, res) => {
+  const data = {};
+  if (typeof req.body?.pinned === 'boolean') data.pinned = req.body.pinned;
+  if (req.body?.followUpAt !== undefined) {
+    const followUp = req.body.followUpAt ? new Date(req.body.followUpAt) : null;
+    if (followUp && Number.isNaN(followUp.getTime())) return res.status(400).json({ error: 'Follow-up date is invalid.' });
+    data.followUpAt = followUp;
+  }
+  if (!Object.keys(data).length) return res.status(400).json({ error: 'Nothing to update.' });
+  const updated = await prisma.accountAdminNote.updateMany({ where: { id: req.params.noteId, accountId: req.params.accountId }, data });
+  if (updated.count !== 1) return res.status(404).json({ error: 'Note not found.' });
+  const note = await prisma.accountAdminNote.findUnique({ where: { id: req.params.noteId }, include: { author: true } });
+  res.json({ note: { id: note.id, body: note.body, category: note.category, pinned: note.pinned, followUpAt: note.followUpAt, createdAt: note.createdAt, author: note.author ? { firstName: note.author.firstName, lastName: note.author.lastName } : null } });
+}));
+
 // Shared by POST /accounts and POST /platform-admins/invite — both create a
 // brand-new User (+ their own Account/Membership, so they're never stuck on
 // NoAccountAccessPage) with no password, then email a set-your-password
@@ -184,6 +254,7 @@ async function createInvitedUser({ firstName, lastName, email }, { grantAdmin = 
       await tx.membership.create({
         data: { userId: newUser.id, accountId: account.id, role: 'owner', permissions: allPermissions() },
       });
+      await tx.accountActivity.create({ data: { accountId: account.id, actorUserId: approvedById || null, type: 'account_created', summary: 'Account created by platform admin', metadata: { source: 'admin' } } });
       return newUser;
     });
   } catch (err) {
@@ -274,7 +345,19 @@ router.patch('/accounts/:id', asyncHandler(async (req, res) => {
   if (Object.keys(data).length === 0) {
     return res.status(400).json({ error: 'Nothing to update.' });
   }
-  const account = await prisma.account.update({ where: { id: req.params.id }, data, include: { disabledBy: true, approvedBy: true } });
+  const account = await prisma.$transaction(async (tx) => {
+    const previous = await tx.account.findUnique({ where: { id: req.params.id } });
+    if (!previous) throw Object.assign(new Error('Account not found.'), { status: 404 });
+    const updated = await tx.account.update({ where: { id: req.params.id }, data, include: { disabledBy: true, approvedBy: true } });
+    const entries = [];
+    if (approved === true && !previous.approvedAt) entries.push({ type: 'account_approved', summary: 'Account approved', metadata: {} });
+    if (disabled === true && !previous.disabledAt) entries.push({ type: 'account_disabled', summary: 'Account disabled', metadata: { reason: reason.trim() } });
+    if (disabled === false && previous.disabledAt) entries.push({ type: 'account_enabled', summary: 'Account re-enabled', metadata: {} });
+    if (vertical !== undefined && vertical !== previous.vertical) entries.push({ type: 'vertical_changed', summary: `Business type changed to ${vertical}`, metadata: { from: previous.vertical, to: vertical } });
+    if (allVerticalsEnabled !== undefined && allVerticalsEnabled !== previous.allVerticalsEnabled) entries.push({ type: 'vertical_access_changed', summary: allVerticalsEnabled ? 'All business types enabled' : 'Restricted to primary business type', metadata: { enabled: allVerticalsEnabled } });
+    if (entries.length) await tx.accountActivity.createMany({ data: entries.map((entry) => ({ accountId: req.params.id, actorUserId: req.user.id, ...entry })) });
+    return updated;
+  });
   res.json({
     ok: true,
     disabledAt: account.disabledAt,

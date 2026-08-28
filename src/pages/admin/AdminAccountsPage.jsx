@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { apiFetch, useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
 import Modal from '../../components/ui/Modal';
@@ -214,7 +215,7 @@ export default function AdminAccountsPage() {
             {pagedAccounts.map((a) => (
               <tr key={a.id} data-testid="admin-account-row" className="border-b border-slate-50 last:border-0">
                 <td className="px-4 py-3">
-                  <div className="font-medium text-slate-800">{a.owner ? `${a.owner.firstName} ${a.owner.lastName}` : '—'}</div>
+                  <Link to={`/admin/accounts/${a.id}`} className="font-medium text-slate-800 hover:text-indigo-700 hover:underline">{a.owner ? `${a.owner.firstName} ${a.owner.lastName}` : '—'}</Link>
                   <div className="text-slate-500 text-xs">{a.owner?.email}</div>
                 </td>
                 <td className="hidden sm:table-cell px-4 py-3 text-slate-600">{a.memberCount}</td>
@@ -265,6 +266,7 @@ export default function AdminAccountsPage() {
                   )}
                 </td>
                 <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
+                  <Link to={`/admin/accounts/${a.id}`} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">Profile</Link>
                   {canManageStatus && (
                     <>
                       {!a.approvedAt && !a.disabledAt && (

@@ -35,6 +35,8 @@ model User {
   disabledAccounts    Account[]            @relation("AccountDisabledBy")
   approvedAccounts    Account[]            @relation("AccountApprovedBy")
   reminders           Reminder[]
+  accountAdminNotes   AccountAdminNote[]
+  accountActivities   AccountActivity[]
 }
 
 model Account {
@@ -84,6 +86,8 @@ model Account {
   stagePlotLibraryItems   StagePlotLibraryItem[]
   bookings                Booking[]
   events                  Event[]
+  adminNotes              AccountAdminNote[]
+  activities              AccountActivity[]
 
   // Stripe Connect (Express) — set once onboarding starts. The three
   // booleans are a local cache of the connected Account object, synced by
@@ -155,6 +159,43 @@ model Membership {
   updatedAt   DateTime @updatedAt
 
   @@index([accountId])
+}
+
+// Platform-admin-only account notes. Kept separate from support notes and
+// customer data so they can never leak through an account-facing endpoint.
+// Notes are append-only; pinned/follow-up fields are workflow metadata.
+model AccountAdminNote {
+  id           String    @id @default(cuid())
+  accountId    String
+  account      Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  authorUserId String?
+  author       User?     @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+  body         String    @db.Text
+  category     String    @default("general") // 'general' | 'sales' | 'onboarding' | 'billing' | 'support' | 'risk'
+  pinned       Boolean   @default(false)
+  followUpAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([accountId, createdAt])
+  @@index([accountId, pinned])
+  @@index([followUpAt])
+}
+
+// Immutable platform activity history. metadata holds non-sensitive context
+// such as a plan id or prior/new status; no passwords, tokens, or message bodies.
+model AccountActivity {
+  id          String   @id @default(cuid())
+  accountId   String
+  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  actorUserId String?
+  actor       User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  type        String
+  summary     String
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  @@index([accountId, createdAt])
+  @@index([type, createdAt])
 }
 
 // Raw token is emailed to the user and never stored — only its hash, so a

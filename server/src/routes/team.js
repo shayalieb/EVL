@@ -63,7 +63,7 @@ router.post('/members', asyncHandler(async (req, res) => {
     const user = await tx.user.create({
       data: { firstName: firstName.trim(), lastName: lastName.trim(), email: normalizedEmail, passwordHash },
     });
-    return tx.membership.create({
+    const created = await tx.membership.create({
       data: {
         userId: user.id,
         accountId: req.membership.accountId,
@@ -72,6 +72,8 @@ router.post('/members', asyncHandler(async (req, res) => {
       },
       include: { user: true },
     });
+    await tx.accountActivity.create({ data: { accountId: req.membership.accountId, actorUserId: req.session.userId, type: 'team_member_added', summary: `${created.user.firstName} ${created.user.lastName} joined the team`, metadata: { role: created.role } } });
+    return created;
   });
 
   res.status(201).json({ member: serializeMember(membership) });
@@ -114,12 +116,16 @@ router.patch('/members/:id', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Nothing to update.' });
   }
 
-  const updated = await prisma.membership.update({ where: { id: target.id }, data, include: { user: true } });
+  const updated = await prisma.$transaction(async (tx) => {
+    const member = await tx.membership.update({ where: { id: target.id }, data, include: { user: true } });
+    await tx.accountActivity.create({ data: { accountId: req.membership.accountId, actorUserId: req.session.userId, type: 'team_member_updated', summary: `${member.user.firstName} ${member.user.lastName}'s access was updated`, metadata: { fromRole: target.role, toRole: member.role } } });
+    return member;
+  });
   res.json({ member: serializeMember(updated) });
 }));
 
 router.delete('/members/:id', asyncHandler(async (req, res) => {
-  const target = await prisma.membership.findUnique({ where: { id: req.params.id } });
+  const target = await prisma.membership.findUnique({ where: { id: req.params.id }, include: { user: true } });
   if (!target || target.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Member not found.' });
   }
@@ -132,7 +138,10 @@ router.delete('/members/:id', asyncHandler(async (req, res) => {
   if (target.role === 'admin' && req.membership.role !== 'owner') {
     return res.status(403).json({ error: 'Only the owner can remove an admin.' });
   }
-  await prisma.membership.delete({ where: { id: target.id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.accountActivity.create({ data: { accountId: req.membership.accountId, actorUserId: req.session.userId, type: 'team_member_removed', summary: `${target.user.firstName} ${target.user.lastName} was removed from the team`, metadata: { role: target.role } } });
+    await tx.membership.delete({ where: { id: target.id } });
+  });
   res.json({ ok: true });
 }));
 
