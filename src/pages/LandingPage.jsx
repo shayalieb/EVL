@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import Logo from '../components/ui/Logo';
 import SubmitButton from '../components/ui/SubmitButton';
 import LandingDashboardPreview from '../components/LandingDashboardPreview';
-import { ClientsPipelinePreview, RosterConfirmPreview, DayOfPreview, StayOnTopPreview } from '../components/LandingFeaturePreviews';
 import {
   FileIcon, UsersIcon, ClipboardIcon, BellIcon, ChevronDownIcon,
   CalendarIcon, ClockIcon, DollarIcon, WrenchIcon, AlertIcon, InfoIcon, MapPinIcon, NoteIcon, SearchIcon,
@@ -98,14 +97,14 @@ const FEATURE_GROUPS = [
 ];
 
 // "See it in action" showcase, right after the pain points make the case
-// for why this exists — a handful of glanceable, illustrative screenshots
-// (see LandingFeaturePreviews.jsx's own header comment) rather than the
-// fuller bullet-list breakdown the feature cards give below this.
+// for why this exists — real screenshots of the actual app (captured from
+// a seeded demo account, not stock photography or mockups), so what a
+// visitor sees here is exactly what they'd see after signing up.
 const SCREENSHOTS = [
-  { Preview: ClientsPipelinePreview, caption: 'The booking pipeline, from inquiry to signed contract' },
-  { Preview: RosterConfirmPreview, caption: 'Roster confirmations, tracked without a single text message' },
-  { Preview: DayOfPreview, caption: 'Stage plots and set lists, ready before load-in' },
-  { Preview: StayOnTopPreview, caption: 'A dashboard that flags what actually needs attention' },
+  { src: '/landing/home-dashboard.png', caption: 'The Home dashboard — upcoming events and at-risk alerts, at a glance' },
+  { src: '/landing/event-roster.png', caption: "An event's roster, with each contractor's confirm status tracked live" },
+  { src: '/landing/stage-plot.png', caption: 'The stage plot builder — drag-and-drop, tied to the real lineup' },
+  { src: '/landing/contractors-list.png', caption: 'Your full contractor roster — searchable, with rates on file' },
 ];
 
 const NAV_LINKS = [
@@ -490,21 +489,21 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* See it in action — a handful of glanceable screenshots (real
-          screens, hand-recreated per LandingFeaturePreviews.jsx's own
-          comment) so a visitor sees what this actually looks like before
-          reading a feature-by-feature breakdown. */}
+      {/* See it in action — real screenshots (public/landing/*.png,
+          captured from a seeded demo account, not mockups or stock photos)
+          so a visitor sees the actual app before reading a feature-by-
+          feature breakdown. */}
       <section className="max-w-5xl mx-auto px-4 sm:px-6 py-16 md:py-24">
         <div className="text-center max-w-2xl mx-auto mb-14">
           <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-3">See it in action</p>
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">This is what running a gig actually looks like</h2>
-          <p className="text-slate-500 mt-3">Four screens you'll actually use, from the first inquiry to load-out.</p>
+          <p className="text-slate-500 mt-3">Real screens from the app, not mockups — four you'll actually use.</p>
         </div>
         <div className="grid sm:grid-cols-2 gap-8 sm:gap-10">
           {SCREENSHOTS.map((s, i) => (
             <Reveal key={s.caption} delay={i * 90} data-testid="landing-screenshot" className="group min-w-0">
-              <div className="transition-transform duration-300 ease-out group-hover:-translate-y-1.5">
-                <s.Preview />
+              <div className="rounded-2xl border border-slate-200 shadow-sm group-hover:shadow-lg transition-all duration-300 ease-out group-hover:-translate-y-1.5 overflow-hidden bg-white">
+                <img src={s.src} alt={s.caption} className="w-full h-auto block" loading="lazy" />
               </div>
               <p className="mt-4 text-center text-sm font-semibold text-slate-700">{s.caption}</p>
             </Reveal>
