@@ -62,10 +62,14 @@ export default function ClientsPage() {
   }
 
   async function handleDelete() {
-    await deleteClient(deleteTarget.id);
-    refresh();
-    showToast('Client deleted');
-    setDeleteTarget(null);
+    try {
+      await deleteClient(deleteTarget.id);
+      refresh();
+      showToast('Client deleted');
+      setDeleteTarget(null);
+    } catch (err) {
+      showToast(err.message || 'Failed to delete client', 'error');
+    }
   }
 
   return (
@@ -214,7 +218,7 @@ export default function ClientsPage() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
         title="Delete client?"
-        description={`This will remove ${deleteTarget?.firstName} ${deleteTarget?.lastName} and unlink them from any events.`}
+        description={`This permanently removes ${deleteTarget?.firstName} ${deleteTarget?.lastName}. Clients linked to bookings or events cannot be deleted until those records are reassigned.`}
       />
     </div>
   );

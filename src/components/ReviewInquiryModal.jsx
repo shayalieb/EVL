@@ -4,8 +4,7 @@ import Modal from './ui/Modal';
 import { useData } from '../context/DataContext';
 import { useToast } from './ui/Toast';
 import { applyInquiryLink } from '../lib/inquiryLinks';
-import { applyInquiryResponse, buildBookingMergePatch, resolveClientForMerge } from '../lib/applyInquiry';
-import { formatEventDate } from '../lib/format';
+import { formatEmailInput, formatEventDate, isValidEmailAddress } from '../lib/format';
 import { getBooking } from '../lib/bookings';
 import { findInquiryClientCandidates } from '../lib/clients';
 
@@ -23,21 +22,17 @@ function Row({ label, value }) {
   );
 }
 
-// Read-only view of a submitted InquiryLink, with an explicit Apply step
-// that runs the normal authenticated addClient/addBooking(orUpdateBooking)
-// flow — never writes directly server-side (see InquiryLink's model comment
-// in schema.prisma). Two apply paths:
+// Review view for a submitted InquiryLink. Apply is one atomic server-side
+// operation so client/booking creation and consuming the inquiry either all
+// succeed or all roll back. Two apply paths:
 //  - link.bookingId unset: creates a brand-new Client + Booking.
 //  - link.bookingId set: merges into that existing Booking instead (see
 //    src/lib/applyInquiry.js's buildBookingMergePatch) — used when the link
 //    was sent from an in-progress booking to fill in the remaining gaps.
-// `onApplyOverride`, if given, replaces both built-in paths entirely — used
-// by BookingFormPage's own inline widget so the merge writes into that
-// page's already-open form state (and gets picked up by its normal
-// autosave) instead of going through DataContext.updateBooking, which the
-// currently-open form's one-time hydration effect wouldn't pick up live.
+// `onApplyOverride`, if given, mirrors the committed server result into
+// BookingFormPage's already-open form state after the transaction succeeds.
 export default function ReviewInquiryModal({ open, link, onClose, onApplied, onApplyOverride, navigateAfterApply = true, currentClientId = null }) {
-  const { clients, venues, searchVenues, addClient, addBooking, updateBooking } = useData();
+  const { clients, searchVenues, loadClient, loadBooking } = useData();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [applying, setApplying] = useState(false);
@@ -46,22 +41,26 @@ export default function ReviewInquiryModal({ open, link, onClose, onApplied, onA
   const [clientCandidates, setClientCandidates] = useState([]);
   const [candidatesLoading, setCandidatesLoading] = useState(false);
   const [clientChoice, setClientChoice] = useState(null);
+  const [candidateLookupFailed, setCandidateLookupFailed] = useState(false);
+  const [customerEmail, setCustomerEmail] = useState('');
 
   useEffect(() => {
     if (open && link?.response) {
       const response = link.response;
+      setCustomerEmail(response.email || '');
+      setCandidateLookupFailed(false);
       if (response.venueName) searchVenues(response.venueName).catch(() => {});
       if (currentClientId) {
         setClientCandidates([]);
         setClientChoice('new');
         setCandidatesLoading(false);
       } else {
-      setCandidatesLoading(true);
-      setClientChoice(null);
-      findInquiryClientCandidates(response)
-        .then((candidates) => { setClientCandidates(candidates); setClientChoice(candidates.length ? null : 'new'); })
-        .catch(() => { setClientCandidates([]); setClientChoice('new'); })
-        .finally(() => setCandidatesLoading(false));
+        setCandidatesLoading(true);
+        setClientChoice(null);
+        findInquiryClientCandidates(response)
+          .then((candidates) => { setClientCandidates(candidates); setClientChoice(candidates.length ? null : 'new'); })
+          .catch(() => { setClientCandidates([]); setClientChoice(null); setCandidateLookupFailed(true); })
+          .finally(() => setCandidatesLoading(false));
       }
     }
     if (!open || !link?.bookingId || onApplyOverride) { setTargetBooking(null); setTargetBookingLoading(false); return; }
@@ -83,32 +82,10 @@ export default function ReviewInquiryModal({ open, link, onClose, onApplied, onA
   async function handleApply() {
     setApplying(true);
     try {
-      const venueMatches = r.venueName ? await searchVenues(r.venueName).catch(() => []) : [];
-      const candidateVenues = [...venues, ...venueMatches.filter((match) => !venues.some((venue) => venue.id === match.id))];
-      let bookingId;
-      let clientId;
-      if (onApplyOverride) {
-        ({ bookingId, clientId } = await onApplyOverride(r, { selectedClientId: clientChoice === 'new' ? null : clientChoice, candidates: clientCandidates }));
-      } else if (link.bookingId) {
-        if (!targetBooking) throw new Error('The booking this was sent from no longer exists.');
-        const resolved = await resolveClientForMerge(r, { clients, addClient, currentClientId: targetBooking.clientId, selectedClientId: clientChoice === 'new' ? null : clientChoice, candidates: clientCandidates });
-        const patch = buildBookingMergePatch(r, targetBooking, candidateVenues);
-        await updateBooking(targetBooking.id, { ...patch, clientId: resolved.clientId });
-        bookingId = targetBooking.id;
-        clientId = resolved.clientId;
-      } else {
-        const created = await applyInquiryResponse(r, { clients, venues: candidateVenues, addClient, addBooking, selectedClientId: clientChoice === 'new' ? null : clientChoice, candidates: clientCandidates });
-        bookingId = created.booking.id;
-        clientId = created.client.id;
-      }
-      try {
-        await applyInquiryLink(link.id, { bookingId, clientId });
-      } catch {
-        // Local Client/Booking are already created/updated regardless — same
-        // tolerance as other best-effort calls in this codebase. Re-clicking
-        // Apply on the same link would create/merge a second time, but
-        // that's a rare failure path.
-      }
+      const applied = await applyInquiryLink(link.id, { selectedClientId: clientChoice === 'new' ? null : clientChoice, createNewClient: clientChoice === 'new', customerEmail });
+      const { bookingId, clientId } = applied;
+      await Promise.all([loadClient(clientId), loadBooking(bookingId)]);
+      if (onApplyOverride) await onApplyOverride(r, { bookingId, clientId });
       showToast(link.bookingId ? 'Booking updated from inquiry' : 'Booking created from inquiry');
       onApplied?.(link.id);
       onClose();
@@ -127,7 +104,11 @@ export default function ReviewInquiryModal({ open, link, onClose, onApplied, onA
           <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Your Info</h4>
           <Row label="Name" value={`${r.firstName || ''} ${r.lastName || ''}`.trim()} />
           <Row label="Phone" value={r.phone} />
-          <Row label="Email" value={r.email} />
+          <div className="py-1.5 text-sm">
+            <label className="block text-slate-400 mb-1">Email *</label>
+            <input type="email" required value={customerEmail} onChange={(event) => setCustomerEmail(formatEmailInput(event.target.value))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-700" />
+            {!isValidEmailAddress(customerEmail) && <p className="mt-1 text-xs text-amber-600">Add a valid email before creating the booking.</p>}
+          </div>
         </div>
         <div>
           <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Event Info</h4>
@@ -159,7 +140,9 @@ export default function ReviewInquiryModal({ open, link, onClose, onApplied, onA
         <div data-testid="review-inquiry-modal-client-note" className="text-xs text-slate-600 bg-slate-50 border border-slate-100 rounded-lg px-3 py-3">
           {linkedClientId ? (
             `Already linked to ${alreadyLinkedClient ? `${alreadyLinkedClient.firstName} ${alreadyLinkedClient.lastName}` : 'an existing client'} — that link will be preserved.`
-          ) : candidatesLoading ? 'Checking for similar clients…' : needsClientDecision ? (
+          ) : candidatesLoading ? 'Checking for similar clients…' : candidateLookupFailed ? (
+            <span className="font-semibold text-red-600">Client comparison could not be completed. Close and try again before applying this inquiry.</span>
+          ) : needsClientDecision ? (
             <fieldset>
               <legend className="font-bold text-slate-700 mb-2">Possible existing client found — compare and choose</legend>
               <div className="mb-2 rounded-md border border-indigo-100 bg-white p-2">
@@ -191,7 +174,7 @@ export default function ReviewInquiryModal({ open, link, onClose, onApplied, onA
           <button
             type="button"
             onClick={handleApply}
-            disabled={applying || targetBookingLoading || candidatesLoading || (needsClientDecision && !clientChoice)}
+            disabled={applying || targetBookingLoading || candidatesLoading || candidateLookupFailed || !isValidEmailAddress(customerEmail) || (needsClientDecision && !clientChoice)}
             data-testid="review-inquiry-modal-apply-button"
             className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60"
           >

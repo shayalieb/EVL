@@ -5,6 +5,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createWithPreservedId } from '../lib/idPreservingCreate.js';
 import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPageResponse } from '../lib/pagination.js';
+import { normalizeValidEmail } from '../lib/emailAddress.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -139,8 +140,9 @@ router.post('/', asyncHandler(async (req, res) => {
   if (!id?.trim()) {
     return res.status(400).json({ error: 'id is required.' });
   }
-  if (!firstName?.trim() || !lastName?.trim()) {
-    return res.status(400).json({ error: 'First name and last name are required.' });
+  const normalizedEmail = normalizeValidEmail(email);
+  if (!firstName?.trim() || !lastName?.trim() || !normalizedEmail) {
+    return res.status(400).json({ error: 'First name, last name, and a valid email address are required.' });
   }
 
   const client = await createWithPreservedId(prisma.client, {
@@ -148,7 +150,7 @@ router.post('/', asyncHandler(async (req, res) => {
     accountId: req.membership.accountId,
     firstName: firstName.trim(),
     lastName: lastName.trim(),
-    email: email?.trim() || null,
+    email: normalizedEmail,
     phone: phone?.trim() || null,
     address1: address1?.trim() || null,
     address2: address2?.trim() || null,
@@ -156,7 +158,7 @@ router.post('/', asyncHandler(async (req, res) => {
     state: state?.trim() || null,
     zip: zip?.trim() || null,
     notes: notes?.trim() || null,
-    ...normalizedClientFields({ firstName, lastName, email, phone }),
+    ...normalizedClientFields({ firstName, lastName, email: normalizedEmail, phone }),
   }, req.membership.accountId);
   res.status(201).json({ client: serializeClient(client) });
 }));
@@ -180,7 +182,13 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     if (!lastName.trim()) return res.status(400).json({ error: 'Last name is required.' });
     data.lastName = lastName.trim();
   }
-  if (email !== undefined) data.email = email?.trim() || null;
+  if (email !== undefined) {
+    const normalizedEmail = normalizeValidEmail(email);
+    if (!normalizedEmail) return res.status(400).json({ error: 'A valid client email address is required.' });
+    data.email = normalizedEmail;
+  } else if (!existing.email) {
+    return res.status(400).json({ error: 'Add a valid client email address before saving this legacy record.' });
+  }
   if (phone !== undefined) data.phone = phone?.trim() || null;
   if (address1 !== undefined) data.address1 = address1?.trim() || null;
   if (address2 !== undefined) data.address2 = address2?.trim() || null;
@@ -207,11 +215,14 @@ router.delete('/:id', asyncHandler(async (req, res) => {
   if (!existing || existing.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Client not found.' });
   }
-  await prisma.$transaction([
-    prisma.event.updateMany({ where: { accountId: req.membership.accountId, clientId: existing.id }, data: { clientId: null } }),
-    prisma.booking.updateMany({ where: { accountId: req.membership.accountId, clientId: existing.id }, data: { clientId: null } }),
-    prisma.client.delete({ where: { id: existing.id } }),
+  const [eventCount, bookingCount] = await Promise.all([
+    prisma.event.count({ where: { accountId: req.membership.accountId, clientId: existing.id } }),
+    prisma.booking.count({ where: { accountId: req.membership.accountId, clientId: existing.id } }),
   ]);
+  if (eventCount || bookingCount) {
+    return res.status(409).json({ error: `This client is linked to ${bookingCount} booking${bookingCount === 1 ? '' : 's'} and ${eventCount} event${eventCount === 1 ? '' : 's'}. Reassign those records before deleting the client.`, bookingCount, eventCount });
+  }
+  await prisma.client.delete({ where: { id: existing.id } });
   res.json({ ok: true });
 }));
 

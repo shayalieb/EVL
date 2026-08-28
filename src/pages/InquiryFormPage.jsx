@@ -165,8 +165,9 @@ export default function InquiryFormPage() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Email Address</label>
+                <label className={labelClass}>Email Address *</label>
                 <input
+                  required
                   type="email"
                   value={form.email}
                   onChange={(e) => update('email', formatEmailInput(e.target.value))}

@@ -565,7 +565,7 @@ model ProposalResponse {
 // single whole-blob-replace JSON column (see AccountData), so an
 // unauthenticated public endpoint must never touch it directly. The agent
 // reviews `response` and explicitly "applies" it through the normal
-// authenticated addClient/addBooking(orUpdateBooking) flow client-side; this
+// authenticated inquiry-apply transaction on the server; this
 // row just tracks the link's lifecycle. Usually standalone (sent before any
 // booking exists), but optionally tied to one via `bookingId` when sent from
 // an in-progress Booking to fill in the remaining gaps — see `bookingId`.

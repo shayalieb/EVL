@@ -1,46 +1,3 @@
-import { emptyForm, emptyVenue } from './bookingDefaults';
-
-// Match an existing Client against a submitted inquiry response, without
-// fuzzy name-matching (which could conflate two different people who share
-// a name). Email first (most reliable, case-insensitive), then phone
-// (digits-only, so formatting differences like "(555) 555-0100" vs
-// "5555550100" still match), else no match — a new Client gets created.
-// A match is reused as-is; we never overwrite an existing client's fields,
-// since those were presumably entered deliberately.
-export function findMatchingClient(clients, response) {
-  const email = response.email?.trim().toLowerCase();
-  if (email) {
-    const byEmail = clients.find((c) => c.email?.trim().toLowerCase() === email);
-    if (byEmail) return byEmail;
-  }
-  const digits = (s) => (s || '').replace(/\D/g, '');
-  const phone = digits(response.phone);
-  if (phone) {
-    const byPhone = clients.find((c) => digits(c.phone) === phone);
-    if (byPhone) return byPhone;
-  }
-  return null;
-}
-
-// If the booking a response is being applied to/into already has a linked
-// client, that link is left alone (it was presumably set deliberately —
-// e.g. from a phone call before the inquiry link was even sent). Only when
-// there's no existing link does this fall back to find-or-create.
-export async function resolveClientForMerge(response, { clients, addClient, currentClientId, selectedClientId = null, candidates = [] }) {
-  if (currentClientId) {
-    return { clientId: currentClientId, client: clients.find((c) => c.id === currentClientId) || null, created: false };
-  }
-  let client = selectedClientId
-    ? [...clients, ...candidates].find((candidate) => candidate.id === selectedClientId)
-    : null;
-  if (selectedClientId && !client) throw new Error('The selected client is no longer available.');
-  const created = !client;
-  if (!client) {
-    client = await addClient({ firstName: response.firstName, lastName: response.lastName, phone: response.phone, email: response.email });
-  }
-  return { clientId: client.id, client, created };
-}
-
 // The client's free-text "Details" field lands in the booking's own Notes
 // field (there's no dedicated slot for it) — clearly labeled and appended
 // rather than overwriting whatever the agent already has there, since Notes
@@ -116,41 +73,6 @@ export function generateEventName({ groomName, brideName, eventType }) {
 export function resolveEventName(response) {
   if (response.eventName?.trim()) return response.eventName.trim();
   return generateEventName(response);
-}
-
-// Turns a submitted InquiryLink.response into a real Client + Booking via
-// the normal authenticated addClient/addBooking flow (never writes directly
-// server-side — see InquiryLink's model comment in schema.prisma for why).
-// Builds a full booking/venue shape (not just the inquiry-sourced fields) —
-// addBooking does a flat spread with no deep-defaulting, so a partial venue
-// object here would leave fields like city/state undefined instead of ''.
-export async function applyInquiryResponse(response, { clients, venues, addClient, addBooking, selectedClientId = null, candidates = [] }) {
-  const r = response;
-  const { clientId, client } = await resolveClientForMerge(r, { clients, addClient, currentClientId: null, selectedClientId, candidates });
-
-  const booking = await addBooking({
-    ...emptyForm(),
-    eventName: resolveEventName(r),
-    clientId,
-    eventDate: r.eventDate,
-    eventType: r.eventType,
-    brideName: r.brideName,
-    groomName: r.groomName,
-    notes: mergeNotesWithDetails('', r.details),
-    venue: {
-      ...emptyVenue(),
-      ...resolveVenue(r, venues || []),
-    },
-    // emptyForm()'s '' default is only safe for a controlled input's initial
-    // render — BookingFormPage's own save handler coerces it to null before
-    // ever sending to the server (the column is Float?, and Prisma rejects
-    // an empty string for it outright). This path calls addBooking directly
-    // and skips that coercion, so it has to redo it here — the inquiry form
-    // never collects a deposit amount anyway, so null is always correct.
-    depositAmount: null,
-  });
-
-  return { client, booking };
 }
 
 // For a link sent FROM an existing, in-progress booking (InquiryLink.

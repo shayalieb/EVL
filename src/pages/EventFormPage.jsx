@@ -298,6 +298,13 @@ export default function EventFormPage() {
   // from `event` — otherwise loading an event's data would itself look like
   // an edit and immediately re-persist the just-loaded data.
   const autoSaveSkipRef = useRef(true);
+  const eventSaveChainRef = useRef(Promise.resolve());
+
+  function enqueueEventUpdate(id, patch) {
+    const pending = eventSaveChainRef.current.catch(() => {}).then(() => updateEvent(id, patch));
+    eventSaveChainRef.current = pending;
+    return pending;
+  }
 
   useEffect(() => {
     if (event) {
@@ -384,7 +391,7 @@ export default function EventFormPage() {
     if (!event) return;
     if (autoSaveSkipRef.current) { autoSaveSkipRef.current = false; return; }
     const timer = setTimeout(() => {
-      updateEvent(event.id, form).catch((err) => setError(err.message || 'Failed to save changes.'));
+      enqueueEventUpdate(event.id, form).catch((err) => setError(err.message || 'Failed to save changes.'));
     }, 800);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1184,7 +1191,7 @@ export default function EventFormPage() {
   // actual save for callers that need to know whether it succeeded.
   function persistEvent(statusId) {
     const patch = { ...form, eventStatus: statusId };
-    const promise = event ? updateEvent(event.id, patch) : addEvent(patch);
+    const promise = event ? enqueueEventUpdate(event.id, patch) : addEvent(patch);
     return { patch, promise };
   }
 

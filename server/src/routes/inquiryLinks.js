@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -5,6 +6,8 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
+import { normalizeValidEmail } from '../lib/emailAddress.js';
+import { withSerializableTransaction } from '../lib/serializableTransaction.js';
 
 const router = Router();
 
@@ -77,6 +80,10 @@ router.post('/', asyncHandler(async (req, res) => {
   }
   const { recipientEmail, recipientName, bookingId } = req.body || {};
   const owner = await prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } });
+  const normalizedOwnerEmail = normalizeValidEmail(owner?.email);
+  const normalizedRecipientEmail = recipientEmail?.trim() ? normalizeValidEmail(recipientEmail) : null;
+  if (!normalizedOwnerEmail) return res.status(400).json({ error: 'Your account needs a valid owner email address before inquiry links can be created.' });
+  if (recipientEmail?.trim() && !normalizedRecipientEmail) return res.status(400).json({ error: 'Enter a valid recipient email address.' });
   const token = generateToken();
 
   const link = await prisma.inquiryLink.create({
@@ -86,18 +93,18 @@ router.post('/', asyncHandler(async (req, res) => {
       status: 'open',
       expiresAt: newExpiry(),
       bookingId: bookingId || null,
-      recipientEmail: recipientEmail?.trim() || null,
+      recipientEmail: normalizedRecipientEmail,
       recipientName: recipientName?.trim() || null,
-      ownerEmail: owner.email,
+      ownerEmail: normalizedOwnerEmail,
     },
   });
 
   const inquiryUrl = `${frontendUrl()}/inquiry/${token}`;
   let emailSent = false;
   let emailError = null;
-  if (recipientEmail?.trim()) {
+  if (normalizedRecipientEmail) {
     try {
-      await emailInquiryLink({ accountId: req.membership.accountId, recipientEmail: recipientEmail.trim(), recipientName, inquiryUrl });
+      await emailInquiryLink({ accountId: req.membership.accountId, recipientEmail: normalizedRecipientEmail, recipientName, inquiryUrl });
       await prisma.inquiryLink.update({ where: { id: link.id }, data: { sentAt: new Date() } });
       emailSent = true;
     } catch (err) {
@@ -111,6 +118,8 @@ router.post('/', asyncHandler(async (req, res) => {
 
 async function createReusableLink(accountId, userId) {
   const owner = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+  const ownerEmail = normalizeValidEmail(owner?.email);
+  if (!ownerEmail) inquiryApplyError(400, 'Your account needs a valid owner email address before inquiry links can be created.');
   const token = generateToken();
   return prisma.inquiryLink.create({
     data: {
@@ -120,7 +129,7 @@ async function createReusableLink(accountId, userId) {
       status: 'open',
       isReusable: true,
       expiresAt: null,
-      ownerEmail: owner.email,
+      ownerEmail,
     },
   });
 }
@@ -193,33 +202,128 @@ router.post('/:id/regenerate', asyncHandler(async (req, res) => {
   res.json({ link: serializeForOwner(updated), inquiryLink: inquiryUrl, emailSent, emailError });
 }));
 
-// Marks the inquiry consumed once the agent has already created/updated the
-// Client/Booking client-side (see src/lib/applyInquiry.js) — this route
-// never creates them itself, since that write has to go through the normal
-// authenticated addClient/addBooking(orUpdateBooking) flow, not a bespoke
-// server-side one.
+function inquiryEventName(response) {
+  if (response.eventName?.trim()) return response.eventName.trim();
+  const lastWord = (value) => String(value || '').trim().split(/\s+/).filter(Boolean).at(-1) || '';
+  return [[lastWord(response.groomName), lastWord(response.brideName)].filter(Boolean).join(' & '), response.eventType].filter(Boolean).join(' — ');
+}
+
+function mergeInquiryNotes(existing, details) {
+  if (!details?.trim()) return existing || null;
+  const next = `From inquiry form: ${details.trim()}`;
+  return existing ? `${existing}\n\n${next}` : next;
+}
+
+function inquiryVenue(response, existing = {}, saved = null) {
+  const pick = (...values) => values.find((value) => value) || '';
+  return {
+    name: pick(existing.name, saved?.name, response.venueName),
+    address1: pick(existing.address1, saved?.address1, response.address1),
+    address2: pick(existing.address2, saved?.address2, response.address2),
+    city: pick(existing.city, saved?.city, response.city),
+    state: pick(existing.state, saved?.state, response.state),
+    zip: pick(existing.zip, saved?.zip, response.zip),
+    contactName: pick(existing.contactName, saved?.contactName, response.venueContactName),
+    contactPhone: pick(existing.contactPhone, saved?.contactPhone),
+    contactPhoneExt: pick(existing.contactPhoneExt, saved?.contactPhoneExt),
+    contactEmail: pick(existing.contactEmail, saved?.contactEmail, response.venueContactEmail),
+    locationNote: pick(existing.locationNote, saved?.locationNote),
+    loadInInfo: pick(existing.loadInInfo, saved?.loadInInfo),
+  };
+}
+
+function inquiryApplyError(status, message) {
+  throw Object.assign(new Error(message), { status, expose: true });
+}
+
+// Claims, converts, and marks an inquiry applied in one transaction. A
+// retry after success returns the original result; concurrent attempts can
+// never create a second Client/Booking.
 router.post('/:id/apply', asyncHandler(async (req, res) => {
   if (!effectivePermissions(req.membership).manageBookings) {
     return res.status(403).json({ error: 'Not authorized.' });
   }
-  const { bookingId, clientId } = req.body || {};
-  const link = await prisma.inquiryLink.findUnique({ where: { id: req.params.id } });
-  if (!link || link.accountId !== req.membership.accountId) {
-    return res.status(404).json({ error: 'Inquiry link not found.' });
-  }
-  if (link.status !== 'submitted') {
-    return res.status(400).json({ error: 'Only a submitted inquiry can be applied.' });
-  }
-  const updated = await prisma.inquiryLink.update({
-    where: { id: link.id },
-    data: {
-      status: 'applied',
-      appliedAt: new Date(),
-      appliedBookingId: bookingId || null,
-      appliedClientId: clientId || null,
-    },
+  const selectedClientId = req.body?.selectedClientId || null;
+  const createNewClient = req.body?.createNewClient === true;
+  const requestedCustomerEmail = req.body?.customerEmail;
+  const result = await withSerializableTransaction(prisma, async (tx) => {
+    let link = await tx.inquiryLink.findUnique({ where: { id: req.params.id } });
+    if (!link || link.accountId !== req.membership.accountId) return { status: 404, error: 'Inquiry link not found.' };
+    if (link.status === 'applied' && link.appliedBookingId && link.appliedClientId) {
+      return { link, bookingId: link.appliedBookingId, clientId: link.appliedClientId, repeated: true };
+    }
+    const claimed = await tx.inquiryLink.updateMany({ where: { id: link.id, status: 'submitted' }, data: { status: 'applying' } });
+    if (claimed.count !== 1) return { status: 409, error: 'This inquiry is already being applied. Refresh to see the completed booking.' };
+
+    const response = { ...(link.response || {}), ...(requestedCustomerEmail !== undefined ? { email: requestedCustomerEmail } : {}) };
+    const normalizedEmail = normalizeValidEmail(response.email);
+    if (!normalizedEmail) inquiryApplyError(400, 'The inquiry needs a valid customer email before it can become a booking.');
+
+    let booking = null;
+    if (link.bookingId) {
+      booking = await tx.booking.findFirst({ where: { id: link.bookingId, accountId: link.accountId, deletedAt: null } });
+      if (!booking) inquiryApplyError(404, 'The booking this inquiry belongs to no longer exists.');
+    }
+
+    let clientId = booking?.clientId || selectedClientId;
+    let resolvedClient = null;
+    if (clientId) {
+      resolvedClient = await tx.client.findFirst({ where: { id: clientId, accountId: link.accountId } });
+      if (!resolvedClient) inquiryApplyError(400, 'The selected client is no longer available.');
+    } else {
+      const phoneNormalized = String(response.phone || '').replace(/\D/g, '') || null;
+      const exact = createNewClient ? null : await tx.client.findFirst({ where: { accountId: link.accountId, OR: [
+        { emailNormalized: normalizedEmail },
+        ...(phoneNormalized ? [{ phoneNormalized }] : []),
+      ] }, orderBy: { updatedAt: 'desc' } });
+      if (exact) {
+        resolvedClient = exact;
+        clientId = exact.id;
+      } else {
+        const firstName = String(response.firstName || '').trim();
+        const lastName = String(response.lastName || '').trim();
+        resolvedClient = await tx.client.create({ data: {
+          id: randomUUID(), accountId: link.accountId, firstName, lastName,
+          email: normalizedEmail, emailNormalized: normalizedEmail,
+          phone: response.phone?.trim() || null, phoneNormalized,
+          nameNormalized: `${firstName} ${lastName}`.trim().toLowerCase(),
+        } });
+        clientId = resolvedClient.id;
+      }
+    }
+    if (!normalizeValidEmail(resolvedClient.email)) {
+      resolvedClient = await tx.client.update({ where: { id: resolvedClient.id }, data: { email: normalizedEmail, emailNormalized: normalizedEmail } });
+    }
+
+    const savedVenue = response.venueName ? await tx.venue.findFirst({ where: { accountId: link.accountId, name: { equals: response.venueName.trim(), mode: 'insensitive' } } }) : null;
+    if (booking) {
+      booking = await tx.booking.update({ where: { id: booking.id }, data: {
+        clientId,
+        eventDate: response.eventDate || booking.eventDate,
+        eventType: response.eventType || booking.eventType,
+        brideName: response.brideName || booking.brideName,
+        groomName: response.groomName || booking.groomName,
+        eventName: booking.eventName || inquiryEventName(response),
+        notes: mergeInquiryNotes(booking.notes, response.details),
+        venue: inquiryVenue(response, booking.venue || {}, savedVenue),
+      } });
+    } else {
+      booking = await tx.booking.create({ data: {
+        id: randomUUID(), accountId: link.accountId, clientId,
+        eventName: inquiryEventName(response), eventDate: response.eventDate || null,
+        eventType: response.eventType || null, brideName: response.brideName || null,
+        groomName: response.groomName || null, notes: mergeInquiryNotes(null, response.details),
+        bookingStatus: 'active', venue: inquiryVenue(response, {}, savedVenue),
+      } });
+    }
+
+    link = await tx.inquiryLink.update({ where: { id: link.id }, data: {
+      status: 'applied', appliedAt: new Date(), appliedBookingId: booking.id, appliedClientId: clientId, response: { ...response, email: normalizedEmail },
+    } });
+    return { link, bookingId: booking.id, clientId, repeated: false };
   });
-  res.json({ link: serializeForOwner(updated) });
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  res.json({ link: serializeForOwner(result.link), bookingId: result.bookingId, clientId: result.clientId, repeated: result.repeated });
 }));
 
 // Hard delete, not soft — an inquiry link is a lightweight invite/response
@@ -299,8 +403,9 @@ publicInquiryLinksRouter.post('/:token/submit', asyncHandler(async (req, res) =>
     details,
   } = req.body || {};
 
-  if (!firstName?.trim() || !lastName?.trim() || !eventDate) {
-    return res.status(400).json({ error: 'First name, last name, and event date are required.' });
+  const normalizedEmail = normalizeValidEmail(email);
+  if (!firstName?.trim() || !lastName?.trim() || !normalizedEmail || !eventDate) {
+    return res.status(400).json({ error: 'First name, last name, a valid email address, and event date are required.' });
   }
   if (zip?.trim() && !/^\d{5}$/.test(zip.trim())) {
     return res.status(400).json({ error: 'Zip code must be 5 digits.' });
@@ -310,7 +415,7 @@ publicInquiryLinksRouter.post('/:token/submit', asyncHandler(async (req, res) =>
     firstName: firstName.trim(),
     lastName: lastName.trim(),
     phone: phone?.trim() || '',
-    email: email?.trim() || '',
+    email: normalizedEmail,
     eventDate,
     eventType: eventType || '',
     brideName: brideName?.trim() || '',

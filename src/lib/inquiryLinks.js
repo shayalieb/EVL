@@ -32,12 +32,11 @@ export async function deleteInquiryLink(id) {
   return apiFetch(`/inquiry-links/${id}`, { method: 'DELETE' });
 }
 
-export async function applyInquiryLink(id, { bookingId, clientId }) {
-  const data = await apiFetch(`/inquiry-links/${id}/apply`, {
+export async function applyInquiryLink(id, { selectedClientId = null, createNewClient = false, customerEmail } = {}) {
+  return apiFetch(`/inquiry-links/${id}/apply`, {
     method: 'POST',
-    body: JSON.stringify({ bookingId, clientId }),
+    body: JSON.stringify({ selectedClientId, createNewClient, customerEmail }),
   });
-  return data.link;
 }
 
 // The one account-wide "general" link a business can paste on their own

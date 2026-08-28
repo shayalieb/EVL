@@ -14,7 +14,7 @@ export function getPricingTier(contractor, pricingTierId) {
 }
 
 export function getTierPrice(contractor, pricingTierId) {
-  return getPricingTier(contractor, pricingTierId)?.price || 0;
+  return Number(getPricingTier(contractor, pricingTierId)?.price) || 0;
 }
 
 // Moved here (from DataContext, which still re-exports it for existing

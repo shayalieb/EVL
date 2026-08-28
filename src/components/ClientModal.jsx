@@ -41,8 +41,8 @@ export default function ClientModal({ open, onClose, client, onSaved }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.firstName.trim() || !form.lastName.trim()) {
-      setError('First name and last name are required.');
+    if (!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()) {
+      setError('First name, last name, and email address are required.');
       return;
     }
     try {
@@ -83,8 +83,9 @@ export default function ClientModal({ open, onClose, client, onSaved }) {
             />
           </div>
           <div>
-            <label className={labelClass}>Email Address</label>
+            <label className={labelClass}>Email Address *</label>
             <input
+              required
               type="email"
               value={form.email}
               onChange={(e) => update('email', formatEmailInput(e.target.value))}

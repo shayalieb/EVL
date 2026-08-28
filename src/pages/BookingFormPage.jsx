@@ -23,7 +23,7 @@ import { generateProposalPdf, generateProposalPdfAttachment, getProposalPdfDataU
 import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms, addContractLogNote, regenerateClientSignLink } from '../lib/contracts';
 import { getProposalResponseForBooking, sendProposalResponseLink } from '../lib/proposalResponses';
 import { listInquiryLinks } from '../lib/inquiryLinks';
-import { buildBookingMergePatch, resolveClientForMerge } from '../lib/applyInquiry';
+import { buildBookingMergePatch } from '../lib/applyInquiry';
 import { listInvoices, createInvoice, updateInvoice, sendInvoice, markInvoicePayment, sendReceipt, voidInvoice, getNextInvoiceInfo } from '../lib/invoices';
 import { generateContractPdf, getContractPdfDataUrl } from '../lib/contractPdf';
 import { generateInvoicePdf } from '../lib/invoicePdf';
@@ -375,7 +375,7 @@ export default function BookingFormPage() {
   const navigate = useNavigate();
   const {
     clients, loadBooking, venues, searchVenues, eventTypes, addEventType, bookingStatuses,
-    addClient, addBooking, updateBooking, convertBookingToEvent, addEvent,
+    addBooking, updateBooking, convertBookingToEvent, addEvent,
     proposalTemplates, addProposalTemplate, contractTemplates, addContractTemplate,
   } = useData();
   const { can, currentUser } = useAuth();
@@ -505,6 +505,7 @@ export default function BookingFormPage() {
 
   const client = clients.find((c) => c.id === form.clientId);
   const autoSaveSkipRef = useRef(true);
+  const bookingSaveChainRef = useRef(Promise.resolve());
   const termsSkipRef = useRef(true);
   const autoCreatedEventRef = useRef(false);
   // Background refreshes (e.g. the window-focus refetch in AuthContext) hand
@@ -512,6 +513,12 @@ export default function BookingFormPage() {
   // otherwise re-run this effect and clobber whatever the user is mid-typing.
   // Only actually hydrate once per booking id.
   const hydratedBookingIdRef = useRef(null);
+
+  function enqueueBookingUpdate(id, patch) {
+    const pending = bookingSaveChainRef.current.catch(() => {}).then(() => updateBooking(id, patch));
+    bookingSaveChainRef.current = pending;
+    return pending;
+  }
 
   useEffect(() => {
     if (booking) {
@@ -759,7 +766,10 @@ export default function BookingFormPage() {
   useEffect(() => {
     if (contract?.status === 'fully_signed' && booking && !booking.convertedEventId && !autoCreatedEventRef.current) {
       autoCreatedEventRef.current = true;
-      createEventFromContract(false);
+      createEventFromContract(false).catch((err) => {
+        autoCreatedEventRef.current = false;
+        showToast(err.message || 'Failed to create the signed event', 'error');
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contract?.status, booking?.convertedEventId]);
@@ -854,13 +864,12 @@ export default function BookingFormPage() {
   // hydration effect only ever runs once per booking id, so a live
   // updateBooking() call wouldn't be reflected here without a reload. The
   // existing 800ms autosave effect persists it normally from here.
-  async function handleApplyInquiryOverride(response, { selectedClientId = null, candidates = [] } = {}) {
+  async function handleApplyInquiryOverride(response, { clientId } = {}) {
     const venueMatches = response.venueName ? await searchVenues(response.venueName).catch(() => []) : [];
     const candidateVenues = [...venues, ...venueMatches.filter((match) => !venues.some((venue) => venue.id === match.id))];
     const patch = buildBookingMergePatch(response, form, candidateVenues);
-    const resolved = await resolveClientForMerge(response, { clients, addClient, currentClientId: form.clientId, selectedClientId, candidates });
-    setForm((f) => ({ ...f, ...patch, clientId: resolved.clientId }));
-    return { bookingId: form.id, clientId: resolved.clientId };
+    setForm((f) => ({ ...f, ...patch, clientId }));
+    return { bookingId: form.id, clientId };
   }
 
   function validate() {
@@ -881,7 +890,7 @@ export default function BookingFormPage() {
   // the actual save, for callers that need to know whether it succeeded.
   function persistBooking() {
     const patch = buildBookingPatch();
-    const promise = booking ? updateBooking(booking.id, patch) : addBooking(patch);
+    const promise = booking ? enqueueBookingUpdate(booking.id, patch) : addBooking(patch);
     return { patch, promise };
   }
 
@@ -932,7 +941,7 @@ export default function BookingFormPage() {
   function handlePushToProposal() {
     const proposal = { hours: '', lineItems: [], sections: currentUser.proposalTemplate?.sections || [], offerings: [], sentAt: null, sentTo: null, log: [] };
     update('proposal', proposal);
-    if (booking) updateBooking(booking.id, { proposal });
+    if (booking) enqueueBookingUpdate(booking.id, { proposal });
   }
 
   async function handleDownloadProposal() {
@@ -1030,7 +1039,7 @@ export default function BookingFormPage() {
         sentTo: client.email,
         log: appendLogEntry(patch.proposal?.log, { type: 'sent', actorEmail: currentUser.email, note: null }),
       };
-      updateBooking(booking.id, { proposal: sentProposal });
+      enqueueBookingUpdate(booking.id, { proposal: sentProposal });
       update('proposal', sentProposal);
       showToast(`Proposal sent to ${client.email}`);
     } catch (err) {
@@ -1069,14 +1078,14 @@ export default function BookingFormPage() {
       sentTo: client?.email || form.proposal.sentTo || 'Marked sent manually',
       log: appendLogEntry(form.proposal.log, { type: 'manual_sent', actorEmail: currentUser.email, note: reason }),
     };
-    updateBooking(booking.id, { proposal: sentProposal });
+    enqueueBookingUpdate(booking.id, { proposal: sentProposal });
     update('proposal', sentProposal);
     showToast('Proposal marked as sent');
   }
 
   function handleAddProposalLogNote(note) {
     const updatedProposal = { ...form.proposal, log: appendLogEntry(form.proposal.log, { type: 'note', actorEmail: currentUser.email, note }) };
-    updateBooking(booking.id, { proposal: updatedProposal });
+    enqueueBookingUpdate(booking.id, { proposal: updatedProposal });
     update('proposal', updatedProposal);
   }
 
@@ -1534,7 +1543,7 @@ export default function BookingFormPage() {
   // Fires automatically once a contract is fully signed (see the effect
   // above) — navigateAfter is only true for a future manual trigger, if one
   // is ever added back; today it's always called silently.
-  function createEventFromContract(navigateAfter) {
+  async function createEventFromContract(navigateAfter) {
     if (!booking || !contract) return;
     const contractBooking = contract.snapshot.booking || {};
     const grandTotal = computeGrandTotal(contract.snapshot.lineItems, contract.snapshot.offerings);
@@ -1544,7 +1553,7 @@ export default function BookingFormPage() {
       contract.snapshot.hours ? `Estimated hours: ${contract.snapshot.hours}` : null,
       `Contract total: ${currency(grandTotal)}`,
     ].filter(Boolean);
-    const event = addEvent({
+    const event = await addEvent({
       name,
       eventType: contractBooking.eventType || '',
       eventDate: contractBooking.eventDate || '',
@@ -1554,7 +1563,7 @@ export default function BookingFormPage() {
       contactPhone: client?.phone || '',
       eventNote: noteLines.join(' '),
     });
-    updateBooking(booking.id, { convertedEventId: event.id });
+    await enqueueBookingUpdate(booking.id, { convertedEventId: event.id });
     if (navigateAfter) {
       showToast('Event created from signed contract');
       navigate(`/events/${event.id}`);
