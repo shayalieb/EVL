@@ -5,7 +5,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachUser, requirePlatformAdmin, requireAdminPermission, allPermissions } from '../lib/membership.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
-import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
+import { sendMail, buildFromHeader, buildActionEmailHtml, escapeHtml } from '../lib/mailer.js';
 import { uploadFile, getSignedDownloadUrl } from '../lib/fileStorage.js';
 import { VERTICALS } from '../lib/verticals.js';
 import { requireCsrfHeader } from '../lib/csrf.js';
@@ -15,6 +15,7 @@ import { priceIdFor } from '../lib/plans.js';
 
 const router = Router();
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+const REVIEW_LINK_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_FILES = 3;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FILE_SIZE, files: MAX_FILES } });
@@ -305,6 +306,74 @@ router.delete('/accounts/:id', asyncHandler(async (req, res) => {
 
 router.get('/website/config', asyncHandler(async (req, res) => {
   res.json({ config: await getWebsiteAdminConfig() });
+}));
+
+function reviewRequestLink(request) { return `${process.env.FRONTEND_URL || 'http://localhost:5173'}/review/${request.publicToken}`; }
+function serializeReviewRequest(request) {
+  return { ...request, tokenHash: undefined, publicToken: undefined, reviewLink: reviewRequestLink(request) };
+}
+async function emailReviewRequest(request) {
+  await sendMail({
+    from: buildFromHeader(), to: request.recipientEmail, subject: 'Share your experience with GigWorks',
+    html: buildActionEmailHtml({ heading: 'How is GigWorks working for you?', bodyHtml: `<p>Hi ${escapeHtml(request.recipientName) || 'there'},</p><p>We'd value your honest feedback about GigWorks. Your review will be moderated before anything is displayed publicly.</p>`, buttonText: 'Write a review', buttonUrl: reviewRequestLink(request) }),
+  });
+  return prisma.websiteReviewRequest.update({ where: { id: request.id }, data: { sentAt: new Date() } });
+}
+
+router.get('/website/review-requests', asyncHandler(async (req, res) => {
+  const requests = await prisma.websiteReviewRequest.findMany({ orderBy: { createdAt: 'desc' } });
+  res.json({ requests: requests.map(serializeReviewRequest) });
+}));
+
+router.post('/website/review-requests', asyncHandler(async (req, res) => {
+  const { recipientName, recipientEmail, groupName, sendEmail } = req.body || {};
+  const email = recipientEmail?.trim().toLowerCase();
+  if (!email || !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'A valid customer email is required.' });
+  const token = generateToken();
+  let request = await prisma.websiteReviewRequest.create({ data: { tokenHash: hashToken(token), publicToken: token, recipientName: recipientName?.trim().slice(0, 120) || null, recipientEmail: email, requestedGroupName: groupName?.trim().slice(0, 140) || null, expiresAt: new Date(Date.now() + REVIEW_LINK_TTL_MS) } });
+  let emailError = null;
+  if (sendEmail === true) {
+    try { request = await emailReviewRequest(request); }
+    catch (err) { console.error(`Failed to send review request ${request.id}:`, err); emailError = 'The link was created, but the email could not be sent. Copy the link and share it manually.'; }
+  }
+  res.status(201).json({ request: serializeReviewRequest(request), emailError });
+}));
+
+router.post('/website/review-requests/:id/send', asyncHandler(async (req, res) => {
+  let request = await prisma.websiteReviewRequest.findUnique({ where: { id: req.params.id } });
+  if (!request) return res.status(404).json({ error: 'Review request not found.' });
+  if (request.status !== 'open') return res.status(409).json({ error: 'Only open review requests can be sent.' });
+  if (request.expiresAt <= new Date()) {
+    const token = generateToken();
+    request = await prisma.websiteReviewRequest.update({ where: { id: request.id }, data: { tokenHash: hashToken(token), publicToken: token, expiresAt: new Date(Date.now() + REVIEW_LINK_TTL_MS) } });
+  }
+  request = await emailReviewRequest(request);
+  res.json({ request: serializeReviewRequest(request) });
+}));
+
+router.post('/website/review-requests/:id/approve', asyncHandler(async (req, res) => {
+  const result = await prisma.$transaction(async (tx) => {
+    const request = await tx.websiteReviewRequest.findUnique({ where: { id: req.params.id } });
+    if (!request) return { error: 'Review request not found.', status: 404 };
+    if (request.status !== 'submitted') return { error: 'Only pending submissions can be approved.', status: 409 };
+    const row = await tx.websiteSetting.findUnique({ where: { id: 'main' } });
+    const config = normalizeWebsiteConfig(row?.config || {});
+    const reviewId = `submission-${request.id}`;
+    if (!config.testimonials.reviews.some((review) => review.id === reviewId)) config.testimonials.reviews.unshift({ id: reviewId, groupName: request.groupName, reviewerName: request.reviewerName || '', groupType: request.groupType || '', quote: request.quote, rating: request.rating, published: false, featured: false, storyPublished: false, storyTitle: request.storyTitle || '', storySummary: request.storySummary || '', storyBody: request.storyBody || '' });
+    const normalized = normalizeWebsiteConfig(config);
+    await tx.websiteSetting.upsert({ where: { id: 'main' }, create: { id: 'main', config: normalized, updatedById: req.user.id }, update: { config: normalized, updatedById: req.user.id } });
+    const updated = await tx.websiteReviewRequest.update({ where: { id: request.id }, data: { status: 'approved', reviewedAt: new Date() } });
+    return { request: updated, config: normalized };
+  });
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  res.json({ request: serializeReviewRequest(result.request), config: result.config });
+}));
+
+router.post('/website/review-requests/:id/decline', asyncHandler(async (req, res) => {
+  const updated = await prisma.websiteReviewRequest.updateMany({ where: { id: req.params.id, status: 'submitted' }, data: { status: 'declined', reviewedAt: new Date() } });
+  if (updated.count !== 1) return res.status(409).json({ error: 'Only pending submissions can be declined.' });
+  const request = await prisma.websiteReviewRequest.findUnique({ where: { id: req.params.id } });
+  res.json({ request: serializeReviewRequest(request) });
 }));
 
 router.put('/website/config', asyncHandler(async (req, res) => {

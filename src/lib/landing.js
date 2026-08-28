@@ -17,3 +17,11 @@ export async function sendContactMessage({ name, email, message }) {
     body: JSON.stringify({ name, email, message }),
   });
 }
+
+export async function getReviewRequest(token) {
+  return apiFetch(`/landing/review/${encodeURIComponent(token)}`);
+}
+
+export async function submitReview(token, review) {
+  return apiFetch(`/landing/review/${encodeURIComponent(token)}`, { method: 'POST', body: JSON.stringify(review) });
+}

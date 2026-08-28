@@ -1426,3 +1426,34 @@ model WebsiteSetting {
   updatedById String?
   updatedAt   DateTime @updatedAt
 }
+
+// Secure, platform-owned review invitations and their original submissions.
+// Approved submissions are copied into WebsiteSetting as unpublished drafts;
+// this record remains unchanged as the moderation/audit source of truth.
+model WebsiteReviewRequest {
+  id                 String    @id @default(cuid())
+  tokenHash          String    @unique
+  publicToken        String    @unique
+  recipientName      String?
+  recipientEmail     String
+  requestedGroupName String?
+  status             String    @default("open") // 'open' | 'submitted' | 'approved' | 'declined'
+  expiresAt          DateTime
+  sentAt             DateTime?
+  submittedAt        DateTime?
+  reviewedAt         DateTime?
+  reviewerName       String?
+  groupName          String?
+  groupType          String?
+  rating             Int?
+  quote              String?   @db.Text
+  storyTitle         String?
+  storySummary       String?   @db.Text
+  storyBody          String?   @db.Text
+  displayConsent     Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([status, createdAt])
+  @@index([recipientEmail])
+}

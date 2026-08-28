@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
 
@@ -52,12 +53,20 @@ function StringList({ items, onChange, label = 'Items' }) {
 
 export default function AdminWebsitePage() {
   const { showToast } = useToast();
+  const [searchParams] = useSearchParams();
   const [config, setConfig] = useState(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState('launch');
+  const [tab, setTab] = useState(() => TABS.some(([id]) => id === searchParams.get('tab')) ? searchParams.get('tab') : 'launch');
+  const [reviewRequests, setReviewRequests] = useState([]);
+  const [requestForm, setRequestForm] = useState({ recipientName: '', recipientEmail: '', groupName: '' });
+  const [requestBusy, setRequestBusy] = useState(false);
 
-  useEffect(() => { apiFetch('/admin/website/config').then((data) => setConfig(data.config)).catch((err) => setError(err.message)); }, []);
+  useEffect(() => {
+    Promise.all([apiFetch('/admin/website/config'), apiFetch('/admin/website/review-requests')])
+      .then(([configData, requestData]) => { setConfig(configData.config); setReviewRequests(requestData.requests); })
+      .catch((err) => setError(err.message));
+  }, []);
 
   function updateSection(section, key, value) { setConfig((current) => ({ ...current, [section]: { ...current[section], [key]: value } })); }
   function updateNested(section, collection, index, key, value) {
@@ -87,6 +96,32 @@ export default function AdminWebsitePage() {
   }
   function updateReview(index, key, value) { updateNested('testimonials', 'reviews', index, key, value); }
   function removeReview(index) { updateSection('testimonials', 'reviews', config.testimonials.reviews.filter((_, i) => i !== index)); }
+  async function createReviewRequest(sendEmail) {
+    if (!requestForm.recipientEmail.trim()) return showToast('Enter the customer email first.', 'error');
+    setRequestBusy(true);
+    try {
+      const data = await apiFetch('/admin/website/review-requests', { method: 'POST', body: JSON.stringify({ ...requestForm, sendEmail }) });
+      setReviewRequests((current) => [data.request, ...current]);
+      setRequestForm({ recipientName: '', recipientEmail: '', groupName: '' });
+      if (data.emailError) showToast(data.emailError, 'error'); else showToast(sendEmail ? 'Review request emailed' : 'Review link created');
+    } catch (err) { showToast(err.message, 'error'); } finally { setRequestBusy(false); }
+  }
+  async function copyReviewLink(link) {
+    try { await navigator.clipboard.writeText(link); showToast('Review link copied'); }
+    catch { showToast('Could not copy the link. Select and copy it manually.', 'error'); }
+  }
+  async function sendReviewRequest(id) {
+    try { const data = await apiFetch(`/admin/website/review-requests/${id}/send`, { method: 'POST' }); setReviewRequests((current) => current.map((item) => item.id === id ? data.request : item)); showToast('Review request emailed'); }
+    catch (err) { showToast(err.message, 'error'); }
+  }
+  async function moderateReview(id, decision) {
+    try {
+      const data = await apiFetch(`/admin/website/review-requests/${id}/${decision}`, { method: 'POST' });
+      setReviewRequests((current) => current.map((item) => item.id === id ? data.request : item));
+      if (data.config) setConfig(data.config);
+      showToast(decision === 'approve' ? 'Review approved as an unpublished draft' : 'Review declined');
+    } catch (err) { showToast(err.message, 'error'); }
+  }
 
   async function save(e) {
     e.preventDefault(); setSaving(true);
@@ -100,7 +135,7 @@ export default function AdminWebsitePage() {
   return (
     <form onSubmit={save} className="max-w-6xl space-y-5">
       <div className="flex items-center justify-between gap-4"><div><h2 className="text-2xl font-bold text-slate-800">Website</h2><p className="text-sm text-slate-500 mt-1">Edit and publish every section of the public landing page.</p></div><button disabled={saving} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold disabled:opacity-50">{saving ? 'Publishing…' : 'Publish changes'}</button></div>
-      <div className="overflow-x-auto border-b border-slate-200"><div className="flex min-w-max gap-1">{TABS.map(([id, label]) => <button key={id} type="button" onClick={() => setTab(id)} className={`px-4 py-2.5 text-sm font-semibold border-b-2 ${tab === id ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>{label}</button>)}</div></div>
+      <div className="overflow-x-auto border-b border-slate-200"><div className="flex min-w-max gap-1">{TABS.map(([id, label]) => <button key={id} type="button" onClick={() => setTab(id)} className={`px-4 py-2.5 text-sm font-semibold border-b-2 ${tab === id ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>{label}{id === 'reviews' && reviewRequests.some((item) => item.status === 'submitted') && <span className="ml-2 inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] text-white">{reviewRequests.filter((item) => item.status === 'submitted').length}</span>}</button>)}</div></div>
 
       {tab === 'launch' && <Card title="Public signup"><div className="flex items-start justify-between gap-4"><p className="text-sm text-slate-500 max-w-xl">When disabled, visitors join the waitlist. When enabled, pricing buttons create accounts and start checkout.</p><label className="flex items-center gap-2 text-sm font-semibold text-slate-700"><input type="checkbox" checked={config.publicSignupsEnabled} onChange={(e) => setConfig((current) => ({ ...current, publicSignupsEnabled: e.target.checked }))} className="w-4 h-4 rounded" />Public signup live</label></div></Card>}
 
@@ -151,6 +186,18 @@ export default function AdminWebsitePage() {
       </div>}
 
       {tab === 'reviews' && <div className="space-y-5">
+        <Card title="Request a customer review">
+          <p className="text-sm text-slate-500">Create a secure 30-day link. You can email it directly from GigWorks or copy it to send yourself.</p>
+          <div className="grid sm:grid-cols-3 gap-3"><Field label="Customer name (optional)" value={requestForm.recipientName} onChange={(v) => setRequestForm((current) => ({ ...current, recipientName: v }))} /><Field label="Customer email" type="email" value={requestForm.recipientEmail} onChange={(v) => setRequestForm((current) => ({ ...current, recipientEmail: v }))} /><Field label="Group or business (optional)" value={requestForm.groupName} onChange={(v) => setRequestForm((current) => ({ ...current, groupName: v }))} /></div>
+          <div className="flex flex-wrap gap-2"><button type="button" disabled={requestBusy} onClick={() => createReviewRequest(true)} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Create and email link</button><button type="button" disabled={requestBusy} onClick={() => createReviewRequest(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50">Create link only</button></div>
+        </Card>
+        {reviewRequests.length > 0 && <Card title={`Review request inbox${reviewRequests.some((item) => item.status === 'submitted') ? ` · ${reviewRequests.filter((item) => item.status === 'submitted').length} pending` : ''}`}>
+          <div className="space-y-3">{reviewRequests.map((request) => <article key={request.id} className={`rounded-xl border p-4 ${request.status === 'submitted' ? 'border-amber-300 bg-amber-50/50' : 'border-slate-200'}`}>
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><p className="font-bold text-slate-800">{request.groupName || request.requestedGroupName || request.recipientName || request.recipientEmail}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${request.status === 'submitted' ? 'bg-amber-200 text-amber-900' : request.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : request.status === 'declined' ? 'bg-slate-200 text-slate-600' : 'bg-indigo-100 text-indigo-700'}`}>{request.status === 'submitted' ? 'Pending review' : request.status}</span></div><p className="text-xs text-slate-500 mt-1">{request.recipientEmail}{request.sentAt ? ` · Sent ${new Date(request.sentAt).toLocaleDateString()}` : ' · Not emailed yet'}</p></div><div className="flex flex-wrap gap-2">{request.status === 'open' && <><button type="button" onClick={() => copyReviewLink(request.reviewLink)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700">Copy link</button><button type="button" onClick={() => sendReviewRequest(request.id)} className="rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">{request.sentAt ? 'Resend' : 'Send email'}</button></>}{request.status === 'submitted' && <><button type="button" onClick={() => moderateReview(request.id, 'approve')} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white">Approve as draft</button><button type="button" onClick={() => moderateReview(request.id, 'decline')} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600">Decline</button></>}</div></div>
+            {request.status !== 'open' && request.quote && <div className="mt-4 border-t border-slate-200/70 pt-4"><div className="text-amber-400" aria-label={`${request.rating} stars`}>{'★'.repeat(request.rating)}</div><blockquote className="mt-2 text-sm text-slate-700">“{request.quote}”</blockquote>{(request.storyTitle || request.storyBody) && <details className="mt-3 text-sm"><summary className="cursor-pointer font-semibold text-indigo-700">View submitted story</summary><div className="mt-2 text-slate-600 whitespace-pre-line"><strong>{request.storyTitle}</strong>{request.storySummary && `\n${request.storySummary}`}{request.storyBody && `\n\n${request.storyBody}`}</div></details>}</div>}
+            {request.status === 'open' && <input readOnly value={request.reviewLink} onFocus={(e) => e.target.select()} className="mt-3 w-full rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500" aria-label={`Review link for ${request.recipientEmail}`} />}
+          </article>)}</div>
+        </Card>}
         <Card title="Customer reviews and stories">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <p className="text-sm text-slate-500 max-w-2xl">Nothing in this section appears publicly until the master switch and the individual review's publish switch are both enabled. Featured reviews rotate on the homepage and link to the customer stories page.</p>
