@@ -11,6 +11,10 @@ export function formatEmailInput(value) {
   return value.trim().toLowerCase();
 }
 
+export function isValidEmailAddress(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formatEmailInput(value || ''));
+}
+
 export function formatZip(value) {
   return value.replace(/\D/g, '').slice(0, 5);
 }

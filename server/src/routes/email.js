@@ -5,6 +5,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership } from '../lib/membership.js';
 import { resolveFromHeader, sendMail, buildActionEmailHtml, buildInlineImageAttachments } from '../lib/mailer.js';
 import { emailSendLimiter, requireEmailSendPermission } from '../lib/emailSendPolicy.js';
+import { normalizeValidEmail } from '../lib/emailAddress.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -18,6 +19,9 @@ router.post('/send', requireEmailSendPermission, emailSendLimiter, asyncHandler(
   if (!to?.trim() || !subject?.trim() || !body?.trim()) {
     return res.status(400).json({ error: 'Recipient, subject, and body are required.' });
   }
+  const recipientEmail = normalizeValidEmail(to);
+  if (!recipientEmail) return res.status(400).json({ error: 'Enter a valid recipient email address.' });
+  if (replyTo && !normalizeValidEmail(replyTo)) return res.status(400).json({ error: 'Enter a valid reply-to email address.' });
 
   // Ad hoc attachment (e.g. a freshly generated proposal PDF) sent as base64
   // straight from the client — same shape as emailThreads.js's pdfAttachment.
@@ -39,7 +43,7 @@ router.post('/send', requireEmailSendPermission, emailSendLimiter, asyncHandler(
     // carries richer content than a plain cover note (StagePlotEmailModal.jsx's
     // ad hoc, non-roster recipients) — see buildActionEmailHtml's own
     // comment for why the default width squeezes that content.
-    ({ data, error } = await sendMail({ from, to, subject, html: buildActionEmailHtml({ businessInfo, bodyHtml: body, ...(wide ? { maxWidth: 640 } : {}) }), replyTo, attachments }));
+    ({ data, error } = await sendMail({ from, to: recipientEmail, subject, html: buildActionEmailHtml({ businessInfo, bodyHtml: body, ...(wide ? { maxWidth: 640 } : {}) }), replyTo: replyTo ? normalizeValidEmail(replyTo) : undefined, attachments }));
   } catch {
     return res.status(503).json({ error: 'Email sending is not configured yet.' });
   }

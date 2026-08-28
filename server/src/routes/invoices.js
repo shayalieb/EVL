@@ -7,6 +7,7 @@ import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '.
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { paidCheckoutSessionMatchesInvoice } from '../lib/invoicePaymentVerification.js';
 import { getStripeClient } from '../lib/stripe.js';
+import { normalizeValidEmail } from '../lib/emailAddress.js';
 
 const router = Router();
 
@@ -112,14 +113,17 @@ router.post('/', asyncHandler(async (req, res) => {
     return res.status(403).json({ error: 'Not authorized.' });
   }
   const { bookingId, recipientEmail, recipientName, snapshot, dueDate, memo, number, acceptPayment } = req.body || {};
-  if (!bookingId?.trim() || !recipientEmail?.trim() || !snapshot) {
-    return res.status(400).json({ error: 'bookingId, recipientEmail, and snapshot are required.' });
+  const normalizedRecipientEmail = normalizeValidEmail(recipientEmail);
+  if (!bookingId?.trim() || !normalizedRecipientEmail || !snapshot) {
+    return res.status(400).json({ error: 'bookingId, a valid recipient email, and snapshot are required.' });
   }
 
   const [owner, account] = await Promise.all([
     prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } }),
     prisma.account.findUnique({ where: { id: req.membership.accountId } }),
   ]);
+  const normalizedOwnerEmail = normalizeValidEmail(owner?.email);
+  if (!normalizedOwnerEmail) return res.status(400).json({ error: 'Your account needs a valid owner email address before invoices can be created.' });
   const usedNumber = parsePositiveInt(number) ?? account.nextInvoiceNumber;
 
   const invoice = await prisma.invoice.create({
@@ -132,9 +136,9 @@ router.post('/', asyncHandler(async (req, res) => {
       memo: memo || null,
       status: 'draft',
       acceptPayment: acceptPayment !== undefined ? !!acceptPayment : true,
-      recipientEmail,
+      recipientEmail: normalizedRecipientEmail,
       recipientName: recipientName || null,
-      ownerEmail: owner.email,
+      ownerEmail: normalizedOwnerEmail,
     },
   });
 
@@ -167,11 +171,13 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   }
 
   const { recipientEmail, recipientName, snapshot, dueDate, memo, number, acceptPayment } = req.body || {};
+  const normalizedRecipientEmail = recipientEmail === undefined ? undefined : normalizeValidEmail(recipientEmail);
+  if (recipientEmail !== undefined && !normalizedRecipientEmail) return res.status(400).json({ error: 'A valid recipient email address is required.' });
   const parsedNumber = parsePositiveInt(number);
   const updated = await prisma.invoice.update({
     where: { id: invoice.id },
     data: {
-      ...(recipientEmail !== undefined ? { recipientEmail } : {}),
+      ...(normalizedRecipientEmail !== undefined ? { recipientEmail: normalizedRecipientEmail } : {}),
       ...(recipientName !== undefined ? { recipientName: recipientName || null } : {}),
       ...(snapshot !== undefined ? { snapshot } : {}),
       ...(dueDate !== undefined ? { dueDate: dueDate ? new Date(dueDate) : null } : {}),

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import Badge from './ui/Badge';
-import { formatCurrency as currency } from '../lib/format';
+import { formatCurrency as currency, isValidEmailAddress } from '../lib/format';
 import { getPricingTier, getPricingTiers, getOvertimeHours, getOvertimeAmount } from '../lib/pricingTiers';
 import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
 
@@ -22,6 +22,7 @@ export default function ContractorPickerRow({
   if (!contractor) return null;
   const status = inquiryStatuses.find((s) => s.id === booking.inquiryStatusId);
   const unreadCount = threadSummary?.unreadCount || 0;
+  const hasValidEmail = isValidEmailAddress(contractor.email);
   const tiers = getPricingTiers(contractor);
   const activeTier = getPricingTier(contractor, booking.pricingTierId);
   const tierTracksOvertime = Number(activeTier?.includedHours) > 0 && Number(activeTier?.overtimeRate) > 0;
@@ -128,9 +129,9 @@ export default function ContractorPickerRow({
             <select
               value={selectedTemplateId}
               onChange={(e) => setSelectedTemplateId(e.target.value)}
-              disabled={!contractor.email}
+              disabled={!hasValidEmail}
               data-testid="contractor-picker-row-template-select"
-              className={`shrink-0 w-36 px-2 py-1.5 rounded-lg border border-slate-300 text-xs ${contractor.email ? '' : 'invisible'}`}
+              className={`shrink-0 w-36 px-2 py-1.5 rounded-lg border border-slate-300 text-xs ${hasValidEmail ? '' : 'invisible'}`}
             >
               <option value="">Select template…</option>
               {emailTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -138,9 +139,9 @@ export default function ContractorPickerRow({
             <button
               type="button"
               onClick={handleSend}
-              disabled={!contractor.email || !selectedTemplateId}
+              disabled={!hasValidEmail || !selectedTemplateId}
               data-testid="contractor-picker-row-send-email-button"
-              className={`${sendEmailButtonClass} ${contractor.email ? '' : 'invisible'}`}
+              className={`${sendEmailButtonClass} ${hasValidEmail ? '' : 'invisible'}`}
             >
               Send Email
             </button>

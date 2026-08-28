@@ -7,6 +7,7 @@ import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { withSerializableTransaction } from '../lib/serializableTransaction.js';
+import { normalizeValidEmail } from '../lib/emailAddress.js';
 
 const router = Router();
 
@@ -103,14 +104,17 @@ router.post('/', asyncHandler(async (req, res) => {
     return res.status(403).json({ error: 'Not authorized.' });
   }
   const { bookingId, recipientEmail, recipientName, snapshot, terms, manual, reason } = req.body || {};
-  if (!bookingId?.trim() || !recipientEmail?.trim() || !snapshot) {
-    return res.status(400).json({ error: 'bookingId, recipientEmail, and snapshot are required.' });
+  const normalizedRecipientEmail = normalizeValidEmail(recipientEmail);
+  if (!bookingId?.trim() || !normalizedRecipientEmail || !snapshot) {
+    return res.status(400).json({ error: 'bookingId, a valid recipient email, and snapshot are required.' });
   }
   if (manual && !reason?.trim()) {
     return res.status(400).json({ error: 'A reason is required to mark a contract as sent manually.' });
   }
 
   const owner = await prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } });
+  const normalizedOwnerEmail = normalizeValidEmail(owner?.email);
+  if (!normalizedOwnerEmail) return res.status(400).json({ error: 'Your account needs a valid owner email address before contracts can be created.' });
   const clientToken = generateToken();
   // Generated up front (not only once the client signs) so the owner can
   // grab their own sign-from-anywhere link immediately too, e.g. to sign
@@ -125,9 +129,9 @@ router.post('/', asyncHandler(async (req, res) => {
       snapshot,
       terms: terms || null,
       status: 'sent',
-      recipientEmail,
+      recipientEmail: normalizedRecipientEmail,
       recipientName: recipientName || null,
-      ownerEmail: owner.email,
+      ownerEmail: normalizedOwnerEmail,
       clientTokenHash: hashToken(clientToken),
       ownerTokenHash: hashToken(ownerToken),
       sentAt,
@@ -135,8 +139,8 @@ router.post('/', asyncHandler(async (req, res) => {
       // etc.) skips the actual email below, but still gets sign tokens so
       // the client can come sign online later if that's still useful.
       log: manual
-        ? withLogEntry([], { type: 'manual_sent', actorEmail: owner.email, note: reason.trim() })
-        : withLogEntry([], { type: 'sent', actorEmail: owner.email, note: null }),
+        ? withLogEntry([], { type: 'manual_sent', actorEmail: normalizedOwnerEmail, note: reason.trim() })
+        : withLogEntry([], { type: 'sent', actorEmail: normalizedOwnerEmail, note: null }),
     },
   });
 
@@ -153,7 +157,7 @@ router.post('/', asyncHandler(async (req, res) => {
     try {
       await sendMail({
         from: await resolveFromHeader({ accountId: req.membership.accountId, fromName, localPart: 'contracts' }),
-        to: recipientEmail,
+        to: normalizedRecipientEmail,
         subject: `Contract for your event — ${fromName}`,
         html: buildActionEmailHtml({
           businessInfo: snapshot.businessInfo,

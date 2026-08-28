@@ -10,7 +10,7 @@ import Tooltip from '../components/ui/Tooltip';
 import Pagination from '../components/ui/Pagination';
 import { useToast } from '../components/ui/Toast';
 import { matchesSearch } from '../lib/search';
-import { formatEventDate } from '../lib/format';
+import { formatEventDate, isValidEmailAddress } from '../lib/format';
 import { deleteDocument } from '../lib/documents';
 import { generateSetListPdf } from '../lib/setListPdf';
 import { renderSetListEmail, sendSetListEmail } from '../lib/setList';
@@ -101,7 +101,7 @@ export default function SetListLibraryPage() {
       .filter(Boolean);
   }
   function bandMembersFor(event) {
-    return allBookedFor(event).filter((c) => c?.email);
+    return allBookedFor(event).filter((c) => isValidEmailAddress(c?.email));
   }
 
   async function handleExportPdf(setList, event) {

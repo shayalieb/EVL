@@ -6,9 +6,22 @@ import { attachMembership } from '../lib/membership.js';
 import { resolveFromHeader, resolveReplyDomain, sendMail, buildActionEmailHtml, buildInlineImageAttachments } from '../lib/mailer.js';
 import { downloadFileBuffer } from '../lib/fileStorage.js';
 import { emailSendLimiter, requireEmailSendPermission } from '../lib/emailSendPolicy.js';
+import { normalizeValidEmail } from '../lib/emailAddress.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
+
+async function resolveCommunicationParticipants(accountId, eventId, contractorId) {
+  const [event, contractor] = await Promise.all([
+    prisma.event.findFirst({ where: { id: eventId, accountId, deletedAt: null }, select: { id: true } }),
+    prisma.contractor.findFirst({ where: { id: contractorId, accountId }, select: { id: true, email: true } }),
+  ]);
+  if (!event) return { error: 'Event not found.' };
+  if (!contractor) return { error: 'Contractor not found.' };
+  const contractorEmail = normalizeValidEmail(contractor.email);
+  if (!contractorEmail) return { error: 'This contractor needs a valid email address before communication can be recorded or sent.' };
+  return { contractorEmail };
+}
 
 function serializeMessage(m) {
   return {
@@ -27,12 +40,15 @@ function serializeMessage(m) {
 }
 
 router.post('/send', requireEmailSendPermission, emailSendLimiter, asyncHandler(async (req, res) => {
-  const { eventId, contractorId, contractorEmail, subject, body, templateId, fromName, documentIds, pdfAttachment, inlineImages } = req.body || {};
-  if (!eventId?.trim() || !contractorId?.trim() || !contractorEmail?.trim() || !subject?.trim() || !body?.trim()) {
-    return res.status(400).json({ error: 'eventId, contractorId, contractorEmail, subject, and body are required.' });
+  const { eventId, contractorId, subject, body, templateId, fromName, documentIds, pdfAttachment, inlineImages } = req.body || {};
+  if (!eventId?.trim() || !contractorId?.trim() || !subject?.trim() || !body?.trim()) {
+    return res.status(400).json({ error: 'eventId, contractorId, subject, and body are required.' });
   }
 
   const { accountId } = req.membership;
+  const participants = await resolveCommunicationParticipants(accountId, eventId, contractorId);
+  if (participants.error) return res.status(400).json({ error: participants.error });
+  const { contractorEmail } = participants;
 
   let attachments;
   if (documentIds?.length) {
@@ -138,12 +154,15 @@ router.post('/send', requireEmailSendPermission, emailSendLimiter, asyncHandler(
 // same thread as a manual EmailMessage — reuses the existing model instead
 // of a parallel table since `direction` is a plain string, not an enum.
 router.post('/log', asyncHandler(async (req, res) => {
-  const { eventId, contractorId, contractorEmail, channel, note } = req.body || {};
-  if (!eventId?.trim() || !contractorId?.trim() || !contractorEmail?.trim() || !note?.trim()) {
-    return res.status(400).json({ error: 'eventId, contractorId, contractorEmail, and note are required.' });
+  const { eventId, contractorId, channel, note } = req.body || {};
+  if (!eventId?.trim() || !contractorId?.trim() || !note?.trim()) {
+    return res.status(400).json({ error: 'eventId, contractorId, and note are required.' });
   }
 
   const { accountId } = req.membership;
+  const participants = await resolveCommunicationParticipants(accountId, eventId, contractorId);
+  if (participants.error) return res.status(400).json({ error: participants.error });
+  const { contractorEmail } = participants;
   const thread = await prisma.emailThread.upsert({
     where: { accountId_eventId_contractorId: { accountId, eventId, contractorId } },
     update: { contractorEmail },

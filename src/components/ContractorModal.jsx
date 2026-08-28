@@ -5,7 +5,7 @@ import CurrencyInput from './ui/CurrencyInput';
 import { useData } from '../context/DataContext';
 import { uid } from '../lib/storage';
 import { getPricingTiers } from '../lib/pricingTiers';
-import { formatPhoneNumber } from '../lib/format';
+import { formatEmailInput, formatPhoneNumber } from '../lib/format';
 import { getContractorCalendarLink, regenerateContractorCalendarLink, updateContractorCalendarLinkVisibility, emailContractorCalendarLink } from '../lib/contractors';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -160,10 +160,10 @@ export default function ContractorModal({ open, onClose, contractor }) {
     setAddingType(false);
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.firstName.trim() || !form.lastName.trim() || !form.contractorType1) {
-      setError('First name, last name, and category are required.');
+    if (!form.firstName.trim() || !form.lastName.trim() || !form.contractorType1 || !form.email?.trim()) {
+      setError('First name, last name, category, and email address are required.');
       return;
     }
     const payload = {
@@ -176,9 +176,13 @@ export default function ContractorModal({ open, onClose, contractor }) {
         overtimeRate: Number(t.overtimeRate) || 0,
       })),
     };
-    if (contractor) updateContractor(contractor.id, payload);
-    else addContractor(payload);
-    onClose();
+    try {
+      if (contractor) await updateContractor(contractor.id, payload);
+      else await addContractor(payload);
+      onClose();
+    } catch (err) {
+      setError(err.message || 'Failed to save contractor.');
+    }
   }
 
   return (
@@ -204,8 +208,8 @@ export default function ContractorModal({ open, onClose, contractor }) {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className={labelClass}>Email Address</label>
-            <input type="email" value={form.email} onChange={(e) => update('email', e.target.value)} data-testid="contractor-modal-email-input" className={inputClass} />
+            <label className={labelClass}>Email Address *</label>
+            <input required type="email" value={form.email} onChange={(e) => update('email', formatEmailInput(e.target.value))} data-testid="contractor-modal-email-input" className={inputClass} />
           </div>
           <div>
             <label className={labelClass}>Phone Number</label>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import Modal from './ui/Modal';
 import { bulkEmailContractors } from '../lib/contractors';
+import { isValidEmailAddress } from '../lib/format';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -23,8 +24,8 @@ export default function BulkEmailModal({ open, onClose, contractors }) {
     }
   }, [open]);
 
-  const withEmail = contractors.filter((c) => c.email);
-  const withoutEmail = contractors.filter((c) => !c.email);
+  const withEmail = contractors.filter((c) => isValidEmailAddress(c.email));
+  const withoutEmail = contractors.filter((c) => !isValidEmailAddress(c.email));
 
   async function handleSend() {
     if (!subject.trim() || !body.trim() || sending) return;
@@ -91,7 +92,7 @@ export default function BulkEmailModal({ open, onClose, contractors }) {
             </div>
             {withoutEmail.length > 0 && (
               <div data-testid="bulk-email-no-address-note" className="text-xs text-amber-600 mt-1.5">
-                {withoutEmail.length} selected contractor{withoutEmail.length === 1 ? '' : 's'} have no email on file and will be skipped: {withoutEmail.map((c) => `${c.firstName} ${c.lastName}`).join(', ')}
+                {withoutEmail.length} selected contractor{withoutEmail.length === 1 ? '' : 's'} need a valid email and will be skipped: {withoutEmail.map((c) => `${c.firstName} ${c.lastName}`).join(', ')}
               </div>
             )}
           </div>

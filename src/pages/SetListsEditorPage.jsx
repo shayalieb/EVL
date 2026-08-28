@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { useToast } from '../components/ui/Toast';
 import { uid } from '../lib/storage';
-import { normalizeUrl, formatEventDate } from '../lib/format';
+import { normalizeUrl, formatEventDate, isValidEmailAddress } from '../lib/format';
 import { uploadDocument, deleteDocument, copyDocument } from '../lib/documents';
 import { getEvent } from '../lib/events';
 import { generateSetListPdf } from '../lib/setListPdf';
@@ -97,7 +97,7 @@ export default function SetListsEditorPage() {
   const allBooked = (event?.contractorBookings || [])
     .map((b) => contractors.find((c) => c.id === b.contractorId))
     .filter(Boolean);
-  const bandMembers = allBooked.filter((c) => c?.email);
+  const bandMembers = allBooked.filter((c) => isValidEmailAddress(c?.email));
   const excludedCount = allBooked.length - bandMembers.length;
   const hasSongs = !!activeSetList?.items?.some((it) => it.songTitle?.trim());
 

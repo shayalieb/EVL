@@ -20,7 +20,7 @@ import { getThreadSummaries, getThread, sendThreadedEmail } from '../lib/email/t
 import { renderEmailTemplate } from '../lib/mergeFields';
 import { uid } from '../lib/storage';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
-import { formatCurrency as currency, formatEventDate, formatEventTime, formatPhoneNumber } from '../lib/format';
+import { formatCurrency as currency, formatEventDate, formatEventTime, formatPhoneNumber, isValidEmailAddress } from '../lib/format';
 import { getPricingTiers, getPricingTier, getTierPrice, getBookingTotal, getOvertimeHours, getOvertimeAmount } from '../lib/pricingTiers';
 import { getPrepContractors, renderPrepSheetEmail, requestsLabels } from '../lib/prepSheet';
 import { useContractorHydration } from '../lib/useContractorHydration';
@@ -1065,7 +1065,7 @@ export default function EventFormPage() {
       let successCount = 0;
       for (const contractorId of recipientIds) {
         const contractor = contractors.find((c) => c.id === contractorId);
-        if (!contractor?.email) continue;
+        if (!isValidEmailAddress(contractor?.email)) continue;
         try {
           // eslint-disable-next-line no-await-in-loop
           await sendThreadedEmail({
@@ -1108,7 +1108,7 @@ export default function EventFormPage() {
   function getRecipientsForActiveTab() {
     return visibleEntries
       .map(({ booking }) => contractors.find((c) => c.id === booking.contractorId))
-      .filter((c) => c && c.email);
+      .filter((c) => isValidEmailAddress(c?.email));
   }
 
   function openBulkPreview() {

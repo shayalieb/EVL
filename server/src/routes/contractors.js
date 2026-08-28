@@ -8,6 +8,7 @@ import { createWithPreservedId } from '../lib/idPreservingCreate.js';
 import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPageResponse } from '../lib/pagination.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
+import { normalizeValidEmail } from '../lib/emailAddress.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -127,8 +128,9 @@ router.post('/', asyncHandler(async (req, res) => {
   if (!id?.trim()) {
     return res.status(400).json({ error: 'id is required.' });
   }
-  if (!firstName?.trim() || !lastName?.trim()) {
-    return res.status(400).json({ error: 'First name and last name are required.' });
+  const normalizedEmail = normalizeValidEmail(email);
+  if (!firstName?.trim() || !lastName?.trim() || !normalizedEmail) {
+    return res.status(400).json({ error: 'First name, last name, and a valid email address are required.' });
   }
 
   const contractor = await createWithPreservedId(prisma.contractor, {
@@ -137,7 +139,7 @@ router.post('/', asyncHandler(async (req, res) => {
     firstName: firstName.trim(),
     middleName: middleName?.trim() || null,
     lastName: lastName.trim(),
-    email: email?.trim() || null,
+    email: normalizedEmail,
     phone: phone?.trim() || null,
     contractorType1: contractorType1 || null,
     contractorType2: contractorType2 || null,
@@ -176,10 +178,10 @@ router.post('/bulk-email', bulkEmailLimiter, asyncHandler(async (req, res) => {
     where: { id: { in: contractorIds }, accountId: req.membership.accountId },
   });
 
-  const withEmail = contractors.filter((c) => c.email);
+  const withEmail = contractors.filter((c) => normalizeValidEmail(c.email));
   const skipped = contractors
-    .filter((c) => !c.email)
-    .map((c) => ({ contractorId: c.id, name: `${c.firstName} ${c.lastName}`.trim(), reason: 'No email on file' }));
+    .filter((c) => !normalizeValidEmail(c.email))
+    .map((c) => ({ contractorId: c.id, name: `${c.firstName} ${c.lastName}`.trim(), reason: 'Missing or invalid email address' }));
 
   let from, html;
   try {
@@ -227,7 +229,13 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     data.lastName = lastName.trim();
   }
   if (middleName !== undefined) data.middleName = middleName?.trim() || null;
-  if (email !== undefined) data.email = email?.trim() || null;
+  if (email !== undefined) {
+    const normalizedEmail = normalizeValidEmail(email);
+    if (!normalizedEmail) return res.status(400).json({ error: 'A valid contractor email address is required.' });
+    data.email = normalizedEmail;
+  } else if (!existing.email) {
+    return res.status(400).json({ error: 'Add a valid contractor email address before saving this legacy record.' });
+  }
   if (phone !== undefined) data.phone = phone?.trim() || null;
   if (contractorType1 !== undefined) data.contractorType1 = contractorType1 || null;
   if (contractorType2 !== undefined) data.contractorType2 = contractorType2 || null;
@@ -342,9 +350,8 @@ router.post('/:id/calendar-link/email', asyncHandler(async (req, res) => {
   if (!existing || existing.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Contractor not found.' });
   }
-  if (!existing.email) {
-    return res.status(400).json({ error: 'This contractor has no email address on file.' });
-  }
+  const recipientEmail = normalizeValidEmail(existing.email);
+  if (!recipientEmail) return res.status(400).json({ error: 'This contractor needs a valid email address before a calendar link can be emailed.' });
 
   let link = await prisma.contractorCalendarLink.findUnique({
     where: { accountId_contractorId: { accountId: req.membership.accountId, contractorId: req.params.id } },
@@ -363,7 +370,7 @@ router.post('/:id/calendar-link/email', asyncHandler(async (req, res) => {
 
   await sendMail({
     from: await resolveFromHeader({ accountId: req.membership.accountId, fromName, localPart: 'gigs' }),
-    to: existing.email,
+    to: recipientEmail,
     subject: `Your gig calendar — ${fromName}`,
     html: buildActionEmailHtml({
       businessInfo,

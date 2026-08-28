@@ -11,6 +11,7 @@ import { MIN_PASSWORD_LENGTH, passwordTooWeak } from '../lib/password.js';
 import { SIGNUP_VERTICALS } from '../lib/verticals.js';
 import { establishSession } from '../lib/sessionAuth.js';
 import { getWebsiteConfig } from '../lib/websiteConfig.js';
+import { normalizeValidEmail } from '../lib/emailAddress.js';
 
 const router = Router();
 const SALT_ROUNDS = 12;
@@ -77,14 +78,14 @@ router.post('/signup', credentialsLimiter, asyncHandler(async (req, res) => {
   if (!['solo', 'team', 'studio'].includes(selectedPlan) || !['month', 'year'].includes(billingInterval)) {
     return res.status(400).json({ error: 'Choose a plan from the pricing page before creating an account.' });
   }
-  if (!firstName?.trim() || !lastName?.trim() || !email?.trim() || !password) {
-    return res.status(400).json({ error: 'First name, last name, email, and password are required.' });
+  const normalizedEmail = normalizeValidEmail(email);
+  if (!firstName?.trim() || !lastName?.trim() || !normalizedEmail || !password) {
+    return res.status(400).json({ error: 'First name, last name, a valid email address, and password are required.' });
   }
   if (passwordTooWeak(password)) {
     return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
   }
 
-  const normalizedEmail = email.trim().toLowerCase();
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   // Falls back to the schema default rather than 400ing on a missing/invalid
   // value, so an old or cached signup form never hard-fails signup itself —

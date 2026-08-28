@@ -5,6 +5,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, requireRole, sanitizePermissions, effectivePermissions } from '../lib/membership.js';
 import { MIN_PASSWORD_LENGTH, passwordTooWeak } from '../lib/password.js';
+import { normalizeValidEmail } from '../lib/emailAddress.js';
 
 const router = Router();
 const SALT_ROUNDS = 12;
@@ -35,14 +36,14 @@ router.get('/members', asyncHandler(async (req, res) => {
 
 router.post('/members', asyncHandler(async (req, res) => {
   const { firstName, lastName, email, password, permissions } = req.body || {};
-  if (!firstName?.trim() || !lastName?.trim() || !email?.trim() || !password) {
-    return res.status(400).json({ error: 'First name, last name, email, and password are required.' });
+  const normalizedEmail = normalizeValidEmail(email);
+  if (!firstName?.trim() || !lastName?.trim() || !normalizedEmail || !password) {
+    return res.status(400).json({ error: 'First name, last name, a valid email address, and password are required.' });
   }
   if (passwordTooWeak(password)) {
     return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
   }
 
-  const normalizedEmail = email.trim().toLowerCase();
   const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing) {
     return res.status(409).json({ error: 'An account with that email already exists.' });

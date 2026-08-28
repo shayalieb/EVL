@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { prisma } from '../lib/prisma.js';
+import { normalizeValidEmail } from '../lib/emailAddress.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachUser, requirePlatformAdmin, requireAdminPermission, allPermissions } from '../lib/membership.js';
@@ -232,7 +233,8 @@ function clampToCallerPermissions(req, input) {
 }
 
 async function createInvitedUser({ firstName, lastName, email }, { grantAdmin = false, permissions, approvedById } = {}) {
-  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedEmail = normalizeValidEmail(email);
+  if (!normalizedEmail) throw Object.assign(new Error('A valid email address is required.'), { status: 400 });
 
   let user;
   try {
@@ -285,8 +287,8 @@ async function createInvitedUser({ firstName, lastName, email }, { grantAdmin = 
 
 router.post('/accounts', asyncHandler(async (req, res) => {
   const { firstName, lastName, email } = req.body || {};
-  if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) {
-    return res.status(400).json({ error: 'First name, last name, and email are required.' });
+  if (!firstName?.trim() || !lastName?.trim() || !normalizeValidEmail(email)) {
+    return res.status(400).json({ error: 'First name, last name, and a valid email address are required.' });
   }
   try {
     await createInvitedUser({ firstName, lastName, email }, { approvedById: req.user.id });
@@ -779,9 +781,10 @@ router.get('/platform-admins', asyncHandler(async (req, res) => {
 // itself still isn't self-serve creatable through this route.
 router.post('/platform-admins', asyncHandler(async (req, res) => {
   const { email, permissions } = req.body || {};
-  if (!email?.trim()) return res.status(400).json({ error: 'Email is required.' });
+  const normalizedEmail = normalizeValidEmail(email);
+  if (!normalizedEmail) return res.status(400).json({ error: 'A valid email address is required.' });
 
-  const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (!user) return res.status(404).json({ error: 'No account exists with that email yet. Use "Invite New Admin" instead.' });
 
   const updated = await prisma.user.update({
@@ -795,8 +798,8 @@ router.post('/platform-admins', asyncHandler(async (req, res) => {
 // doesn't have an account yet.
 router.post('/platform-admins/invite', asyncHandler(async (req, res) => {
   const { firstName, lastName, email, permissions } = req.body || {};
-  if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) {
-    return res.status(400).json({ error: 'First name, last name, and email are required.' });
+  if (!firstName?.trim() || !lastName?.trim() || !normalizeValidEmail(email)) {
+    return res.status(400).json({ error: 'First name, last name, and a valid email address are required.' });
   }
   let user;
   try {

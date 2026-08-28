@@ -21,6 +21,7 @@ import { useToast } from '../components/ui/Toast';
 import { matchesSearch } from '../lib/search';
 import { getEvent } from '../lib/events';
 import { useContractorHydration } from '../lib/useContractorHydration';
+import { isValidEmailAddress } from '../lib/format';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -249,7 +250,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   };
   const rosterContractors = (event?.contractorBookings || [])
     .map((b) => contractors.find((c) => c.id === b.contractorId))
-    .filter((c) => c?.email);
+    .filter((c) => isValidEmailAddress(c?.email));
   const fromName = currentUser.businessInfo?.name || `${currentUser.firstName} ${currentUser.lastName}`;
   // Every thread for this event, not just current roster members — removing
   // someone from the roster shouldn't erase their email history here, since

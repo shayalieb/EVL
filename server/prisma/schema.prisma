@@ -968,6 +968,9 @@ model Guest {
   eventId   String // opaque localStorage id, same non-FK pattern as EventDocument.eventId
 
   name       String
+  // Nullable only for pre-enforcement legacy rows. Every create/update API
+  // requires a valid normalized address, so new or edited contractors can
+  // always participate safely in booking communications.
   email      String?
   phone      String?
   partySize  Int     @default(1)

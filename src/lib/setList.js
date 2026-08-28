@@ -1,6 +1,6 @@
 import { DEFAULT_ACCENT_COLOR } from './colorTheme';
 import { songSheetPublicDownloadUrl } from './documents';
-import { formatEventDate } from './format';
+import { formatEventDate, isValidEmailAddress } from './format';
 import { escapeHtml } from './htmlEscape';
 import { generateSetListPdfAttachment } from './setListPdf';
 import { sendThreadedEmail } from './email/threads';
@@ -73,7 +73,7 @@ export async function sendSetListEmail({ eventId, eventName, eventDate, setList,
   let successCount = 0;
   for (const contractorId of recipientIds) {
     const contractor = contractors.find((c) => c.id === contractorId);
-    if (!contractor?.email) continue;
+    if (!isValidEmailAddress(contractor?.email)) continue;
     try {
       // eslint-disable-next-line no-await-in-loop
       await sendThreadedEmail({ eventId, contractorId, contractorEmail: contractor.email, subject, body, fromName, documentIds, pdfAttachment });
