@@ -90,6 +90,7 @@ export const DEFAULT_WEBSITE_CONFIG = {
   painPoints: { heading: 'Sound familiar?', description: "These aren't hypothetical problems — they're what running an entertainment business actually feels like without the right tools.", items: painItems },
   features: { heading: 'One place for the whole gig', groups: featureGroups, comparison: { eyebrow: 'Compare plans', heading: 'Everything you need, at every tier', description: 'Core workflow features are included on every plan. Choose based on how many people need access.', featureColumnLabel: 'Feature', footer: 'All plans include a 14-day free trial. Prices and team limits are shown in the pricing section below.', categories: comparisonCategories } },
   pricing: { label: 'Simple pricing', heading: 'Every plan runs the whole gig', description: 'Choose based on the size of your team—not which tools you’re allowed to use.', monthlyLabel: 'Monthly', annualLabel: 'Annual', annualSavingsLabel: 'Save up to 20%', featuredLabel: 'Most popular', perMonthLabel: '/month', billedAnnuallyLabel: 'billed annually', billedMonthlyLabel: 'Billed monthly', trialButtonLabel: 'Start {days}-day free trial', trialFooterLabel: '{days}-day free trial at launch.', trialDays: 14, footer: 'Cancel anytime. Secure billing through Stripe.', includedFeatures: ['Unlimited clients, bookings, and events', 'Proposals, e-sign contracts, and invoices', 'Contractor confirmations and availability', 'Stage plots, set lists, and production details', 'Templates, reminders, and client payment tools'], tiers: PLAN_TIERS.map((tier) => ({ id: tier.id, name: tier.label, seatLimit: tier.seatLimit, monthlyAmountCents: tier.monthly.amountCents, annualAmountCents: tier.annual.amountCents, description: tier.id === 'solo' ? 'For independent bandleaders and performers running their own calendar.' : tier.id === 'team' ? 'For small teams sharing bookings, staffing, and client follow-up.' : 'For growing entertainment companies coordinating multiple people.', featured: tier.id === 'team' })) },
+  testimonials: { enabled: false, heading: 'Trusted by people who run the gig', description: 'Real stories from entertainment professionals using GigWorks.', pageHeading: 'Customer stories', pageDescription: 'See how entertainment businesses are bringing bookings, people, and production details together.', reviews: [] },
   faq: { heading: 'Questions bandleaders actually ask', description: 'Most critical first — scroll down for the smaller stuff.', items: faqItems },
   waitlist: { heading: 'Get Waitlisted', description: "GigWorks is currently onboarding a small first group of agencies and bandleaders directly. Join the waitlist and I'll reach out personally.", success: "You're on the list — thanks for the interest. I'll be in touch soon.", submitLabel: 'Join the Waitlist', namePlaceholder: 'Your name', emailPlaceholder: 'Email address', businessPlaceholder: 'Business or band name (optional)' },
   contact: { heading: 'Get in Touch', description: 'Have a question, or want to talk through whether this fits how your business runs? Send a message directly.', success: "Got it — thanks for reaching out. I'll reply personally as soon as I can.", submitLabel: 'Send Message', namePlaceholder: 'Your name', emailPlaceholder: 'Email address', messagePlaceholder: "What's on your mind?" },
@@ -97,6 +98,7 @@ export const DEFAULT_WEBSITE_CONFIG = {
 };
 
 function text(value, fallback, max = 1000) { return typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : fallback; }
+function optionalText(value, max = 1000) { return typeof value === 'string' ? value.trim().slice(0, max) : ''; }
 function amount(value, fallback) { const parsed = Number.parseInt(value, 10); return Number.isInteger(parsed) && parsed >= 100 && parsed <= 1000000 ? parsed : fallback; }
 function stringList(value, fallback, maxItems = 12) { return Array.isArray(value) && value.length ? value.slice(0, maxItems).map((item, i) => text(item, fallback[i] || 'Item', 500)) : fallback; }
 function section(input, defaults, limits = {}) { return Object.fromEntries(Object.keys(defaults).map((key) => [key, text(input?.[key], defaults[key], limits[key] || 500)])); }
@@ -137,6 +139,27 @@ export function normalizeWebsiteConfig(input = {}) {
     painPoints: { heading: text(input.painPoints?.heading, d.painPoints.heading, 120), description: text(input.painPoints?.description, d.painPoints.description, 400), items: d.painPoints.items.map((fallback, i) => ({ title: text(input.painPoints?.items?.[i]?.title, fallback.title, 160), problem: text(input.painPoints?.items?.[i]?.problem, fallback.problem, 500), fix: text(input.painPoints?.items?.[i]?.fix, fallback.fix, 500) })) },
     features: { heading: text(input.features?.heading, d.features.heading, 120), groups: featureGroupsList(input.features?.groups, d.features.groups), comparison: comparison(input.features?.comparison, d.features.comparison) },
     pricing: { label: text(pricing.label, d.pricing.label, 60), heading: text(pricing.heading, d.pricing.heading, 140), description: text(pricing.description, d.pricing.description, 300), monthlyLabel: text(pricing.monthlyLabel, d.pricing.monthlyLabel, 30), annualLabel: text(pricing.annualLabel, d.pricing.annualLabel, 30), annualSavingsLabel: text(pricing.annualSavingsLabel, d.pricing.annualSavingsLabel, 60), featuredLabel: text(pricing.featuredLabel, d.pricing.featuredLabel, 40), perMonthLabel: text(pricing.perMonthLabel, d.pricing.perMonthLabel, 30), billedAnnuallyLabel: text(pricing.billedAnnuallyLabel, d.pricing.billedAnnuallyLabel, 50), billedMonthlyLabel: text(pricing.billedMonthlyLabel, d.pricing.billedMonthlyLabel, 50), trialButtonLabel: text(pricing.trialButtonLabel, d.pricing.trialButtonLabel, 80), trialFooterLabel: text(pricing.trialFooterLabel, d.pricing.trialFooterLabel, 100), trialDays: Math.min(60, Math.max(0, Number.parseInt(pricing.trialDays, 10) || 14)), footer: text(pricing.footer, d.pricing.footer, 200), includedFeatures: stringList(pricing.includedFeatures, d.pricing.includedFeatures, 12), tiers: d.pricing.tiers.map((fallback) => { const incoming = pricing.tiers?.find((tier) => tier?.id === fallback.id) || {}; return { ...fallback, name: text(incoming.name, fallback.name, 40), description: text(incoming.description, fallback.description, 220), featured: incoming.featured === true, monthlyAmountCents: amount(incoming.monthlyAmountCents, fallback.monthlyAmountCents), annualAmountCents: amount(incoming.annualAmountCents, fallback.annualAmountCents), seatLimit: fallback.seatLimit, monthlyPriceId: typeof incoming.monthlyPriceId === 'string' ? incoming.monthlyPriceId : null, annualPriceId: typeof incoming.annualPriceId === 'string' ? incoming.annualPriceId : null }; }) },
+    testimonials: {
+      enabled: input.testimonials?.enabled === true,
+      heading: text(input.testimonials?.heading, d.testimonials.heading, 140),
+      description: text(input.testimonials?.description, d.testimonials.description, 400),
+      pageHeading: text(input.testimonials?.pageHeading, d.testimonials.pageHeading, 140),
+      pageDescription: text(input.testimonials?.pageDescription, d.testimonials.pageDescription, 500),
+      reviews: (Array.isArray(input.testimonials?.reviews) ? input.testimonials.reviews : []).slice(0, 30).map((review, index) => ({
+        id: text(review?.id, `review-${index + 1}`, 80),
+        groupName: text(review?.groupName, 'Customer group', 140),
+        reviewerName: optionalText(review?.reviewerName, 120),
+        groupType: optionalText(review?.groupType, 100),
+        quote: text(review?.quote, 'Add the customer review here.', 1200),
+        rating: Math.min(5, Math.max(1, Number.parseInt(review?.rating, 10) || 5)),
+        published: review?.published === true,
+        featured: review?.featured === true,
+        storyPublished: review?.storyPublished === true,
+        storyTitle: optionalText(review?.storyTitle, 180),
+        storySummary: optionalText(review?.storySummary, 600),
+        storyBody: optionalText(review?.storyBody, 8000),
+      })),
+    },
     faq: { heading: text(input.faq?.heading, d.faq.heading, 140), description: text(input.faq?.description, d.faq.description, 300), items: d.faq.items.map((fallback, i) => ({ question: text(input.faq?.items?.[i]?.question, fallback.question, 240), answer: text(input.faq?.items?.[i]?.answer, fallback.answer, 1000) })) },
     waitlist: section(input.waitlist, d.waitlist),
     contact: section(input.contact, d.contact),
@@ -145,5 +168,15 @@ export function normalizeWebsiteConfig(input = {}) {
 }
 
 export async function getWebsiteAdminConfig() { const row = await prisma.websiteSetting.findUnique({ where: { id: 'main' } }); return normalizeWebsiteConfig(row?.config || DEFAULT_WEBSITE_CONFIG); }
-export async function getWebsiteConfig() { const config = await getWebsiteAdminConfig(); return { ...config, pricing: { ...config.pricing, tiers: config.pricing.tiers.map(({ monthlyPriceId: _monthly, annualPriceId: _annual, ...tier }) => tier) } }; }
+export function publicWebsiteConfig(config) {
+  const publicReviews = config.testimonials.enabled
+    ? config.testimonials.reviews.filter((review) => review.published).map((review) => review.storyPublished ? review : { ...review, storyTitle: '', storySummary: '', storyBody: '' })
+    : [];
+  return {
+    ...config,
+    pricing: { ...config.pricing, tiers: config.pricing.tiers.map(({ monthlyPriceId: _monthly, annualPriceId: _annual, ...tier }) => tier) },
+    testimonials: { ...config.testimonials, reviews: publicReviews },
+  };
+}
+export async function getWebsiteConfig() { return publicWebsiteConfig(await getWebsiteAdminConfig()); }
 export async function getBillingTier(tierId) { const config = await getWebsiteAdminConfig(); return config.pricing.tiers.find((tier) => tier.id === tierId) || null; }

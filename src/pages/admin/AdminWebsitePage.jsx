@@ -6,7 +6,7 @@ const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm 
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 const TABS = [
   ['launch', 'Launch'], ['hero', 'Navigation & Hero'], ['story', 'Story'], ['problems', 'Problems'],
-  ['features', 'Features'], ['pricing', 'Pricing'], ['faq', 'FAQ'], ['forms', 'Forms & Footer'],
+  ['features', 'Features'], ['reviews', 'Reviews & Stories'], ['pricing', 'Pricing'], ['faq', 'FAQ'], ['forms', 'Forms & Footer'],
 ];
 
 // Keep in sync with server/src/lib/websiteConfig.js's ICON_KEYS and
@@ -79,6 +79,14 @@ export default function AdminWebsitePage() {
   function removeFeatureGroup(index) {
     updateSection('features', 'groups', config.features.groups.filter((_, i) => i !== index));
   }
+  function addReview() {
+    updateSection('testimonials', 'reviews', [...config.testimonials.reviews, {
+      id: `review-${Date.now()}`, groupName: 'New customer group', reviewerName: '', groupType: '', quote: 'Add the customer review here.', rating: 5,
+      published: false, featured: false, storyPublished: false, storyTitle: '', storySummary: '', storyBody: '',
+    }]);
+  }
+  function updateReview(index, key, value) { updateNested('testimonials', 'reviews', index, key, value); }
+  function removeReview(index) { updateSection('testimonials', 'reviews', config.testimonials.reviews.filter((_, i) => i !== index)); }
 
   async function save(e) {
     e.preventDefault(); setSaving(true);
@@ -140,6 +148,39 @@ export default function AdminWebsitePage() {
           <button type="button" onClick={() => updateComparisonCategory(categoryIndex, (current) => ({ ...current, rows: [...current.rows, { id: `${current.id}-feature-${Date.now()}`, feature: 'New feature', solo: 'Included', team: 'Included', studio: 'Included' }] }))} className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">+ Add feature</button>
         </Card>)}
         <button type="button" onClick={addComparisonCategory} className="px-4 py-2 rounded-lg border border-indigo-200 text-sm font-semibold text-indigo-700 hover:bg-indigo-50">+ Add category</button>
+      </div>}
+
+      {tab === 'reviews' && <div className="space-y-5">
+        <Card title="Customer reviews and stories">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <p className="text-sm text-slate-500 max-w-2xl">Nothing in this section appears publicly until the master switch and the individual review's publish switch are both enabled. Featured reviews rotate on the homepage and link to the customer stories page.</p>
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 shrink-0"><input type="checkbox" checked={config.testimonials.enabled} onChange={(e) => updateSection('testimonials', 'enabled', e.target.checked)} className="w-4 h-4 rounded" />Section live</label>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3"><Field label="Homepage heading" value={config.testimonials.heading} onChange={(v) => updateSection('testimonials', 'heading', v)} /><Field label="Stories page heading" value={config.testimonials.pageHeading} onChange={(v) => updateSection('testimonials', 'pageHeading', v)} /></div>
+          <Field label="Homepage description" rows={2} value={config.testimonials.description} onChange={(v) => updateSection('testimonials', 'description', v)} />
+          <Field label="Stories page description" rows={2} value={config.testimonials.pageDescription} onChange={(v) => updateSection('testimonials', 'pageDescription', v)} />
+        </Card>
+        {config.testimonials.reviews.map((review, index) => <Card key={review.id} title={`Review ${index + 1} — ${review.groupName}`}>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3"><Field label="Group or business name" value={review.groupName} onChange={(v) => updateReview(index, 'groupName', v)} /><Field label="Reviewer name (optional)" value={review.reviewerName} onChange={(v) => updateReview(index, 'reviewerName', v)} /><Field label="Group type (optional)" value={review.groupType} onChange={(v) => updateReview(index, 'groupType', v)} /></div>
+          <Field label="Review" rows={4} value={review.quote} onChange={(v) => updateReview(index, 'quote', v)} />
+          <div>
+            <label className={labelClass}>Star rating</label>
+            <div className="flex gap-1" role="radiogroup" aria-label={`Rating for ${review.groupName}`}>{[1, 2, 3, 4, 5].map((star) => <button key={star} type="button" role="radio" aria-checked={review.rating === star} onClick={() => updateReview(index, 'rating', star)} className={`text-2xl leading-none ${star <= review.rating ? 'text-amber-400' : 'text-slate-300'} hover:text-amber-400`} aria-label={`${star} star${star === 1 ? '' : 's'}`}>★</button>)}</div>
+          </div>
+          <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-lg bg-slate-50 px-3 py-3">
+            <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={review.published} onChange={(e) => updateReview(index, 'published', e.target.checked)} />Publish review</label>
+            <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={review.featured} onChange={(e) => updateReview(index, 'featured', e.target.checked)} />Feature in homepage slider</label>
+            <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={review.storyPublished} onChange={(e) => updateReview(index, 'storyPublished', e.target.checked)} />Publish full story</label>
+          </div>
+          <div className="border-t border-slate-100 pt-4 space-y-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-indigo-600">Optional customer story</p>
+            <Field label="Story title" value={review.storyTitle} onChange={(v) => updateReview(index, 'storyTitle', v)} />
+            <Field label="Short summary" rows={2} value={review.storySummary} onChange={(v) => updateReview(index, 'storySummary', v)} />
+            <Field label="Full story" rows={8} value={review.storyBody} onChange={(v) => updateReview(index, 'storyBody', v)} />
+          </div>
+          <button type="button" onClick={() => removeReview(index)} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 hover:bg-red-50">Remove review</button>
+        </Card>)}
+        <button type="button" onClick={addReview} disabled={config.testimonials.reviews.length >= 30} className="px-4 py-2 rounded-lg border border-indigo-200 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-40">+ Add customer review</button>
       </div>}
 
       {tab === 'pricing' && <div className="space-y-5"><Card title="Pricing section"><div className="grid sm:grid-cols-2 gap-3"><Field label="Section label" value={config.pricing.label} onChange={(v) => updateSection('pricing', 'label', v)} /><Field label="Heading" value={config.pricing.heading} onChange={(v) => updateSection('pricing', 'heading', v)} /></div><Field label="Description" value={config.pricing.description} onChange={(v) => updateSection('pricing', 'description', v)} /><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3"><Field label="Monthly label" value={config.pricing.monthlyLabel} onChange={(v) => updateSection('pricing', 'monthlyLabel', v)} /><Field label="Annual label" value={config.pricing.annualLabel} onChange={(v) => updateSection('pricing', 'annualLabel', v)} /><Field label="Savings badge" value={config.pricing.annualSavingsLabel} onChange={(v) => updateSection('pricing', 'annualSavingsLabel', v)} /><Field label="Featured badge" value={config.pricing.featuredLabel} onChange={(v) => updateSection('pricing', 'featuredLabel', v)} /></div><div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3"><Field label="Per-month suffix" value={config.pricing.perMonthLabel} onChange={(v) => updateSection('pricing', 'perMonthLabel', v)} /><Field label="Annual billing label" value={config.pricing.billedAnnuallyLabel} onChange={(v) => updateSection('pricing', 'billedAnnuallyLabel', v)} /><Field label="Monthly billing label" value={config.pricing.billedMonthlyLabel} onChange={(v) => updateSection('pricing', 'billedMonthlyLabel', v)} /><Field label="Trial button ({days} supported)" value={config.pricing.trialButtonLabel} onChange={(v) => updateSection('pricing', 'trialButtonLabel', v)} /><Field label="Trial footer ({days} supported)" value={config.pricing.trialFooterLabel} onChange={(v) => updateSection('pricing', 'trialFooterLabel', v)} /></div><div className="grid sm:grid-cols-2 gap-3"><Field label="Trial days" type="number" min="0" max="60" value={config.pricing.trialDays} onChange={(v) => updateSection('pricing', 'trialDays', v)} /><Field label="Pricing footer" value={config.pricing.footer} onChange={(v) => updateSection('pricing', 'footer', v)} /></div><StringList label="Features included in every plan" items={config.pricing.includedFeatures} onChange={(items) => updateSection('pricing', 'includedFeatures', items)} /></Card><div className="grid md:grid-cols-3 gap-5">{config.pricing.tiers.map((tier, index) => <Card key={tier.id} title={tier.name}><Field label="Plan name" value={tier.name} onChange={(v) => updateTier(index, 'name', v)} /><div className="grid grid-cols-2 gap-2"><Field label="Monthly $" type="number" min="1" step="0.01" value={(tier.monthlyAmountCents / 100).toFixed(2)} onChange={(v) => updateTierDollars(index, 'monthlyAmountCents', v)} /><Field label="Annual $" type="number" min="1" step="0.01" value={(tier.annualAmountCents / 100).toFixed(2)} onChange={(v) => updateTierDollars(index, 'annualAmountCents', v)} /></div><Field label="Description" rows={3} value={tier.description} onChange={(v) => updateTier(index, 'description', v)} /><label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={tier.featured} onChange={(e) => updateTier(index, 'featured', e.target.checked)} />Featured plan</label></Card>)}</div><p className="text-xs text-slate-500">Changing an amount creates a new Stripe price for future customers. Existing subscribers keep their current rate.</p></div>}

@@ -223,6 +223,44 @@ function Reveal({ as: Tag = 'div', delay = 0, className = '', children, ...rest 
   );
 }
 
+function ReviewSlider({ section }) {
+  const reviews = section.reviews.filter((review) => review.published && review.featured);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    if (reviews.length < 2 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    const timer = window.setInterval(() => setActiveIndex((current) => (current + 1) % reviews.length), 6500);
+    return () => window.clearInterval(timer);
+  }, [reviews.length]);
+
+  if (!reviews.length) return null;
+  const review = reviews[activeIndex % reviews.length];
+  const storyHref = `/customer-stories#${review.id}`;
+
+  return (
+    <section className="overflow-hidden bg-indigo-950 text-white" aria-label="Customer reviews">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-14 md:py-20">
+        <div className="text-center max-w-2xl mx-auto mb-8">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-300">Customer reviews</p>
+          <h2 className="text-2xl sm:text-3xl font-bold mt-3">{section.heading}</h2>
+          <p className="text-indigo-200 mt-3">{section.description}</p>
+        </div>
+        <div className="flex items-center gap-3 sm:gap-5">
+          {reviews.length > 1 && <button type="button" onClick={() => setActiveIndex((activeIndex - 1 + reviews.length) % reviews.length)} className="shrink-0 h-10 w-10 rounded-full border border-white/20 hover:bg-white/10" aria-label="Previous review">←</button>}
+          <Link to={storyHref} className="group min-w-0 flex-1 rounded-3xl border border-white/15 bg-white/[0.08] px-6 py-7 sm:px-10 sm:py-9 text-center shadow-xl hover:bg-white/[0.12] transition-colors">
+            <div className="text-amber-400 text-xl tracking-wider" aria-label={`${review.rating} out of 5 stars`}>{'★'.repeat(review.rating)}<span className="text-white/20">{'★'.repeat(5 - review.rating)}</span></div>
+            <blockquote className="mt-5 text-xl sm:text-2xl font-medium leading-relaxed">“{review.quote}”</blockquote>
+            <div className="mt-6"><p className="font-bold">{review.groupName}</p>{(review.reviewerName || review.groupType) && <p className="text-sm text-indigo-200 mt-1">{[review.reviewerName, review.groupType].filter(Boolean).join(' · ')}</p>}</div>
+            <span className="inline-block mt-5 text-sm font-semibold text-indigo-200 group-hover:text-white">Read customer stories →</span>
+          </Link>
+          {reviews.length > 1 && <button type="button" onClick={() => setActiveIndex((activeIndex + 1) % reviews.length)} className="shrink-0 h-10 w-10 rounded-full border border-white/20 hover:bg-white/10" aria-label="Next review">→</button>}
+        </div>
+        {reviews.length > 1 && <div className="flex justify-center gap-2 mt-6">{reviews.map((item, index) => <button key={item.id} type="button" onClick={() => setActiveIndex(index)} aria-label={`Show review ${index + 1}`} aria-current={index === activeIndex ? 'true' : undefined} className={`h-2 rounded-full transition-all ${index === activeIndex ? 'w-7 bg-white' : 'w-2 bg-white/35'}`} />)}</div>}
+      </div>
+    </section>
+  );
+}
+
 export default function LandingPage() {
   const [waitlistForm, setWaitlistForm] = useState({ name: '', email: '', businessName: '', selectedPlan: '', billingInterval: '' });
   const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
@@ -248,6 +286,7 @@ export default function LandingPage() {
   const featureGroups = featureSection?.groups || FEATURE_GROUPS;
   const featureComparison = featureSection?.comparison;
   const pricing = websiteConfig?.pricing;
+  const testimonials = websiteConfig?.testimonials;
   const includedFeatures = pricing?.includedFeatures || INCLUDED_FEATURES;
   const faqSection = websiteConfig?.faq;
   const faqs = faqSection?.items?.map((item) => ({ q: item.question, a: item.answer })) || FAQS;
@@ -590,6 +629,8 @@ export default function LandingPage() {
           </Reveal>
         </section>
       )}
+
+      {testimonials?.enabled && <ReviewSlider section={testimonials} />}
 
       {/* Pricing is visible during early access; only the action changes at launch. */}
       <section id="pricing" className="bg-white scroll-mt-16">

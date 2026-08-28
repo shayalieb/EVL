@@ -47,6 +47,7 @@ const SetListLibraryPage = lazy(() => import('./pages/SetListLibraryPage'));
 const StagePlotLibraryPage = lazy(() => import('./pages/StagePlotLibraryPage'));
 const StagePlotLibraryEditorPage = lazy(() => import('./pages/StagePlotLibraryEditorPage'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
+const CustomerStoriesPage = lazy(() => import('./pages/CustomerStoriesPage'));
 
 // The marketing site lives at the exact root path, which otherwise sits
 // inside this same route tree (see AppRoutes' `path="/"` below) — checking
@@ -148,6 +149,7 @@ function AppRoutes() {
     <Suspense fallback={<div className="min-h-screen bg-slate-50" aria-busy="true" />}>
       <Routes>
       <Route path="/auth" element={<AuthGate><AuthPage /></AuthGate>} />
+      <Route path="/customer-stories" element={<CustomerStoriesPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/sign/:token" element={<ContractSignPage />} />
       <Route path="/proposal/:token" element={<ProposalRespondPage />} />
