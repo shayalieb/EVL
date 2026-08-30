@@ -19,7 +19,7 @@ const featureGroups = [
   ['clients', 'file', 'For your clients', ['Inquiry-to-booking pipeline', 'Proposals your client accepts online', 'Contracts with e-signature', 'Invoicing with built-in Stripe payments']],
   ['roster', 'users', 'For your roster', ['Contractor roster & availability', 'Per-event confirm/decline tracking', 'Ensembles — save a group once, add its whole lineup in one click', 'A home-screen link every contractor can check themselves']],
   ['dayOf', 'clipboard', 'For the day of', ['Stage plots with a live drag-and-drop canvas', 'Set lists with email + PDF export', 'Backline & production lists', 'Prep sheets & crew schedules']],
-  ['oversight', 'bell', 'For staying on top of it', ['A dashboard that surfaces what actually needs attention', 'Automatic alerts for at-risk events and overdue invoices', 'Email templates with merge fields for real event details', 'Manual reminders tied to any client or contractor']],
+  ['oversight', 'bell', 'For staying on top of it', ['A dashboard that surfaces what actually needs attention', 'Automatic alerts for at-risk events and overdue invoices', 'Email templates with merge fields for real event details', 'Manual reminders tied to any client or contractor', 'A Financials page tracking money in, money out, contractor payments due, and bookkeeper-ready exports']],
 ].map(([id, icon, title, items]) => ({ id, icon, title, items }));
 
 // True variable-length list (an admin can add/remove cards from
@@ -47,6 +47,7 @@ const faqItems = [
   ['Is the client-facing proposal and contract actually legally binding?', "The proposal is something a client reviews and accepts (or sends back with requested changes) — it's a decision, not a signature. The contract is the real e-signature step: both sides draw a signature and type a legal name, and an Electronic Signature Consent clause citing the U.S. E-SIGN Act is included automatically."],
   ['How does getting paid actually work — does GigWorks touch the money?', "Invoices are paid directly into your own bank account through Stripe Connect — GigWorks never touches the money. If a client pays outside the app instead (check, cash), you log that manually and it's tracked the same way."],
   ['Do I have to run every gig through the full proposal-and-contract pipeline?', 'No. That pipeline is there for a formal booking with a paper trail, but you can also add an event directly for a one-off or word-of-mouth gig with no sales process attached at all.'],
+  ['How do I keep track of money in and out for bookkeeping or taxes?', "The Financials page shows everything at a glance — cash received, cash paid out, who owes you, who you still owe contractors — and lets you log any payment that didn't go through Stripe (cash, check, a card run outside the app) with an optional receipt attached. When it's time to hand things off to a bookkeeper or accountant, one export button builds a ZIP with a plain-language summary, the full payment history as a CSV, a list of anything missing documentation, and every receipt you've attached."],
   ['When can I start using it, and what does it cost?', 'See the pricing section above for current plans and availability.'],
 ].map(([question, answer]) => ({ question, answer }));
 
@@ -74,6 +75,7 @@ const comparisonCategories = [
     ['Dashboard and risk alerts', 'Included', 'Included', 'Included'],
     ['Reminders and recurring follow-up', 'Included', 'Included', 'Included'],
     ['Email templates and merge fields', 'Included', 'Included', 'Included'],
+    ['Financial tracking with receipts and bookkeeper exports', 'Included', 'Included', 'Included'],
     ['Team members', '1', '2', '5'],
   ]],
 ].map(([name, rows], categoryIndex) => ({

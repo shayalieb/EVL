@@ -343,6 +343,84 @@ export const HELP_CATEGORIES = [
     ],
   },
   {
+    id: 'financials',
+    title: 'Financials',
+    articles: [
+      {
+        id: 'financials-overview',
+        title: 'Understand your Financials page',
+        summary: 'The three sections — Overview, Payments, and Reports — and what each card means.',
+        blocks: [
+          { type: 'p', text: 'The Financials page shows what\'s come in, what\'s gone out, what\'s still owed, and which bookings are profitable. It\'s split into three sections along the top: Overview, Payments, and Reports.' },
+          { type: 'h', text: 'Overview' },
+          { type: 'list', items: [
+            '"Money already received and spent" — Money received, Money spent, and the Difference between them, for the selected date range.',
+            '"Money expected in the next 30 days" — a planning estimate of what\'s likely to come in from clients and go out to contractors. These amounts haven\'t necessarily been paid yet.',
+            '"Still outstanding" — what customers still owe you, and what you still owe contractors, right now.',
+            '"Contractors still to pay" and "Estimated profit by booking," side by side.',
+          ] },
+          { type: 'note', text: "A booking's estimated profit only shows once every contractor cost on it is complete — until then it reads \"Costs incomplete\" with a link straight to the event to finish entering rates." },
+          { type: 'h', text: 'Reports' },
+          { type: 'p', text: 'Reports has two tabs — "Who owes you" (an aging breakdown of open client balances) and "Who you owe" (unpaid contractor assignments, most urgent first) — both searchable, sortable, and exportable as CSV or PDF.' },
+          { type: 'p', text: 'A shared date range (From/To, or the This year / Last 12 months / All time buttons) filters Overview and Reports together. Payments has its own search and filters instead — see Record Money Paid Out.' },
+          { type: 'note', text: "On the Agency plan, use the same managed-group switcher you use elsewhere in the app to scope the whole Financials page to one group instead of the entire account." },
+        ],
+      },
+      {
+        id: 'record-expenses',
+        title: 'Record money paid out',
+        summary: 'Logging an expense — and why customer payments work differently.',
+        blocks: [
+          { type: 'note', text: "This is for money you paid out, not money a customer paid you. Record a customer payment from the booking's Invoices tab instead (see Deposits, Partial Payments & Manual Payments), so the invoice balance and payment history stay in sync." },
+          { type: 'p', text: 'From the Payments section, click "+ Add money paid out."' },
+          { type: 'steps', items: [
+            'Fill in the three essentials: what it was for, how much, and when it was paid.',
+            'Open "Optional details" for a category, payment method, who you paid, and a receipt (PDF or image, up to 10MB) — the receipt can also be added later.',
+            'Optionally attach the expense to a Booking, Event, or Contractor so it shows up in that record too.',
+            'Click "Add payment."',
+          ] },
+          { type: 'note', text: "Once recorded, a payment can't be edited. If it's wrong, undo it from Payment History instead — the original stays visible rather than silently disappearing." },
+        ],
+      },
+      {
+        id: 'contractor-payments',
+        title: 'Track and pay contractors',
+        summary: 'Two places to mark a contractor paid, and how due dates work.',
+        blocks: [
+          { type: 'p', text: 'The Overview section\'s "Contractors still to pay" panel lists every unpaid contractor assignment, most urgent first, each with a status — Upcoming, Due today, Overdue, or Payment date missing.' },
+          { type: 'steps', items: [
+            'Set a Due date on any row to start tracking it.',
+            'Click "Mark paid" once you\'ve actually paid them, and fill in the amount, date, method, and an optional memo.',
+          ] },
+          { type: 'note', text: 'The same "Mark paid" action — labeled "Pay" there instead — is also available directly on an event\'s roster. Both write to the same underlying record, so marking a contractor paid from either screen shows up on the other.' },
+          { type: 'note', text: "A contractor missing a saved rate shows up in an amber \"rates are missing\" callout instead of the payment list — add their rate on the event to bring them into the numbers." },
+          { type: 'p', text: 'The "Who you owe" report, under Reports, shows this same information as a full sortable, exportable list.' },
+        ],
+      },
+      {
+        id: 'bookkeeper-export',
+        title: 'Export for your bookkeeper',
+        summary: 'One ZIP file with everything a bookkeeper or accountant needs.',
+        blocks: [
+          { type: 'p', text: 'Click "Export for bookkeeper," at the top of the Financials page, to build a ZIP package for a date range — and, on the Agency plan, for one managed group or the whole account.' },
+          { type: 'list', items: [
+            'A plain-language summary (README.txt) of the period.',
+            'payment-history.csv — every recorded payment, one row each.',
+            'items-to-review.csv — anything missing a receipt, a vendor/payee, or a linked record.',
+            'Every receipt file you\'ve attached, organized in its own folder.',
+          ] },
+          { type: 'steps', items: [
+            'Set the date range (This year, Last year, All time, or your own) and scope.',
+            'Click "Review package" to see totals and what\'s missing before committing to anything.',
+            'Click "Download ZIP package."',
+          ] },
+          { type: 'note', text: "Missing information never blocks the download — it's simply listed in items-to-review.csv so you know what to follow up on." },
+          { type: 'tip', text: "This is an operational record export, not tax or accounting advice — it's built to make a bookkeeper's job easier, not to replace one." },
+        ],
+      },
+    ],
+  },
+  {
     id: 'day-of',
     title: 'Running the Event',
     articles: [

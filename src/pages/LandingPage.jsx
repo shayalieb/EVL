@@ -92,7 +92,7 @@ const FEATURE_GROUPS = [
     id: 'oversight',
     title: 'For staying on top of it',
     icon: 'bell',
-    items: ['A dashboard that surfaces what actually needs attention', 'Automatic alerts for at-risk events and overdue invoices', 'Email templates with merge fields for real event details', 'Manual reminders tied to any client or contractor'],
+    items: ['A dashboard that surfaces what actually needs attention', 'Automatic alerts for at-risk events and overdue invoices', 'Email templates with merge fields for real event details', 'Manual reminders tied to any client or contractor', 'A Financials page tracking money in, money out, contractor payments due, and bookkeeper-ready exports'],
   },
 ];
 
@@ -141,6 +141,10 @@ const FAQS = [
   {
     q: 'Do I have to run every gig through the full proposal-and-contract pipeline?',
     a: "No. That pipeline is there for a formal booking with a paper trail, but you can also add an event directly for a one-off or word-of-mouth gig with no sales process attached at all.",
+  },
+  {
+    q: 'How do I keep track of money in and out for bookkeeping or taxes?',
+    a: "The Financials page shows everything at a glance — cash received, cash paid out, who owes you, who you still owe contractors — and lets you log any payment that didn't go through Stripe (cash, check, a card run outside the app) with an optional receipt attached. When it's time to hand things off to a bookkeeper or accountant, one export button builds a ZIP with a plain-language summary, the full payment history as a CSV, a list of anything missing documentation, and every receipt you've attached.",
   },
   {
     q: 'When can I start using it, and what does it cost?',
