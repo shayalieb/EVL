@@ -1,11 +1,8 @@
 const money = (value) => Number(value || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
 function reportDefinition(tab, reports) {
-  if (tab === 'receivables') return { title: 'Receivables Aging', headers: ['Client', 'Booking', 'Invoice', 'Due date', 'Days overdue', 'Balance'], rows: reports.receivables.rows.map((row) => [row.clientName, row.bookingName, row.invoiceNumber ?? '', row.dueDate ? row.dueDate.slice(0, 10) : '', row.overdueDays, money(row.balance)]), summary: `Total outstanding: ${money(reports.receivables.total)}` };
-  if (tab === 'payables') return { title: 'Contractor Payables', headers: ['Contractor', 'Event', 'Event date', 'Days past event', 'Expected pay'], rows: reports.payables.rows.map((row) => [row.contractorName, row.eventName, row.eventDate || '', row.overdueDays, money(row.expectedAmount)]), summary: `Total payables: ${money(reports.payables.total)}` };
-  if (tab === 'profitability') return { title: 'Booking Profitability', headers: ['Booking', 'Event date', 'Billed', 'Collected', 'Outstanding', 'Contractor costs', 'Other costs', 'Profit', 'Margin'], rows: reports.profitability.rows.map((row) => [row.name, row.eventDate || '', money(row.billed), money(row.collected), money(row.outstanding), money(row.contractorCosts), money(row.otherCosts), money(row.profit), row.margin === null ? '' : `${row.margin.toFixed(1)}%`]), summary: `Total profit: ${money(reports.profitability.totalProfit)}` };
-  const pnl = reports.profitAndLoss;
-  return { title: 'Profit & Loss — Cash Basis', headers: ['Type', 'Category', 'Amount'], rows: [...pnl.income.map((row) => ['Income', row.category.replaceAll('_', ' '), money(row.amount)]), ...pnl.expenses.map((row) => ['Expense', row.category.replaceAll('_', ' '), money(row.amount)])], summary: `Net income: ${money(pnl.netIncome)}` };
+  if (tab === 'payables') return { title: 'Who You Owe', headers: ['Contractor', 'Event', 'Event date', 'Days past event', 'Expected pay'], rows: reports.payables.rows.map((row) => [row.contractorName, row.eventName, row.eventDate || '', row.overdueDays, money(row.expectedAmount)]), summary: `Total payables: ${money(reports.payables.total)}` };
+  return { title: 'Who Owes You', headers: ['Client', 'Booking', 'Invoice', 'Due date', 'Days overdue', 'Balance'], rows: reports.receivables.rows.map((row) => [row.clientName, row.bookingName, row.invoiceNumber ?? '', row.dueDate ? row.dueDate.slice(0, 10) : '', row.overdueDays, money(row.balance)]), summary: `Total outstanding: ${money(reports.receivables.total)}` };
 }
 
 function safeCsvCell(value) {

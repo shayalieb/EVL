@@ -2573,7 +2573,7 @@ export default function EventFormPage() {
                   <span className="text-sm font-bold text-slate-700">Net Profit</span>
                   <span
                     data-testid="event-form-financials-settlement-badge"
-                    title={isActualFinancials ? 'Every contractor is resolved (Confirmed & paid, or Not Avail), every invoice is paid, and every expense is marked paid — this is realized, not estimated.' : 'Based on tier prices and invoiced amounts — will shift until every contractor is resolved (none left Tentative) and paid, every invoice settles, and every expense is marked paid.'}
+                    title={isActualFinancials ? "This is final — everyone's been paid and every invoice is settled." : "This will still change — some contractors, invoices, or expenses aren't settled yet."}
                     className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${isActualFinancials ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}
                   >
                     {isActualFinancials ? 'Actual' : 'Projected'}

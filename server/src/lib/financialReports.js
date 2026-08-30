@@ -42,16 +42,3 @@ export function inIsoDateRange(value, from, to) {
   if (!value) return !from && !to;
   return (!from || value >= from) && (!to || value <= to);
 }
-
-export function proposalSnapshotTotal(proposal) {
-  const lineItems = (proposal?.lineItems || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-  const offerings = (proposal?.offerings || []).reduce((sum, item) => sum + (item?.type === 'perUnit' ? (Number(item.unitCount) || 0) * (Number(item.ratePerUnit) || 0) : Number(item?.amount) || 0), 0);
-  return lineItems + offerings;
-}
-
-export function financialMonthSequence(start, count) {
-  return Array.from({ length: count }, (_, index) => {
-    const date = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + index, 1));
-    return { key: date.toISOString().slice(0, 7), label: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' }) };
-  });
-}

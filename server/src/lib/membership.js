@@ -12,7 +12,6 @@ export const PERMISSION_KEYS = [
   'manageSettings',
   'viewFinancials',
   'recordFinancialTransactions',
-  'manageFinancialBudgets',
   'exportFinancialReports',
 ];
 
@@ -32,7 +31,7 @@ export function sanitizePermissions(input) {
   // Existing members who could manage bookings already had full access to
   // Financials before these permissions existed. Preserve that access until
   // an owner explicitly customizes the new controls.
-  for (const key of ['viewFinancials', 'recordFinancialTransactions', 'manageFinancialBudgets', 'exportFinancialReports']) {
+  for (const key of ['viewFinancials', 'recordFinancialTransactions', 'exportFinancialReports']) {
     if (input?.[key] === undefined) safe[key] = !!input?.manageBookings;
   }
   return safe;

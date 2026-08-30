@@ -7,7 +7,6 @@ import { createWithPreservedId } from '../lib/idPreservingCreate.js';
 import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPageResponse } from '../lib/pagination.js';
 import { randomUUID } from 'node:crypto';
 import { dollarsToCents } from '../lib/financialLedger.js';
-import { assertFinancialPeriodOpen } from '../lib/financialPeriods.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -230,7 +229,6 @@ router.patch('/:id', asyncHandler(async (req, res) => {
         const deltaCents = dollarsToCents(newPaid) - dollarsToCents(oldPaid);
         if (deltaCents === 0) continue;
         const postingDate = booking.paidAt ? new Date(`${booking.paidAt}T12:00:00.000Z`) : new Date();
-        await assertFinancialPeriodOpen({ db: tx, accountId: existing.accountId, groupId: saved.groupId, occurredAt: postingDate });
         const contractor = contractorById.get(booking.contractorId);
         const contractorName = contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor';
         await tx.financialTransaction.create({ data: {
