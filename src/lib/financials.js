@@ -50,3 +50,8 @@ export async function updateContractorPayment(eventId, assignmentId, patch) {
 export async function authorizeFinancialExport(report, format, filters) {
   return apiFetch('/financials/export-events', { method: 'POST', body: JSON.stringify({ report, format, filters }) });
 }
+
+export async function getBookkeeperExport(filters) {
+  const data = await apiFetch('/financials/bookkeeper-export', { method: 'POST', body: JSON.stringify(filters) });
+  return data.exportData;
+}

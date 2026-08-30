@@ -41,6 +41,27 @@ function dateRange(req) {
   return from || to ? { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } : undefined;
 }
 
+async function enrichTransactions(accountId, transactions) {
+  const bookingIds = [...new Set(transactions.map((tx) => tx.bookingId).filter(Boolean))];
+  const eventIds = [...new Set(transactions.map((tx) => tx.eventId).filter(Boolean))];
+  const contractorIds = [...new Set(transactions.map((tx) => tx.contractorId).filter(Boolean))];
+  const invoiceIds = [...new Set(transactions.map((tx) => tx.invoiceId).filter(Boolean))];
+  const [bookings, events, contractors, invoices] = await Promise.all([
+    prisma.booking.findMany({ where: { accountId, id: { in: bookingIds } }, select: { id: true, eventName: true } }),
+    prisma.event.findMany({ where: { accountId, id: { in: eventIds } }, select: { id: true, name: true } }),
+    prisma.contractor.findMany({ where: { accountId, id: { in: contractorIds } }, select: { id: true, firstName: true, lastName: true } }),
+    prisma.invoice.findMany({ where: { accountId, id: { in: invoiceIds } }, select: { id: true, number: true, bookingId: true } }),
+  ]);
+  const bookingById = new Map(bookings.map((item) => [item.id, item]));
+  const eventById = new Map(events.map((item) => [item.id, item]));
+  const contractorById = new Map(contractors.map((item) => [item.id, item]));
+  const invoiceById = new Map(invoices.map((item) => [item.id, item]));
+  return transactions.map((tx) => {
+    const contractor = contractorById.get(tx.contractorId);
+    return serialize({ ...tx, relatedBooking: bookingById.get(tx.bookingId) || null, relatedEvent: eventById.get(tx.eventId) || null, relatedContractor: contractor ? { id: contractor.id, name: `${contractor.firstName} ${contractor.lastName}`.trim() } : null, relatedInvoice: invoiceById.get(tx.invoiceId) || null });
+  });
+}
+
 router.get('/', requireFinancialPermission('viewFinancials'), asyncHandler(async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const pageSize = Math.min(100, Math.max(10, Number(req.query.pageSize) || 30));
@@ -71,30 +92,7 @@ router.get('/', requireFinancialPermission('viewFinancials'), asyncHandler(async
     prisma.financialTransaction.findMany({ where, include: { group: { select: { name: true } }, createdBy: { select: { firstName: true, lastName: true } }, reversedBy: { select: { id: true } } }, orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }], skip: (page - 1) * pageSize, take: pageSize }),
     prisma.financialTransaction.count({ where }),
   ]);
-  const bookingIds = [...new Set(transactions.map((tx) => tx.bookingId).filter(Boolean))];
-  const eventIds = [...new Set(transactions.map((tx) => tx.eventId).filter(Boolean))];
-  const contractorIds = [...new Set(transactions.map((tx) => tx.contractorId).filter(Boolean))];
-  const invoiceIds = [...new Set(transactions.map((tx) => tx.invoiceId).filter(Boolean))];
-  const [bookings, events, contractors, invoices] = await Promise.all([
-    prisma.booking.findMany({ where: { accountId: req.membership.accountId, id: { in: bookingIds } }, select: { id: true, eventName: true } }),
-    prisma.event.findMany({ where: { accountId: req.membership.accountId, id: { in: eventIds } }, select: { id: true, name: true } }),
-    prisma.contractor.findMany({ where: { accountId: req.membership.accountId, id: { in: contractorIds } }, select: { id: true, firstName: true, lastName: true } }),
-    prisma.invoice.findMany({ where: { accountId: req.membership.accountId, id: { in: invoiceIds } }, select: { id: true, number: true, bookingId: true } }),
-  ]);
-  const bookingById = new Map(bookings.map((item) => [item.id, item]));
-  const eventById = new Map(events.map((item) => [item.id, item]));
-  const contractorById = new Map(contractors.map((item) => [item.id, item]));
-  const invoiceById = new Map(invoices.map((item) => [item.id, item]));
-  res.json({ transactions: transactions.map((tx) => {
-    const contractor = contractorById.get(tx.contractorId);
-    return serialize({
-      ...tx,
-      relatedBooking: bookingById.get(tx.bookingId) || null,
-      relatedEvent: eventById.get(tx.eventId) || null,
-      relatedContractor: contractor ? { id: contractor.id, name: `${contractor.firstName} ${contractor.lastName}`.trim() } : null,
-      relatedInvoice: invoiceById.get(tx.invoiceId) || null,
-    });
-  }), total, page, pageSize, pageCount: Math.max(1, Math.ceil(total / pageSize)) });
+  res.json({ transactions: await enrichTransactions(req.membership.accountId, transactions), total, page, pageSize, pageCount: Math.max(1, Math.ceil(total / pageSize)) });
 }));
 
 router.get('/summary', requireFinancialPermission('viewFinancials'), asyncHandler(async (req, res) => {
@@ -280,6 +278,36 @@ router.get('/reports', requireFinancialPermission('viewFinancials'), asyncHandle
     payables: { total: payables.reduce((sum, row) => sum + row.expectedAmount, 0), overdueTotal: payables.filter((row) => row.overdueDays > 0).reduce((sum, row) => sum + row.expectedAmount, 0), rows: payables },
     dataQuality: { issueCount: qualityIssues.reduce((sum, issue) => sum + issue.count, 0), issues: qualityIssues },
   } });
+}));
+
+router.post('/bookkeeper-export', requireFinancialPermission('exportFinancialReports'), asyncHandler(async (req, res) => {
+  const accountId = req.membership.accountId;
+  const from = String(req.body?.from || '').trim();
+  const to = String(req.body?.to || '').trim();
+  const groupId = String(req.body?.groupId || '').trim();
+  if ((from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) || (to && !/^\d{4}-\d{2}-\d{2}$/.test(to)) || (from && to && from > to)) return res.status(400).json({ error: 'Select a valid export date range.' });
+  const group = groupId ? await prisma.agencyGroup.findFirst({ where: { id: groupId, accountId }, select: { id: true, name: true } }) : null;
+  if (groupId && !group) return res.status(400).json({ error: 'Invalid managed group.' });
+  const where = { accountId, ...(groupId ? { groupId } : {}), ...(from || to ? { occurredAt: { ...(from ? { gte: new Date(`${from}T00:00:00.000Z`) } : {}), ...(to ? { lte: new Date(`${to}T23:59:59.999Z`) } : {}) } } : {}) };
+  const total = await prisma.financialTransaction.count({ where });
+  if (total > 5000) return res.status(413).json({ error: 'This period has more than 5,000 payments. Choose a shorter date range.' });
+  const rawTransactions = await prisma.financialTransaction.findMany({ where, include: { group: { select: { name: true } }, createdBy: { select: { firstName: true, lastName: true } }, reversedBy: { select: { id: true } } }, orderBy: [{ occurredAt: 'asc' }, { createdAt: 'asc' }] });
+  const transactions = await enrichTransactions(accountId, rawTransactions);
+  const activeExpenses = transactions.filter((tx) => tx.amount < 0 && !tx.reversed && !tx.reversalOfId);
+  const activeTransactions = transactions.filter((tx) => !tx.reversed && !tx.reversalOfId);
+  const receipts = activeExpenses.filter((tx) => tx.metadata?.receipt);
+  const summary = {
+    transactionCount: transactions.length,
+    moneyReceived: activeTransactions.reduce((sum, tx) => sum + Math.max(0, tx.amount), 0),
+    moneyPaidOut: Math.abs(activeTransactions.reduce((sum, tx) => sum + Math.min(0, tx.amount), 0)),
+    receiptCount: receipts.length,
+    receiptBytes: receipts.reduce((sum, tx) => sum + (Number(tx.metadata.receipt.size) || 0), 0),
+    missingReceiptCount: activeExpenses.filter((tx) => !tx.metadata?.receipt).length,
+    missingPayeeCount: activeExpenses.filter((tx) => !tx.metadata?.payee).length,
+    unlinkedCount: activeExpenses.filter((tx) => !tx.bookingId && !tx.eventId && !tx.contractorId && !tx.invoiceId).length,
+  };
+  if (req.body?.preview !== true) await prisma.accountActivity.create({ data: { accountId, actorUserId: req.session.userId, type: 'bookkeeper_export_created', summary: 'Bookkeeper package exported', metadata: { from: from || null, to: to || null, groupId: groupId || null, transactionCount: transactions.length, receiptCount: receipts.length } } });
+  res.json({ exportData: { period: { from: from || null, to: to || null }, scope: { groupId: groupId || null, groupName: group?.name || null }, summary: { ...summary, net: summary.moneyReceived - summary.moneyPaidOut }, transactions } });
 }));
 
 router.post('/export-events', requireFinancialPermission('exportFinancialReports'), asyncHandler(async (req, res) => {
