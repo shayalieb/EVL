@@ -9,6 +9,7 @@ import { paidCheckoutSessionMatchesInvoice } from '../lib/invoicePaymentVerifica
 import { getStripeClient } from '../lib/stripe.js';
 import { normalizeValidEmail } from '../lib/emailAddress.js';
 import { recordInvoicePayment } from '../lib/financialLedger.js';
+import { assertFinancialPeriodOpen } from '../lib/financialPeriods.js';
 
 const router = Router();
 
@@ -321,6 +322,11 @@ router.post('/:id/mark-payment', asyncHandler(async (req, res) => {
   // Leaving draft status behind for the first time — stamp sentAt so it
   // reads consistently with an invoice that went out through POST /:id/send.
   if (invoice.status === 'draft') data.sentAt = new Date();
+
+  const booking = await prisma.booking.findFirst({ where: { id: invoice.bookingId, accountId: invoice.accountId }, select: { groupId: true } });
+  const postingDate = status === 'paid' && paidAt ? new Date(paidAt) : new Date();
+  if (Number.isNaN(postingDate.getTime())) return res.status(400).json({ error: 'Select a valid payment date.' });
+  await assertFinancialPeriodOpen({ accountId: invoice.accountId, groupId: booking?.groupId || null, occurredAt: postingDate });
 
   const updated = await prisma.$transaction(async (tx) => {
     const saved = await tx.invoice.update({ where: { id: invoice.id }, data });

@@ -103,6 +103,13 @@ function VerticalGate({ vertical, children }) {
   return children;
 }
 
+function PermissionGate({ permission, children }) {
+  const { currentUser, authLoading, can } = useAuth();
+  if (authLoading) return null;
+  if (!currentUser || !can(permission)) return <Navigate to="/home" replace />;
+  return children;
+}
+
 // Gates a single route to platform admins without needing a whole nested
 // area like PlatformAdminArea below — for one-off internal/dev pages that
 // live inside the regular app chrome rather than the admin layout.
@@ -171,7 +178,7 @@ function AppRoutes() {
         <Route index element={<Navigate to="/home" replace />} />
         <Route path="home" element={<HomePage />} />
         <Route path="agency/groups" element={<AgencyGroupsPage />} />
-        <Route path="financials" element={<FinancialsPage />} />
+        <Route path="financials" element={<PermissionGate permission="viewFinancials"><FinancialsPage /></PermissionGate>} />
         <Route path="contractors" element={<ContractorsPage />} />
         <Route path="clients" element={<ClientsPage />} />
         <Route path="venues" element={<VenuesPage />} />

@@ -3,10 +3,11 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { attachMembership, effectivePermissions } from '../lib/membership.js';
+import { attachMembership, effectivePermissions, requireRole } from '../lib/membership.js';
 import { dollarsToCents } from '../lib/financialLedger.js';
 import { invoiceTotal } from './invoices.js';
 import { contractorAssignmentCost, financialMonthSequence, inIsoDateRange, proposalSnapshotTotal, receivableAgingBucket } from '../lib/financialReports.js';
+import { assertFinancialPeriodOpen } from '../lib/financialPeriods.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -14,6 +15,14 @@ router.use(requireAuth, asyncHandler(attachMembership));
 const EXPENSE_CATEGORIES = new Set(['contractor_payment', 'production', 'backline', 'travel', 'processing_fee', 'agency_commission', 'tax', 'reimbursement', 'other_expense']);
 const METHODS = new Set(['ach', 'check', 'card', 'cash', 'wire', 'other']);
 const REPORT_TABS = new Set(['pnl', 'receivables', 'payables', 'profitability']);
+
+function hasPermission(req, permission) {
+  return !!effectivePermissions(req.membership)[permission];
+}
+
+function requireFinancialPermission(permission) {
+  return (req, res, next) => hasPermission(req, permission) ? next() : res.status(403).json({ error: 'Not authorized.' });
+}
 
 function serialize(tx) {
   return { ...tx, amount: tx.amountCents / 100, reversed: !!tx.reversedBy, reversedBy: undefined };
@@ -25,7 +34,7 @@ function dateRange(req) {
   return from || to ? { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } : undefined;
 }
 
-router.get('/', asyncHandler(async (req, res) => {
+router.get('/', requireFinancialPermission('viewFinancials'), asyncHandler(async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const pageSize = Math.min(100, Math.max(10, Number(req.query.pageSize) || 30));
   const where = {
@@ -42,7 +51,7 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ transactions: transactions.map(serialize), total, page, pageSize });
 }));
 
-router.get('/summary', asyncHandler(async (req, res) => {
+router.get('/summary', requireFinancialPermission('viewFinancials'), asyncHandler(async (req, res) => {
   const accountId = req.membership.accountId;
   const occurredAt = dateRange(req);
   const groupFilter = req.query.groupId ? { groupId: req.query.groupId } : {};
@@ -83,7 +92,7 @@ router.get('/summary', asyncHandler(async (req, res) => {
   res.json({ summary: { inflow: inflowCents / 100, outflow: outflowCents / 100, netCash: (inflowCents - outflowCents) / 100, accountsReceivable: receivableCents / 100, accountsPayable: payableRows.reduce((sum, row) => sum + row.amount, 0), payableCount: payableRows.length, payables: payableRows.slice(0, 10), profitability } });
 }));
 
-router.get('/reports', asyncHandler(async (req, res) => {
+router.get('/reports', requireFinancialPermission('viewFinancials'), asyncHandler(async (req, res) => {
   const accountId = req.membership.accountId;
   const groupId = String(req.query.groupId || '').trim();
   const from = String(req.query.from || '').trim();
@@ -207,7 +216,7 @@ function transactionIsIncome(transaction) {
   return category === 'client_payment' || (category === 'payment_adjustment' && !!context.invoiceStatus);
 }
 
-router.get('/forecast', asyncHandler(async (req, res) => {
+router.get('/forecast', requireFinancialPermission('viewFinancials'), asyncHandler(async (req, res) => {
   const accountId = req.membership.accountId;
   const groupId = String(req.query.groupId || '').trim();
   const groupFilter = groupId ? { groupId } : {};
@@ -293,8 +302,7 @@ router.get('/forecast', asyncHandler(async (req, res) => {
   res.json({ forecast: { trend, cashFlow, pipeline: { total: pipeline.reduce((sum, row) => sum + row.value, 0), weightedTotal: pipeline.reduce((sum, row) => sum + row.weightedValue, 0), rows: pipeline.slice(0, 12) }, obligations: obligations.sort((a, b) => (a.eventDate || '').localeCompare(b.eventDate || '')).slice(0, 12), alerts } });
 }));
 
-router.put('/budgets/:month', asyncHandler(async (req, res) => {
-  if (!effectivePermissions(req.membership).manageBookings) return res.status(403).json({ error: 'Not authorized.' });
+router.put('/budgets/:month', requireFinancialPermission('manageFinancialBudgets'), asyncHandler(async (req, res) => {
   const month = String(req.params.month || '');
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ error: 'Select a valid budget month.' });
   const groupId = String(req.body?.groupId || '').trim();
@@ -306,12 +314,56 @@ router.put('/budgets/:month', asyncHandler(async (req, res) => {
   res.json({ budget: { ...budget, revenueTarget: budget.revenueTargetCents / 100, expenseBudget: budget.expenseBudgetCents / 100 } });
 }));
 
-router.get('/saved-views', asyncHandler(async (req, res) => {
+router.get('/periods', requireFinancialPermission('viewFinancials'), asyncHandler(async (req, res) => {
+  const groupId = String(req.query.groupId || '').trim();
+  const periods = await prisma.financialPeriod.findMany({
+    where: { accountId: req.membership.accountId, groupKey: groupId || 'account' },
+    include: { closedBy: { select: { firstName: true, lastName: true } }, activities: { include: { actor: { select: { firstName: true, lastName: true } } }, orderBy: { createdAt: 'desc' }, take: 10 } },
+    orderBy: { month: 'desc' },
+    take: 36,
+  });
+  res.json({ periods });
+}));
+
+router.post('/periods/:month/close', requireRole('owner', 'admin'), asyncHandler(async (req, res) => {
+  const month = String(req.params.month || '');
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || month >= currentMonth) return res.status(400).json({ error: 'Only a completed month can be closed.' });
+  const groupId = String(req.body?.groupId || '').trim();
+  const reason = String(req.body?.reason || '').trim();
+  if (!reason) return res.status(400).json({ error: 'Enter a closing note.' });
+  if (groupId && !await prisma.agencyGroup.findFirst({ where: { id: groupId, accountId: req.membership.accountId } })) return res.status(400).json({ error: 'Invalid managed group.' });
+  const existing = await prisma.financialPeriod.findUnique({ where: { accountId_groupKey_month: { accountId: req.membership.accountId, groupKey: groupId || 'account', month } } });
+  if (existing?.status === 'closed') return res.status(409).json({ error: 'This accounting period is already closed.' });
+  const period = await prisma.$transaction(async (tx) => {
+    const saved = await tx.financialPeriod.upsert({ where: { accountId_groupKey_month: { accountId: req.membership.accountId, groupKey: groupId || 'account', month } }, create: { accountId: req.membership.accountId, groupId: groupId || null, groupKey: groupId || 'account', month, status: 'closed', closedById: req.session.userId }, update: { status: 'closed', closedAt: new Date(), closedById: req.session.userId } });
+    await tx.financialPeriodActivity.create({ data: { accountId: req.membership.accountId, periodId: saved.id, actorId: req.session.userId, action: 'closed', reason } });
+    return saved;
+  });
+  res.json({ period });
+}));
+
+router.post('/periods/:month/reopen', requireRole('owner'), asyncHandler(async (req, res) => {
+  const month = String(req.params.month || '');
+  const groupId = String(req.body?.groupId || '').trim();
+  const reason = String(req.body?.reason || '').trim();
+  if (!reason) return res.status(400).json({ error: 'A reopening reason is required.' });
+  const existing = await prisma.financialPeriod.findUnique({ where: { accountId_groupKey_month: { accountId: req.membership.accountId, groupKey: groupId || 'account', month } } });
+  if (!existing || existing.status !== 'closed') return res.status(404).json({ error: 'Closed accounting period not found.' });
+  const period = await prisma.$transaction(async (tx) => {
+    const saved = await tx.financialPeriod.update({ where: { id: existing.id }, data: { status: 'open' } });
+    await tx.financialPeriodActivity.create({ data: { accountId: req.membership.accountId, periodId: saved.id, actorId: req.session.userId, action: 'reopened', reason } });
+    return saved;
+  });
+  res.json({ period });
+}));
+
+router.get('/saved-views', requireFinancialPermission('viewFinancials'), asyncHandler(async (req, res) => {
   const views = await prisma.savedFinancialReport.findMany({ where: { accountId: req.membership.accountId, userId: req.session.userId }, orderBy: { updatedAt: 'desc' } });
   res.json({ views });
 }));
 
-router.post('/saved-views', asyncHandler(async (req, res) => {
+router.post('/saved-views', requireFinancialPermission('viewFinancials'), asyncHandler(async (req, res) => {
   const name = String(req.body?.name || '').trim();
   const reportTab = String(req.body?.reportTab || 'pnl');
   const filters = req.body?.filters && typeof req.body.filters === 'object' ? req.body.filters : {};
@@ -323,15 +375,28 @@ router.post('/saved-views', asyncHandler(async (req, res) => {
   res.status(201).json({ view });
 }));
 
-router.delete('/saved-views/:id', asyncHandler(async (req, res) => {
+router.delete('/saved-views/:id', requireFinancialPermission('viewFinancials'), asyncHandler(async (req, res) => {
   const existing = await prisma.savedFinancialReport.findFirst({ where: { id: req.params.id, accountId: req.membership.accountId, userId: req.session.userId } });
   if (!existing) return res.status(404).json({ error: 'Saved view not found.' });
   await prisma.savedFinancialReport.delete({ where: { id: existing.id } });
   res.json({ ok: true });
 }));
 
-router.post('/expenses', asyncHandler(async (req, res) => {
-  if (!effectivePermissions(req.membership).manageBookings) return res.status(403).json({ error: 'Not authorized.' });
+router.post('/export-events', requireFinancialPermission('exportFinancialReports'), asyncHandler(async (req, res) => {
+  const format = String(req.body?.format || '');
+  const report = String(req.body?.report || '');
+  if (!['csv', 'pdf'].includes(format) || !REPORT_TABS.has(report)) return res.status(400).json({ error: 'Invalid financial export.' });
+  const requestedFilters = req.body?.filters && typeof req.body.filters === 'object' ? req.body.filters : {};
+  const filters = {
+    from: String(requestedFilters.from || '').slice(0, 10),
+    to: String(requestedFilters.to || '').slice(0, 10),
+    groupId: String(requestedFilters.groupId || '').slice(0, 100),
+  };
+  await prisma.accountActivity.create({ data: { accountId: req.membership.accountId, actorUserId: req.session.userId, type: 'financial_report_exported', summary: `${report} financial report exported as ${format.toUpperCase()}`, metadata: { report, format, filters } } });
+  res.json({ ok: true });
+}));
+
+router.post('/expenses', requireFinancialPermission('recordFinancialTransactions'), asyncHandler(async (req, res) => {
   const { amount, category, description, occurredAt, groupId, bookingId, eventId, contractorId, paymentMethod, reference, memo } = req.body || {};
   const amountCents = dollarsToCents(amount);
   if (!(amountCents > 0)) return res.status(400).json({ error: 'Amount must be greater than $0.' });
@@ -341,12 +406,12 @@ router.post('/expenses', asyncHandler(async (req, res) => {
   if (groupId && !await prisma.agencyGroup.findFirst({ where: { id: groupId, accountId: req.membership.accountId } })) return res.status(400).json({ error: 'Invalid managed group.' });
   const transactionDate = occurredAt ? new Date(`${occurredAt}T12:00:00.000Z`) : new Date();
   if (Number.isNaN(transactionDate.getTime())) return res.status(400).json({ error: 'Select a valid payment date.' });
+  await assertFinancialPeriodOpen({ accountId: req.membership.accountId, groupId: groupId || null, occurredAt: transactionDate });
   const transaction = await prisma.financialTransaction.create({ data: { accountId: req.membership.accountId, groupId: groupId || null, bookingId: bookingId || null, eventId: eventId || null, contractorId: contractorId || null, category, amountCents: -amountCents, description: description.trim(), occurredAt: transactionDate, sourceType: 'manual_expense', sourceId: randomUUID(), paymentMethod: paymentMethod || null, reference: reference || null, memo: memo || null, createdById: req.session.userId } });
   res.status(201).json({ transaction: serialize({ ...transaction, reversedBy: null }) });
 }));
 
-router.post('/:id/reverse', asyncHandler(async (req, res) => {
-  if (!effectivePermissions(req.membership).manageBookings) return res.status(403).json({ error: 'Not authorized.' });
+router.post('/:id/reverse', requireFinancialPermission('recordFinancialTransactions'), asyncHandler(async (req, res) => {
   const original = await prisma.financialTransaction.findFirst({ where: { id: req.params.id, accountId: req.membership.accountId }, include: { reversedBy: true } });
   if (!original) return res.status(404).json({ error: 'Transaction not found.' });
   if (original.reversalOfId || original.reversedBy) return res.status(400).json({ error: 'This transaction is already a correction or has already been reversed.' });

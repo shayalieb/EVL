@@ -10,6 +10,10 @@ export const PERMISSION_KEYS = [
   'manageEmailTemplates',
   'manageOfferings',
   'manageSettings',
+  'viewFinancials',
+  'recordFinancialTransactions',
+  'manageFinancialBudgets',
+  'exportFinancialReports',
 ];
 
 export function emptyPermissions() {
@@ -24,6 +28,12 @@ export function sanitizePermissions(input) {
   const safe = emptyPermissions();
   for (const key of PERMISSION_KEYS) {
     if (input && typeof input[key] === 'boolean') safe[key] = input[key];
+  }
+  // Existing members who could manage bookings already had full access to
+  // Financials before these permissions existed. Preserve that access until
+  // an owner explicitly customizes the new controls.
+  for (const key of ['viewFinancials', 'recordFinancialTransactions', 'manageFinancialBudgets', 'exportFinancialReports']) {
+    if (input?.[key] === undefined) safe[key] = !!input?.manageBookings;
   }
   return safe;
 }

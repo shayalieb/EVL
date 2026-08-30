@@ -19,6 +19,10 @@ const PERMISSION_FIELDS = [
   { key: 'manageEmailTemplates', label: 'Manage Email Templates' },
   { key: 'manageOfferings', label: 'Manage Offerings' },
   { key: 'manageSettings', label: 'Manage Business Info & Custom Fields' },
+  { key: 'viewFinancials', label: 'View Financials' },
+  { key: 'recordFinancialTransactions', label: 'Record Financial Transactions' },
+  { key: 'manageFinancialBudgets', label: 'Manage Financial Budgets' },
+  { key: 'exportFinancialReports', label: 'Export Financial Reports' },
 ];
 
 function emptyPermissions() {

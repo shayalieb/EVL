@@ -52,3 +52,22 @@ export async function saveFinancialView(view) {
 export async function deleteFinancialView(id) {
   return apiFetch(`/financials/saved-views/${id}`, { method: 'DELETE' });
 }
+
+export async function listFinancialPeriods(groupId) {
+  const data = await apiFetch(`/financials/periods${queryString(groupId ? { groupId } : {})}`);
+  return data.periods;
+}
+
+export async function closeFinancialPeriod(month, groupId, reason) {
+  const data = await apiFetch(`/financials/periods/${month}/close`, { method: 'POST', body: JSON.stringify({ groupId: groupId || null, reason }) });
+  return data.period;
+}
+
+export async function reopenFinancialPeriod(month, groupId, reason) {
+  const data = await apiFetch(`/financials/periods/${month}/reopen`, { method: 'POST', body: JSON.stringify({ groupId: groupId || null, reason }) });
+  return data.period;
+}
+
+export async function authorizeFinancialExport(report, format, filters) {
+  return apiFetch('/financials/export-events', { method: 'POST', body: JSON.stringify({ report, format, filters }) });
+}

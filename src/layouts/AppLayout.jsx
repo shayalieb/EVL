@@ -12,7 +12,7 @@ const NAV_GROUPS = [
       { to: '/home', label: 'Home', icon: '🏠' },
       { to: '/bookings', label: 'Bookings', icon: '🤝' },
       { to: '/events', label: 'Events', icon: '📅' },
-      { to: '/financials', label: 'Financials', icon: '💵' },
+      { to: '/financials', label: 'Financials', icon: '💵', permission: 'viewFinancials' },
       { to: '/reminders', label: 'Reminders', icon: '🔔' },
     ],
   },
@@ -102,7 +102,7 @@ export default function AppLayout() {
   const navGroups = NAV_GROUPS
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => !item.vertical || currentUser?.activeVerticals?.includes(item.vertical)),
+      items: group.items.filter((item) => (!item.vertical || currentUser?.activeVerticals?.includes(item.vertical)) && (!item.permission || currentUser?.permissions?.[item.permission])),
     }))
     .map((group, i) => (
       currentUser?.isPlatformAdmin && i === NAV_GROUPS.length - 1

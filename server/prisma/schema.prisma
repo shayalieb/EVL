@@ -39,6 +39,8 @@ model User {
   accountActivities   AccountActivity[]
   financialTransactions FinancialTransaction[] @relation("FinancialTransactionCreator")
   savedFinancialReports SavedFinancialReport[]
+  closedFinancialPeriods FinancialPeriod[] @relation("FinancialPeriodCloser")
+  financialPeriodActivities FinancialPeriodActivity[]
 }
 
 model Account {
@@ -94,6 +96,8 @@ model Account {
   financialTransactions   FinancialTransaction[]
   savedFinancialReports   SavedFinancialReport[]
   financialBudgets        FinancialBudget[]
+  financialPeriods        FinancialPeriod[]
+  financialPeriodActivities FinancialPeriodActivity[]
 
   // Stripe Connect (Express) — set once onboarding starts. The three
   // booleans are a local cache of the connected Account object, synced by
@@ -790,6 +794,41 @@ model FinancialBudget {
 
   @@unique([accountId, groupKey, month])
   @@index([accountId, month])
+}
+
+model FinancialPeriod {
+  id         String  @id @default(cuid())
+  accountId  String
+  account    Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  groupId    String?
+  group      AgencyGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupKey   String  @default("account")
+  month      String
+  status     String  @default("closed")
+  closedAt   DateTime @default(now())
+  closedById String?
+  closedBy   User? @relation("FinancialPeriodCloser", fields: [closedById], references: [id], onDelete: SetNull)
+  activities FinancialPeriodActivity[]
+  updatedAt  DateTime @updatedAt
+
+  @@unique([accountId, groupKey, month])
+  @@index([accountId, month])
+}
+
+model FinancialPeriodActivity {
+  id        String  @id @default(cuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  periodId  String
+  period    FinancialPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  actorId   String?
+  actor     User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action    String
+  reason    String @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([accountId, createdAt])
+  @@index([periodId, createdAt])
 }
 
 // A follow-up reminder, optionally tied to a client, contractor, event,
@@ -1493,6 +1532,7 @@ model AgencyGroup {
   events      Event[]
   financialTransactions FinancialTransaction[]
   financialBudgets FinancialBudget[]
+  financialPeriods FinancialPeriod[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

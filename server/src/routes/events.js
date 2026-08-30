@@ -7,6 +7,7 @@ import { createWithPreservedId } from '../lib/idPreservingCreate.js';
 import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPageResponse } from '../lib/pagination.js';
 import { randomUUID } from 'node:crypto';
 import { dollarsToCents } from '../lib/financialLedger.js';
+import { assertFinancialPeriodOpen } from '../lib/financialPeriods.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -228,6 +229,8 @@ router.patch('/:id', asyncHandler(async (req, res) => {
         const newPaid = booking.paymentStatus === 'paid' ? Number(booking.paidAmount) || 0 : 0;
         const deltaCents = dollarsToCents(newPaid) - dollarsToCents(oldPaid);
         if (deltaCents === 0) continue;
+        const postingDate = booking.paidAt ? new Date(`${booking.paidAt}T12:00:00.000Z`) : new Date();
+        await assertFinancialPeriodOpen({ db: tx, accountId: existing.accountId, groupId: saved.groupId, occurredAt: postingDate });
         const contractor = contractorById.get(booking.contractorId);
         const contractorName = contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor';
         await tx.financialTransaction.create({ data: {
@@ -238,7 +241,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
           category: deltaCents > 0 ? 'contractor_payment' : 'payment_adjustment',
           amountCents: -deltaCents,
           description: `${deltaCents > 0 ? 'Contractor paid' : 'Contractor payment correction'} · ${contractorName}`,
-          occurredAt: booking.paidAt ? new Date(`${booking.paidAt}T12:00:00.000Z`) : new Date(),
+          occurredAt: postingDate,
           sourceType: 'event_contractor_payment',
           sourceId: randomUUID(),
           paymentMethod: booking.paymentMethod || null,
