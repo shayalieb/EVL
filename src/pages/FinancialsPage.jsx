@@ -3,7 +3,6 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAgencyGroup } from '../context/AgencyGroupContext';
 import MoneyInput from '../components/ui/MoneyInput';
-import { listAgencyGroups } from '../lib/agencyGroups';
 import { authorizeFinancialExport, createFinancialExpense, getFinancialReports, getFinancialSummary, listFinancialTransactions, reverseFinancialTransaction } from '../lib/financials';
 import { exportFinancialReportCsv, exportFinancialReportPdf } from '../lib/financialReportExports';
 
@@ -17,6 +16,7 @@ const money = (value) => Number(value || 0).toLocaleString('en-US', { style: 'cu
 const today = () => new Date().toISOString().slice(0, 10);
 const startOfYear = () => `${new Date().getFullYear()}-01-01`;
 const reportTabs = [['receivables', 'Who owes you'], ['payables', 'Who you owe']];
+const pageSections = [['overview', 'Overview'], ['payments', 'Payments'], ['reports', 'Reports']];
 
 function friendlyDate(value) {
   if (!value) return null;
@@ -60,13 +60,14 @@ function displayedReports(reports, tab, search, sort) {
 
 export default function FinancialsPage() {
   const { currentUser, can } = useAuth();
-  const { setSelectedGroupId: setWorkspaceGroupId } = useAgencyGroup();
+  const { groups, selectedGroup } = useAgencyGroup();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedGroupId = searchParams.get('groupId') || '';
+  const requestedSection = searchParams.get('section') || 'overview';
+  const activeSection = pageSections.some(([id]) => id === requestedSection) ? requestedSection : 'overview';
   const [summary, setSummary] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [reports, setReports] = useState(null);
-  const [groups, setGroups] = useState([]);
   const [groupId, setGroupId] = useState(requestedGroupId);
   const [from, setFrom] = useState(startOfYear());
   const [to, setTo] = useState(today());
@@ -81,12 +82,10 @@ export default function FinancialsPage() {
 
   useEffect(() => { setGroupId(requestedGroupId); }, [requestedGroupId]);
 
-  function selectGroup(nextGroupId) {
-    setGroupId(nextGroupId);
-    setWorkspaceGroupId(nextGroupId);
+  function selectSection(nextSection) {
     const next = new URLSearchParams(searchParams);
-    if (nextGroupId) next.set('groupId', nextGroupId);
-    else next.delete('groupId');
+    if (nextSection === 'overview') next.delete('section');
+    else next.set('section', nextSection);
     setSearchParams(next, { replace: true });
   }
   const [form, setForm] = useState({ amount: '', category: 'contractor_payment', description: '', occurredAt: today(), paymentMethod: '', reference: '', memo: '', groupId: '' });
@@ -95,14 +94,13 @@ export default function FinancialsPage() {
     setLoading(true); setError('');
     try {
       const filters = { ...(groupId ? { groupId } : {}), ...(from ? { from } : {}), ...(to ? { to } : {}) };
-      const [nextSummary, ledger, nextReports] = await Promise.all([getFinancialSummary(filters), listFinancialTransactions({ ...filters, pageSize: 50 }), getFinancialReports(filters)]);
+      const [nextSummary, ledger, nextReports] = await Promise.all([getFinancialSummary(filters), listFinancialTransactions({ ...(groupId ? { groupId } : {}), pageSize: 50 }), getFinancialReports(filters)]);
       setSummary(nextSummary); setTransactions(ledger.transactions); setReports(nextReports);
     } catch (err) { setError(err.message || 'Financial information could not be loaded.'); }
     finally { setLoading(false); }
   }, [groupId, from, to]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { if (currentUser?.planTier === 'agency') listAgencyGroups().then(setGroups).catch(() => {}); }, [currentUser?.planTier]);
 
   const visibleReports = displayedReports(reports, reportTab, reportSearch, reportSort);
 
@@ -143,13 +141,14 @@ export default function FinancialsPage() {
     <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-8 space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><h1 className="text-2xl font-bold text-slate-900">Financials</h1><p className="mt-1 text-sm text-slate-500">See what came in, what went out, what is still owed, and which bookings are profitable.</p></div>
-        <div className="flex flex-wrap gap-2">
-          {groups.length > 0 && <select value={groupId} onChange={(e) => selectGroup(e.target.value)} className={inputClass} aria-label="Managed group"><option value="">All managed groups</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select>}
-          {can('recordFinancialTransactions') && <button type="button" onClick={() => setShowExpense((value) => !value)} className="min-h-11 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">{showExpense ? 'Cancel' : '+ Record expense'}</button>}
-        </div>
+        {selectedGroup && <div className="rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-700">Viewing {selectedGroup.name}</div>}
       </div>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <nav className="flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm" aria-label="Financial sections">
+        {pageSections.map(([id, label]) => <button key={id} type="button" onClick={() => selectSection(id)} aria-current={activeSection === id ? 'page' : undefined} className={`min-h-11 flex-1 whitespace-nowrap rounded-lg px-4 text-sm font-semibold transition-colors ${activeSection === id ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}>{label}</button>)}
+      </nav>
+
+      {activeSection !== 'payments' && <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-end gap-3">
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">From<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={`${inputClass} mt-1`} /></label>
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">To<input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={`${inputClass} mt-1`} /></label>
@@ -160,12 +159,13 @@ export default function FinancialsPage() {
           </div>
           {loading && <span className="pb-3 text-xs text-slate-400">Refreshing…</span>}
         </div>
-      </section>
+      </section>}
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
-      {showExpense && <form onSubmit={saveExpense} className="rounded-xl border border-indigo-100 bg-white p-5 shadow-sm space-y-4"><div><h2 className="font-bold text-slate-800">Record money paid out</h2><p className="text-xs text-slate-500 mt-1">Once recorded, this can't be edited — if it's wrong, undo it from the payment log below instead so the original stays visible.</p></div><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3"><label className="text-sm font-medium text-slate-700">Amount<MoneyInput value={form.amount} onChange={(amount) => setForm((old) => ({ ...old, amount }))} className={`${inputClass} mt-1`} /></label><label className="text-sm font-medium text-slate-700">Category<select value={form.category} onChange={(e) => setForm((old) => ({ ...old, category: e.target.value }))} className={`${inputClass} mt-1`}>{categories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-sm font-medium text-slate-700">Payment date<input type="date" value={form.occurredAt} onChange={(e) => setForm((old) => ({ ...old, occurredAt: e.target.value }))} className={`${inputClass} mt-1`} /></label><label className="text-sm font-medium text-slate-700">Method<select value={form.paymentMethod} onChange={(e) => setForm((old) => ({ ...old, paymentMethod: e.target.value }))} className={`${inputClass} mt-1`}><option value="">Not specified</option><option value="ach">ACH</option><option value="check">Check</option><option value="card">Card</option><option value="cash">Cash</option><option value="wire">Wire</option><option value="other">Other</option></select></label></div><div className="grid sm:grid-cols-2 gap-3"><label className="text-sm font-medium text-slate-700">Description<input required value={form.description} onChange={(e) => setForm((old) => ({ ...old, description: e.target.value }))} placeholder="What was this payment for?" className={`${inputClass} mt-1`} /></label><label className="text-sm font-medium text-slate-700">Reference<input value={form.reference} onChange={(e) => setForm((old) => ({ ...old, reference: e.target.value }))} placeholder="Check or confirmation number" className={`${inputClass} mt-1`} /></label></div>{groups.length > 0 && <label className="block text-sm font-medium text-slate-700 max-w-sm">Managed group<select value={form.groupId} onChange={(e) => setForm((old) => ({ ...old, groupId: e.target.value }))} className={`${inputClass} mt-1`}><option value="">Agency-wide / unassigned</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>}<div className="flex justify-end"><button disabled={saving} className="min-h-11 rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white disabled:opacity-60">{saving ? 'Recording…' : 'Record expense'}</button></div></form>}
+      {activeSection === 'payments' && <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold text-slate-800">Payments</h2><p className="mt-1 text-sm text-slate-500">Review recorded money in and money out, or add an expense.</p></div>{can('recordFinancialTransactions') && <button type="button" onClick={() => setShowExpense((value) => !value)} className="min-h-11 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">{showExpense ? 'Cancel' : '+ Add money paid out'}</button>}</div>}
+      {activeSection === 'payments' && showExpense && <form onSubmit={saveExpense} className="rounded-xl border border-indigo-100 bg-white p-5 shadow-sm space-y-4"><div><h2 className="font-bold text-slate-800">Add money paid out</h2><p className="text-xs text-slate-500 mt-1">Once recorded, this can't be edited — if it's wrong, undo it from the payment history below instead so the original stays visible.</p></div><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3"><label className="text-sm font-medium text-slate-700">Amount<MoneyInput value={form.amount} onChange={(amount) => setForm((old) => ({ ...old, amount }))} className={`${inputClass} mt-1`} /></label><label className="text-sm font-medium text-slate-700">Category<select value={form.category} onChange={(e) => setForm((old) => ({ ...old, category: e.target.value }))} className={`${inputClass} mt-1`}>{categories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-sm font-medium text-slate-700">Payment date<input type="date" value={form.occurredAt} onChange={(e) => setForm((old) => ({ ...old, occurredAt: e.target.value }))} className={`${inputClass} mt-1`} /></label><label className="text-sm font-medium text-slate-700">Method<select value={form.paymentMethod} onChange={(e) => setForm((old) => ({ ...old, paymentMethod: e.target.value }))} className={`${inputClass} mt-1`}><option value="">Not specified</option><option value="ach">ACH</option><option value="check">Check</option><option value="card">Card</option><option value="cash">Cash</option><option value="wire">Wire</option><option value="other">Other</option></select></label></div><div className="grid sm:grid-cols-2 gap-3"><label className="text-sm font-medium text-slate-700">Description<input required value={form.description} onChange={(e) => setForm((old) => ({ ...old, description: e.target.value }))} placeholder="What was this payment for?" className={`${inputClass} mt-1`} /></label><label className="text-sm font-medium text-slate-700">Reference<input value={form.reference} onChange={(e) => setForm((old) => ({ ...old, reference: e.target.value }))} placeholder="Check or confirmation number" className={`${inputClass} mt-1`} /></label></div>{groups.length > 0 && <label className="block text-sm font-medium text-slate-700 max-w-sm">Managed group<select value={form.groupId} onChange={(e) => setForm((old) => ({ ...old, groupId: e.target.value }))} className={`${inputClass} mt-1`}><option value="">Use current group ({selectedGroup?.name || 'agency-wide'})</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>}<div className="flex justify-end"><button disabled={saving} className="min-h-11 rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white disabled:opacity-60">{saving ? 'Recording…' : 'Add payment'}</button></div></form>}
 
-      {loading && !summary ? <div className="py-20 text-center text-sm text-slate-400">Loading financials…</div> : summary && <>
+      {loading && !summary ? <div className="py-20 text-center text-sm text-slate-400">Loading financials…</div> : activeSection === 'overview' && summary && <>
         <section aria-labelledby="cash-already-moved-heading">
           <div className="mb-3">
             <h2 id="cash-already-moved-heading" className="font-bold text-slate-800">Money already received and spent</h2>
@@ -190,9 +190,9 @@ export default function FinancialsPage() {
         <section className="grid lg:grid-cols-2 gap-5"><div className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-bold text-slate-800">Contractors still to pay</h2><p className="text-xs text-slate-500 mt-1">Unpaid assignments that have a saved contractor rate.</p><div className="mt-4 divide-y divide-slate-100">{summary.payables.length === 0 ? <p className="py-6 text-center text-sm text-slate-400">No contractor payments found.</p> : summary.payables.map((item, index) => <Link key={`${item.eventId}-${item.contractorId}-${index}`} to={`/events/${item.eventId}?tab=financials`} className="flex items-center justify-between gap-3 py-3 hover:bg-slate-50"><div className="min-w-0"><p className="text-sm font-semibold text-slate-700 truncate">{item.contractorName}</p><p className="text-xs text-slate-400 truncate">{item.eventName}</p></div><span className="text-sm font-bold text-slate-700">{money(item.amount)}</span></Link>)}</div></div><div className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-bold text-slate-800">Estimated profit by booking</h2><p className="text-xs text-slate-500 mt-1">Profit is shown only after contractor costs are complete.</p><div className="mt-4 divide-y divide-slate-100">{summary.profitability.length === 0 ? <p className="py-6 text-center text-sm text-slate-400">Issue an invoice to begin profitability tracking.</p> : summary.profitability.map((item) => <Link key={item.bookingId} to={item.costsComplete ? `/bookings/${item.bookingId}?tab=invoices` : item.eventId ? `/events/${item.eventId}?tab=financials` : `/bookings/${item.bookingId}`} className="grid grid-cols-[1fr_auto] gap-3 py-3 hover:bg-slate-50"><div className="min-w-0"><p className="text-sm font-semibold text-slate-700 truncate">{item.name}</p><p className="text-xs text-slate-400">{money(item.billed)} billed · {money(item.estimatedCosts)} costs entered</p></div>{item.costsComplete ? <div className="text-right"><p className={`text-sm font-bold ${item.estimatedProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{money(item.estimatedProfit)}</p><p className="text-xs text-slate-400">Estimated · {item.margin.toFixed(1)}%</p></div> : <div className="text-right"><p className="text-sm font-bold text-amber-700">Costs incomplete</p><p className="text-xs font-semibold text-indigo-600">Complete costs →</p></div>}</Link>)}</div></div></section>
       </>}
 
-      {reports?.dataQuality?.issues.length > 0 && <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-5"><div className="flex items-start justify-between gap-4"><div><h2 className="font-bold text-amber-900">Financial data needs attention</h2><p className="mt-1 text-sm text-amber-700">{reports.dataQuality.issueCount} records may affect report accuracy.</p></div><span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">Review before exporting</span></div><div className="mt-4 grid md:grid-cols-2 gap-3">{reports.dataQuality.issues.map((issue) => <div key={issue.id} className="rounded-lg border border-amber-200 bg-white p-4"><div className="flex items-center justify-between gap-2"><h3 className="text-sm font-bold text-slate-800">{issue.title}</h3><span className="text-xs font-bold text-amber-700">{issue.count}</span></div><p className="mt-1 text-xs text-slate-500">{issue.detail}</p>{issue.links.length > 0 && <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">{issue.links.map((link) => <Link key={`${issue.id}-${link.path}`} to={link.path} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">Fix {link.label} →</Link>)}</div>}</div>)}</div></section>}
+      {activeSection === 'overview' && reports?.dataQuality?.issues.length > 0 && <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-5"><div className="flex items-start justify-between gap-4"><div><h2 className="font-bold text-amber-900">Financial data needs attention</h2><p className="mt-1 text-sm text-amber-700">{reports.dataQuality.issueCount} records may affect report accuracy.</p></div><span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">Review before exporting</span></div><div className="mt-4 grid md:grid-cols-2 gap-3">{reports.dataQuality.issues.map((issue) => <div key={issue.id} className="rounded-lg border border-amber-200 bg-white p-4"><div className="flex items-center justify-between gap-2"><h3 className="text-sm font-bold text-slate-800">{issue.title}</h3><span className="text-xs font-bold text-amber-700">{issue.count}</span></div><p className="mt-1 text-xs text-slate-500">{issue.detail}</p>{issue.links.length > 0 && <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">{issue.links.map((link) => <Link key={`${issue.id}-${link.path}`} to={link.path} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">Fix {link.label} →</Link>)}</div>}</div>)}</div></section>}
 
-      {visibleReports && <section className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+      {activeSection === 'reports' && visibleReports && <section className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
         <div className="border-b border-slate-200 px-3 pt-3">
           <div className="flex gap-1 overflow-x-auto" role="tablist" aria-label="Financial reports">
             {reportTabs.map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={reportTab === id} onClick={() => setReportTab(id)} className={`min-h-11 whitespace-nowrap rounded-t-lg px-4 text-sm font-semibold ${reportTab === id ? 'border border-b-white border-slate-200 bg-white text-indigo-700 -mb-px' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>{label}</button>)}
@@ -203,7 +203,7 @@ export default function FinancialsPage() {
         {reportTab === 'payables' && <PayablesReport report={visibleReports.payables} />}
       </section>}
 
-      <section className="rounded-xl border border-slate-200 bg-white overflow-hidden"><div className="px-5 py-4 border-b border-slate-100"><h2 className="font-bold text-slate-800">Payment log</h2><p className="text-xs text-slate-500 mt-1">Every payment recorded, in order. Made a mistake? Undo it — the original stays here so nothing's silently changed.</p></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-5 py-3">Date</th><th className="px-5 py-3">Description</th><th className="px-5 py-3">Category</th><th className="px-5 py-3">Entered by</th><th className="px-5 py-3 text-right">Amount</th><th className="px-5 py-3"></th></tr></thead><tbody className="divide-y divide-slate-100">{transactions.length === 0 ? <tr><td colSpan="6" className="px-5 py-10 text-center text-slate-400">No posted transactions yet.</td></tr> : transactions.map((tx) => <tr key={tx.id} className={tx.reversed ? 'bg-slate-50 opacity-60' : ''}><td className="px-5 py-3 whitespace-nowrap text-slate-500">{new Date(tx.occurredAt).toLocaleDateString()}</td><td className="px-5 py-3"><p className="font-medium text-slate-700">{tx.description}</p>{tx.memo && <p className="text-xs text-slate-400">{tx.memo}</p>}</td><td className="px-5 py-3 text-slate-500">{categoryLabel[tx.category] || tx.category.replaceAll('_', ' ')}</td><td className="px-5 py-3 text-slate-500">{tx.createdBy ? `${tx.createdBy.firstName} ${tx.createdBy.lastName}` : 'System'}</td><td className={`px-5 py-3 text-right font-bold ${tx.amount >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{tx.amount >= 0 ? '+' : '−'}{money(Math.abs(tx.amount))}</td><td className="px-5 py-3 text-right">{can('recordFinancialTransactions') && !tx.reversed && !tx.reversalOfId && <button type="button" onClick={() => reverse(tx)} className="min-h-11 px-2 text-xs font-semibold text-slate-500 hover:text-rose-600">Undo</button>}</td></tr>)}</tbody></table></div></section>
+      {activeSection === 'payments' && <section className="rounded-xl border border-slate-200 bg-white overflow-hidden"><div className="px-5 py-4 border-b border-slate-100"><h2 className="font-bold text-slate-800">Payment history</h2><p className="text-xs text-slate-500 mt-1">Every recorded payment, newest first. Made a mistake? Undo it — the original stays here so nothing's silently changed.</p></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-5 py-3">Date</th><th className="px-5 py-3">Description</th><th className="px-5 py-3">Category</th><th className="px-5 py-3">Entered by</th><th className="px-5 py-3 text-right">Amount</th><th className="px-5 py-3"></th></tr></thead><tbody className="divide-y divide-slate-100">{transactions.length === 0 ? <tr><td colSpan="6" className="px-5 py-10 text-center text-slate-400">No posted transactions yet.</td></tr> : transactions.map((tx) => <tr key={tx.id} className={tx.reversed ? 'bg-slate-50 opacity-60' : ''}><td className="px-5 py-3 whitespace-nowrap text-slate-500">{new Date(tx.occurredAt).toLocaleDateString()}</td><td className="px-5 py-3"><p className="font-medium text-slate-700">{tx.description}</p>{tx.memo && <p className="text-xs text-slate-400">{tx.memo}</p>}</td><td className="px-5 py-3 text-slate-500">{categoryLabel[tx.category] || tx.category.replaceAll('_', ' ')}</td><td className="px-5 py-3 text-slate-500">{tx.createdBy ? `${tx.createdBy.firstName} ${tx.createdBy.lastName}` : 'System'}</td><td className={`px-5 py-3 text-right font-bold ${tx.amount >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{tx.amount >= 0 ? '+' : '−'}{money(Math.abs(tx.amount))}</td><td className="px-5 py-3 text-right">{can('recordFinancialTransactions') && !tx.reversed && !tx.reversalOfId && <button type="button" onClick={() => reverse(tx)} className="min-h-11 px-2 text-xs font-semibold text-slate-500 hover:text-rose-600">Undo</button>}</td></tr>)}</tbody></table></div></section>}
     </main>
   );
 }
