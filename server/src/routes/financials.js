@@ -68,6 +68,7 @@ router.get('/summary', requireFinancialPermission('viewFinancials'), asyncHandle
   const outflowCents = Math.abs(transactions.reduce((sum, tx) => sum + Math.min(0, tx.amountCents), 0));
   const receivableCents = scopedInvoices.reduce((sum, invoice) => sum + Math.max(0, dollarsToCents(invoiceTotal(invoice)) - dollarsToCents(invoice.paidAmount)), 0);
   const contractorById = new Map(contractors.map((c) => [c.id, c]));
+  const bookingByEvent = new Map(bookings.filter((booking) => booking.convertedEventId).map((booking) => [booking.convertedEventId, booking]));
   const inquiryStatuses = accountData?.data?.inquiryStatuses || [];
   const isUnavailable = (assignment) => {
     const status = inquiryStatuses.find((item) => item.id === assignment.inquiryStatusId);
@@ -84,16 +85,17 @@ router.get('/summary', requireFinancialPermission('viewFinancials'), asyncHandle
   const in30Days = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
   let expectedOutCents = 0;
   for (const event of events) {
+    const relatedBooking = bookingByEvent.get(event.id);
     for (const booking of event.contractorBookings || []) {
       if (isUnavailable(booking)) continue;
       const contractor = contractorById.get(booking.contractorId);
       const amount = contractorAssignmentCost(booking, contractor);
       if (amount === null && booking.paymentStatus !== 'paid') {
-        missingRateRows.push({ assignmentId: booking.id || booking.contractorId, eventId: event.id, eventName: event.name, contractorId: booking.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor' });
+        missingRateRows.push({ assignmentId: booking.id || booking.contractorId, eventId: event.id, eventName: event.name, eventDate: event.eventDate, bookingId: relatedBooking?.id || null, bookingName: relatedBooking?.eventName || null, contractorId: booking.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor' });
       }
       if (amount !== null && amount > 0) {
         const timing = contractorPaymentTiming(booking.paymentDueDate);
-        const row = { assignmentId: booking.id || booking.contractorId, eventId: event.id, eventName: event.name, eventDate: event.eventDate, paymentDueDate: booking.paymentDueDate || null, contractorId: booking.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor', amount, ...timing };
+        const row = { assignmentId: booking.id || booking.contractorId, eventId: event.id, eventName: event.name, eventDate: event.eventDate, bookingId: relatedBooking?.id || null, bookingName: relatedBooking?.eventName || null, paymentDueDate: booking.paymentDueDate || null, contractorId: booking.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor', amount, ...timing };
         contractorCostRows.push(row);
         if (booking.paymentStatus !== 'paid') {
           payableRows.push(row);
@@ -107,7 +109,6 @@ router.get('/summary', requireFinancialPermission('viewFinancials'), asyncHandle
     if (balance <= 0 || (invoice.dueDate && invoice.dueDate.toISOString().slice(0, 10) > in30Days)) return sum;
     return sum + balance;
   }, 0);
-  const bookingByEvent = new Map(bookings.filter((b) => b.convertedEventId).map((b) => [b.convertedEventId, b]));
   const profitability = bookings.map((booking) => {
     const billed = scopedInvoices.filter((invoice) => invoice.bookingId === booking.id).reduce((sum, invoice) => sum + (invoice.status === 'void' ? 0 : invoiceTotal(invoice)), 0);
     const event = events.find((item) => bookingByEvent.get(item.id)?.id === booking.id);
