@@ -53,7 +53,7 @@ function cleanLogo(input) {
 }
 
 function serialize(group, stats = {}) {
-  return { ...group, stationery: group.stationery || {}, stats: { activeBookings: 0, upcomingEvents: 0, completedEvents: 0, invoicedRevenue: null, outstandingBalance: null, contractorDue: null, nextEvent: null, ...stats } };
+  return { ...group, stationery: group.stationery || {}, stats: { activeBookings: 0, upcomingEvents: 0, completedEvents: 0, invoicedRevenue: null, outstandingBalance: null, contractorDue: null, nextEvent: null, canDelete: true, ...stats } };
 }
 
 function invoiceValue(invoice) {
@@ -64,20 +64,25 @@ router.get('/', asyncHandler(async (req, res) => {
   const accountId = req.membership.accountId;
   const groups = await prisma.agencyGroup.findMany({ where: { accountId }, orderBy: [{ active: 'desc' }, { name: 'asc' }] });
   const includeFinancials = effectivePermissions(req.membership).viewFinancials;
-  const [bookings, events, invoices, contractors] = await Promise.all([
-    prisma.booking.findMany({ where: { accountId, groupId: { not: null }, deletedAt: null }, select: { id: true, groupId: true, completedAt: true } }),
-    prisma.event.findMany({ where: { accountId, groupId: { not: null }, deletedAt: null }, select: { groupId: true, name: true, eventDate: true, completedAt: true, contractorBookings: includeFinancials } }),
+  const [bookings, events, invoices, contractors, transactionCounts, budgetCounts, periodCounts] = await Promise.all([
+    prisma.booking.findMany({ where: { accountId, groupId: { not: null } }, select: { id: true, groupId: true, completedAt: true, deletedAt: true } }),
+    prisma.event.findMany({ where: { accountId, groupId: { not: null } }, select: { groupId: true, name: true, eventDate: true, completedAt: true, deletedAt: true, contractorBookings: includeFinancials } }),
     includeFinancials ? prisma.invoice.findMany({ where: { accountId, status: { not: 'void' } }, select: { bookingId: true, snapshot: true, paidAmount: true, status: true } }) : [],
     includeFinancials ? prisma.contractor.findMany({ where: { accountId }, select: { id: true, pricingTiers: true } }) : [],
+    prisma.financialTransaction.groupBy({ by: ['groupId'], where: { accountId, groupId: { not: null } }, _count: { _all: true } }),
+    prisma.financialBudget.groupBy({ by: ['groupId'], where: { accountId, groupId: { not: null } }, _count: { _all: true } }),
+    prisma.financialPeriod.groupBy({ by: ['groupId'], where: { accountId, groupId: { not: null } }, _count: { _all: true } }),
   ]);
-  const stats = new Map(groups.map((group) => [group.id, { activeBookings: 0, upcomingEvents: 0, completedEvents: 0, invoicedRevenue: includeFinancials ? 0 : null, outstandingBalance: includeFinancials ? 0 : null, contractorDue: includeFinancials ? 0 : null, nextEvent: null }]));
+  const stats = new Map(groups.map((group) => [group.id, { activeBookings: 0, upcomingEvents: 0, completedEvents: 0, invoicedRevenue: includeFinancials ? 0 : null, outstandingBalance: includeFinancials ? 0 : null, contractorDue: includeFinancials ? 0 : null, nextEvent: null, canDelete: true }]));
   const bookingGroups = new Map();
-  bookings.forEach((booking) => { bookingGroups.set(booking.id, booking.groupId); const item = stats.get(booking.groupId); if (item && !booking.completedAt) item.activeBookings += 1; });
+  bookings.forEach((booking) => { bookingGroups.set(booking.id, booking.groupId); const item = stats.get(booking.groupId); if (item) { item.canDelete = false; if (!booking.deletedAt && !booking.completedAt) item.activeBookings += 1; } });
   const today = new Date().toISOString().slice(0, 10);
   const contractorById = new Map(contractors.map((contractor) => [contractor.id, contractor]));
   events.forEach((event) => {
     const item = stats.get(event.groupId);
     if (!item) return;
+    item.canDelete = false;
+    if (event.deletedAt) return;
     item[event.completedAt ? 'completedEvents' : 'upcomingEvents'] += 1;
     if (!event.completedAt && event.eventDate && event.eventDate >= today && (!item.nextEvent || event.eventDate < item.nextEvent.date)) item.nextEvent = { name: event.name || 'Untitled event', date: event.eventDate };
     if (includeFinancials) for (const assignment of event.contractorBookings || []) {
@@ -92,6 +97,7 @@ router.get('/', asyncHandler(async (req, res) => {
     item.invoicedRevenue += total;
     if (['sent', 'partial'].includes(invoice.status)) item.outstandingBalance += Math.max(0, total - (Number(invoice.paidAmount) || 0));
   });
+  [...transactionCounts, ...budgetCounts, ...periodCounts].forEach((row) => { const item = stats.get(row.groupId); if (item && row._count._all > 0) item.canDelete = false; });
   res.json({ groups: groups.map((group) => serialize(group, stats.get(group.id))) });
 }));
 
@@ -127,8 +133,8 @@ router.delete('/:id', asyncHandler(async (req, res) => {
   if (!effectivePermissions(req.membership).manageBookings) return res.status(403).json({ error: 'Not authorized.' });
   const existing = await prisma.agencyGroup.findFirst({ where: { id: req.params.id, accountId: req.membership.accountId } });
   if (!existing) return res.status(404).json({ error: 'Group not found.' });
-  const [bookings, events] = await Promise.all([prisma.booking.count({ where: { accountId: req.membership.accountId, groupId: existing.id } }), prisma.event.count({ where: { accountId: req.membership.accountId, groupId: existing.id } })]);
-  if (bookings || events) return res.status(409).json({ error: `This group has ${bookings} booking(s) and ${events} event(s). Archive it instead of deleting it.` });
+  const [bookings, events, transactions, budgets, periods] = await Promise.all([prisma.booking.count({ where: { accountId: req.membership.accountId, groupId: existing.id } }), prisma.event.count({ where: { accountId: req.membership.accountId, groupId: existing.id } }), prisma.financialTransaction.count({ where: { accountId: req.membership.accountId, groupId: existing.id } }), prisma.financialBudget.count({ where: { accountId: req.membership.accountId, groupId: existing.id } }), prisma.financialPeriod.count({ where: { accountId: req.membership.accountId, groupId: existing.id } })]);
+  if (bookings || events || transactions || budgets || periods) return res.status(409).json({ error: 'This group has workflow or financial history. Archive it instead so its records remain available.' });
   await prisma.agencyGroup.delete({ where: { id: existing.id } });
   res.json({ ok: true });
 }));
