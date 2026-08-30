@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import MoneyInput from '../components/ui/MoneyInput';
 import FinancialForecastDashboard from '../components/FinancialForecastDashboard';
@@ -70,12 +70,13 @@ function displayedReports(reports, tab, search, sort) {
 
 export default function FinancialsPage() {
   const { currentUser, can, role } = useAuth();
+  const [searchParams] = useSearchParams();
   const [summary, setSummary] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [reports, setReports] = useState(null);
   const [forecast, setForecast] = useState(null);
   const [groups, setGroups] = useState([]);
-  const [groupId, setGroupId] = useState('');
+  const [groupId, setGroupId] = useState(searchParams.get('groupId') || '');
   const [from, setFrom] = useState(startOfYear());
   const [to, setTo] = useState(today());
   const [reportTab, setReportTab] = useState('pnl');

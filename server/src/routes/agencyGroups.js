@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
+import { contractorAssignmentCost } from '../lib/financialReports.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -52,19 +53,45 @@ function cleanLogo(input) {
 }
 
 function serialize(group, stats = {}) {
-  return { ...group, stationery: group.stationery || {}, stats: { activeBookings: 0, upcomingEvents: 0, completedEvents: 0, revenue: 0, ...stats } };
+  return { ...group, stationery: group.stationery || {}, stats: { activeBookings: 0, upcomingEvents: 0, completedEvents: 0, invoicedRevenue: null, outstandingBalance: null, contractorDue: null, nextEvent: null, ...stats } };
+}
+
+function invoiceValue(invoice) {
+  return (invoice.snapshot?.lineItems || []).reduce((sum, item) => sum + (item?.type === 'perUnit' ? (Number(item.unitCount) || 0) * (Number(item.ratePerUnit) || 0) : Number(item?.amount) || 0), 0);
 }
 
 router.get('/', asyncHandler(async (req, res) => {
   const accountId = req.membership.accountId;
   const groups = await prisma.agencyGroup.findMany({ where: { accountId }, orderBy: [{ active: 'desc' }, { name: 'asc' }] });
-  const [bookingStats, eventStats] = await Promise.all([
-    prisma.booking.groupBy({ by: ['groupId'], where: { accountId, groupId: { not: null }, deletedAt: null, completedAt: null }, _count: { _all: true }, _sum: { depositAmount: true } }),
-    prisma.event.groupBy({ by: ['groupId', 'completedAt'], where: { accountId, groupId: { not: null }, deletedAt: null }, _count: { _all: true } }),
+  const includeFinancials = effectivePermissions(req.membership).viewFinancials;
+  const [bookings, events, invoices, contractors] = await Promise.all([
+    prisma.booking.findMany({ where: { accountId, groupId: { not: null }, deletedAt: null }, select: { id: true, groupId: true, completedAt: true } }),
+    prisma.event.findMany({ where: { accountId, groupId: { not: null }, deletedAt: null }, select: { groupId: true, name: true, eventDate: true, completedAt: true, contractorBookings: includeFinancials } }),
+    includeFinancials ? prisma.invoice.findMany({ where: { accountId, status: { not: 'void' } }, select: { bookingId: true, snapshot: true, paidAmount: true, status: true } }) : [],
+    includeFinancials ? prisma.contractor.findMany({ where: { accountId }, select: { id: true, pricingTiers: true } }) : [],
   ]);
-  const stats = new Map(groups.map((group) => [group.id, { activeBookings: 0, upcomingEvents: 0, completedEvents: 0, revenue: 0 }]));
-  bookingStats.forEach((row) => { const item = stats.get(row.groupId); if (item) { item.activeBookings = row._count._all; item.revenue = row._sum.depositAmount || 0; } });
-  eventStats.forEach((row) => { const item = stats.get(row.groupId); if (item) item[row.completedAt ? 'completedEvents' : 'upcomingEvents'] += row._count._all; });
+  const stats = new Map(groups.map((group) => [group.id, { activeBookings: 0, upcomingEvents: 0, completedEvents: 0, invoicedRevenue: includeFinancials ? 0 : null, outstandingBalance: includeFinancials ? 0 : null, contractorDue: includeFinancials ? 0 : null, nextEvent: null }]));
+  const bookingGroups = new Map();
+  bookings.forEach((booking) => { bookingGroups.set(booking.id, booking.groupId); const item = stats.get(booking.groupId); if (item && !booking.completedAt) item.activeBookings += 1; });
+  const today = new Date().toISOString().slice(0, 10);
+  const contractorById = new Map(contractors.map((contractor) => [contractor.id, contractor]));
+  events.forEach((event) => {
+    const item = stats.get(event.groupId);
+    if (!item) return;
+    item[event.completedAt ? 'completedEvents' : 'upcomingEvents'] += 1;
+    if (!event.completedAt && event.eventDate && event.eventDate >= today && (!item.nextEvent || event.eventDate < item.nextEvent.date)) item.nextEvent = { name: event.name || 'Untitled event', date: event.eventDate };
+    if (includeFinancials) for (const assignment of event.contractorBookings || []) {
+      if (assignment.paymentStatus === 'paid') continue;
+      item.contractorDue += contractorAssignmentCost(assignment, contractorById.get(assignment.contractorId)) || 0;
+    }
+  });
+  if (includeFinancials) invoices.forEach((invoice) => {
+    const item = stats.get(bookingGroups.get(invoice.bookingId));
+    if (!item) return;
+    const total = invoiceValue(invoice);
+    item.invoicedRevenue += total;
+    if (['sent', 'partial'].includes(invoice.status)) item.outstandingBalance += Math.max(0, total - (Number(invoice.paidAmount) || 0));
+  });
   res.json({ groups: groups.map((group) => serialize(group, stats.get(group.id))) });
 }));
 

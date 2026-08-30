@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { createAgencyGroup, deleteAgencyGroup, listAgencyGroups, updateAgencyGroup } from '../lib/agencyGroups';
 import { useToast } from '../components/ui/Toast';
 import { resizeImageToDataUrl } from '../lib/resizeImage';
+import { useAuth } from '../context/AuthContext';
 
 const empty = { name: '', description: '', logo: '', active: true, stationery: { businessName: '', address: '', addressLine1: '', addressLine2: '', city: '', state: '', postalCode: '', country: '', phone: '', email: '', accentColor: '#6366f1', documentLayout: 'classic', footer: '' } };
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -15,6 +16,7 @@ export default function AgencyGroupsPage() {
   const [busy, setBusy] = useState(false);
   const [processingLogo, setProcessingLogo] = useState(false);
   const { showToast } = useToast();
+  const { can } = useAuth();
   const load = () => listAgencyGroups().then(setGroups).catch((error) => showToast(error.message, 'error'));
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
@@ -56,12 +58,7 @@ export default function AgencyGroupsPage() {
     <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wide text-indigo-600">Agency workspace</p><h1 className="text-3xl font-bold text-slate-900">Managed Groups</h1><p className="text-slate-500 mt-1">Each group has its own workflow identity and stationery. Agency contacts, contractors, venues, catalogs, and searches stay shared.</p></div><button onClick={reset} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">+ Add group</button></div>
     <div className="grid sm:grid-cols-3 gap-4"><Metric label="Managed groups" value={groups.filter((g) => g.active).length} /><Metric label="Active bookings" value={totals.bookings} /><Metric label="Upcoming events" value={totals.events} /></div>
     <GroupEditor form={form} editing={editing} busy={busy} processingLogo={processingLogo} update={update} updateStationery={updateStationery} changeLogo={changeLogo} save={save} reset={reset} />
-    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">{groups.map((group) => <article key={group.id} className={`bg-white rounded-2xl border p-5 shadow-sm ${group.active ? 'border-slate-200' : 'border-slate-200 opacity-65'}`}>
-        <div className="flex items-start gap-3">{group.logo ? <img src={group.logo} alt="" className="h-12 w-12 rounded-lg object-contain border" /> : <div className="h-12 w-12 rounded-lg flex items-center justify-center text-lg font-bold text-white" style={{ backgroundColor: group.stationery?.accentColor || '#6366f1' }}>{group.name[0]}</div>}<div className="min-w-0 flex-1"><h2 className="font-bold text-slate-900 truncate">{group.name}</h2><p className="text-xs text-slate-500">{group.active ? 'Active' : 'Archived'} · {group.stationery?.businessName || 'Stationery uses group name'}</p></div></div>
-        <div className="grid grid-cols-3 gap-2 mt-5 text-center"><SmallMetric label="Bookings" value={group.stats.activeBookings} /><SmallMetric label="Upcoming" value={group.stats.upcomingEvents} /><SmallMetric label="Completed" value={group.stats.completedEvents} /></div>
-        <p className="text-sm text-slate-500 mt-4 line-clamp-2 min-h-10">{group.description || 'No group notes yet.'}</p>
-        <div className="flex flex-wrap gap-2 mt-4"><Link to={`/bookings?groupId=${group.id}`} className="text-xs font-semibold text-indigo-700 bg-indigo-50 rounded-lg px-3 py-2">Bookings</Link><Link to={`/events?groupId=${group.id}`} className="text-xs font-semibold text-indigo-700 bg-indigo-50 rounded-lg px-3 py-2">Events</Link><button onClick={() => startEdit(group)} className="text-xs font-semibold text-slate-700 border rounded-lg px-3 py-2">Edit</button><button onClick={() => remove(group)} className="text-xs font-semibold text-red-600 px-2 py-2">Delete</button></div>
-      </article>)}</div>
+    <div><div className="mb-3 flex items-center justify-between"><h2 className="text-lg font-bold text-slate-900">Group operations</h2><p className="text-xs text-slate-400">Current activity and setup health</p></div><div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">{groups.map((group) => <GroupCard key={group.id} group={group} canViewFinancials={can('viewFinancials')} startEdit={startEdit} remove={remove} />)}</div></div>
   </div>;
 }
 
@@ -111,4 +108,21 @@ function GroupDocumentPreview({ form, type }) {
       </div>
     </article>
   </div>;
+}
+
+function money(value) { return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(value) || 0); }
+
+function GroupCard({ group, canViewFinancials, startEdit, remove }) {
+  const stationery = group.stationery || {};
+  const setupItems = [{ label: 'logo', ready: !!group.logo }, { label: 'document name', ready: !!(stationery.businessName || group.name) }, { label: 'email', ready: !!stationery.email }, { label: 'phone', ready: !!stationery.phone }, { label: 'address', ready: !!(stationery.addressLine1 || stationery.address) }];
+  const missing = setupItems.filter((item) => !item.ready);
+  const completeness = Math.round(((setupItems.length - missing.length) / setupItems.length) * 100);
+  return <article className={`flex flex-col rounded-2xl border bg-white p-5 shadow-sm ${group.active ? 'border-slate-200' : 'border-slate-200 opacity-65'}`}>
+    <div className="flex items-start gap-3">{group.logo ? <img src={group.logo} alt="" className="h-12 w-12 rounded-lg border object-contain" /> : <div className="flex h-12 w-12 items-center justify-center rounded-lg text-lg font-bold text-white" style={{ backgroundColor: stationery.accentColor || '#6366f1' }}>{group.name[0]}</div>}<div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><h3 className="truncate font-bold text-slate-900">{group.name}</h3><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${group.active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{group.active ? 'Active' : 'Archived'}</span></div><p className="truncate text-xs text-slate-500">{stationery.businessName || 'Uses group name on documents'}</p></div></div>
+    <div className="mt-5 grid grid-cols-3 gap-2 text-center"><SmallMetric label="Bookings" value={group.stats.activeBookings} /><SmallMetric label="Upcoming" value={group.stats.upcomingEvents} /><SmallMetric label="Completed" value={group.stats.completedEvents} /></div>
+    {canViewFinancials && <div className="mt-3 grid grid-cols-3 gap-2 text-center"><SmallMetric label="Invoiced" value={money(group.stats.invoicedRevenue)} /><SmallMetric label="Client due" value={money(group.stats.outstandingBalance)} /><SmallMetric label="Crew due" value={money(group.stats.contractorDue)} /></div>}
+    <div className="mt-4 rounded-lg bg-slate-50 p-3"><div className="flex items-center justify-between gap-3"><span className="text-xs font-semibold text-slate-500">Setup completeness</span><span className={`text-xs font-bold ${completeness === 100 ? 'text-emerald-700' : 'text-amber-700'}`}>{completeness}%</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200"><div className={`h-full rounded-full ${completeness === 100 ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${completeness}%` }} /></div>{missing.length > 0 && <p className="mt-2 text-[11px] text-amber-700">Missing {missing.map((item) => item.label).join(', ')}</p>}</div>
+    <div className="mt-4 min-h-10"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Next event</p><p className="mt-1 truncate text-sm font-semibold text-slate-700">{group.stats.nextEvent ? `${group.stats.nextEvent.name} · ${new Date(`${group.stats.nextEvent.date}T12:00:00`).toLocaleDateString()}` : 'No upcoming event scheduled'}</p></div>
+    <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4"><Link to={`/bookings?groupId=${group.id}`} className="min-h-10 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white">Open group</Link><Link to={`/events?groupId=${group.id}`} className="min-h-10 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600">Events</Link>{canViewFinancials && <Link to={`/financials?groupId=${group.id}`} className="min-h-10 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600">Financials</Link>}<button type="button" onClick={() => startEdit(group)} className="ml-auto min-h-10 px-2 text-xs font-semibold text-slate-600">Edit</button><button type="button" onClick={() => remove(group)} className="min-h-10 px-2 text-xs font-semibold text-rose-600">Delete</button></div>
+  </article>;
 }
