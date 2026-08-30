@@ -6,7 +6,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { dollarsToCents } from '../lib/financialLedger.js';
 import { invoiceTotal } from './invoices.js';
-import { contractorAssignmentCost, inIsoDateRange, receivableAgingBucket } from '../lib/financialReports.js';
+import { contractorAssignmentCost, financialMonthSequence, inIsoDateRange, proposalSnapshotTotal, receivableAgingBucket } from '../lib/financialReports.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -195,6 +195,115 @@ router.get('/reports', asyncHandler(async (req, res) => {
     profitability: { totalBilled: profitability.reduce((sum, row) => sum + row.billed, 0), totalCollected: profitability.reduce((sum, row) => sum + row.collected, 0), totalCosts: profitability.reduce((sum, row) => sum + row.totalCosts, 0), totalProfit: profitability.reduce((sum, row) => sum + row.profit, 0), rows: profitability },
     dataQuality: { issueCount: qualityIssues.reduce((sum, issue) => sum + issue.count, 0), issues: qualityIssues },
   } });
+}));
+
+function monthKey(date) {
+  return date.toISOString().slice(0, 7);
+}
+
+function transactionIsIncome(transaction) {
+  const category = transaction.category === 'reversal' ? transaction.metadata?.originalCategory : transaction.category;
+  const context = transaction.category === 'reversal' ? transaction.metadata?.originalMetadata || {} : transaction.metadata || {};
+  return category === 'client_payment' || (category === 'payment_adjustment' && !!context.invoiceStatus);
+}
+
+router.get('/forecast', asyncHandler(async (req, res) => {
+  const accountId = req.membership.accountId;
+  const groupId = String(req.query.groupId || '').trim();
+  const groupFilter = groupId ? { groupId } : {};
+  const now = new Date();
+  const trendStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1));
+  const trendMonths = financialMonthSequence(trendStart, 12);
+  const futureStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const futureMonths = financialMonthSequence(futureStart, 6);
+  const futureEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 6, 0, 23, 59, 59));
+
+  const [transactions, invoices, bookings, events, contractors, accountData, budgets] = await Promise.all([
+    prisma.financialTransaction.findMany({ where: { accountId, ...groupFilter, occurredAt: { gte: trendStart } }, select: { amountCents: true, category: true, occurredAt: true, metadata: true } }),
+    prisma.invoice.findMany({ where: { accountId, status: { in: ['sent', 'partial', 'paid'] } } }),
+    prisma.booking.findMany({ where: { accountId, deletedAt: null, completedAt: null, ...groupFilter }, select: { id: true, groupId: true, eventName: true, eventDate: true, bookingStatus: true, priority: true, proposal: true, contractSignedDate: true, convertedEventId: true } }),
+    prisma.event.findMany({ where: { accountId, deletedAt: null, completedAt: null, ...groupFilter }, select: { id: true, name: true, eventDate: true, contractorBookings: true } }),
+    prisma.contractor.findMany({ where: { accountId }, select: { id: true, firstName: true, lastName: true, pricingTiers: true } }),
+    prisma.accountData.findUnique({ where: { accountId }, select: { data: true } }),
+    prisma.financialBudget.findMany({ where: { accountId, groupKey: groupId || 'account', month: { gte: trendMonths[0].key, lte: futureMonths[futureMonths.length - 1].key } } }),
+  ]);
+  const bookingIds = new Set(bookings.map((booking) => booking.id));
+  const scopedInvoices = groupId ? invoices.filter((invoice) => bookingIds.has(invoice.bookingId)) : invoices;
+  const contractorById = new Map(contractors.map((contractor) => [contractor.id, contractor]));
+  const statuses = accountData?.data?.bookingStatuses || [];
+  const budgetByMonth = new Map(budgets.map((budget) => [budget.month, budget]));
+
+  const trend = trendMonths.map((month) => {
+    const rows = transactions.filter((transaction) => monthKey(transaction.occurredAt) === month.key);
+    const income = rows.filter(transactionIsIncome).reduce((sum, row) => sum + row.amountCents, 0) / 100;
+    const expenses = -rows.filter((row) => !transactionIsIncome(row)).reduce((sum, row) => sum + row.amountCents, 0) / 100;
+    const budget = budgetByMonth.get(month.key);
+    return { ...month, income, expenses, profit: income - expenses, revenueTarget: (budget?.revenueTargetCents || 0) / 100, expenseBudget: (budget?.expenseBudgetCents || 0) / 100 };
+  });
+
+  const cashFlow = futureMonths.map((month) => ({ ...month, expectedIn: 0, expectedOut: 0, net: 0 }));
+  const cashByMonth = new Map(cashFlow.map((row) => [row.key, row]));
+  for (const invoice of scopedInvoices) {
+    const balance = Math.max(0, invoiceTotal(invoice) - (Number(invoice.paidAmount) || 0));
+    if (balance <= 0) continue;
+    if (invoice.dueDate && invoice.dueDate > futureEnd) continue;
+    const due = invoice.dueDate && invoice.dueDate >= futureStart ? invoice.dueDate : futureStart;
+    const target = cashByMonth.get(monthKey(due)) || cashFlow[0];
+    target.expectedIn += balance;
+  }
+  const obligations = [];
+  for (const event of events) {
+    for (const assignment of event.contractorBookings || []) {
+      if (assignment.paymentStatus === 'paid') continue;
+      const contractor = contractorById.get(assignment.contractorId);
+      const amount = contractorAssignmentCost(assignment, contractor);
+      if (!(amount > 0)) continue;
+      const eventDate = event.eventDate ? new Date(`${event.eventDate}T12:00:00.000Z`) : futureStart;
+      const target = cashByMonth.get(monthKey(eventDate)) || (eventDate < futureStart ? cashFlow[0] : null);
+      if (target) target.expectedOut += amount;
+      obligations.push({ eventId: event.id, eventName: event.name || 'Untitled event', eventDate: event.eventDate, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor', amount });
+    }
+  }
+  for (const row of cashFlow) row.net = row.expectedIn - row.expectedOut;
+
+  const pipeline = bookings.map((booking) => {
+    const statusLabel = statuses.find((status) => status.id === booking.bookingStatus)?.label || booking.bookingStatus || '';
+    if (/lost|cancel|declin/i.test(statusLabel)) return null;
+    if (booking.convertedEventId) return null;
+    const value = proposalSnapshotTotal(booking.proposal);
+    if (!(value > 0)) return null;
+    let probability = 0.15;
+    let stage = 'Inquiry';
+    if (booking.contractSignedDate) { probability = 0.9; stage = 'Contract signed'; }
+    else if (booking.proposal?.sentAt) { probability = 0.6; stage = 'Proposal sent'; }
+    else if (booking.proposal) { probability = 0.35; stage = 'Proposal drafted'; }
+    if (booking.priority === 'hot' && probability < 0.9) probability = Math.min(0.85, probability + 0.1);
+    return { bookingId: booking.id, name: booking.eventName || 'Untitled booking', eventDate: booking.eventDate, stage, value, probability, weightedValue: value * probability };
+  }).filter(Boolean).sort((a, b) => b.weightedValue - a.weightedValue);
+
+  const overdue = scopedInvoices.map((invoice) => ({ invoice, balance: Math.max(0, invoiceTotal(invoice) - (Number(invoice.paidAmount) || 0)) })).filter(({ invoice, balance }) => balance > 0 && invoice.dueDate && invoice.dueDate < now);
+  const alerts = [];
+  const seriouslyOverdue = overdue.filter(({ invoice }) => (now - invoice.dueDate) / 86400000 >= 30);
+  if (seriouslyOverdue.length) alerts.push({ id: 'overdue', severity: 'high', title: `${seriouslyOverdue.length} invoice${seriouslyOverdue.length === 1 ? '' : 's'} more than 30 days overdue`, detail: `${seriouslyOverdue.reduce((sum, row) => sum + row.balance, 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' })} needs collection follow-up.`, path: '/financials' });
+  const negativeMonths = cashFlow.filter((row) => row.net < 0);
+  if (negativeMonths.length) alerts.push({ id: 'cash-flow', severity: 'warning', title: `Projected cash shortfall in ${negativeMonths.length} upcoming month${negativeMonths.length === 1 ? '' : 's'}`, detail: 'Expected contractor payments exceed currently scheduled client collections.', path: '/financials' });
+  const recentAverage = trend.slice(-3).reduce((sum, row) => sum + row.profit, 0) / 3;
+  if (recentAverage < 0) alerts.push({ id: 'margin', severity: 'warning', title: 'Three-month cash profit is negative', detail: 'Review pricing, contractor costs, and uncollected invoices.', path: '/financials' });
+
+  res.json({ forecast: { trend, cashFlow, pipeline: { total: pipeline.reduce((sum, row) => sum + row.value, 0), weightedTotal: pipeline.reduce((sum, row) => sum + row.weightedValue, 0), rows: pipeline.slice(0, 12) }, obligations: obligations.sort((a, b) => (a.eventDate || '').localeCompare(b.eventDate || '')).slice(0, 12), alerts } });
+}));
+
+router.put('/budgets/:month', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageBookings) return res.status(403).json({ error: 'Not authorized.' });
+  const month = String(req.params.month || '');
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ error: 'Select a valid budget month.' });
+  const groupId = String(req.body?.groupId || '').trim();
+  if (groupId && !await prisma.agencyGroup.findFirst({ where: { id: groupId, accountId: req.membership.accountId } })) return res.status(400).json({ error: 'Invalid managed group.' });
+  const revenueTargetCents = dollarsToCents(req.body?.revenueTarget);
+  const expenseBudgetCents = dollarsToCents(req.body?.expenseBudget);
+  if (revenueTargetCents < 0 || expenseBudgetCents < 0) return res.status(400).json({ error: 'Budget amounts cannot be negative.' });
+  const budget = await prisma.financialBudget.upsert({ where: { accountId_groupKey_month: { accountId: req.membership.accountId, groupKey: groupId || 'account', month } }, create: { accountId: req.membership.accountId, groupId: groupId || null, groupKey: groupId || 'account', month, revenueTargetCents, expenseBudgetCents }, update: { revenueTargetCents, expenseBudgetCents } });
+  res.json({ budget: { ...budget, revenueTarget: budget.revenueTargetCents / 100, expenseBudget: budget.expenseBudgetCents / 100 } });
 }));
 
 router.get('/saved-views', asyncHandler(async (req, res) => {

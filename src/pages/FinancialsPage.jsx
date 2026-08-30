@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import MoneyInput from '../components/ui/MoneyInput';
+import FinancialForecastDashboard from '../components/FinancialForecastDashboard';
 import { listAgencyGroups } from '../lib/agencyGroups';
-import { createFinancialExpense, deleteFinancialView, getFinancialReports, getFinancialSummary, listFinancialTransactions, listSavedFinancialViews, reverseFinancialTransaction, saveFinancialView } from '../lib/financials';
+import { createFinancialExpense, deleteFinancialView, getFinancialForecast, getFinancialReports, getFinancialSummary, listFinancialTransactions, listSavedFinancialViews, reverseFinancialTransaction, saveFinancialView } from '../lib/financials';
 import { exportFinancialReportCsv, exportFinancialReportPdf } from '../lib/financialReportExports';
 
 const inputClass = 'w-full min-h-11 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100';
@@ -71,6 +72,7 @@ export default function FinancialsPage() {
   const [summary, setSummary] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [reports, setReports] = useState(null);
+  const [forecast, setForecast] = useState(null);
   const [groups, setGroups] = useState([]);
   const [groupId, setGroupId] = useState('');
   const [from, setFrom] = useState(startOfYear());
@@ -90,8 +92,8 @@ export default function FinancialsPage() {
     setLoading(true); setError('');
     try {
       const filters = { ...(groupId ? { groupId } : {}), ...(from ? { from } : {}), ...(to ? { to } : {}) };
-      const [nextSummary, ledger, nextReports] = await Promise.all([getFinancialSummary(filters), listFinancialTransactions({ ...filters, pageSize: 50 }), getFinancialReports(filters)]);
-      setSummary(nextSummary); setTransactions(ledger.transactions); setReports(nextReports);
+      const [nextSummary, ledger, nextReports, nextForecast] = await Promise.all([getFinancialSummary(filters), listFinancialTransactions({ ...filters, pageSize: 50 }), getFinancialReports(filters), getFinancialForecast(groupId ? { groupId } : {})]);
+      setSummary(nextSummary); setTransactions(ledger.transactions); setReports(nextReports); setForecast(nextForecast);
     } catch (err) { setError(err.message || 'Financial information could not be loaded.'); }
     finally { setLoading(false); }
   }, [groupId, from, to]);
@@ -172,6 +174,8 @@ export default function FinancialsPage() {
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       {showExpense && <form onSubmit={saveExpense} className="rounded-xl border border-indigo-100 bg-white p-5 shadow-sm space-y-4"><div><h2 className="font-bold text-slate-800">Record money paid out</h2><p className="text-xs text-slate-500 mt-1">Once posted, this entry cannot be edited. If it is wrong, reverse it so the audit history remains intact.</p></div><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3"><label className="text-sm font-medium text-slate-700">Amount<MoneyInput value={form.amount} onChange={(amount) => setForm((old) => ({ ...old, amount }))} className={`${inputClass} mt-1`} /></label><label className="text-sm font-medium text-slate-700">Category<select value={form.category} onChange={(e) => setForm((old) => ({ ...old, category: e.target.value }))} className={`${inputClass} mt-1`}>{categories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-sm font-medium text-slate-700">Payment date<input type="date" value={form.occurredAt} onChange={(e) => setForm((old) => ({ ...old, occurredAt: e.target.value }))} className={`${inputClass} mt-1`} /></label><label className="text-sm font-medium text-slate-700">Method<select value={form.paymentMethod} onChange={(e) => setForm((old) => ({ ...old, paymentMethod: e.target.value }))} className={`${inputClass} mt-1`}><option value="">Not specified</option><option value="ach">ACH</option><option value="check">Check</option><option value="card">Card</option><option value="cash">Cash</option><option value="wire">Wire</option><option value="other">Other</option></select></label></div><div className="grid sm:grid-cols-2 gap-3"><label className="text-sm font-medium text-slate-700">Description<input required value={form.description} onChange={(e) => setForm((old) => ({ ...old, description: e.target.value }))} placeholder="What was this payment for?" className={`${inputClass} mt-1`} /></label><label className="text-sm font-medium text-slate-700">Reference<input value={form.reference} onChange={(e) => setForm((old) => ({ ...old, reference: e.target.value }))} placeholder="Check or confirmation number" className={`${inputClass} mt-1`} /></label></div>{groups.length > 0 && <label className="block text-sm font-medium text-slate-700 max-w-sm">Managed group<select value={form.groupId} onChange={(e) => setForm((old) => ({ ...old, groupId: e.target.value }))} className={`${inputClass} mt-1`}><option value="">Agency-wide / unassigned</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>}<div className="flex justify-end"><button disabled={saving} className="min-h-11 rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white disabled:opacity-60">{saving ? 'Recording…' : 'Record expense'}</button></div></form>}
+
+      {forecast && <FinancialForecastDashboard forecast={forecast} groupId={groupId} canManage={can('manageBookings')} onRefresh={load} />}
 
       {loading && !summary ? <div className="py-20 text-center text-sm text-slate-400">Loading financials…</div> : summary && <>
         <section className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">{[['Cash received', summary.inflow, 'text-emerald-700'], ['Cash paid out', summary.outflow, 'text-rose-700'], ['Net cash', summary.netCash, summary.netCash >= 0 ? 'text-indigo-700' : 'text-rose-700'], ['Client balances due', summary.accountsReceivable, 'text-amber-700'], ['Contractor payables', summary.accountsPayable, 'text-violet-700']].map(([label, value, color]) => <div key={label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p><p className={`mt-2 text-xl font-bold ${color}`}>{money(value)}</p></div>)}</section>

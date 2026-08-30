@@ -93,6 +93,7 @@ model Account {
   agencyGroups            AgencyGroup[]
   financialTransactions   FinancialTransaction[]
   savedFinancialReports   SavedFinancialReport[]
+  financialBudgets        FinancialBudget[]
 
   // Stripe Connect (Express) — set once onboarding starts. The three
   // booleans are a local cache of the connected Account object, synced by
@@ -772,6 +773,23 @@ model SavedFinancialReport {
 
   @@unique([userId, name])
   @@index([accountId, userId, updatedAt])
+}
+
+model FinancialBudget {
+  id                 String  @id @default(cuid())
+  accountId          String
+  account            Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  groupId            String?
+  group              AgencyGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupKey           String  @default("account")
+  month              String
+  revenueTargetCents Int     @default(0)
+  expenseBudgetCents Int     @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([accountId, groupKey, month])
+  @@index([accountId, month])
 }
 
 // A follow-up reminder, optionally tied to a client, contractor, event,
@@ -1474,6 +1492,7 @@ model AgencyGroup {
   bookings    Booking[]
   events      Event[]
   financialTransactions FinancialTransaction[]
+  financialBudgets FinancialBudget[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

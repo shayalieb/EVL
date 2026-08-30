@@ -15,6 +15,16 @@ export async function getFinancialReports(filters) {
   return data.reports;
 }
 
+export async function getFinancialForecast(filters) {
+  const data = await apiFetch(`/financials/forecast${queryString(filters)}`);
+  return data.forecast;
+}
+
+export async function saveFinancialBudget(month, budget) {
+  const data = await apiFetch(`/financials/budgets/${month}`, { method: 'PUT', body: JSON.stringify(budget) });
+  return data.budget;
+}
+
 export async function listFinancialTransactions(filters) {
   return apiFetch(`/financials${queryString(filters)}`);
 }
