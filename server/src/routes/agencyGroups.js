@@ -14,9 +14,22 @@ function requireAgency(req, res, next) {
 router.use(requireAgency);
 
 function cleanStationery(input = {}) {
+  const addressLine1 = String(input.addressLine1 || input.address || '').trim().slice(0, 160);
+  const addressLine2 = String(input.addressLine2 || '').trim().slice(0, 100);
+  const city = String(input.city || '').trim().slice(0, 100);
+  const state = String(input.state || '').trim().slice(0, 100);
+  const postalCode = String(input.postalCode || '').trim().slice(0, 30);
+  const country = String(input.country || '').trim().slice(0, 100);
+  const locality = [city, state, postalCode].filter(Boolean).join(', ').replace(/, ([^,]+),/, ', $1 ');
   return {
     businessName: String(input.businessName || '').trim().slice(0, 140),
-    address: String(input.address || '').trim().slice(0, 300),
+    address: [addressLine1, addressLine2, locality, country].filter(Boolean).join(', ').slice(0, 500),
+    addressLine1,
+    addressLine2,
+    city,
+    state,
+    postalCode,
+    country,
     phone: String(input.phone || '').trim().slice(0, 40),
     email: String(input.email || '').trim().slice(0, 254),
     accentColor: /^#[0-9a-f]{6}$/i.test(input.accentColor || '') ? input.accentColor : '#6366f1',
