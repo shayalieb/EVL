@@ -13,6 +13,7 @@ router.use(requireAuth, asyncHandler(attachMembership));
 
 const EXPENSE_CATEGORIES = new Set(['contractor_payment', 'production', 'backline', 'travel', 'processing_fee', 'agency_commission', 'tax', 'reimbursement', 'other_expense']);
 const METHODS = new Set(['ach', 'check', 'card', 'cash', 'wire', 'other']);
+const REPORT_TABS = new Set(['pnl', 'receivables', 'payables', 'profitability']);
 
 function serialize(tx) {
   return { ...tx, amount: tx.amountCents / 100, reversed: !!tx.reversedBy, reversedBy: undefined };
@@ -91,7 +92,7 @@ router.get('/reports', asyncHandler(async (req, res) => {
   const asOf = to ? new Date(`${to}T23:59:59.999Z`) : new Date();
   if (Number.isNaN(asOf.getTime())) return res.status(400).json({ error: 'Select a valid report date range.' });
 
-  const [transactions, invoices, events, bookings, contractors, clients, accountData] = await Promise.all([
+  const [transactions, invoices, events, bookings, contractors, clients, accountData, account] = await Promise.all([
     prisma.financialTransaction.findMany({ where: { accountId, ...groupFilter, ...(dateRange(req) ? { occurredAt: dateRange(req) } : {}) }, select: { category: true, amountCents: true, bookingId: true, eventId: true, metadata: true } }),
     prisma.invoice.findMany({ where: { accountId, status: { notIn: ['draft', 'void'] } }, orderBy: { dueDate: 'asc' } }),
     prisma.event.findMany({ where: { accountId, deletedAt: null, ...groupFilter }, select: { id: true, groupId: true, name: true, eventDate: true, contractorBookings: true, otherExpenses: true } }),
@@ -99,6 +100,7 @@ router.get('/reports', asyncHandler(async (req, res) => {
     prisma.contractor.findMany({ where: { accountId }, select: { id: true, firstName: true, lastName: true, pricingTiers: true } }),
     prisma.client.findMany({ where: { accountId }, select: { id: true, firstName: true, lastName: true } }),
     prisma.accountData.findUnique({ where: { accountId }, select: { data: true } }),
+    prisma.account.findUnique({ where: { id: accountId }, select: { planTier: true } }),
   ]);
 
   const bookingById = new Map(bookings.map((booking) => [booking.id, booking]));
@@ -174,13 +176,49 @@ router.get('/reports', asyncHandler(async (req, res) => {
     return { bookingId: booking.id, eventId: event?.id || null, name: booking.eventName || event?.name || 'Untitled booking', eventDate: booking.eventDate || event?.eventDate || null, billed, collected, outstanding: Math.max(0, billed - collected), contractorCosts: costs?.contractorCost || 0, otherCosts: (costs?.otherCosts || 0) + directLedgerExpenses, totalCosts: knownCosts, profit, margin: billed > 0 ? (profit / billed) * 100 : null, costingComplete: !event || !incompleteEventCosts.has(event.id) };
   }).filter((row) => row.billed > 0 || row.totalCosts > 0).sort((a, b) => (b.eventDate || '').localeCompare(a.eventDate || ''));
 
+  const qualityIssues = [];
+  const invoicesWithoutDueDate = scopedInvoices.filter((invoice) => !invoice.dueDate && Math.max(0, invoiceTotal(invoice) - (Number(invoice.paidAmount) || 0)) > 0);
+  if (invoicesWithoutDueDate.length) qualityIssues.push({ id: 'invoice-due-date', severity: 'warning', count: invoicesWithoutDueDate.length, title: 'Open invoices missing due dates', detail: 'These balances remain current and cannot be aged accurately.', links: invoicesWithoutDueDate.slice(0, 5).map((invoice) => ({ label: `Invoice #${invoice.number ?? '—'}`, path: `/bookings/${invoice.bookingId}?tab=invoices` })) });
+  if (incompleteEventCosts.size) qualityIssues.push({ id: 'contractor-rates', severity: 'warning', count: incompleteEventCosts.size, title: 'Events missing contractor rates', detail: 'Booking profit may be overstated until these rates are entered.', links: [...incompleteEventCosts].slice(0, 5).map((eventId) => ({ label: eventById.get(eventId)?.name || 'Event', path: `/events/${eventId}?tab=financials` })) });
+  const undatedEvents = events.filter((event) => !event.eventDate);
+  if (undatedEvents.length) qualityIssues.push({ id: 'event-dates', severity: 'info', count: undatedEvents.length, title: 'Events missing dates', detail: 'These events are excluded from date-filtered reports.', links: undatedEvents.slice(0, 5).map((event) => ({ label: event.name || 'Untitled event', path: `/events/${event.id}` })) });
+  if (account?.planTier === 'agency') {
+    const unassigned = [...bookings.filter((booking) => !booking.groupId).map((booking) => ({ label: booking.eventName || 'Untitled booking', path: `/bookings/${booking.id}` })), ...events.filter((event) => !event.groupId).map((event) => ({ label: event.name || 'Untitled event', path: `/events/${event.id}` }))];
+    if (unassigned.length) qualityIssues.push({ id: 'agency-groups', severity: 'info', count: unassigned.length, title: 'Records not assigned to a managed group', detail: 'They appear in agency totals but not in a group-specific report.', links: unassigned.slice(0, 5) });
+  }
+
   res.json({ reports: {
     period: { from: from || null, to: to || null, asOf: asOf.toISOString() },
     profitAndLoss: { basis: 'cash', income, expenses, totalIncome, totalExpenses, netIncome: totalIncome - totalExpenses },
     receivables: { totals: agingTotals, total: Object.values(agingTotals).reduce((sum, amount) => sum + amount, 0), rows: receivables },
     payables: { total: payables.reduce((sum, row) => sum + row.expectedAmount, 0), overdueTotal: payables.filter((row) => row.overdueDays > 0).reduce((sum, row) => sum + row.expectedAmount, 0), rows: payables },
     profitability: { totalBilled: profitability.reduce((sum, row) => sum + row.billed, 0), totalCollected: profitability.reduce((sum, row) => sum + row.collected, 0), totalCosts: profitability.reduce((sum, row) => sum + row.totalCosts, 0), totalProfit: profitability.reduce((sum, row) => sum + row.profit, 0), rows: profitability },
+    dataQuality: { issueCount: qualityIssues.reduce((sum, issue) => sum + issue.count, 0), issues: qualityIssues },
   } });
+}));
+
+router.get('/saved-views', asyncHandler(async (req, res) => {
+  const views = await prisma.savedFinancialReport.findMany({ where: { accountId: req.membership.accountId, userId: req.session.userId }, orderBy: { updatedAt: 'desc' } });
+  res.json({ views });
+}));
+
+router.post('/saved-views', asyncHandler(async (req, res) => {
+  const name = String(req.body?.name || '').trim();
+  const reportTab = String(req.body?.reportTab || 'pnl');
+  const filters = req.body?.filters && typeof req.body.filters === 'object' ? req.body.filters : {};
+  if (!name || name.length > 80) return res.status(400).json({ error: 'Enter a view name up to 80 characters.' });
+  if (!REPORT_TABS.has(reportTab)) return res.status(400).json({ error: 'Select a valid report.' });
+  const safeFilters = { from: String(filters.from || '').slice(0, 10), to: String(filters.to || '').slice(0, 10), groupId: String(filters.groupId || '').slice(0, 100) };
+  if (safeFilters.groupId && !await prisma.agencyGroup.findFirst({ where: { id: safeFilters.groupId, accountId: req.membership.accountId } })) return res.status(400).json({ error: 'Invalid managed group.' });
+  const view = await prisma.savedFinancialReport.upsert({ where: { userId_name: { userId: req.session.userId, name } }, create: { accountId: req.membership.accountId, userId: req.session.userId, name, reportTab, filters: safeFilters }, update: { reportTab, filters: safeFilters } });
+  res.status(201).json({ view });
+}));
+
+router.delete('/saved-views/:id', asyncHandler(async (req, res) => {
+  const existing = await prisma.savedFinancialReport.findFirst({ where: { id: req.params.id, accountId: req.membership.accountId, userId: req.session.userId } });
+  if (!existing) return res.status(404).json({ error: 'Saved view not found.' });
+  await prisma.savedFinancialReport.delete({ where: { id: existing.id } });
+  res.json({ ok: true });
 }));
 
 router.post('/expenses', asyncHandler(async (req, res) => {

@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import MoneyInput from '../components/ui/MoneyInput';
 import { listAgencyGroups } from '../lib/agencyGroups';
-import { createFinancialExpense, getFinancialReports, getFinancialSummary, listFinancialTransactions, reverseFinancialTransaction } from '../lib/financials';
+import { createFinancialExpense, deleteFinancialView, getFinancialReports, getFinancialSummary, listFinancialTransactions, listSavedFinancialViews, reverseFinancialTransaction, saveFinancialView } from '../lib/financials';
+import { exportFinancialReportCsv, exportFinancialReportPdf } from '../lib/financialReportExports';
 
 const inputClass = 'w-full min-h-11 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100';
 const categories = [
@@ -42,6 +43,29 @@ function Metric({ label, value, color }) {
   return <div className="rounded-lg bg-slate-50 p-3"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p><p className={`mt-1 text-lg font-bold ${color}`}>{money(value)}</p></div>;
 }
 
+function displayedReports(reports, tab, search, sort) {
+  if (!reports) return null;
+  const copy = { ...reports, [tab === 'pnl' ? 'profitAndLoss' : tab]: { ...reports[tab === 'pnl' ? 'profitAndLoss' : tab] } };
+  if (tab === 'pnl') {
+    const matches = (row) => `${row.category} ${row.amount}`.toLowerCase().includes(search.toLowerCase());
+    copy.profitAndLoss.income = reports.profitAndLoss.income.filter(matches);
+    copy.profitAndLoss.expenses = reports.profitAndLoss.expenses.filter(matches);
+    return copy;
+  }
+  const source = reports[tab].rows || [];
+  const rows = source.filter((row) => Object.values(row).join(' ').toLowerCase().includes(search.toLowerCase()));
+  const selectors = {
+    amount: (row) => row.balance ?? row.expectedAmount ?? row.profit ?? 0,
+    name: (row) => row.clientName || row.contractorName || row.name || '',
+    date: (row) => row.dueDate || row.eventDate || '',
+    urgency: (row) => row.overdueDays || 0,
+  };
+  const selector = selectors[sort] || selectors.amount;
+  rows.sort((a, b) => typeof selector(a) === 'string' ? selector(a).localeCompare(selector(b)) : selector(b) - selector(a));
+  copy[tab].rows = rows;
+  return copy;
+}
+
 export default function FinancialsPage() {
   const { currentUser, can } = useAuth();
   const [summary, setSummary] = useState(null);
@@ -52,6 +76,10 @@ export default function FinancialsPage() {
   const [from, setFrom] = useState(startOfYear());
   const [to, setTo] = useState(today());
   const [reportTab, setReportTab] = useState('pnl');
+  const [reportSearch, setReportSearch] = useState('');
+  const [reportSort, setReportSort] = useState('amount');
+  const [savedViews, setSavedViews] = useState([]);
+  const [exporting, setExporting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showExpense, setShowExpense] = useState(false);
@@ -70,6 +98,36 @@ export default function FinancialsPage() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (currentUser?.planTier === 'agency') listAgencyGroups().then(setGroups).catch(() => {}); }, [currentUser?.planTier]);
+  useEffect(() => { listSavedFinancialViews().then(setSavedViews).catch(() => {}); }, []);
+
+  const visibleReports = displayedReports(reports, reportTab, reportSearch, reportSort);
+
+  async function saveView() {
+    const name = window.prompt('Name this report view:');
+    if (!name?.trim()) return;
+    try {
+      const view = await saveFinancialView({ name: name.trim(), reportTab, filters: { from, to, groupId } });
+      setSavedViews((old) => [view, ...old.filter((item) => item.id !== view.id && item.name !== view.name)]);
+    } catch (err) { setError(err.message || 'The report view could not be saved.'); }
+  }
+
+  function applyView(view) {
+    setReportTab(view.reportTab); setFrom(view.filters?.from || ''); setTo(view.filters?.to || ''); setGroupId(view.filters?.groupId || ''); setReportSearch('');
+  }
+
+  async function removeView(event, view) {
+    event.stopPropagation();
+    try { await deleteFinancialView(view.id); setSavedViews((old) => old.filter((item) => item.id !== view.id)); }
+    catch (err) { setError(err.message || 'The saved view could not be removed.'); }
+  }
+
+  async function exportPdf() {
+    if (!visibleReports) return;
+    setExporting(true);
+    try { await exportFinancialReportPdf({ tab: reportTab, reports: visibleReports, businessInfo: currentUser?.businessInfo, groupName: groups.find((group) => group.id === groupId)?.name, from, to }); }
+    catch { setError('The PDF could not be generated.'); }
+    finally { setExporting(false); }
+  }
 
   async function saveExpense(event) {
     event.preventDefault(); setSaving(true); setError('');
@@ -109,6 +167,7 @@ export default function FinancialsPage() {
           </div>
           {loading && <span className="pb-3 text-xs text-slate-400">Refreshing…</span>}
         </div>
+        {savedViews.length > 0 && <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3"><span className="text-xs font-semibold text-slate-400">Saved views</span>{savedViews.map((view) => <div key={view.id} className="flex min-h-9 items-center rounded-full bg-indigo-50"><button type="button" onClick={() => applyView(view)} className="min-h-9 pl-3 pr-2 text-xs font-semibold text-indigo-700 hover:text-indigo-900">{view.name}</button><button type="button" onClick={(event) => removeView(event, view)} className="min-h-9 px-2 text-indigo-300 hover:text-rose-600" aria-label={`Delete ${view.name}`}>×</button></div>)}</div>}
       </section>
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
@@ -120,16 +179,19 @@ export default function FinancialsPage() {
         <section className="grid lg:grid-cols-2 gap-5"><div className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-bold text-slate-800">Contractors awaiting payment</h2><p className="text-xs text-slate-500 mt-1">Based on unpaid contractor assignments with a saved rate.</p><div className="mt-4 divide-y divide-slate-100">{summary.payables.length === 0 ? <p className="py-6 text-center text-sm text-slate-400">No contractor payables found.</p> : summary.payables.map((item, index) => <Link key={`${item.eventId}-${item.contractorId}-${index}`} to={`/events/${item.eventId}?tab=financials`} className="flex items-center justify-between gap-3 py-3 hover:bg-slate-50"><div className="min-w-0"><p className="text-sm font-semibold text-slate-700 truncate">{item.contractorName}</p><p className="text-xs text-slate-400 truncate">{item.eventName}</p></div><span className="text-sm font-bold text-slate-700">{money(item.amount)}</span></Link>)}</div></div><div className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-bold text-slate-800">Booking profitability</h2><p className="text-xs text-slate-500 mt-1">Billed revenue compared with currently known gig costs.</p><div className="mt-4 divide-y divide-slate-100">{summary.profitability.length === 0 ? <p className="py-6 text-center text-sm text-slate-400">Issue an invoice to begin profitability tracking.</p> : summary.profitability.map((item) => <Link key={item.bookingId} to={`/bookings/${item.bookingId}?tab=invoices`} className="grid grid-cols-[1fr_auto] gap-3 py-3 hover:bg-slate-50"><div className="min-w-0"><p className="text-sm font-semibold text-slate-700 truncate">{item.name}</p><p className="text-xs text-slate-400">{money(item.billed)} billed · {money(item.estimatedCosts)} known costs</p></div><div className="text-right"><p className={`text-sm font-bold ${item.estimatedProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{money(item.estimatedProfit)}</p><p className="text-xs text-slate-400">{item.margin.toFixed(1)}%</p></div></Link>)}</div></div></section>
       </>}
 
-      {reports && <section className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+      {reports?.dataQuality?.issues.length > 0 && <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-5"><div className="flex items-start justify-between gap-4"><div><h2 className="font-bold text-amber-900">Financial data needs attention</h2><p className="mt-1 text-sm text-amber-700">{reports.dataQuality.issueCount} records may affect report accuracy.</p></div><span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">Review before exporting</span></div><div className="mt-4 grid md:grid-cols-2 gap-3">{reports.dataQuality.issues.map((issue) => <div key={issue.id} className="rounded-lg border border-amber-200 bg-white p-4"><div className="flex items-center justify-between gap-2"><h3 className="text-sm font-bold text-slate-800">{issue.title}</h3><span className="text-xs font-bold text-amber-700">{issue.count}</span></div><p className="mt-1 text-xs text-slate-500">{issue.detail}</p>{issue.links.length > 0 && <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">{issue.links.map((link) => <Link key={`${issue.id}-${link.path}`} to={link.path} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">Fix {link.label} →</Link>)}</div>}</div>)}</div></section>}
+
+      {visibleReports && <section className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
         <div className="border-b border-slate-200 px-3 pt-3">
           <div className="flex gap-1 overflow-x-auto" role="tablist" aria-label="Financial reports">
             {reportTabs.map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={reportTab === id} onClick={() => setReportTab(id)} className={`min-h-11 whitespace-nowrap rounded-t-lg px-4 text-sm font-semibold ${reportTab === id ? 'border border-b-white border-slate-200 bg-white text-indigo-700 -mb-px' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>{label}</button>)}
           </div>
         </div>
-        {reportTab === 'pnl' && <ProfitAndLossReport report={reports.profitAndLoss} />}
-        {reportTab === 'receivables' && <ReceivablesReport report={reports.receivables} />}
-        {reportTab === 'payables' && <PayablesReport report={reports.payables} />}
-        {reportTab === 'profitability' && <ProfitabilityReport report={reports.profitability} />}
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 p-3"><input type="search" value={reportSearch} onChange={(e) => setReportSearch(e.target.value)} placeholder="Search this report…" aria-label="Search this report" className={`${inputClass} max-w-xs`} /><select value={reportSort} onChange={(e) => setReportSort(e.target.value)} className={`${inputClass} max-w-48`} aria-label="Sort report"><option value="amount">Highest amount</option><option value="urgency">Most overdue</option><option value="date">Date</option><option value="name">Name</option></select><div className="ml-auto flex flex-wrap gap-2"><button type="button" onClick={saveView} className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">Save view</button><button type="button" onClick={() => exportFinancialReportCsv({ tab: reportTab, reports: visibleReports })} className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">Export CSV</button><button type="button" disabled={exporting} onClick={exportPdf} className="min-h-11 rounded-lg bg-slate-800 px-3 text-sm font-semibold text-white hover:bg-slate-900 disabled:opacity-60">{exporting ? 'Creating…' : 'Export PDF'}</button></div></div>
+        {reportTab === 'pnl' && <ProfitAndLossReport report={visibleReports.profitAndLoss} />}
+        {reportTab === 'receivables' && <ReceivablesReport report={visibleReports.receivables} />}
+        {reportTab === 'payables' && <PayablesReport report={visibleReports.payables} />}
+        {reportTab === 'profitability' && <ProfitabilityReport report={visibleReports.profitability} />}
       </section>}
 
       <section className="rounded-xl border border-slate-200 bg-white overflow-hidden"><div className="px-5 py-4 border-b border-slate-100"><h2 className="font-bold text-slate-800">Accounting ledger</h2><p className="text-xs text-slate-500 mt-1">Permanent transaction history. Corrections create an equal and opposite entry.</p></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-5 py-3">Date</th><th className="px-5 py-3">Description</th><th className="px-5 py-3">Category</th><th className="px-5 py-3">Entered by</th><th className="px-5 py-3 text-right">Amount</th><th className="px-5 py-3"></th></tr></thead><tbody className="divide-y divide-slate-100">{transactions.length === 0 ? <tr><td colSpan="6" className="px-5 py-10 text-center text-slate-400">No posted transactions yet.</td></tr> : transactions.map((tx) => <tr key={tx.id} className={tx.reversed ? 'bg-slate-50 opacity-60' : ''}><td className="px-5 py-3 whitespace-nowrap text-slate-500">{new Date(tx.occurredAt).toLocaleDateString()}</td><td className="px-5 py-3"><p className="font-medium text-slate-700">{tx.description}</p>{tx.memo && <p className="text-xs text-slate-400">{tx.memo}</p>}</td><td className="px-5 py-3 text-slate-500">{categoryLabel[tx.category] || tx.category.replaceAll('_', ' ')}</td><td className="px-5 py-3 text-slate-500">{tx.createdBy ? `${tx.createdBy.firstName} ${tx.createdBy.lastName}` : 'System'}</td><td className={`px-5 py-3 text-right font-bold ${tx.amount >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{tx.amount >= 0 ? '+' : '−'}{money(Math.abs(tx.amount))}</td><td className="px-5 py-3 text-right">{can('manageBookings') && !tx.reversed && !tx.reversalOfId && <button type="button" onClick={() => reverse(tx)} className="min-h-11 px-2 text-xs font-semibold text-slate-500 hover:text-rose-600">Reverse</button>}</td></tr>)}</tbody></table></div></section>

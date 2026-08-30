@@ -28,3 +28,17 @@ export async function reverseFinancialTransaction(id, reason) {
   const data = await apiFetch(`/financials/${id}/reverse`, { method: 'POST', body: JSON.stringify({ reason }) });
   return data.transaction;
 }
+
+export async function listSavedFinancialViews() {
+  const data = await apiFetch('/financials/saved-views');
+  return data.views;
+}
+
+export async function saveFinancialView(view) {
+  const data = await apiFetch('/financials/saved-views', { method: 'POST', body: JSON.stringify(view) });
+  return data.view;
+}
+
+export async function deleteFinancialView(id) {
+  return apiFetch(`/financials/saved-views/${id}`, { method: 'DELETE' });
+}
