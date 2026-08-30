@@ -60,17 +60,24 @@ function eventSummary(event, inquiryStatuses) {
 
 router.get('/', asyncHandler(async (req, res) => {
   const accountId = req.membership.accountId;
+  const groupId = String(req.query.groupId || '').trim();
+  if (groupId && !await prisma.agencyGroup.findFirst({ where: { id: groupId, accountId, active: true }, select: { id: true } })) {
+    return res.status(400).json({ error: 'Invalid managed group.' });
+  }
+  const groupFilter = groupId ? { groupId } : {};
   const [events, bookings, clients, contractors, invoices, accountData] = await Promise.all([
     prisma.event.findMany({
-      where: { accountId, deletedAt: null },
+      where: { accountId, deletedAt: null, ...groupFilter },
       select: { id: true, name: true, eventDate: true, eventStatus: true, clientId: true, completedAt: true, noOutsideContractorsNeeded: true, contractorBookings: true },
     }),
-    prisma.booking.findMany({ where: { accountId, deletedAt: null }, select: { id: true, convertedEventId: true } }),
+    prisma.booking.findMany({ where: { accountId, deletedAt: null, ...groupFilter }, select: { id: true, convertedEventId: true } }),
     prisma.client.findMany({ where: { accountId }, select: { id: true, firstName: true, lastName: true } }),
     prisma.contractor.findMany({ where: { accountId }, select: { id: true, firstName: true, lastName: true, contractorType1: true, pricingTiers: true } }),
     prisma.invoice.findMany({ where: { accountId }, select: { id: true, bookingId: true, number: true, snapshot: true, dueDate: true, status: true, recipientName: true, paidAmount: true } }),
     prisma.accountData.findUnique({ where: { accountId }, select: { data: true } }),
   ]);
+  const scopedBookingIds = new Set(bookings.map((booking) => booking.id));
+  const scopedInvoices = groupId ? invoices.filter((invoice) => scopedBookingIds.has(invoice.bookingId)) : invoices;
   const eventStatuses = accountData?.data?.eventStatuses || [];
   const inquiryStatuses = accountData?.data?.inquiryStatuses || [];
   const contractorById = new Map(contractors.map((item) => [item.id, item]));
@@ -116,7 +123,7 @@ router.get('/', asyncHandler(async (req, res) => {
     .sort((a, b) => b.counts.pending - a.counts.pending)
     .slice(0, 5);
 
-  const overdueInvoices = invoices
+  const overdueInvoices = scopedInvoices
     .filter((invoice) => ['sent', 'partial'].includes(invoice.status) && invoice.dueDate && invoice.dueDate.slice(0, 10) < today)
     .map((invoice) => ({ ...invoice, total: invoiceTotal(invoice), paidAmount: invoice.paidAmount ?? 0 }))
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
@@ -124,7 +131,7 @@ router.get('/', asyncHandler(async (req, res) => {
 
   const bookingByEvent = new Map(bookings.filter((item) => item.convertedEventId).map((item) => [item.convertedEventId, item]));
   const revenueByBooking = new Map();
-  for (const invoice of invoices) {
+  for (const invoice of scopedInvoices) {
     if (['void', 'draft'].includes(invoice.status)) continue;
     revenueByBooking.set(invoice.bookingId, (revenueByBooking.get(invoice.bookingId) || 0) + invoiceTotal(invoice));
   }

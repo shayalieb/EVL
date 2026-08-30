@@ -1,8 +1,9 @@
 import { apiFetch } from '../context/AuthContext';
 
-export async function getDashboard(attempt = 0) {
+export async function getDashboard(filters = {}, attempt = 0) {
   try {
-    const data = await apiFetch('/dashboard');
+    const query = new URLSearchParams(filters).toString();
+    const data = await apiFetch(`/dashboard${query ? `?${query}` : ''}`);
     return data.dashboard;
   } catch (error) {
     // During a rolling deploy, a new browser bundle can briefly reach an
@@ -10,7 +11,7 @@ export async function getDashboard(attempt = 0) {
     // one version-mismatch case; real authorization/server errors surface.
     if (error.status === 404 && attempt < 3) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
-      return getDashboard(attempt + 1);
+      return getDashboard(filters, attempt + 1);
     }
     throw error;
   }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useAgencyGroup } from '../context/AgencyGroupContext';
 import MoneyInput from '../components/ui/MoneyInput';
 import FinancialForecastDashboard from '../components/FinancialForecastDashboard';
 import FinancialPeriodControls from '../components/FinancialPeriodControls';
@@ -70,13 +71,15 @@ function displayedReports(reports, tab, search, sort) {
 
 export default function FinancialsPage() {
   const { currentUser, can, role } = useAuth();
-  const [searchParams] = useSearchParams();
+  const { setSelectedGroupId: setWorkspaceGroupId } = useAgencyGroup();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedGroupId = searchParams.get('groupId') || '';
   const [summary, setSummary] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [reports, setReports] = useState(null);
   const [forecast, setForecast] = useState(null);
   const [groups, setGroups] = useState([]);
-  const [groupId, setGroupId] = useState(searchParams.get('groupId') || '');
+  const [groupId, setGroupId] = useState(requestedGroupId);
   const [from, setFrom] = useState(startOfYear());
   const [to, setTo] = useState(today());
   const [reportTab, setReportTab] = useState('pnl');
@@ -88,6 +91,17 @@ export default function FinancialsPage() {
   const [error, setError] = useState('');
   const [showExpense, setShowExpense] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => { setGroupId(requestedGroupId); }, [requestedGroupId]);
+
+  function selectGroup(nextGroupId) {
+    setGroupId(nextGroupId);
+    setWorkspaceGroupId(nextGroupId);
+    const next = new URLSearchParams(searchParams);
+    if (nextGroupId) next.set('groupId', nextGroupId);
+    else next.delete('groupId');
+    setSearchParams(next, { replace: true });
+  }
   const [form, setForm] = useState({ amount: '', category: 'contractor_payment', description: '', occurredAt: today(), paymentMethod: '', reference: '', memo: '', groupId: '' });
 
   const load = useCallback(async () => {
@@ -116,7 +130,7 @@ export default function FinancialsPage() {
   }
 
   function applyView(view) {
-    setReportTab(view.reportTab); setFrom(view.filters?.from || ''); setTo(view.filters?.to || ''); setGroupId(view.filters?.groupId || ''); setReportSearch('');
+    setReportTab(view.reportTab); setFrom(view.filters?.from || ''); setTo(view.filters?.to || ''); selectGroup(view.filters?.groupId || ''); setReportSearch('');
   }
 
   async function removeView(event, view) {
@@ -163,7 +177,7 @@ export default function FinancialsPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><h1 className="text-2xl font-bold text-slate-900">Financials</h1><p className="mt-1 text-sm text-slate-500">Cash activity, outstanding balances, contractor obligations, and booking profitability.</p></div>
         <div className="flex flex-wrap gap-2">
-          {groups.length > 0 && <select value={groupId} onChange={(e) => setGroupId(e.target.value)} className={inputClass} aria-label="Managed group"><option value="">All managed groups</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select>}
+          {groups.length > 0 && <select value={groupId} onChange={(e) => selectGroup(e.target.value)} className={inputClass} aria-label="Managed group"><option value="">All managed groups</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select>}
           {can('recordFinancialTransactions') && <button type="button" onClick={() => setShowExpense((value) => !value)} className="min-h-11 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">{showExpense ? 'Cancel' : '+ Record expense'}</button>}
         </div>
       </div>

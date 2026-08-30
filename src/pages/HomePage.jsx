@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
+import { useAgencyGroup } from '../context/AgencyGroupContext';
 import Badge from '../components/ui/Badge';
 import { formatCurrency } from '../lib/format';
 import { getDashboard } from '../lib/dashboard';
@@ -71,6 +72,7 @@ function WelcomeStep({ icon, title, description, actionLabel, onClick, testId })
 export default function HomePage() {
   const { eventStatuses } = useData();
   const { currentUser } = useAuth();
+  const { selectedGroupId, selectedGroup, pathFor } = useAgencyGroup();
   const navigate = useNavigate();
 
   const [dashboard, setDashboard] = useState(null);
@@ -78,12 +80,14 @@ export default function HomePage() {
   const [dashboardError, setDashboardError] = useState('');
   useEffect(() => {
     let cancelled = false;
-    getDashboard()
+    setDashboardLoading(true);
+    setDashboardError('');
+    getDashboard(selectedGroupId ? { groupId: selectedGroupId } : {})
       .then((result) => { if (!cancelled) setDashboard(result); })
       .catch((error) => { if (!cancelled) setDashboardError(error.message || 'Unable to load the dashboard.'); })
       .finally(() => { if (!cancelled) setDashboardLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [selectedGroupId]);
   const stats = dashboard?.stats;
   const overdueInvoices = dashboard?.overdueInvoices || [];
   const financialsSnapshot = dashboard?.financials;
@@ -94,7 +98,10 @@ export default function HomePage() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-slate-800 mb-4">Home</h2>
+      <div className="mb-4">
+        <h2 className="text-2xl font-bold text-slate-800">Home</h2>
+        {selectedGroup && <p className="mt-1 text-sm text-slate-500">Dashboard for <span className="font-semibold text-slate-700">{selectedGroup.name}</span></p>}
+      </div>
 
       {dashboardLoading ? (
         <Skeleton className="h-72 w-full rounded-xl" />
@@ -135,7 +142,7 @@ export default function HomePage() {
               title="Create your first booking"
               description="Start tracking a real inquiry, or send a client a link to fill in their own event details."
               actionLabel="Add a Booking"
-              onClick={() => navigate('/bookings/new')}
+              onClick={() => navigate(pathFor('/bookings/new'))}
               testId="home-welcome-step-booking"
             />
           </div>

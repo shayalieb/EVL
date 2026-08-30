@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useAgencyGroup } from '../context/AgencyGroupContext';
 import Logo from '../components/ui/Logo';
 import { BellIcon } from '../components/ui/icons';
 import { fetchReminders, completeReminder, relatedRecordPath } from '../lib/reminders';
@@ -39,6 +40,7 @@ const NAV_GROUPS = [
 
 export default function AppLayout() {
   const { currentUser, logout, sizeWarning } = useAuth();
+  const { groups: agencyGroups, isAgency, loading: groupsLoading, selectedGroupId, selectedGroup, setSelectedGroupId, pathFor } = useAgencyGroup();
   const [sizeWarningDismissed, setSizeWarningDismissed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -135,7 +137,7 @@ export default function AppLayout() {
           >
             ☰
           </button>
-          <Link to="/home" className="flex items-center gap-3">
+          <Link to={pathFor('/home')} className="flex items-center gap-3">
             <Logo className="h-14 w-auto" />
             {currentUser?.businessInfo?.logo && (
               <>
@@ -279,13 +281,33 @@ export default function AppLayout() {
           className={`${mobileNavOpen ? 'block' : 'hidden'} sm:block w-full sm:w-56 shrink-0 border-r border-slate-200 bg-white sm:min-h-0`}
         >
           <div className="p-3 space-y-4">
+            {isAgency && (
+              <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
+                <label htmlFor="agency-workspace-group" className="block text-[11px] font-semibold uppercase tracking-wide text-indigo-500">
+                  Working group
+                </label>
+                <select
+                  id="agency-workspace-group"
+                  value={selectedGroupId}
+                  onChange={(event) => setSelectedGroupId(event.target.value)}
+                  disabled={groupsLoading}
+                  className="mt-1.5 w-full min-h-11 rounded-lg border border-indigo-200 bg-white px-2.5 text-sm font-semibold text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:opacity-60"
+                >
+                  <option value="">All groups</option>
+                  {agencyGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+                </select>
+                <p className="mt-1.5 text-[11px] leading-4 text-slate-500">
+                  {selectedGroup ? `Showing work for ${selectedGroup.name}.` : 'Showing agency-wide work.'}
+                </p>
+              </div>
+            )}
             {navGroups.map((group) => (
               <div key={group.label} className="space-y-1">
                 <div className="px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">{group.label}</div>
                 {group.items.map((item) => (
                   <NavLink
                     key={item.to}
-                    to={item.to}
+                    to={pathFor(item.to)}
                     onClick={() => setMobileNavOpen(false)}
                     className={({ isActive }) =>
                       `nav-item flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium ${

@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
+import { AgencyGroupProvider } from './context/AgencyGroupContext';
 import { PortalAuthProvider, usePortalAuth } from './context/PortalAuthContext';
 import { ToastProvider } from './components/ui/Toast';
 import { SavingIndicatorProvider } from './components/ui/SavingIndicator';
@@ -76,7 +77,9 @@ function ProtectedArea() {
   if (!currentUser.accountApproved || currentUser.subscriptionBlocked) return <PendingApprovalPage />;
   return (
     <DataProvider>
-      <AppLayout />
+      <AgencyGroupProvider>
+        <AppLayout />
+      </AgencyGroupProvider>
     </DataProvider>
   );
 }

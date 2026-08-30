@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createAgencyGroup, deleteAgencyGroup, listAgencyGroups, updateAgencyGroup } from '../lib/agencyGroups';
 import { useToast } from '../components/ui/Toast';
@@ -8,10 +8,15 @@ import { useAuth } from '../context/AuthContext';
 const empty = { name: '', description: '', logo: '', active: true, stationery: { businessName: '', address: '', addressLine1: '', addressLine2: '', city: '', state: '', postalCode: '', country: '', phone: '', email: '', accentColor: '#6366f1', documentLayout: 'classic', footer: '' } };
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
+const PAGE_SIZE = 9;
 
 export default function AgencyGroupsPage() {
   const [groups, setGroups] = useState([]);
   const [groupView, setGroupView] = useState('active');
+  const [search, setSearch] = useState('');
+  const [attention, setAttention] = useState('all');
+  const [sort, setSort] = useState('name');
+  const [page, setPage] = useState(1);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(empty);
   const [busy, setBusy] = useState(false);
@@ -60,12 +65,35 @@ export default function AgencyGroupsPage() {
     try { await deleteAgencyGroup(group.id); await load(); showToast('Group deleted'); } catch (error) { showToast(error.message, 'error'); }
   }
   const totals = groups.reduce((sum, group) => ({ bookings: sum.bookings + group.stats.activeBookings, events: sum.events + group.stats.upcomingEvents }), { bookings: 0, events: 0 });
-  const visibleGroups = groups.filter((group) => groupView === 'all' || (groupView === 'active' ? group.active : !group.active));
+  const filteredGroups = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    const setupComplete = (group) => !!group.logo && !!group.stationery?.email && !!group.stationery?.phone && !!(group.stationery?.addressLine1 || group.stationery?.address);
+    const matchesAttention = (group) => attention === 'all' || (attention === 'incomplete' && !setupComplete(group)) || (attention === 'client_due' && group.stats.outstandingBalance > 0) || (attention === 'crew_due' && group.stats.contractorDue > 0);
+    const rows = groups.filter((group) => {
+      if (groupView !== 'all' && (groupView === 'active') !== group.active) return false;
+      if (!matchesAttention(group)) return false;
+      if (!term) return true;
+      const stationery = group.stationery || {};
+      return [group.name, group.description, stationery.businessName, stationery.email, stationery.phone, stationery.address, stationery.city, stationery.state].some((value) => String(value || '').toLowerCase().includes(term));
+    });
+    const selectors = {
+      name: (group) => group.name.toLowerCase(),
+      next_event: (group) => group.stats.nextEvent?.date || '9999-99-99',
+      revenue: (group) => Number(group.stats.invoicedRevenue) || 0,
+      outstanding: (group) => Number(group.stats.outstandingBalance) || 0,
+    };
+    const select = selectors[sort] || selectors.name;
+    return rows.sort((a, b) => sort === 'name' || sort === 'next_event' ? String(select(a)).localeCompare(String(select(b))) : select(b) - select(a));
+  }, [attention, groupView, groups, search, sort]);
+  const pageCount = Math.max(1, Math.ceil(filteredGroups.length / PAGE_SIZE));
+  const visibleGroups = filteredGroups.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  useEffect(() => { setPage(1); }, [attention, groupView, search, sort]);
+  useEffect(() => { if (page > pageCount) setPage(pageCount); }, [page, pageCount]);
   return <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-7">
     <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wide text-indigo-600">Agency workspace</p><h1 className="text-3xl font-bold text-slate-900">Managed Groups</h1><p className="text-slate-500 mt-1">Each group has its own workflow identity and stationery. Agency contacts, contractors, venues, catalogs, and searches stay shared.</p></div><button onClick={reset} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">+ Add group</button></div>
     <div className="grid sm:grid-cols-3 gap-4"><Metric label="Managed groups" value={groups.filter((g) => g.active).length} /><Metric label="Active bookings" value={totals.bookings} /><Metric label="Upcoming events" value={totals.events} /></div>
     <GroupEditor form={form} editing={editing} busy={busy} processingLogo={processingLogo} update={update} updateStationery={updateStationery} changeLogo={changeLogo} save={save} reset={reset} />
-    <div><div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-lg font-bold text-slate-900">Group operations</h2><p className="text-xs text-slate-400">Current activity and setup health</p></div><div className="flex rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Group status">{[['active', 'Active'], ['archived', `Archived (${groups.filter((group) => !group.active).length})`], ['all', 'All']].map(([value, label]) => <button key={value} type="button" role="tab" aria-selected={groupView === value} onClick={() => setGroupView(value)} className={`min-h-9 rounded-md px-3 text-xs font-semibold ${groupView === value ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500'}`}>{label}</button>)}</div></div>{visibleGroups.length > 0 ? <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">{visibleGroups.map((group) => <GroupCard key={group.id} group={group} canViewFinancials={can('viewFinancials')} startEdit={startEdit} setArchived={setArchived} remove={remove} />)}</div> : <div className="rounded-xl border border-dashed border-slate-300 py-12 text-center text-sm text-slate-400">No {groupView === 'all' ? '' : groupView} groups found.</div>}</div>
+    <div><div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-lg font-bold text-slate-900">Group operations</h2><p className="text-xs text-slate-400">Current activity and setup health</p></div><div className="flex rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Group status">{[['active', 'Active'], ['archived', `Archived (${groups.filter((group) => !group.active).length})`], ['all', 'All']].map(([value, label]) => <button key={value} type="button" role="tab" aria-selected={groupView === value} onClick={() => setGroupView(value)} className={`min-h-9 rounded-md px-3 text-xs font-semibold ${groupView === value ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500'}`}>{label}</button>)}</div></div><div className="mb-4 grid gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-[minmax(14rem,1fr)_auto_auto]"><label><span className="sr-only">Search managed groups</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, email, phone, or notes…" className={inputClass} /></label><label><span className="sr-only">Filter group attention</span><select value={attention} onChange={(event) => setAttention(event.target.value)} className={inputClass}><option value="all">All setup states</option><option value="incomplete">Setup incomplete</option>{can('viewFinancials') && <><option value="client_due">Client balance due</option><option value="crew_due">Contractor payment due</option></>}</select></label><label><span className="sr-only">Sort managed groups</span><select value={sort} onChange={(event) => setSort(event.target.value)} className={inputClass}><option value="name">Name A–Z</option><option value="next_event">Next event</option>{can('viewFinancials') && <><option value="revenue">Highest revenue</option><option value="outstanding">Highest client balance</option></>}</select></label></div>{visibleGroups.length > 0 ? <><div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">{visibleGroups.map((group) => <GroupCard key={group.id} group={group} canViewFinancials={can('viewFinancials')} startEdit={startEdit} setArchived={setArchived} remove={remove} />)}</div><div className="mt-5 flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-slate-500">Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filteredGroups.length)} of {filteredGroups.length} groups</p><div className="flex items-center gap-2"><button type="button" disabled={page === 1} onClick={() => setPage((value) => value - 1)} className="min-h-10 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-600 disabled:opacity-40">Previous</button><span className="px-2 text-sm font-semibold text-slate-600">{page} / {pageCount}</span><button type="button" disabled={page === pageCount} onClick={() => setPage((value) => value + 1)} className="min-h-10 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-600 disabled:opacity-40">Next</button></div></div></> : <div className="rounded-xl border border-dashed border-slate-300 py-12 text-center"><p className="text-sm text-slate-500">No groups match these filters.</p>{(search || attention !== 'all') && <button type="button" onClick={() => { setSearch(''); setAttention('all'); }} className="mt-3 text-sm font-semibold text-indigo-600">Clear filters</button>}</div>}</div>
   </div>;
 }
 
