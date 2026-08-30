@@ -7,7 +7,7 @@ import FinancialExpenseForm from '../components/FinancialExpenseForm';
 import { useToast } from '../components/ui/Toast';
 import Modal from '../components/ui/Modal';
 import Pagination from '../components/ui/Pagination';
-import { authorizeFinancialExport, createFinancialExpense, getFinancialReports, getFinancialSummary, listFinancialTransactions, reverseFinancialTransaction, updateContractorPayment } from '../lib/financials';
+import { authorizeFinancialExport, createFinancialExpense, financialReceiptUrl, getFinancialReports, getFinancialSummary, listFinancialTransactions, reverseFinancialTransaction, updateContractorPayment, uploadFinancialReceipt } from '../lib/financials';
 import { exportFinancialReportCsv, exportFinancialReportPdf } from '../lib/financialReportExports';
 
 const inputClass = 'w-full min-h-11 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100';
@@ -19,7 +19,7 @@ const categoryLabel = Object.fromEntries([...categories, ['client_payment', 'Cli
 const money = (value) => Number(value || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 const today = () => new Date().toISOString().slice(0, 10);
 const startOfYear = () => `${new Date().getFullYear()}-01-01`;
-const emptyExpenseForm = () => ({ amount: '', category: 'contractor_payment', description: '', occurredAt: today(), paymentMethod: '', reference: '', memo: '', groupId: '', bookingId: '', eventId: '', contractorId: '' });
+const emptyExpenseForm = () => ({ amount: '', category: 'contractor_payment', description: '', occurredAt: today(), paymentMethod: '', payee: '', reference: '', memo: '', groupId: '', bookingId: '', eventId: '', contractorId: '' });
 const reportTabs = [['receivables', 'Who owes you'], ['payables', 'Who you owe']];
 const pageSections = [['overview', 'Overview'], ['payments', 'Payments'], ['reports', 'Reports']];
 
@@ -60,7 +60,7 @@ function Metric({ label, value, color }) {
   return <div className="rounded-lg bg-slate-50 p-3"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p><p className={`mt-1 text-lg font-bold ${color}`}>{money(value)}</p></div>;
 }
 
-function TransactionDetailsModal({ transaction, onClose }) {
+function TransactionDetailsModal({ transaction, canAttachReceipt, receiptUploading, onReceiptUpload, onClose }) {
   if (!transaction) return null;
   const detailRows = [
     ['Direction', transaction.amount >= 0 ? 'Money received' : 'Money paid out'],
@@ -68,12 +68,14 @@ function TransactionDetailsModal({ transaction, onClose }) {
     ['Date', new Date(transaction.occurredAt).toLocaleDateString()],
     ['Category', categoryLabel[transaction.category] || transaction.category.replaceAll('_', ' ')],
     ['Payment method', transaction.paymentMethod ? transaction.paymentMethod.toUpperCase() : null],
+    ['Paid to / vendor', transaction.metadata?.payee],
     ['Reference', transaction.reference],
     ['Managed group', transaction.group?.name],
     ['Entered by', transaction.createdBy ? `${transaction.createdBy.firstName} ${transaction.createdBy.lastName}` : 'System'],
     ['Internal note', transaction.memo],
   ].filter(([, value]) => value);
-  return <Modal open onClose={onClose} title="Payment details"><div className="space-y-4"><div><p className="text-sm font-semibold text-slate-800">{transaction.description}</p>{transaction.reversed && <span className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">Undone</span>}</div><dl className="divide-y divide-slate-100 rounded-lg border border-slate-200">{detailRows.map(([label, value]) => <div key={label} className="grid grid-cols-[8rem_1fr] gap-3 px-4 py-3 text-sm"><dt className="font-semibold text-slate-500">{label}</dt><dd className="text-slate-800">{value}</dd></div>)}</dl><div className="flex flex-wrap gap-2">{transaction.relatedBooking && <Link onClick={onClose} to={`/bookings/${transaction.relatedBooking.id}`} className="rounded-lg bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700">Open booking</Link>}{transaction.relatedEvent && <Link onClick={onClose} to={`/events/${transaction.relatedEvent.id}?tab=financials`} className="rounded-lg bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700">Open event</Link>}{transaction.relatedContractor && <Link onClick={onClose} to={`/contractors?open=${encodeURIComponent(transaction.relatedContractor.id)}`} className="rounded-lg bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700">Open contractor</Link>}{transaction.relatedInvoice && <Link onClick={onClose} to={`/bookings/${transaction.relatedInvoice.bookingId}?tab=invoices`} className="rounded-lg bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700">Open invoice #{transaction.relatedInvoice.number ?? '—'}</Link>}</div></div></Modal>;
+  const receipt = transaction.metadata?.receipt;
+  return <Modal open onClose={onClose} title="Payment details" widthClass="max-w-2xl"><div className="space-y-4"><div><p className="text-sm font-semibold text-slate-800">{transaction.description}</p>{transaction.reversed && <span className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">Undone</span>}</div><dl className="divide-y divide-slate-100 rounded-lg border border-slate-200">{detailRows.map(([label, value]) => <div key={label} className="grid grid-cols-[8rem_1fr] gap-3 px-4 py-3 text-sm"><dt className="font-semibold text-slate-500">{label}</dt><dd className="text-slate-800">{value}</dd></div>)}</dl>{receipt ? <section className="rounded-lg border border-slate-200 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="text-sm font-bold text-slate-800">Receipt</h4><p className="text-xs text-slate-500">{receipt.filename}</p></div><a href={financialReceiptUrl(transaction.id, true)} target="_blank" rel="noreferrer" className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">Download</a></div>{receipt.contentType?.startsWith('image/') ? <img src={financialReceiptUrl(transaction.id)} alt={`Receipt ${receipt.filename}`} className="mt-3 max-h-80 w-full rounded-lg bg-slate-50 object-contain" /> : receipt.contentType === 'application/pdf' ? <iframe src={financialReceiptUrl(transaction.id)} title={`Receipt ${receipt.filename}`} className="mt-3 h-80 w-full rounded-lg border border-slate-100" /> : null}</section> : transaction.amount < 0 && <section className="rounded-lg border border-amber-200 bg-amber-50 p-3"><p className="text-sm font-semibold text-amber-900">Receipt missing</p><p className="mt-1 text-xs text-amber-700">Optional—attach a PDF or image when documentation becomes available.</p>{canAttachReceipt && <label className="mt-3 inline-flex min-h-11 cursor-pointer items-center rounded-lg bg-white px-3 py-2 text-xs font-semibold text-indigo-700 shadow-sm"><input type="file" disabled={receiptUploading} accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif,.pdf,.jpg,.jpeg,.png,.webp,.heic,.heif" onChange={(event) => event.target.files?.[0] && onReceiptUpload(transaction, event.target.files[0])} className="sr-only" />{receiptUploading ? 'Uploading receipt…' : 'Attach receipt'}</label>}</section>}<div className="flex flex-wrap gap-2">{transaction.relatedBooking && <Link onClick={onClose} to={`/bookings/${transaction.relatedBooking.id}`} className="rounded-lg bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700">Open booking</Link>}{transaction.relatedEvent && <Link onClick={onClose} to={`/events/${transaction.relatedEvent.id}?tab=financials`} className="rounded-lg bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700">Open event</Link>}{transaction.relatedContractor && <Link onClick={onClose} to={`/contractors?open=${encodeURIComponent(transaction.relatedContractor.id)}`} className="rounded-lg bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700">Open contractor</Link>}{transaction.relatedInvoice && <Link onClick={onClose} to={`/bookings/${transaction.relatedInvoice.bookingId}?tab=invoices`} className="rounded-lg bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700">Open invoice #{transaction.relatedInvoice.number ?? '—'}</Link>}</div></div></Modal>;
 }
 
 function displayedReports(reports, tab, search, sort) {
@@ -112,6 +114,8 @@ export default function FinancialsPage() {
   const [ledgerCategory, setLedgerCategory] = useState('');
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
+  const [receiptFile, setReceiptFile] = useState(null);
+  const [receiptUploading, setReceiptUploading] = useState(false);
   const [reports, setReports] = useState(null);
   const [groupId, setGroupId] = useState(requestedGroupId);
   const [from, setFrom] = useState(startOfYear());
@@ -183,22 +187,41 @@ export default function FinancialsPage() {
 
   async function saveExpense(event) {
     event.preventDefault(); setSaving(true); setError('');
+    let paymentRecorded = false;
     try {
+      if (receiptFile && (receiptFile.size > 10 * 1024 * 1024 || !/\.(pdf|jpe?g|png|webp|heic|heif)$/i.test(receiptFile.name))) throw new Error('Choose a PDF or image receipt up to 10MB.');
       if (!expenseRequestId.current) expenseRequestId.current = crypto.randomUUID();
-      await createFinancialExpense({ ...form, groupId: form.groupId || groupId || null, clientRequestId: expenseRequestId.current });
+      const transaction = await createFinancialExpense({ ...form, groupId: form.groupId || groupId || null, clientRequestId: expenseRequestId.current });
+      paymentRecorded = true;
+      if (receiptFile) await uploadFinancialReceipt(transaction.id, receiptFile);
       expenseRequestId.current = '';
       setForm(emptyExpenseForm());
+      setReceiptFile(null);
       setShowExpense(false);
       showToast('Payment added');
       await Promise.all([load(), loadLedger()]);
-    } catch (err) { setError(err.message || 'Expense could not be recorded.'); }
+    } catch (err) { setError(paymentRecorded ? `Payment was recorded, but its receipt was not attached. ${err.message || 'Try attaching it from Payment Details.'}` : err.message || 'Expense could not be recorded.'); }
     finally { setSaving(false); }
   }
 
   function closeExpenseForm() {
     expenseRequestId.current = '';
     setForm(emptyExpenseForm());
+    setReceiptFile(null);
     setShowExpense(false);
+  }
+
+  async function attachReceipt(transaction, file) {
+    setReceiptUploading(true); setError('');
+    try {
+      if (file.size > 10 * 1024 * 1024 || !/\.(pdf|jpe?g|png|webp|heic|heif)$/i.test(file.name)) throw new Error('Choose a PDF or image receipt up to 10MB.');
+      const receipt = await uploadFinancialReceipt(transaction.id, file);
+      const updated = { ...transaction, metadata: { ...(transaction.metadata || {}), receipt } };
+      setSelectedTransaction(updated);
+      setTransactions((items) => items.map((item) => item.id === transaction.id ? updated : item));
+      showToast('Receipt attached');
+    } catch (err) { setError(err.message || 'Receipt could not be attached.'); }
+    finally { setReceiptUploading(false); }
   }
 
   async function reverse(tx) {
@@ -248,7 +271,7 @@ export default function FinancialsPage() {
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       {activeSection === 'payments' && <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold text-slate-800">Payments</h2><p className="mt-1 text-sm text-slate-500">Review recorded money in and money out, or add an expense.</p></div>{can('recordFinancialTransactions') && <button type="button" onClick={() => showExpense ? closeExpenseForm() : setShowExpense(true)} className="min-h-11 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">{showExpense ? 'Cancel' : '+ Add money paid out'}</button>}</div>}
-      {activeSection === 'payments' && showExpense && <FinancialExpenseForm form={form} setForm={setForm} groups={groups} selectedGroup={selectedGroup} saving={saving} onSubmit={saveExpense} onCancel={closeExpenseForm} />}
+      {activeSection === 'payments' && showExpense && <FinancialExpenseForm form={form} setForm={setForm} receiptFile={receiptFile} setReceiptFile={setReceiptFile} groups={groups} selectedGroup={selectedGroup} saving={saving} onSubmit={saveExpense} onCancel={closeExpenseForm} />}
 
       {loading && !summary ? <div className="py-20 text-center text-sm text-slate-400">Loading financials…</div> : activeSection === 'overview' && summary && <>
         <section aria-labelledby="cash-already-moved-heading">
@@ -289,7 +312,7 @@ export default function FinancialsPage() {
       </section>}
 
       {activeSection === 'payments' && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="border-b border-slate-100 px-5 py-4"><h2 className="font-bold text-slate-800">Payment history</h2><p className="mt-1 text-xs text-slate-500">Every recorded payment, newest first. Open a payment for its full details or undo an incorrect entry.</p></div><div className="flex flex-wrap gap-2 border-b border-slate-100 p-3"><input type="search" value={ledgerSearchInput} onChange={(event) => setLedgerSearchInput(event.target.value)} placeholder="Search payments or related records…" aria-label="Search payment history" className={`${inputClass} min-w-64 flex-1`} /><select value={ledgerDirection} onChange={(event) => setLedgerDirection(event.target.value)} aria-label="Filter payment direction" className={`${inputClass} max-w-48`}><option value="">Money in and out</option><option value="in">Money received</option><option value="out">Money paid out</option></select><select value={ledgerCategory} onChange={(event) => setLedgerCategory(event.target.value)} aria-label="Filter payment category" className={`${inputClass} max-w-52`}><option value="">All categories</option>{[...categories, ['client_payment', 'Client payment'], ['payment_adjustment', 'Payment adjustment'], ['reversal', 'Reversal']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{ledgerLoading && <span className="self-center px-2 text-xs text-slate-400">Refreshing…</span>}</div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-5 py-3">Date</th><th className="px-5 py-3">Payment and related record</th><th className="px-5 py-3">Type</th><th className="px-5 py-3 text-right">Amount</th><th className="px-5 py-3"></th></tr></thead><tbody className="divide-y divide-slate-100">{transactions.length === 0 ? <tr><td colSpan="5" className="px-5 py-10 text-center text-slate-400">{ledgerSearch || ledgerDirection || ledgerCategory ? 'No payments match these filters.' : 'No posted transactions yet.'}</td></tr> : transactions.map((tx) => <tr key={tx.id} className={tx.reversed ? 'bg-slate-50 opacity-60' : ''}><td className="whitespace-nowrap px-5 py-3 text-slate-500">{new Date(tx.occurredAt).toLocaleDateString()}</td><td className="px-5 py-3"><p className="font-medium text-slate-700">{tx.description}</p><div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">{tx.relatedBooking && <Link to={`/bookings/${tx.relatedBooking.id}`} className="font-semibold text-indigo-600 hover:text-indigo-700">Booking: {tx.relatedBooking.eventName || 'Untitled'}</Link>}{tx.relatedEvent && <Link to={`/events/${tx.relatedEvent.id}?tab=financials`} className="font-semibold text-indigo-600 hover:text-indigo-700">Event: {tx.relatedEvent.name || 'Untitled'}</Link>}{tx.relatedContractor && <span className="text-slate-500">Contractor: {tx.relatedContractor.name}</span>}{tx.relatedInvoice && <Link to={`/bookings/${tx.relatedInvoice.bookingId}?tab=invoices`} className="font-semibold text-indigo-600 hover:text-indigo-700">Invoice #{tx.relatedInvoice.number ?? '—'}</Link>}</div></td><td className="px-5 py-3"><span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${tx.amount >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>{tx.amount >= 0 ? 'Money received' : 'Money paid out'}</span><p className="mt-1 text-xs text-slate-400">{categoryLabel[tx.category] || tx.category.replaceAll('_', ' ')}</p></td><td className={`px-5 py-3 text-right font-bold ${tx.amount >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{tx.amount >= 0 ? '+' : '−'}{money(Math.abs(tx.amount))}</td><td className="px-5 py-3 text-right"><div className="flex justify-end gap-1"><button type="button" onClick={() => setSelectedTransaction(tx)} className="min-h-11 px-2 text-xs font-semibold text-indigo-600 hover:text-indigo-700">Details</button>{can('recordFinancialTransactions') && !tx.reversed && !tx.reversalOfId && <button type="button" onClick={() => reverse(tx)} className="min-h-11 px-2 text-xs font-semibold text-slate-500 hover:text-rose-600">Undo</button>}</div></td></tr>)}</tbody></table></div><Pagination page={ledgerPage} pageCount={ledgerPageCount} onChange={setLedgerPage} totalItems={ledgerTotal} pageSize={25} testId="financial-transactions-pagination" /></section>}
-      <TransactionDetailsModal transaction={selectedTransaction} onClose={() => setSelectedTransaction(null)} />
+      <TransactionDetailsModal transaction={selectedTransaction} canAttachReceipt={can('recordFinancialTransactions')} receiptUploading={receiptUploading} onReceiptUpload={attachReceipt} onClose={() => setSelectedTransaction(null)} />
       <AcceptPaymentModal open={!!payingContractor} title={payingContractor ? `Pay ${payingContractor.contractorName}` : 'Mark contractor paid'} confirmLabel="Mark paid" amountDue={payingContractor?.amount ?? payingContractor?.expectedAmount} amountLabel="Expected payment" onClose={() => setPayingContractor(null)} onAccept={markContractorPaid} />
     </main>
   );

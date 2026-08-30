@@ -7,6 +7,7 @@ import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { dollarsToCents } from '../lib/financialLedger.js';
 import { invoiceTotal } from './invoices.js';
 import { bookingProfitabilitySnapshot, contractorAssignmentCost, contractorPaymentTiming, inIsoDateRange, receivableAgingBucket } from '../lib/financialReports.js';
+import { createSignedUpload, deleteFile, getSignedDownloadUrl, getSignedPreviewUrl, uploadedFileSize } from '../lib/fileStorage.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -14,6 +15,9 @@ router.use(requireAuth, asyncHandler(attachMembership));
 const EXPENSE_CATEGORIES = new Set(['contractor_payment', 'production', 'backline', 'travel', 'processing_fee', 'agency_commission', 'tax', 'reimbursement', 'other_expense']);
 const METHODS = new Set(['ach', 'check', 'card', 'cash', 'wire', 'other']);
 const REPORT_TABS = new Set(['receivables', 'payables']);
+const RECEIPT_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
+const RECEIPT_EXTENSIONS = /\.(pdf|jpe?g|png|webp|heic|heif)$/i;
+const MAX_RECEIPT_SIZE = 10 * 1024 * 1024;
 
 function hasPermission(req, permission) {
   return !!effectivePermissions(req.membership)[permission];
@@ -25,6 +29,10 @@ function requireFinancialPermission(permission) {
 
 function serialize(tx) {
   return { ...tx, amount: tx.amountCents / 100, reversed: !!tx.reversedBy, reversedBy: undefined };
+}
+
+function objectMetadata(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 
 function dateRange(req) {
@@ -289,7 +297,7 @@ router.post('/export-events', requireFinancialPermission('exportFinancialReports
 }));
 
 router.post('/expenses', requireFinancialPermission('recordFinancialTransactions'), asyncHandler(async (req, res) => {
-  const { amount, category, description, occurredAt, groupId, bookingId, eventId, contractorId, paymentMethod, reference, memo, clientRequestId } = req.body || {};
+  const { amount, category, description, occurredAt, groupId, bookingId, eventId, contractorId, paymentMethod, reference, memo, payee, clientRequestId } = req.body || {};
   const accountId = req.membership.accountId;
   const amountCents = dollarsToCents(amount);
   if (!(amountCents > 0)) return res.status(400).json({ error: 'Amount must be greater than $0.' });
@@ -320,7 +328,7 @@ router.post('/expenses', requireFinancialPermission('recordFinancialTransactions
     if (existing) return res.json({ transaction: serialize({ ...existing, reversedBy: null }), duplicate: true });
   }
   try {
-    const transaction = await prisma.financialTransaction.create({ data: { accountId, groupId: resolvedGroupId, bookingId: bookingId || null, eventId: eventId || null, contractorId: contractorId || null, category, amountCents: -amountCents, description: description.trim().slice(0, 500), occurredAt: transactionDate, sourceType: 'manual_expense', sourceId, paymentMethod: paymentMethod || null, reference: String(reference || '').trim().slice(0, 200) || null, memo: String(memo || '').trim().slice(0, 1000) || null, metadata: requestId ? { clientRequestId: requestId } : undefined, createdById: req.session.userId } });
+    const transaction = await prisma.financialTransaction.create({ data: { accountId, groupId: resolvedGroupId, bookingId: bookingId || null, eventId: eventId || null, contractorId: contractorId || null, category, amountCents: -amountCents, description: description.trim().slice(0, 500), occurredAt: transactionDate, sourceType: 'manual_expense', sourceId, paymentMethod: paymentMethod || null, reference: String(reference || '').trim().slice(0, 200) || null, memo: String(memo || '').trim().slice(0, 1000) || null, metadata: { ...(requestId ? { clientRequestId: requestId } : {}), ...(String(payee || '').trim() ? { payee: String(payee).trim().slice(0, 160) } : {}) }, createdById: req.session.userId } });
     return res.status(201).json({ transaction: serialize({ ...transaction, reversedBy: null }) });
   } catch (error) {
     if (requestId && error?.code === 'P2002') {
@@ -329,6 +337,54 @@ router.post('/expenses', requireFinancialPermission('recordFinancialTransactions
     }
     throw error;
   }
+}));
+
+router.post('/:id/receipt-upload-url', requireFinancialPermission('recordFinancialTransactions'), asyncHandler(async (req, res) => {
+  const transaction = await prisma.financialTransaction.findFirst({ where: { id: req.params.id, accountId: req.membership.accountId }, select: { amountCents: true, metadata: true } });
+  if (!transaction) return res.status(404).json({ error: 'Payment not found.' });
+  if (transaction.amountCents >= 0) return res.status(400).json({ error: 'Receipts can only be attached to money paid out.' });
+  if (transaction.metadata?.receipt) return res.status(409).json({ error: 'This payment already has a receipt.' });
+  const filename = String(req.body?.filename || '').trim();
+  const contentType = String(req.body?.contentType || '').toLowerCase();
+  const size = Number(req.body?.size);
+  if (!filename || !RECEIPT_EXTENSIONS.test(filename) || !RECEIPT_TYPES.has(contentType)) return res.status(400).json({ error: 'Choose a PDF, JPG, PNG, WebP, or HEIC receipt.' });
+  if (!Number.isInteger(size) || size <= 0) return res.status(400).json({ error: 'The receipt file is empty or invalid.' });
+  if (size > MAX_RECEIPT_SIZE) return res.status(413).json({ error: 'Receipt is too large (10MB max).' });
+  res.json(await createSignedUpload({ accountId: req.membership.accountId, contentType }));
+}));
+
+router.post('/:id/receipt', requireFinancialPermission('recordFinancialTransactions'), asyncHandler(async (req, res) => {
+  const accountId = req.membership.accountId;
+  const transaction = await prisma.financialTransaction.findFirst({ where: { id: req.params.id, accountId } });
+  if (!transaction) return res.status(404).json({ error: 'Payment not found.' });
+  if (transaction.amountCents >= 0) return res.status(400).json({ error: 'Receipts can only be attached to money paid out.' });
+  const { storageKey } = req.body || {};
+  const filename = String(req.body?.filename || '').trim();
+  const contentType = String(req.body?.contentType || '').toLowerCase();
+  const size = Number(req.body?.size);
+  if (transaction.metadata?.receipt?.storageKey === storageKey) return res.json({ receipt: transaction.metadata.receipt });
+  if (transaction.metadata?.receipt) return res.status(409).json({ error: 'This payment already has a receipt.' });
+  if (!storageKey?.startsWith(`${accountId}/`) || !filename || !RECEIPT_EXTENSIONS.test(filename) || !RECEIPT_TYPES.has(contentType) || !Number.isInteger(size) || size <= 0) return res.status(400).json({ error: 'Invalid receipt upload.' });
+  if (size > MAX_RECEIPT_SIZE) return res.status(413).json({ error: 'Receipt is too large (10MB max).' });
+  const actualSize = await uploadedFileSize(storageKey);
+  if (actualSize === null) return res.status(409).json({ error: 'Receipt upload has not completed.' });
+  if (actualSize !== size || actualSize > MAX_RECEIPT_SIZE) {
+    await deleteFile(storageKey);
+    return res.status(400).json({ error: 'Uploaded receipt size does not match.' });
+  }
+  const alreadyAttached = await prisma.financialTransaction.findFirst({ where: { accountId, metadata: { path: ['receipt', 'storageKey'], equals: storageKey } }, select: { id: true } });
+  if (alreadyAttached) return res.status(409).json({ error: 'This receipt is already attached to a payment.' });
+  const receipt = { storageKey, filename: filename.slice(0, 240), contentType, size, uploadedAt: new Date().toISOString(), uploadedById: req.session.userId };
+  await prisma.financialTransaction.update({ where: { id: transaction.id }, data: { metadata: { ...objectMetadata(transaction.metadata), receipt } } });
+  res.status(201).json({ receipt });
+}));
+
+router.get('/:id/receipt', requireFinancialPermission('viewFinancials'), asyncHandler(async (req, res) => {
+  const transaction = await prisma.financialTransaction.findFirst({ where: { id: req.params.id, accountId: req.membership.accountId }, select: { metadata: true } });
+  const receipt = transaction?.metadata?.receipt;
+  if (!receipt?.storageKey) return res.status(404).json({ error: 'Receipt not found.' });
+  const url = req.query.download === '1' ? await getSignedDownloadUrl(receipt.storageKey, receipt.filename) : await getSignedPreviewUrl(receipt.storageKey);
+  res.redirect(302, url);
 }));
 
 router.post('/:id/reverse', requireFinancialPermission('recordFinancialTransactions'), asyncHandler(async (req, res) => {

@@ -1,4 +1,5 @@
-import { apiFetch } from '../context/AuthContext';
+import { apiFetch, API_BASE } from '../context/AuthContext';
+import { uploadToSignedUrl } from './directUpload';
 
 function queryString(filters = {}) {
   const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
@@ -22,6 +23,18 @@ export async function listFinancialTransactions(filters) {
 export async function createFinancialExpense(expense) {
   const data = await apiFetch('/financials/expenses', { method: 'POST', body: JSON.stringify(expense) });
   return data.transaction;
+}
+
+export async function uploadFinancialReceipt(transactionId, file) {
+  const metadata = { filename: file.name, contentType: file.type || 'application/octet-stream', size: file.size };
+  const upload = await apiFetch(`/financials/${transactionId}/receipt-upload-url`, { method: 'POST', body: JSON.stringify(metadata) });
+  await uploadToSignedUrl(upload, file);
+  const data = await apiFetch(`/financials/${transactionId}/receipt`, { method: 'POST', body: JSON.stringify({ ...metadata, storageKey: upload.storageKey }) });
+  return data.receipt;
+}
+
+export function financialReceiptUrl(transactionId, download = false) {
+  return `${API_BASE}/financials/${encodeURIComponent(transactionId)}/receipt${download ? '?download=1' : ''}`;
 }
 
 export async function reverseFinancialTransaction(id, reason) {
