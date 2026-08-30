@@ -37,6 +37,7 @@ model User {
   reminders           Reminder[]
   accountAdminNotes   AccountAdminNote[]
   accountActivities   AccountActivity[]
+  financialTransactions FinancialTransaction[] @relation("FinancialTransactionCreator")
 }
 
 model Account {
@@ -89,6 +90,7 @@ model Account {
   adminNotes              AccountAdminNote[]
   activities              AccountActivity[]
   agencyGroups            AgencyGroup[]
+  financialTransactions   FinancialTransaction[]
 
   // Stripe Connect (Express) — set once onboarding starts. The three
   // booleans are a local cache of the connected Account object, synced by
@@ -709,6 +711,49 @@ model Invoice {
   updatedAt     DateTime  @updatedAt
 
   @@index([accountId, bookingId])
+}
+
+// Append-only accounting ledger. Amounts are integer cents: positive values
+// are money into the business, negative values are money out. Posted rows are
+// never edited or deleted; mistakes are corrected by a linked reversing row.
+// sourceType/sourceId makes external and workflow-driven writes idempotent.
+model FinancialTransaction {
+  id          String  @id @default(cuid())
+  accountId   String
+  account     Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  groupId     String?
+  group       AgencyGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  bookingId   String?
+  eventId     String?
+  invoiceId   String?
+  contractorId String?
+  clientId    String?
+  category    String
+  amountCents Int
+  currency    String   @default("USD")
+  description String
+  occurredAt  DateTime
+  sourceType  String
+  sourceId    String
+  paymentMethod String?
+  reference   String?
+  memo        String?  @db.Text
+  metadata    Json     @default("{}")
+
+  reversalOfId String? @unique
+  reversalOf   FinancialTransaction? @relation("FinancialReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversedBy   FinancialTransaction? @relation("FinancialReversal")
+  createdById  String?
+  createdBy    User? @relation("FinancialTransactionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+
+  @@unique([accountId, sourceType, sourceId])
+  @@index([accountId, occurredAt])
+  @@index([accountId, bookingId, occurredAt])
+  @@index([accountId, eventId, occurredAt])
+  @@index([accountId, groupId, occurredAt])
+  @@index([accountId, contractorId, occurredAt])
 }
 
 // A follow-up reminder, optionally tied to a client, contractor, event,
@@ -1410,6 +1455,7 @@ model AgencyGroup {
   active      Boolean  @default(true)
   bookings    Booking[]
   events      Event[]
+  financialTransactions FinancialTransaction[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

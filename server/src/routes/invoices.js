@@ -8,6 +8,7 @@ import { hashToken, generateToken } from '../lib/resetToken.js';
 import { paidCheckoutSessionMatchesInvoice } from '../lib/invoicePaymentVerification.js';
 import { getStripeClient } from '../lib/stripe.js';
 import { normalizeValidEmail } from '../lib/emailAddress.js';
+import { recordInvoicePayment } from '../lib/financialLedger.js';
 
 const router = Router();
 
@@ -321,7 +322,22 @@ router.post('/:id/mark-payment', asyncHandler(async (req, res) => {
   // reads consistently with an invoice that went out through POST /:id/send.
   if (invoice.status === 'draft') data.sentAt = new Date();
 
-  const updated = await prisma.invoice.update({ where: { id: invoice.id }, data });
+  const updated = await prisma.$transaction(async (tx) => {
+    const saved = await tx.invoice.update({ where: { id: invoice.id }, data });
+    await recordInvoicePayment({
+      db: tx,
+      invoice,
+      previousPaidAmount: invoice.paidAmount || 0,
+      newPaidAmount: saved.paidAmount || 0,
+      sourceType: 'manual_invoice_payment',
+      actorUserId: req.session.userId,
+      occurredAt: saved.paidAt || new Date(),
+      paymentMethod: saved.paymentMethod,
+      reference: saved.paymentReference,
+      memo: saved.paymentMemo,
+    });
+    return saved;
+  });
   res.json({ invoice: serializeForOwner(updated) });
 }));
 
@@ -422,9 +438,12 @@ publicInvoicesRouter.get('/:token', asyncHandler(async (req, res) => {
       const stripe = getStripeClient();
       const session = await stripe.checkout.sessions.retrieve(sessionId, { stripeAccount: account.stripeAccountId });
       if (paidCheckoutSessionMatchesInvoice(session, invoice)) {
-        await prisma.invoice.updateMany({
-          where: { id: invoice.id, status: 'sent', stripeCheckoutSessionId: session.id },
-          data: { status: 'paid', paidAmount: invoiceTotal(invoice), paidAt: new Date(), stripePaymentIntentId: session.payment_intent },
+        await prisma.$transaction(async (tx) => {
+          const changed = await tx.invoice.updateMany({
+            where: { id: invoice.id, status: 'sent', stripeCheckoutSessionId: session.id },
+            data: { status: 'paid', paidAmount: invoiceTotal(invoice), paidAt: new Date(), stripePaymentIntentId: session.payment_intent },
+          });
+          if (changed.count) await recordInvoicePayment({ db: tx, invoice, previousPaidAmount: invoice.paidAmount || 0, newPaidAmount: invoiceTotal(invoice), sourceType: 'stripe_checkout', sourceId: session.id, paymentMethod: 'card', reference: String(session.payment_intent || '') });
         });
         invoice = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
       }
@@ -451,9 +470,12 @@ publicInvoicesRouter.post('/:token/view', asyncHandler(async (req, res) => {
       const stripe = getStripeClient();
       const session = await stripe.checkout.sessions.retrieve(sessionId, { stripeAccount: account.stripeAccountId });
       if (paidCheckoutSessionMatchesInvoice(session, invoice)) {
-        await prisma.invoice.updateMany({
-          where: { id: invoice.id, status: 'sent', stripeCheckoutSessionId: session.id },
-          data: { status: 'paid', paidAmount: invoiceTotal(invoice), paidAt: new Date(), stripePaymentIntentId: session.payment_intent },
+        await prisma.$transaction(async (tx) => {
+          const changed = await tx.invoice.updateMany({
+            where: { id: invoice.id, status: 'sent', stripeCheckoutSessionId: session.id },
+            data: { status: 'paid', paidAmount: invoiceTotal(invoice), paidAt: new Date(), stripePaymentIntentId: session.payment_intent },
+          });
+          if (changed.count) await recordInvoicePayment({ db: tx, invoice, previousPaidAmount: invoice.paidAmount || 0, newPaidAmount: invoiceTotal(invoice), sourceType: 'stripe_checkout', sourceId: session.id, paymentMethod: 'card', reference: String(session.payment_intent || '') });
         });
         invoice = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
       }

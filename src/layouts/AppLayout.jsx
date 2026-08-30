@@ -12,6 +12,7 @@ const NAV_GROUPS = [
       { to: '/home', label: 'Home', icon: '🏠' },
       { to: '/bookings', label: 'Bookings', icon: '🤝' },
       { to: '/events', label: 'Events', icon: '📅' },
+      { to: '/financials', label: 'Financials', icon: '💵' },
       { to: '/reminders', label: 'Reminders', icon: '🔔' },
     ],
   },

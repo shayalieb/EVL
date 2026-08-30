@@ -4,6 +4,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { getStripeClient } from '../lib/stripe.js';
 import { invoiceTotal } from './invoices.js';
 import { paidCheckoutSessionMatchesInvoice } from '../lib/invoicePaymentVerification.js';
+import { recordInvoicePayment } from '../lib/financialLedger.js';
 
 const router = Router();
 
@@ -53,9 +54,22 @@ router.post('/stripe', asyncHandler(async (req, res) => {
         && event.account === account?.stripeAccountId
         && paidCheckoutSessionMatchesInvoice(session, invoice)
       ) {
-        await prisma.invoice.updateMany({
-          where: { id: invoiceId, status: { not: 'paid' }, stripeCheckoutSessionId: session.id },
-          data: { status: 'paid', paidAmount: invoiceTotal(invoice), paidAt: new Date(), stripePaymentIntentId: session.payment_intent },
+        await prisma.$transaction(async (tx) => {
+          const changed = await tx.invoice.updateMany({
+            where: { id: invoiceId, status: { not: 'paid' }, stripeCheckoutSessionId: session.id },
+            data: { status: 'paid', paidAmount: invoiceTotal(invoice), paidAt: new Date(), stripePaymentIntentId: session.payment_intent },
+          });
+          if (changed.count) await recordInvoicePayment({
+            db: tx,
+            invoice,
+            previousPaidAmount: invoice.paidAmount || 0,
+            newPaidAmount: invoiceTotal(invoice),
+            sourceType: 'stripe_checkout',
+            sourceId: session.id,
+            paymentMethod: 'card',
+            reference: String(session.payment_intent || ''),
+            metadata: { stripeEventId: event.id },
+          });
         });
       }
     }

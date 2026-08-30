@@ -45,6 +45,7 @@ import bookingsRouter from './routes/bookings.js';
 import eventsRouter from './routes/events.js';
 import dashboardRouter from './routes/dashboard.js';
 import agencyGroupsRouter from './routes/agencyGroups.js';
+import financialsRouter from './routes/financials.js';
 import portalRouter from './routes/portal.js';
 import { startReminderScheduler } from './lib/reminderScheduler.js';
 import { startReminderRuleEngine } from './lib/reminderRuleEngine.js';
@@ -254,6 +255,7 @@ app.use('/api/set-list-library', setListLibraryRouter);
 app.use('/api/bookings', bookingsRouter);
 app.use('/api/events', eventsRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api/financials', financialsRouter);
 // Client-facing self-service portal — public/token-login, own session
 // scope (portalSession above), see routes/portal.js.
 app.use('/api/portal', portalSession, portalRouter);

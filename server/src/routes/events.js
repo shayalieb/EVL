@@ -5,6 +5,8 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createWithPreservedId } from '../lib/idPreservingCreate.js';
 import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPageResponse } from '../lib/pagination.js';
+import { randomUUID } from 'node:crypto';
+import { dollarsToCents } from '../lib/financialLedger.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -213,7 +215,42 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   }
   if (data.groupId && !await prisma.agencyGroup.findFirst({ where: { id: data.groupId, accountId: req.membership.accountId, active: true } })) return res.status(400).json({ error: 'Invalid managed group.' });
 
-  const event = await prisma.event.update({ where: { id: existing.id }, data });
+  const event = await prisma.$transaction(async (tx) => {
+    const saved = await tx.event.update({ where: { id: existing.id }, data });
+    if (data.contractorBookings !== undefined) {
+      const previousById = new Map((existing.contractorBookings || []).map((booking) => [booking.id, booking]));
+      const contractorIds = [...new Set((data.contractorBookings || []).map((booking) => booking.contractorId).filter(Boolean))];
+      const contractors = contractorIds.length ? await tx.contractor.findMany({ where: { accountId: existing.accountId, id: { in: contractorIds } }, select: { id: true, firstName: true, lastName: true } }) : [];
+      const contractorById = new Map(contractors.map((contractor) => [contractor.id, contractor]));
+      for (const booking of data.contractorBookings || []) {
+        const previous = previousById.get(booking.id);
+        const oldPaid = previous?.paymentStatus === 'paid' ? Number(previous.paidAmount) || 0 : 0;
+        const newPaid = booking.paymentStatus === 'paid' ? Number(booking.paidAmount) || 0 : 0;
+        const deltaCents = dollarsToCents(newPaid) - dollarsToCents(oldPaid);
+        if (deltaCents === 0) continue;
+        const contractor = contractorById.get(booking.contractorId);
+        const contractorName = contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor';
+        await tx.financialTransaction.create({ data: {
+          accountId: existing.accountId,
+          groupId: saved.groupId,
+          eventId: saved.id,
+          contractorId: booking.contractorId || null,
+          category: deltaCents > 0 ? 'contractor_payment' : 'payment_adjustment',
+          amountCents: -deltaCents,
+          description: `${deltaCents > 0 ? 'Contractor paid' : 'Contractor payment correction'} · ${contractorName}`,
+          occurredAt: booking.paidAt ? new Date(`${booking.paidAt}T12:00:00.000Z`) : new Date(),
+          sourceType: 'event_contractor_payment',
+          sourceId: randomUUID(),
+          paymentMethod: booking.paymentMethod || null,
+          reference: booking.paymentReference || null,
+          memo: booking.paymentMemo || null,
+          metadata: { contractorBookingId: booking.id, previousPaidAmount: oldPaid, newPaidAmount: newPaid },
+          createdById: req.session.userId,
+        } });
+      }
+    }
+    return saved;
+  });
   res.json({ event: serializeEvent(event) });
 }));
 
