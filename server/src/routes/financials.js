@@ -6,7 +6,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { dollarsToCents } from '../lib/financialLedger.js';
 import { invoiceTotal } from './invoices.js';
-import { contractorAssignmentCost, inIsoDateRange, receivableAgingBucket } from '../lib/financialReports.js';
+import { bookingProfitabilitySnapshot, contractorAssignmentCost, inIsoDateRange, receivableAgingBucket } from '../lib/financialReports.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -54,12 +54,13 @@ router.get('/summary', requireFinancialPermission('viewFinancials'), asyncHandle
   const accountId = req.membership.accountId;
   const occurredAt = dateRange(req);
   const groupFilter = req.query.groupId ? { groupId: req.query.groupId } : {};
-  const [transactions, invoices, events, bookings, contractors] = await Promise.all([
+  const [transactions, invoices, events, bookings, contractors, accountData] = await Promise.all([
     prisma.financialTransaction.findMany({ where: { accountId, ...groupFilter, ...(occurredAt ? { occurredAt } : {}) }, select: { amountCents: true, category: true } }),
     prisma.invoice.findMany({ where: { accountId, status: { in: ['sent', 'partial', 'paid'] } } }),
-    prisma.event.findMany({ where: { accountId, deletedAt: null, ...groupFilter }, select: { id: true, name: true, eventDate: true, contractorBookings: true, otherExpenses: true } }),
+    prisma.event.findMany({ where: { accountId, deletedAt: null, ...groupFilter }, select: { id: true, name: true, eventDate: true, noOutsideContractorsNeeded: true, contractorBookings: true, otherExpenses: true } }),
     prisma.booking.findMany({ where: { accountId, deletedAt: null, ...groupFilter }, select: { id: true, eventName: true, convertedEventId: true } }),
     prisma.contractor.findMany({ where: { accountId }, select: { id: true, firstName: true, lastName: true, pricingTiers: true } }),
+    prisma.accountData.findUnique({ where: { accountId }, select: { data: true } }),
   ]);
   const scopedBookingIds = new Set(bookings.map((booking) => booking.id));
   const scopedInvoices = req.query.groupId ? invoices.filter((invoice) => scopedBookingIds.has(invoice.bookingId)) : invoices;
@@ -67,6 +68,11 @@ router.get('/summary', requireFinancialPermission('viewFinancials'), asyncHandle
   const outflowCents = Math.abs(transactions.reduce((sum, tx) => sum + Math.min(0, tx.amountCents), 0));
   const receivableCents = scopedInvoices.reduce((sum, invoice) => sum + Math.max(0, dollarsToCents(invoiceTotal(invoice)) - dollarsToCents(invoice.paidAmount)), 0);
   const contractorById = new Map(contractors.map((c) => [c.id, c]));
+  const inquiryStatuses = accountData?.data?.inquiryStatuses || [];
+  const isUnavailable = (assignment) => {
+    const status = inquiryStatuses.find((item) => item.id === assignment.inquiryStatusId);
+    return status && (!status.isConfirmed && /not.?avail|declin/i.test(status.label || ''));
+  };
   const contractorCostRows = [];
   const payableRows = [];
   // "Expected in the next 30 days" — a single forward-looking number in
@@ -78,10 +84,10 @@ router.get('/summary', requireFinancialPermission('viewFinancials'), asyncHandle
   let expectedOutCents = 0;
   for (const event of events) {
     for (const booking of event.contractorBookings || []) {
+      if (isUnavailable(booking)) continue;
       const contractor = contractorById.get(booking.contractorId);
-      const tier = (contractor?.pricingTiers || []).find((item) => item.id === booking.pricingTierId) || contractor?.pricingTiers?.[0];
-      const amount = Number(tier?.price) || 0;
-      if (amount > 0) {
+      const amount = contractorAssignmentCost(booking, contractor);
+      if (amount !== null && amount > 0) {
         const row = { eventId: event.id, eventName: event.name, eventDate: event.eventDate, contractorId: booking.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor', amount };
         contractorCostRows.push(row);
         if (booking.paymentStatus !== 'paid') {
@@ -100,8 +106,9 @@ router.get('/summary', requireFinancialPermission('viewFinancials'), asyncHandle
   const profitability = bookings.map((booking) => {
     const billed = scopedInvoices.filter((invoice) => invoice.bookingId === booking.id).reduce((sum, invoice) => sum + (invoice.status === 'void' ? 0 : invoiceTotal(invoice)), 0);
     const event = events.find((item) => bookingByEvent.get(item.id)?.id === booking.id);
-    const estimatedCosts = (event?.otherExpenses || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0) + contractorCostRows.filter((row) => row.eventId === event?.id).reduce((sum, row) => sum + row.amount, 0);
-    return billed > 0 ? { bookingId: booking.id, name: booking.eventName || event?.name || 'Untitled booking', billed, estimatedCosts, estimatedProfit: billed - estimatedCosts, margin: ((billed - estimatedCosts) / billed) * 100 } : null;
+    const assignments = (event?.contractorBookings || []).filter((assignment) => !isUnavailable(assignment));
+    const snapshot = bookingProfitabilitySnapshot({ billed, event, assignments, contractorById });
+    return billed > 0 ? { bookingId: booking.id, eventId: event?.id || null, name: booking.eventName || event?.name || 'Untitled booking', billed, ...snapshot } : null;
   }).filter(Boolean).sort((a, b) => b.billed - a.billed).slice(0, 10);
   res.json({ summary: {
     inflow: inflowCents / 100, outflow: outflowCents / 100, netCash: (inflowCents - outflowCents) / 100,

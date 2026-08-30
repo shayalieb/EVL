@@ -38,6 +38,25 @@ export function contractorAssignmentCost(booking, contractor) {
   return (Number(tier.price) || 0) + overtimeHours * (Number(tier.overtimeRate) || 0);
 }
 
+export function bookingProfitabilitySnapshot({ billed, event, assignments = [], contractorById = new Map() }) {
+  const otherCosts = (event?.otherExpenses || []).reduce((sum, item) => sum + (Number(item?.amount) || 0), 0);
+  let missingCostCount = 0;
+  const contractorCosts = assignments.reduce((sum, assignment) => {
+    const cost = contractorAssignmentCost(assignment, contractorById.get(assignment.contractorId));
+    if (cost === null) { missingCostCount += 1; return sum; }
+    return sum + cost;
+  }, 0);
+  const estimatedCosts = otherCosts + contractorCosts;
+  const costsComplete = !!event && ((assignments.length === 0 && event.noOutsideContractorsNeeded) || (assignments.length > 0 && missingCostCount === 0));
+  return {
+    estimatedCosts,
+    costsComplete,
+    missingCostCount,
+    estimatedProfit: costsComplete ? billed - estimatedCosts : null,
+    margin: costsComplete && billed > 0 ? ((billed - estimatedCosts) / billed) * 100 : null,
+  };
+}
+
 export function inIsoDateRange(value, from, to) {
   if (!value) return !from && !to;
   return (!from || value >= from) && (!to || value <= to);
