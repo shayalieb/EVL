@@ -1,7 +1,7 @@
 const money = (value) => Number(value || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
 function reportDefinition(tab, reports) {
-  if (tab === 'payables') return { title: 'Who You Owe', headers: ['Contractor', 'Event', 'Event date', 'Days past event', 'Expected pay'], rows: reports.payables.rows.map((row) => [row.contractorName, row.eventName, row.eventDate || '', row.overdueDays, money(row.expectedAmount)]), summary: `Total payables: ${money(reports.payables.total)}` };
+  if (tab === 'payables') return { title: 'Who You Owe', headers: ['Contractor', 'Event', 'Payment due', 'Status', 'Expected pay'], rows: reports.payables.rows.map((row) => [row.contractorName, row.eventName, row.paymentDueDate || 'Not set', row.label, money(row.expectedAmount)]), summary: `Total still to pay: ${money(reports.payables.total)}` };
   return { title: 'Who Owes You', headers: ['Client', 'Booking', 'Invoice', 'Due date', 'Days overdue', 'Balance'], rows: reports.receivables.rows.map((row) => [row.clientName, row.bookingName, row.invoiceNumber ?? '', row.dueDate ? row.dueDate.slice(0, 10) : '', row.overdueDays, money(row.balance)]), summary: `Total outstanding: ${money(reports.receivables.total)}` };
 }
 

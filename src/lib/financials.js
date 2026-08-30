@@ -29,6 +29,11 @@ export async function reverseFinancialTransaction(id, reason) {
   return data.transaction;
 }
 
+export async function updateContractorPayment(eventId, assignmentId, patch) {
+  const data = await apiFetch(`/financials/contractor-payments/${eventId}/${assignmentId}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  return data.payment;
+}
+
 export async function authorizeFinancialExport(report, format, filters) {
   return apiFetch('/financials/export-events', { method: 'POST', body: JSON.stringify({ report, format, filters }) });
 }

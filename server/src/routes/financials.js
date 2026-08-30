@@ -6,7 +6,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { dollarsToCents } from '../lib/financialLedger.js';
 import { invoiceTotal } from './invoices.js';
-import { bookingProfitabilitySnapshot, contractorAssignmentCost, inIsoDateRange, receivableAgingBucket } from '../lib/financialReports.js';
+import { bookingProfitabilitySnapshot, contractorAssignmentCost, contractorPaymentTiming, inIsoDateRange, receivableAgingBucket } from '../lib/financialReports.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -75,6 +75,7 @@ router.get('/summary', requireFinancialPermission('viewFinancials'), asyncHandle
   };
   const contractorCostRows = [];
   const payableRows = [];
+  const missingRateRows = [];
   // "Expected in the next 30 days" — a single forward-looking number in
   // place of the old multi-month forecast dashboard. Mirrors that
   // dashboard's own leniency: anything already overdue (or with no due
@@ -87,8 +88,12 @@ router.get('/summary', requireFinancialPermission('viewFinancials'), asyncHandle
       if (isUnavailable(booking)) continue;
       const contractor = contractorById.get(booking.contractorId);
       const amount = contractorAssignmentCost(booking, contractor);
+      if (amount === null && booking.paymentStatus !== 'paid') {
+        missingRateRows.push({ assignmentId: booking.id || booking.contractorId, eventId: event.id, eventName: event.name, contractorId: booking.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor' });
+      }
       if (amount !== null && amount > 0) {
-        const row = { eventId: event.id, eventName: event.name, eventDate: event.eventDate, contractorId: booking.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor', amount };
+        const timing = contractorPaymentTiming(booking.paymentDueDate);
+        const row = { assignmentId: booking.id || booking.contractorId, eventId: event.id, eventName: event.name, eventDate: event.eventDate, paymentDueDate: booking.paymentDueDate || null, contractorId: booking.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor', amount, ...timing };
         contractorCostRows.push(row);
         if (booking.paymentStatus !== 'paid') {
           payableRows.push(row);
@@ -110,11 +115,46 @@ router.get('/summary', requireFinancialPermission('viewFinancials'), asyncHandle
     const snapshot = bookingProfitabilitySnapshot({ billed, event, assignments, contractorById });
     return billed > 0 ? { bookingId: booking.id, eventId: event?.id || null, name: booking.eventName || event?.name || 'Untitled booking', billed, ...snapshot } : null;
   }).filter(Boolean).sort((a, b) => b.billed - a.billed).slice(0, 10);
+  const paymentPriority = { overdue: 0, due: 1, missing: 2, upcoming: 3 };
+  payableRows.sort((a, b) => paymentPriority[a.status] - paymentPriority[b.status] || (a.paymentDueDate || '').localeCompare(b.paymentDueDate || '') || b.amount - a.amount);
   res.json({ summary: {
     inflow: inflowCents / 100, outflow: outflowCents / 100, netCash: (inflowCents - outflowCents) / 100,
-    accountsReceivable: receivableCents / 100, accountsPayable: payableRows.reduce((sum, row) => sum + row.amount, 0), payableCount: payableRows.length, payables: payableRows.slice(0, 10), profitability,
+    accountsReceivable: receivableCents / 100, accountsPayable: payableRows.reduce((sum, row) => sum + row.amount, 0), payableCount: payableRows.length, payables: payableRows.slice(0, 10), missingRateCount: missingRateRows.length, missingRates: missingRateRows.slice(0, 10), profitability,
     next30: { expectedIn: expectedInCents / 100, expectedOut: expectedOutCents / 100, net: (expectedInCents - expectedOutCents) / 100 },
   } });
+}));
+
+router.patch('/contractor-payments/:eventId/:assignmentId', requireFinancialPermission('recordFinancialTransactions'), asyncHandler(async (req, res) => {
+  const event = await prisma.event.findFirst({ where: { id: req.params.eventId, accountId: req.membership.accountId, deletedAt: null } });
+  if (!event) return res.status(404).json({ error: 'Event not found.' });
+  const assignments = [...(event.contractorBookings || [])];
+  const assignmentIndex = assignments.findIndex((item) => item.id === req.params.assignmentId || (!item.id && item.contractorId === req.params.assignmentId));
+  if (assignmentIndex < 0) return res.status(404).json({ error: 'Contractor assignment not found.' });
+  const existing = assignments[assignmentIndex];
+  const paymentDueDate = req.body?.paymentDueDate;
+  const markPaid = req.body?.markPaid === true;
+  if (!markPaid && paymentDueDate === undefined) return res.status(400).json({ error: 'Select a payment due date or mark the payment paid.' });
+  if (paymentDueDate !== undefined && paymentDueDate !== null && paymentDueDate !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(paymentDueDate)) return res.status(400).json({ error: 'Select a valid payment due date.' });
+  if (!markPaid) {
+    assignments[assignmentIndex] = { ...existing, paymentDueDate: paymentDueDate || null };
+    await prisma.event.update({ where: { id: event.id }, data: { contractorBookings: assignments } });
+    return res.json({ payment: { eventId: event.id, assignmentId: req.params.assignmentId, paymentDueDate: paymentDueDate || null, ...contractorPaymentTiming(paymentDueDate || null) } });
+  }
+  if (existing.paymentStatus === 'paid') return res.status(409).json({ error: 'This contractor payment is already marked paid.' });
+  const amount = Number(req.body?.amount);
+  const paymentDate = String(req.body?.paymentDate || '');
+  const paymentMethod = String(req.body?.paymentMethod || '');
+  if (!(amount > 0)) return res.status(400).json({ error: 'Enter an amount greater than $0.' });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)) return res.status(400).json({ error: 'Select a valid payment date.' });
+  if (!METHODS.has(paymentMethod)) return res.status(400).json({ error: 'Select a valid payment method.' });
+  const contractor = await prisma.contractor.findFirst({ where: { id: existing.contractorId, accountId: event.accountId }, select: { firstName: true, lastName: true } });
+  const contractorName = contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor';
+  assignments[assignmentIndex] = { ...existing, paymentStatus: 'paid', paidAmount: amount, paidAt: paymentDate, paymentMethod, paymentReference: String(req.body?.paymentReference || '').trim().slice(0, 160) || null, paymentMemo: String(req.body?.paymentMemo || '').trim().slice(0, 1000) || null };
+  await prisma.$transaction(async (tx) => {
+    await tx.event.update({ where: { id: event.id }, data: { contractorBookings: assignments } });
+    await tx.financialTransaction.create({ data: { accountId: event.accountId, groupId: event.groupId, eventId: event.id, contractorId: existing.contractorId || null, category: 'contractor_payment', amountCents: -dollarsToCents(amount), description: `Contractor paid · ${contractorName}`, occurredAt: new Date(`${paymentDate}T12:00:00.000Z`), sourceType: 'event_contractor_payment', sourceId: randomUUID(), paymentMethod, reference: String(req.body?.paymentReference || '').trim().slice(0, 160) || null, memo: String(req.body?.paymentMemo || '').trim().slice(0, 1000) || null, metadata: { contractorBookingId: existing.id || req.params.assignmentId, previousPaidAmount: 0, newPaidAmount: amount }, createdById: req.session.userId } });
+  });
+  res.json({ payment: { eventId: event.id, assignmentId: req.params.assignmentId, paymentStatus: 'paid', paidAmount: amount, paidAt: paymentDate, paymentMethod } });
 }));
 
 router.get('/reports', requireFinancialPermission('viewFinancials'), asyncHandler(async (req, res) => {
@@ -167,12 +207,13 @@ router.get('/reports', requireFinancialPermission('viewFinancials'), asyncHandle
       const expectedAmount = contractorAssignmentCost(assignment, contractor);
       if (expectedAmount === null) { incompleteEventCosts.add(event.id); continue; }
       if (assignment.paymentStatus !== 'paid' && inIsoDateRange(event.eventDate, from, to)) {
-        const overdueDays = event.eventDate && event.eventDate < asOf.toISOString().slice(0, 10) ? Math.max(0, Math.floor((asOf - new Date(`${event.eventDate}T12:00:00.000Z`)) / 86400000)) : 0;
-        payables.push({ eventId: event.id, eventName: event.name || 'Untitled event', eventDate: event.eventDate, contractorId: assignment.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor', expectedAmount, overdueDays, pricingComplete: true });
+        const timing = contractorPaymentTiming(assignment.paymentDueDate, asOf.toISOString().slice(0, 10));
+        payables.push({ assignmentId: assignment.id || assignment.contractorId, eventId: event.id, eventName: event.name || 'Untitled event', eventDate: event.eventDate, paymentDueDate: assignment.paymentDueDate || null, contractorId: assignment.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor', expectedAmount, pricingComplete: true, ...timing });
       }
     }
   }
-  payables.sort((a, b) => b.overdueDays - a.overdueDays || b.expectedAmount - a.expectedAmount);
+  const payablePriority = { overdue: 0, due: 1, missing: 2, upcoming: 3 };
+  payables.sort((a, b) => payablePriority[a.status] - payablePriority[b.status] || (a.paymentDueDate || '').localeCompare(b.paymentDueDate || '') || b.expectedAmount - a.expectedAmount);
 
   const qualityIssues = [];
   const invoicesWithoutDueDate = scopedInvoices.filter((invoice) => !invoice.dueDate && Math.max(0, invoiceTotal(invoice) - (Number(invoice.paidAmount) || 0)) > 0);

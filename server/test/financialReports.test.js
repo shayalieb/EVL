@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bookingProfitabilitySnapshot, contractorAssignmentCost, inIsoDateRange, receivableAgingBucket } from '../src/lib/financialReports.js';
+import { bookingProfitabilitySnapshot, contractorAssignmentCost, contractorPaymentTiming, inIsoDateRange, receivableAgingBucket } from '../src/lib/financialReports.js';
 
 test('receivables are assigned to stable aging buckets', () => {
   const asOf = new Date('2026-08-30T23:59:59.999Z');
@@ -44,6 +44,13 @@ test('profitability is available when contractor costs are complete', () => {
   assert.equal(result.estimatedCosts, 2000);
   assert.equal(result.estimatedProfit, 6000);
   assert.equal(result.margin, 75);
+});
+
+test('contractor payment timing distinguishes missing, due, overdue, and upcoming dates', () => {
+  assert.equal(contractorPaymentTiming(null, '2026-08-30').status, 'missing');
+  assert.equal(contractorPaymentTiming('2026-08-30', '2026-08-30').status, 'due');
+  assert.deepEqual(contractorPaymentTiming('2026-08-28', '2026-08-30'), { status: 'overdue', label: '2 days overdue', overdueDays: 2 });
+  assert.equal(contractorPaymentTiming('2026-09-01', '2026-08-30').status, 'upcoming');
 });
 
 test('ISO event dates respect report boundaries', () => {

@@ -11,6 +11,8 @@ const METHODS = [
   { value: 'ach', label: 'ACH' },
   { value: 'check', label: 'Check' },
   { value: 'card', label: 'Credit/Debit Card' },
+  { value: 'cash', label: 'Cash' },
+  { value: 'wire', label: 'Wire' },
   { value: 'other', label: 'Other' },
 ];
 
@@ -34,7 +36,7 @@ function todayLocalDate() {
 // onAccept's `overtimeHours` so it can persist the same override
 // ContractorPickerRow's own OT Hours field writes to — one field, two
 // convenient places to edit it.
-export default function AcceptPaymentModal({ open, title = 'Accept Payment', amountDue, amountLabel = 'Amount due', initialValues, overtime, onClose, onAccept }) {
+export default function AcceptPaymentModal({ open, title = 'Accept Payment', confirmLabel = 'Accept Payment', amountDue, amountLabel = 'Amount due', initialValues, overtime, onClose, onAccept }) {
   const [amount, setAmount] = useState('');
   const [paymentDate, setPaymentDate] = useState(todayLocalDate());
   const [method, setMethod] = useState('');
@@ -195,7 +197,7 @@ export default function AcceptPaymentModal({ open, title = 'Accept Payment', amo
             className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-2"
           >
             {submitting && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
-            Accept Payment
+            {confirmLabel}
           </button>
         </div>
       </div>

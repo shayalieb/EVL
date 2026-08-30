@@ -57,6 +57,16 @@ export function bookingProfitabilitySnapshot({ billed, event, assignments = [], 
   };
 }
 
+export function contractorPaymentTiming(dueDate, today = new Date().toISOString().slice(0, 10)) {
+  if (!dueDate) return { status: 'missing', label: 'Payment date missing', overdueDays: 0 };
+  if (dueDate < today) {
+    const overdueDays = dateDaysBetween(new Date(`${today}T12:00:00.000Z`), new Date(`${dueDate}T12:00:00.000Z`));
+    return { status: 'overdue', label: `${overdueDays} day${overdueDays === 1 ? '' : 's'} overdue`, overdueDays };
+  }
+  if (dueDate === today) return { status: 'due', label: 'Due today', overdueDays: 0 };
+  return { status: 'upcoming', label: 'Upcoming', overdueDays: 0 };
+}
+
 export function inIsoDateRange(value, from, to) {
   if (!value) return !from && !to;
   return (!from || value >= from) && (!to || value <= to);
