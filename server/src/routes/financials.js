@@ -249,17 +249,46 @@ router.post('/export-events', requireFinancialPermission('exportFinancialReports
 }));
 
 router.post('/expenses', requireFinancialPermission('recordFinancialTransactions'), asyncHandler(async (req, res) => {
-  const { amount, category, description, occurredAt, groupId, bookingId, eventId, contractorId, paymentMethod, reference, memo } = req.body || {};
+  const { amount, category, description, occurredAt, groupId, bookingId, eventId, contractorId, paymentMethod, reference, memo, clientRequestId } = req.body || {};
+  const accountId = req.membership.accountId;
   const amountCents = dollarsToCents(amount);
   if (!(amountCents > 0)) return res.status(400).json({ error: 'Amount must be greater than $0.' });
   if (!EXPENSE_CATEGORIES.has(category)) return res.status(400).json({ error: 'Select a valid expense category.' });
   if (!description?.trim()) return res.status(400).json({ error: 'Description is required.' });
   if (paymentMethod && !METHODS.has(paymentMethod)) return res.status(400).json({ error: 'Select a valid payment method.' });
-  if (groupId && !await prisma.agencyGroup.findFirst({ where: { id: groupId, accountId: req.membership.accountId } })) return res.status(400).json({ error: 'Invalid managed group.' });
+  const relationshipIds = [bookingId, eventId, contractorId].filter(Boolean);
+  if (relationshipIds.length > 1) return res.status(400).json({ error: 'Attach the payment to only one record.' });
+  const [group, booking, event, contractor] = await Promise.all([
+    groupId ? prisma.agencyGroup.findFirst({ where: { id: groupId, accountId }, select: { id: true } }) : null,
+    bookingId ? prisma.booking.findFirst({ where: { id: bookingId, accountId }, select: { id: true, groupId: true } }) : null,
+    eventId ? prisma.event.findFirst({ where: { id: eventId, accountId }, select: { id: true, groupId: true } }) : null,
+    contractorId ? prisma.contractor.findFirst({ where: { id: contractorId, accountId }, select: { id: true } }) : null,
+  ]);
+  if (groupId && !group) return res.status(400).json({ error: 'Invalid managed group.' });
+  if (bookingId && !booking) return res.status(400).json({ error: 'The selected booking is not available.' });
+  if (eventId && !event) return res.status(400).json({ error: 'The selected event is not available.' });
+  if (contractorId && !contractor) return res.status(400).json({ error: 'The selected contractor is not available.' });
+  const linkedGroupId = booking?.groupId || event?.groupId || null;
+  if (groupId && linkedGroupId && groupId !== linkedGroupId) return res.status(400).json({ error: 'The selected record belongs to a different managed group.' });
+  const resolvedGroupId = groupId || linkedGroupId || null;
   const transactionDate = occurredAt ? new Date(`${occurredAt}T12:00:00.000Z`) : new Date();
   if (Number.isNaN(transactionDate.getTime())) return res.status(400).json({ error: 'Select a valid payment date.' });
-  const transaction = await prisma.financialTransaction.create({ data: { accountId: req.membership.accountId, groupId: groupId || null, bookingId: bookingId || null, eventId: eventId || null, contractorId: contractorId || null, category, amountCents: -amountCents, description: description.trim(), occurredAt: transactionDate, sourceType: 'manual_expense', sourceId: randomUUID(), paymentMethod: paymentMethod || null, reference: reference || null, memo: memo || null, createdById: req.session.userId } });
-  res.status(201).json({ transaction: serialize({ ...transaction, reversedBy: null }) });
+  const requestId = typeof clientRequestId === 'string' && /^[a-zA-Z0-9_-]{8,100}$/.test(clientRequestId) ? clientRequestId : null;
+  const sourceId = requestId || randomUUID();
+  if (requestId) {
+    const existing = await prisma.financialTransaction.findFirst({ where: { accountId, sourceType: 'manual_expense', sourceId: requestId } });
+    if (existing) return res.json({ transaction: serialize({ ...existing, reversedBy: null }), duplicate: true });
+  }
+  try {
+    const transaction = await prisma.financialTransaction.create({ data: { accountId, groupId: resolvedGroupId, bookingId: bookingId || null, eventId: eventId || null, contractorId: contractorId || null, category, amountCents: -amountCents, description: description.trim().slice(0, 500), occurredAt: transactionDate, sourceType: 'manual_expense', sourceId, paymentMethod: paymentMethod || null, reference: String(reference || '').trim().slice(0, 200) || null, memo: String(memo || '').trim().slice(0, 1000) || null, metadata: requestId ? { clientRequestId: requestId } : undefined, createdById: req.session.userId } });
+    return res.status(201).json({ transaction: serialize({ ...transaction, reversedBy: null }) });
+  } catch (error) {
+    if (requestId && error?.code === 'P2002') {
+      const existing = await prisma.financialTransaction.findFirst({ where: { accountId, sourceType: 'manual_expense', sourceId: requestId } });
+      if (existing) return res.json({ transaction: serialize({ ...existing, reversedBy: null }), duplicate: true });
+    }
+    throw error;
+  }
 }));
 
 router.post('/:id/reverse', requireFinancialPermission('recordFinancialTransactions'), asyncHandler(async (req, res) => {

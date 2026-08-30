@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAgencyGroup } from '../context/AgencyGroupContext';
-import MoneyInput from '../components/ui/MoneyInput';
 import AcceptPaymentModal from '../components/AcceptPaymentModal';
+import FinancialExpenseForm from '../components/FinancialExpenseForm';
+import { useToast } from '../components/ui/Toast';
 import { authorizeFinancialExport, createFinancialExpense, getFinancialReports, getFinancialSummary, listFinancialTransactions, reverseFinancialTransaction, updateContractorPayment } from '../lib/financials';
 import { exportFinancialReportCsv, exportFinancialReportPdf } from '../lib/financialReportExports';
 
@@ -16,6 +17,7 @@ const categoryLabel = Object.fromEntries([...categories, ['client_payment', 'Cli
 const money = (value) => Number(value || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 const today = () => new Date().toISOString().slice(0, 10);
 const startOfYear = () => `${new Date().getFullYear()}-01-01`;
+const emptyExpenseForm = () => ({ amount: '', category: 'contractor_payment', description: '', occurredAt: today(), paymentMethod: '', reference: '', memo: '', groupId: '', bookingId: '', eventId: '', contractorId: '' });
 const reportTabs = [['receivables', 'Who owes you'], ['payables', 'Who you owe']];
 const pageSections = [['overview', 'Overview'], ['payments', 'Payments'], ['reports', 'Reports']];
 
@@ -75,6 +77,7 @@ function displayedReports(reports, tab, search, sort) {
 
 export default function FinancialsPage() {
   const { currentUser, can } = useAuth();
+  const { showToast } = useToast();
   const { groups, selectedGroup } = useAgencyGroup();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedGroupId = searchParams.get('groupId') || '';
@@ -96,6 +99,7 @@ export default function FinancialsPage() {
   const [saving, setSaving] = useState(false);
   const [payingContractor, setPayingContractor] = useState(null);
   const [savingDueDate, setSavingDueDate] = useState('');
+  const expenseRequestId = useRef('');
 
   useEffect(() => { setGroupId(requestedGroupId); }, [requestedGroupId]);
 
@@ -105,7 +109,7 @@ export default function FinancialsPage() {
     else next.set('section', nextSection);
     setSearchParams(next, { replace: true });
   }
-  const [form, setForm] = useState({ amount: '', category: 'contractor_payment', description: '', occurredAt: today(), paymentMethod: '', reference: '', memo: '', groupId: '' });
+  const [form, setForm] = useState(emptyExpenseForm);
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -140,11 +144,21 @@ export default function FinancialsPage() {
   async function saveExpense(event) {
     event.preventDefault(); setSaving(true); setError('');
     try {
-      await createFinancialExpense({ ...form, groupId: form.groupId || groupId || null });
-      setForm({ amount: '', category: 'contractor_payment', description: '', occurredAt: today(), paymentMethod: '', reference: '', memo: '', groupId: '' });
-      setShowExpense(false); await load();
+      if (!expenseRequestId.current) expenseRequestId.current = crypto.randomUUID();
+      await createFinancialExpense({ ...form, groupId: form.groupId || groupId || null, clientRequestId: expenseRequestId.current });
+      expenseRequestId.current = '';
+      setForm(emptyExpenseForm());
+      setShowExpense(false);
+      showToast('Payment added');
+      await load();
     } catch (err) { setError(err.message || 'Expense could not be recorded.'); }
     finally { setSaving(false); }
+  }
+
+  function closeExpenseForm() {
+    expenseRequestId.current = '';
+    setForm(emptyExpenseForm());
+    setShowExpense(false);
   }
 
   async function reverse(tx) {
@@ -193,8 +207,8 @@ export default function FinancialsPage() {
       </section>}
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
-      {activeSection === 'payments' && <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold text-slate-800">Payments</h2><p className="mt-1 text-sm text-slate-500">Review recorded money in and money out, or add an expense.</p></div>{can('recordFinancialTransactions') && <button type="button" onClick={() => setShowExpense((value) => !value)} className="min-h-11 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">{showExpense ? 'Cancel' : '+ Add money paid out'}</button>}</div>}
-      {activeSection === 'payments' && showExpense && <form onSubmit={saveExpense} className="rounded-xl border border-indigo-100 bg-white p-5 shadow-sm space-y-4"><div><h2 className="font-bold text-slate-800">Add money paid out</h2><p className="text-xs text-slate-500 mt-1">Once recorded, this can't be edited — if it's wrong, undo it from the payment history below instead so the original stays visible.</p></div><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3"><label className="text-sm font-medium text-slate-700">Amount<MoneyInput value={form.amount} onChange={(amount) => setForm((old) => ({ ...old, amount }))} className={`${inputClass} mt-1`} /></label><label className="text-sm font-medium text-slate-700">Category<select value={form.category} onChange={(e) => setForm((old) => ({ ...old, category: e.target.value }))} className={`${inputClass} mt-1`}>{categories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-sm font-medium text-slate-700">Payment date<input type="date" value={form.occurredAt} onChange={(e) => setForm((old) => ({ ...old, occurredAt: e.target.value }))} className={`${inputClass} mt-1`} /></label><label className="text-sm font-medium text-slate-700">Method<select value={form.paymentMethod} onChange={(e) => setForm((old) => ({ ...old, paymentMethod: e.target.value }))} className={`${inputClass} mt-1`}><option value="">Not specified</option><option value="ach">ACH</option><option value="check">Check</option><option value="card">Card</option><option value="cash">Cash</option><option value="wire">Wire</option><option value="other">Other</option></select></label></div><div className="grid sm:grid-cols-2 gap-3"><label className="text-sm font-medium text-slate-700">Description<input required value={form.description} onChange={(e) => setForm((old) => ({ ...old, description: e.target.value }))} placeholder="What was this payment for?" className={`${inputClass} mt-1`} /></label><label className="text-sm font-medium text-slate-700">Reference<input value={form.reference} onChange={(e) => setForm((old) => ({ ...old, reference: e.target.value }))} placeholder="Check or confirmation number" className={`${inputClass} mt-1`} /></label></div>{groups.length > 0 && <label className="block text-sm font-medium text-slate-700 max-w-sm">Managed group<select value={form.groupId} onChange={(e) => setForm((old) => ({ ...old, groupId: e.target.value }))} className={`${inputClass} mt-1`}><option value="">Use current group ({selectedGroup?.name || 'agency-wide'})</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>}<div className="flex justify-end"><button disabled={saving} className="min-h-11 rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white disabled:opacity-60">{saving ? 'Recording…' : 'Add payment'}</button></div></form>}
+      {activeSection === 'payments' && <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold text-slate-800">Payments</h2><p className="mt-1 text-sm text-slate-500">Review recorded money in and money out, or add an expense.</p></div>{can('recordFinancialTransactions') && <button type="button" onClick={() => showExpense ? closeExpenseForm() : setShowExpense(true)} className="min-h-11 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">{showExpense ? 'Cancel' : '+ Add money paid out'}</button>}</div>}
+      {activeSection === 'payments' && showExpense && <FinancialExpenseForm form={form} setForm={setForm} groups={groups} selectedGroup={selectedGroup} saving={saving} onSubmit={saveExpense} onCancel={closeExpenseForm} />}
 
       {loading && !summary ? <div className="py-20 text-center text-sm text-slate-400">Loading financials…</div> : activeSection === 'overview' && summary && <>
         <section aria-labelledby="cash-already-moved-heading">
