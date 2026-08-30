@@ -5,6 +5,8 @@ import { useAgencyGroup } from '../context/AgencyGroupContext';
 import AcceptPaymentModal from '../components/AcceptPaymentModal';
 import FinancialExpenseForm from '../components/FinancialExpenseForm';
 import { useToast } from '../components/ui/Toast';
+import Modal from '../components/ui/Modal';
+import Pagination from '../components/ui/Pagination';
 import { authorizeFinancialExport, createFinancialExpense, getFinancialReports, getFinancialSummary, listFinancialTransactions, reverseFinancialTransaction, updateContractorPayment } from '../lib/financials';
 import { exportFinancialReportCsv, exportFinancialReportPdf } from '../lib/financialReportExports';
 
@@ -58,6 +60,22 @@ function Metric({ label, value, color }) {
   return <div className="rounded-lg bg-slate-50 p-3"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p><p className={`mt-1 text-lg font-bold ${color}`}>{money(value)}</p></div>;
 }
 
+function TransactionDetailsModal({ transaction, onClose }) {
+  if (!transaction) return null;
+  const detailRows = [
+    ['Direction', transaction.amount >= 0 ? 'Money received' : 'Money paid out'],
+    ['Amount', money(Math.abs(transaction.amount))],
+    ['Date', new Date(transaction.occurredAt).toLocaleDateString()],
+    ['Category', categoryLabel[transaction.category] || transaction.category.replaceAll('_', ' ')],
+    ['Payment method', transaction.paymentMethod ? transaction.paymentMethod.toUpperCase() : null],
+    ['Reference', transaction.reference],
+    ['Managed group', transaction.group?.name],
+    ['Entered by', transaction.createdBy ? `${transaction.createdBy.firstName} ${transaction.createdBy.lastName}` : 'System'],
+    ['Internal note', transaction.memo],
+  ].filter(([, value]) => value);
+  return <Modal open onClose={onClose} title="Payment details"><div className="space-y-4"><div><p className="text-sm font-semibold text-slate-800">{transaction.description}</p>{transaction.reversed && <span className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">Undone</span>}</div><dl className="divide-y divide-slate-100 rounded-lg border border-slate-200">{detailRows.map(([label, value]) => <div key={label} className="grid grid-cols-[8rem_1fr] gap-3 px-4 py-3 text-sm"><dt className="font-semibold text-slate-500">{label}</dt><dd className="text-slate-800">{value}</dd></div>)}</dl><div className="flex flex-wrap gap-2">{transaction.relatedBooking && <Link onClick={onClose} to={`/bookings/${transaction.relatedBooking.id}`} className="rounded-lg bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700">Open booking</Link>}{transaction.relatedEvent && <Link onClick={onClose} to={`/events/${transaction.relatedEvent.id}?tab=financials`} className="rounded-lg bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700">Open event</Link>}{transaction.relatedContractor && <Link onClick={onClose} to={`/contractors?open=${encodeURIComponent(transaction.relatedContractor.id)}`} className="rounded-lg bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700">Open contractor</Link>}{transaction.relatedInvoice && <Link onClick={onClose} to={`/bookings/${transaction.relatedInvoice.bookingId}?tab=invoices`} className="rounded-lg bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700">Open invoice #{transaction.relatedInvoice.number ?? '—'}</Link>}</div></div></Modal>;
+}
+
 function displayedReports(reports, tab, search, sort) {
   if (!reports) return null;
   const copy = { ...reports, [tab]: { ...reports[tab] } };
@@ -85,6 +103,15 @@ export default function FinancialsPage() {
   const activeSection = pageSections.some(([id]) => id === requestedSection) ? requestedSection : 'overview';
   const [summary, setSummary] = useState(null);
   const [transactions, setTransactions] = useState([]);
+  const [ledgerTotal, setLedgerTotal] = useState(0);
+  const [ledgerPageCount, setLedgerPageCount] = useState(1);
+  const [ledgerPage, setLedgerPage] = useState(1);
+  const [ledgerSearchInput, setLedgerSearchInput] = useState('');
+  const [ledgerSearch, setLedgerSearch] = useState('');
+  const [ledgerDirection, setLedgerDirection] = useState('');
+  const [ledgerCategory, setLedgerCategory] = useState('');
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [reports, setReports] = useState(null);
   const [groupId, setGroupId] = useState(requestedGroupId);
   const [from, setFrom] = useState(startOfYear());
@@ -102,6 +129,8 @@ export default function FinancialsPage() {
   const expenseRequestId = useRef('');
 
   useEffect(() => { setGroupId(requestedGroupId); }, [requestedGroupId]);
+  useEffect(() => { const timer = setTimeout(() => { setLedgerPage(1); setLedgerSearch(ledgerSearchInput.trim()); }, 300); return () => clearTimeout(timer); }, [ledgerSearchInput]);
+  useEffect(() => { setLedgerPage(1); }, [groupId, ledgerDirection, ledgerCategory]);
 
   function selectSection(nextSection) {
     const next = new URLSearchParams(searchParams);
@@ -115,13 +144,24 @@ export default function FinancialsPage() {
     setLoading(true); setError('');
     try {
       const filters = { ...(groupId ? { groupId } : {}), ...(from ? { from } : {}), ...(to ? { to } : {}) };
-      const [nextSummary, ledger, nextReports] = await Promise.all([getFinancialSummary(filters), listFinancialTransactions({ ...(groupId ? { groupId } : {}), pageSize: 50 }), getFinancialReports(filters)]);
-      setSummary(nextSummary); setTransactions(ledger.transactions); setReports(nextReports);
+      const [nextSummary, nextReports] = await Promise.all([getFinancialSummary(filters), getFinancialReports(filters)]);
+      setSummary(nextSummary); setReports(nextReports);
     } catch (err) { setError(err.message || 'Financial information could not be loaded.'); }
     finally { setLoading(false); }
   }, [groupId, from, to]);
 
   useEffect(() => { load(); }, [load]);
+
+  const loadLedger = useCallback(async () => {
+    setLedgerLoading(true);
+    try {
+      const ledger = await listFinancialTransactions({ page: ledgerPage, pageSize: 25, ...(groupId ? { groupId } : {}), ...(ledgerSearch ? { search: ledgerSearch } : {}), ...(ledgerDirection ? { direction: ledgerDirection } : {}), ...(ledgerCategory ? { category: ledgerCategory } : {}) });
+      setTransactions(ledger.transactions); setLedgerTotal(ledger.total); setLedgerPageCount(ledger.pageCount);
+    } catch (err) { setError(err.message || 'Payment history could not be loaded.'); }
+    finally { setLedgerLoading(false); }
+  }, [groupId, ledgerCategory, ledgerDirection, ledgerPage, ledgerSearch]);
+
+  useEffect(() => { loadLedger(); }, [loadLedger]);
 
   const visibleReports = displayedReports(reports, reportTab, reportSearch, reportSort);
 
@@ -150,7 +190,7 @@ export default function FinancialsPage() {
       setForm(emptyExpenseForm());
       setShowExpense(false);
       showToast('Payment added');
-      await load();
+      await Promise.all([load(), loadLedger()]);
     } catch (err) { setError(err.message || 'Expense could not be recorded.'); }
     finally { setSaving(false); }
   }
@@ -164,13 +204,13 @@ export default function FinancialsPage() {
   async function reverse(tx) {
     const reason = window.prompt('Why is this entry being undone? The original entry stays visible in the payment log.');
     if (!reason?.trim()) return;
-    try { await reverseFinancialTransaction(tx.id, reason.trim()); await load(); }
+    try { await reverseFinancialTransaction(tx.id, reason.trim()); await Promise.all([load(), loadLedger()]); }
     catch (err) { setError(err.message || 'Transaction could not be reversed.'); }
   }
 
   async function saveContractorDueDate(row, paymentDueDate) {
     setSavingDueDate(row.assignmentId); setError('');
-    try { await updateContractorPayment(row.eventId, row.assignmentId, { paymentDueDate }); await load(); }
+    try { await updateContractorPayment(row.eventId, row.assignmentId, { paymentDueDate }); await Promise.all([load(), loadLedger()]); }
     catch (err) { setError(err.message || 'The contractor payment date could not be saved.'); }
     finally { setSavingDueDate(''); }
   }
@@ -179,7 +219,7 @@ export default function FinancialsPage() {
     if (!payingContractor) return;
     await updateContractorPayment(payingContractor.eventId, payingContractor.assignmentId, { markPaid: true, amount: payload.amount, paymentDate: payload.paymentDate, paymentMethod: payload.method, paymentReference: payload.checkNumber, paymentMemo: payload.memo });
     setPayingContractor(null);
-    await load();
+    await Promise.all([load(), loadLedger()]);
   }
 
   return (
@@ -248,7 +288,8 @@ export default function FinancialsPage() {
         {reportTab === 'payables' && <PayablesReport report={visibleReports.payables} canRecord={can('recordFinancialTransactions')} savingDueDate={savingDueDate} onDueDate={saveContractorDueDate} onPay={setPayingContractor} />}
       </section>}
 
-      {activeSection === 'payments' && <section className="rounded-xl border border-slate-200 bg-white overflow-hidden"><div className="px-5 py-4 border-b border-slate-100"><h2 className="font-bold text-slate-800">Payment history</h2><p className="text-xs text-slate-500 mt-1">Every recorded payment, newest first. Made a mistake? Undo it — the original stays here so nothing's silently changed.</p></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-5 py-3">Date</th><th className="px-5 py-3">Description</th><th className="px-5 py-3">Category</th><th className="px-5 py-3">Entered by</th><th className="px-5 py-3 text-right">Amount</th><th className="px-5 py-3"></th></tr></thead><tbody className="divide-y divide-slate-100">{transactions.length === 0 ? <tr><td colSpan="6" className="px-5 py-10 text-center text-slate-400">No posted transactions yet.</td></tr> : transactions.map((tx) => <tr key={tx.id} className={tx.reversed ? 'bg-slate-50 opacity-60' : ''}><td className="px-5 py-3 whitespace-nowrap text-slate-500">{new Date(tx.occurredAt).toLocaleDateString()}</td><td className="px-5 py-3"><p className="font-medium text-slate-700">{tx.description}</p>{tx.memo && <p className="text-xs text-slate-400">{tx.memo}</p>}</td><td className="px-5 py-3 text-slate-500">{categoryLabel[tx.category] || tx.category.replaceAll('_', ' ')}</td><td className="px-5 py-3 text-slate-500">{tx.createdBy ? `${tx.createdBy.firstName} ${tx.createdBy.lastName}` : 'System'}</td><td className={`px-5 py-3 text-right font-bold ${tx.amount >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{tx.amount >= 0 ? '+' : '−'}{money(Math.abs(tx.amount))}</td><td className="px-5 py-3 text-right">{can('recordFinancialTransactions') && !tx.reversed && !tx.reversalOfId && <button type="button" onClick={() => reverse(tx)} className="min-h-11 px-2 text-xs font-semibold text-slate-500 hover:text-rose-600">Undo</button>}</td></tr>)}</tbody></table></div></section>}
+      {activeSection === 'payments' && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="border-b border-slate-100 px-5 py-4"><h2 className="font-bold text-slate-800">Payment history</h2><p className="mt-1 text-xs text-slate-500">Every recorded payment, newest first. Open a payment for its full details or undo an incorrect entry.</p></div><div className="flex flex-wrap gap-2 border-b border-slate-100 p-3"><input type="search" value={ledgerSearchInput} onChange={(event) => setLedgerSearchInput(event.target.value)} placeholder="Search payments or related records…" aria-label="Search payment history" className={`${inputClass} min-w-64 flex-1`} /><select value={ledgerDirection} onChange={(event) => setLedgerDirection(event.target.value)} aria-label="Filter payment direction" className={`${inputClass} max-w-48`}><option value="">Money in and out</option><option value="in">Money received</option><option value="out">Money paid out</option></select><select value={ledgerCategory} onChange={(event) => setLedgerCategory(event.target.value)} aria-label="Filter payment category" className={`${inputClass} max-w-52`}><option value="">All categories</option>{[...categories, ['client_payment', 'Client payment'], ['payment_adjustment', 'Payment adjustment'], ['reversal', 'Reversal']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{ledgerLoading && <span className="self-center px-2 text-xs text-slate-400">Refreshing…</span>}</div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-5 py-3">Date</th><th className="px-5 py-3">Payment and related record</th><th className="px-5 py-3">Type</th><th className="px-5 py-3 text-right">Amount</th><th className="px-5 py-3"></th></tr></thead><tbody className="divide-y divide-slate-100">{transactions.length === 0 ? <tr><td colSpan="5" className="px-5 py-10 text-center text-slate-400">{ledgerSearch || ledgerDirection || ledgerCategory ? 'No payments match these filters.' : 'No posted transactions yet.'}</td></tr> : transactions.map((tx) => <tr key={tx.id} className={tx.reversed ? 'bg-slate-50 opacity-60' : ''}><td className="whitespace-nowrap px-5 py-3 text-slate-500">{new Date(tx.occurredAt).toLocaleDateString()}</td><td className="px-5 py-3"><p className="font-medium text-slate-700">{tx.description}</p><div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">{tx.relatedBooking && <Link to={`/bookings/${tx.relatedBooking.id}`} className="font-semibold text-indigo-600 hover:text-indigo-700">Booking: {tx.relatedBooking.eventName || 'Untitled'}</Link>}{tx.relatedEvent && <Link to={`/events/${tx.relatedEvent.id}?tab=financials`} className="font-semibold text-indigo-600 hover:text-indigo-700">Event: {tx.relatedEvent.name || 'Untitled'}</Link>}{tx.relatedContractor && <span className="text-slate-500">Contractor: {tx.relatedContractor.name}</span>}{tx.relatedInvoice && <Link to={`/bookings/${tx.relatedInvoice.bookingId}?tab=invoices`} className="font-semibold text-indigo-600 hover:text-indigo-700">Invoice #{tx.relatedInvoice.number ?? '—'}</Link>}</div></td><td className="px-5 py-3"><span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${tx.amount >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>{tx.amount >= 0 ? 'Money received' : 'Money paid out'}</span><p className="mt-1 text-xs text-slate-400">{categoryLabel[tx.category] || tx.category.replaceAll('_', ' ')}</p></td><td className={`px-5 py-3 text-right font-bold ${tx.amount >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{tx.amount >= 0 ? '+' : '−'}{money(Math.abs(tx.amount))}</td><td className="px-5 py-3 text-right"><div className="flex justify-end gap-1"><button type="button" onClick={() => setSelectedTransaction(tx)} className="min-h-11 px-2 text-xs font-semibold text-indigo-600 hover:text-indigo-700">Details</button>{can('recordFinancialTransactions') && !tx.reversed && !tx.reversalOfId && <button type="button" onClick={() => reverse(tx)} className="min-h-11 px-2 text-xs font-semibold text-slate-500 hover:text-rose-600">Undo</button>}</div></td></tr>)}</tbody></table></div><Pagination page={ledgerPage} pageCount={ledgerPageCount} onChange={setLedgerPage} totalItems={ledgerTotal} pageSize={25} testId="financial-transactions-pagination" /></section>}
+      <TransactionDetailsModal transaction={selectedTransaction} onClose={() => setSelectedTransaction(null)} />
       <AcceptPaymentModal open={!!payingContractor} title={payingContractor ? `Pay ${payingContractor.contractorName}` : 'Mark contractor paid'} confirmLabel="Mark paid" amountDue={payingContractor?.amount ?? payingContractor?.expectedAmount} amountLabel="Expected payment" onClose={() => setPayingContractor(null)} onAccept={markContractorPaid} />
     </main>
   );

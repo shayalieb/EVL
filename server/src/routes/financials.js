@@ -36,18 +36,57 @@ function dateRange(req) {
 router.get('/', requireFinancialPermission('viewFinancials'), asyncHandler(async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const pageSize = Math.min(100, Math.max(10, Number(req.query.pageSize) || 30));
+  const search = String(req.query.search || '').trim().slice(0, 100);
+  const direction = String(req.query.direction || '');
+  const relatedMatches = search ? await Promise.all([
+    prisma.booking.findMany({ where: { accountId: req.membership.accountId, eventName: { contains: search, mode: 'insensitive' } }, select: { id: true }, take: 100 }),
+    prisma.event.findMany({ where: { accountId: req.membership.accountId, name: { contains: search, mode: 'insensitive' } }, select: { id: true }, take: 100 }),
+    prisma.contractor.findMany({ where: { accountId: req.membership.accountId, OR: [{ firstName: { contains: search, mode: 'insensitive' } }, { lastName: { contains: search, mode: 'insensitive' } }] }, select: { id: true }, take: 100 }),
+  ]) : [[], [], []];
   const where = {
     accountId: req.membership.accountId,
     ...(req.query.groupId ? { groupId: req.query.groupId } : {}),
     ...(req.query.bookingId ? { bookingId: req.query.bookingId } : {}),
     ...(req.query.category ? { category: req.query.category } : {}),
+    ...(direction === 'in' ? { amountCents: { gt: 0 } } : direction === 'out' ? { amountCents: { lt: 0 } } : {}),
     ...(dateRange(req) ? { occurredAt: dateRange(req) } : {}),
+    ...(search ? { OR: [
+      { description: { contains: search, mode: 'insensitive' } },
+      { reference: { contains: search, mode: 'insensitive' } },
+      { memo: { contains: search, mode: 'insensitive' } },
+      { bookingId: { in: relatedMatches[0].map((item) => item.id) } },
+      { eventId: { in: relatedMatches[1].map((item) => item.id) } },
+      { contractorId: { in: relatedMatches[2].map((item) => item.id) } },
+    ] } : {}),
   };
   const [transactions, total] = await Promise.all([
     prisma.financialTransaction.findMany({ where, include: { group: { select: { name: true } }, createdBy: { select: { firstName: true, lastName: true } }, reversedBy: { select: { id: true } } }, orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }], skip: (page - 1) * pageSize, take: pageSize }),
     prisma.financialTransaction.count({ where }),
   ]);
-  res.json({ transactions: transactions.map(serialize), total, page, pageSize });
+  const bookingIds = [...new Set(transactions.map((tx) => tx.bookingId).filter(Boolean))];
+  const eventIds = [...new Set(transactions.map((tx) => tx.eventId).filter(Boolean))];
+  const contractorIds = [...new Set(transactions.map((tx) => tx.contractorId).filter(Boolean))];
+  const invoiceIds = [...new Set(transactions.map((tx) => tx.invoiceId).filter(Boolean))];
+  const [bookings, events, contractors, invoices] = await Promise.all([
+    prisma.booking.findMany({ where: { accountId: req.membership.accountId, id: { in: bookingIds } }, select: { id: true, eventName: true } }),
+    prisma.event.findMany({ where: { accountId: req.membership.accountId, id: { in: eventIds } }, select: { id: true, name: true } }),
+    prisma.contractor.findMany({ where: { accountId: req.membership.accountId, id: { in: contractorIds } }, select: { id: true, firstName: true, lastName: true } }),
+    prisma.invoice.findMany({ where: { accountId: req.membership.accountId, id: { in: invoiceIds } }, select: { id: true, number: true, bookingId: true } }),
+  ]);
+  const bookingById = new Map(bookings.map((item) => [item.id, item]));
+  const eventById = new Map(events.map((item) => [item.id, item]));
+  const contractorById = new Map(contractors.map((item) => [item.id, item]));
+  const invoiceById = new Map(invoices.map((item) => [item.id, item]));
+  res.json({ transactions: transactions.map((tx) => {
+    const contractor = contractorById.get(tx.contractorId);
+    return serialize({
+      ...tx,
+      relatedBooking: bookingById.get(tx.bookingId) || null,
+      relatedEvent: eventById.get(tx.eventId) || null,
+      relatedContractor: contractor ? { id: contractor.id, name: `${contractor.firstName} ${contractor.lastName}`.trim() } : null,
+      relatedInvoice: invoiceById.get(tx.invoiceId) || null,
+    });
+  }), total, page, pageSize, pageCount: Math.max(1, Math.ceil(total / pageSize)) });
 }));
 
 router.get('/summary', requireFinancialPermission('viewFinancials'), asyncHandler(async (req, res) => {
