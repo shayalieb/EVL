@@ -10,6 +10,7 @@ import AcceptPaymentModal from '../components/AcceptPaymentModal';
 import SectionsEditor from '../components/SectionsEditor';
 import EventLogPanel from '../components/EventLogPanel';
 import HistoryModal from '../components/HistoryModal';
+import Modal from '../components/ui/Modal';
 import OverflowMenu from '../components/ui/OverflowMenu';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Badge from '../components/ui/Badge';
@@ -2402,11 +2403,9 @@ export default function BookingFormPage() {
                     </div>
                   </div>
                 )}
-                {showProposalPreview && proposalPreviewUrl && (
-                  <div className="mt-5 rounded-xl border border-slate-200 overflow-hidden">
-                    <iframe title="Proposal preview" src={proposalPreviewUrl} data-testid="booking-form-proposal-preview-frame" className="w-full h-[70vh]" />
-                  </div>
-                )}
+                <Modal open={showProposalPreview} onClose={() => setShowProposalPreview(false)} title="Proposal Preview" widthClass="max-w-4xl" bodyClassName="p-0">
+                  {proposalPreviewUrl && <iframe title="Proposal preview" src={proposalPreviewUrl} data-testid="booking-form-proposal-preview-frame" className="w-full h-[70vh] border-0" />}
+                </Modal>
               </div>
 
               <div className={cardClass}>
@@ -2667,11 +2666,9 @@ export default function BookingFormPage() {
                   </div>
                 </div>
               )}
-              {showContractPreview && contractPreviewUrl && (
-                <div className="mt-5 rounded-xl border border-slate-200 overflow-hidden">
-                  <iframe title="Contract preview" src={contractPreviewUrl} data-testid="booking-form-contract-preview-frame" className="w-full h-[70vh]" />
-                </div>
-              )}
+              <Modal open={showContractPreview} onClose={() => setShowContractPreview(false)} title="Contract Preview" widthClass="max-w-4xl" bodyClassName="p-0">
+                {contractPreviewUrl && <iframe title="Contract preview" src={contractPreviewUrl} data-testid="booking-form-contract-preview-frame" className="w-full h-[70vh] border-0" />}
+              </Modal>
             </div>
           ) : (
             <>
@@ -3239,8 +3236,8 @@ export default function BookingFormPage() {
                         Send Invoice
                       </button>
                     </div>
-                    {showInvoicePreview && (
-                      <div className="mt-5 max-w-2xl" data-testid="booking-form-invoice-preview-container">
+                    <Modal open={showInvoicePreview} onClose={() => setShowInvoicePreview(false)} title="Invoice Preview" widthClass="max-w-2xl">
+                      <div data-testid="booking-form-invoice-preview-container">
                         <InvoiceDocument
                           businessInfo={businessInfo}
                           client={client}
@@ -3252,7 +3249,7 @@ export default function BookingFormPage() {
                           number={newInvoiceNumber ? Number(newInvoiceNumber) : null}
                         />
                       </div>
-                    )}
+                    </Modal>
                   </div>
                 </>
               )}
