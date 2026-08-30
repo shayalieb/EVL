@@ -6,6 +6,7 @@ import { attachMembershipForBilling, requireRole } from '../lib/membership.js';
 import { getStripeClient } from '../lib/stripe.js';
 import { priceIdFor } from '../lib/plans.js';
 import { getBillingTier, getWebsiteConfig } from '../lib/websiteConfig.js';
+import { agencyAmountCents, normalizeAgencyGroupCount } from '../lib/agencyPricing.js';
 
 const router = Router();
 
@@ -26,6 +27,7 @@ function serializeStatus(account) {
     billingInterval: account.billingInterval,
     subscriptionStatus: account.subscriptionStatus,
     seatLimit: account.seatLimit,
+    agencyGroupLimit: account.agencyGroupLimit,
     trialEndsAt: account.trialEndsAt,
     hasStripeCustomer: !!account.stripeCustomerId,
   };
@@ -50,6 +52,9 @@ router.get('/status', asyncHandler(async (req, res) => {
       seatLimit: t.seatLimit,
       monthlyAmountCents: t.monthlyAmountCents,
       annualAmountCents: t.annualAmountCents,
+      includedGroupCount: t.includedGroupCount,
+      monthlyAdditionalGroupCents: t.monthlyAdditionalGroupCents,
+      annualAdditionalGroupCents: t.annualAdditionalGroupCents,
     })),
   });
 }));
@@ -58,15 +63,16 @@ router.get('/status', asyncHandler(async (req, res) => {
 // existing stripeCustomerId reuses it — Stripe Customers persist across a
 // canceled subscription, so re-subscribing shouldn't create a duplicate one.
 router.post('/checkout', asyncHandler(async (req, res) => {
-  const { tier: tierId, interval } = req.body || {};
+  const { tier: tierId, interval, groupCount } = req.body || {};
   const tier = await getBillingTier(tierId);
   if (!tier) return res.status(400).json({ error: 'Unknown plan.' });
-  const priceId = interval === 'month'
+  const selectedGroupCount = tierId === 'agency' ? normalizeAgencyGroupCount(groupCount, tier.includedGroupCount) : null;
+  const priceId = tierId === 'agency' ? null : interval === 'month'
     ? (tier.monthlyPriceId || priceIdFor(tierId, interval))
     : interval === 'year'
       ? (tier.annualPriceId || priceIdFor(tierId, interval))
       : null;
-  if (!priceId) return res.status(400).json({ error: 'Invalid billing interval.' });
+  if (!['month', 'year'].includes(interval) || (tierId !== 'agency' && !priceId)) return res.status(400).json({ error: 'Invalid billing interval.' });
 
   const stripe = getStripeClient();
   const account = await prisma.account.findUnique({ where: { id: req.membership.accountId } });
@@ -84,10 +90,8 @@ router.post('/checkout', asyncHandler(async (req, res) => {
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
-      line_items: [{ price: priceId, quantity: 1 }],
-      subscription_data: websiteConfig.pricing.trialDays > 0
-        ? { trial_period_days: websiteConfig.pricing.trialDays }
-        : {},
+      line_items: tierId === 'agency' ? [{ price_data: { currency: 'usd', unit_amount: agencyAmountCents(tier, interval, selectedGroupCount), recurring: { interval }, product_data: { name: `GigWorks Agency · ${selectedGroupCount} groups`, metadata: { gigworksTier: 'agency' } } }, quantity: 1 }] : [{ price: priceId, quantity: 1 }],
+      subscription_data: { ...(websiteConfig.pricing.trialDays > 0 ? { trial_period_days: websiteConfig.pricing.trialDays } : {}), metadata: { gigworksTier: tierId, gigworksInterval: interval, ...(selectedGroupCount ? { gigworksGroupCount: String(selectedGroupCount) } : {}) } },
       // This Stripe account has Managed Payments (automatic sales-tax
       // collection) on by default, which requires a tax_code on every
       // Product to work — deliberately left off in setupBillingPlans.js

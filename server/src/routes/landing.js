@@ -60,13 +60,16 @@ publicLandingRouter.post('/review/:token', submitLimiter, asyncHandler(async (re
 // whether this send succeeds, same reasoning as support.js's notifyAdmin.
 async function notifyOwner(entry) {
   const to = process.env.SUPPORT_NOTIFICATION_EMAIL || 'shayalieberman@gmail.com';
-  const subject = entry.type === 'waitlist'
+  const subject = entry.selectedPlan === 'agency'
+    ? `[Agency inquiry] ${entry.name}`
+    : entry.type === 'waitlist'
     ? `[Waitlist] ${entry.name}`
     : `[Contact] ${entry.name}`;
   const lines = [
     `<p><strong>${escapeHtml(entry.name)}</strong> (${escapeHtml(entry.email)})</p>`,
     entry.businessName ? `<p>Business: ${escapeHtml(entry.businessName)}</p>` : '',
     entry.message ? `<p>${escapeHtml(entry.message)}</p>` : '',
+    entry.selectedPlan ? `<p>Plan interest: ${escapeHtml(entry.selectedPlan)}</p>` : '',
   ].filter(Boolean).join('');
   try {
     await sendMail({ from: buildFromHeader(), to, subject, html: lines });
@@ -76,7 +79,7 @@ async function notifyOwner(entry) {
 }
 
 publicLandingRouter.post('/waitlist', submitLimiter, asyncHandler(async (req, res) => {
-  const { name, email, businessName, selectedPlan, billingInterval } = req.body || {};
+  const { name, email, businessName, selectedPlan, billingInterval, groupCount } = req.body || {};
   if (!name?.trim() || !email?.trim()) {
     return res.status(400).json({ error: 'Name and email are required.' });
   }
@@ -86,8 +89,9 @@ publicLandingRouter.post('/waitlist', submitLimiter, asyncHandler(async (req, re
       name: name.trim(),
       email: email.trim().toLowerCase(),
       businessName: businessName?.trim() || null,
-      selectedPlan: ['solo', 'team', 'studio'].includes(selectedPlan) ? selectedPlan : null,
+      selectedPlan: ['solo', 'team', 'studio', 'agency'].includes(selectedPlan) ? selectedPlan : null,
       billingInterval: ['month', 'year'].includes(billingInterval) ? billingInterval : null,
+      requestedGroupCount: selectedPlan === 'agency' ? Math.min(500, Math.max(2, Number.parseInt(groupCount, 10) || 2)) : null,
     },
   });
   await notifyOwner(entry);
@@ -95,12 +99,12 @@ publicLandingRouter.post('/waitlist', submitLimiter, asyncHandler(async (req, re
 }));
 
 publicLandingRouter.post('/contact', submitLimiter, asyncHandler(async (req, res) => {
-  const { name, email, message } = req.body || {};
+  const { name, email, message, selectedPlan } = req.body || {};
   if (!name?.trim() || !email?.trim() || !message?.trim()) {
     return res.status(400).json({ error: 'Name, email, and message are required.' });
   }
   const entry = await prisma.waitlistEntry.create({
-    data: { type: 'contact', name: name.trim(), email: email.trim(), message: message.trim() },
+    data: { type: 'contact', name: name.trim(), email: email.trim(), message: message.trim(), selectedPlan: selectedPlan === 'agency' ? 'agency' : null },
   });
   await notifyOwner(entry);
   res.status(201).json({ ok: true });

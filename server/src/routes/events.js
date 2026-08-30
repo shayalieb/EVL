@@ -12,6 +12,7 @@ router.use(requireAuth, asyncHandler(attachMembership));
 function serializeEvent(e) {
   return {
     id: e.id,
+    groupId: e.groupId,
     name: e.name,
     eventType: e.eventType,
     eventDate: e.eventDate,
@@ -50,6 +51,7 @@ function serializeEvent(e) {
 // Fields a caller may set — deliberately excludes id/accountId/createdAt/
 // updatedAt, which are handled separately by each route below.
 const WRITABLE_FIELDS = [
+  'groupId',
   'name', 'eventType', 'eventDate', 'eventDayOfTheWeek', 'clientId', 'brideName', 'groomName', 'guestCount',
   'contactPhone', 'contactPhoneExt', 'contactEmail', 'startTime', 'endTime', 'eventNote', 'prepNotes',
   'eventStatus', 'noOutsideContractorsNeeded', 'deletedAt', 'completedAt',
@@ -67,6 +69,7 @@ const WRITABLE_FIELDS = [
 function serializeEventLite(e) {
   return {
     id: e.id,
+    groupId: e.groupId,
     name: e.name,
     eventType: e.eventType,
     eventDate: e.eventDate,
@@ -99,6 +102,7 @@ router.get('/', asyncHandler(async (req, res) => {
     const search = String(req.query.search || '').trim();
     const where = {
       accountId: req.membership.accountId,
+      ...(req.query.groupId ? { groupId: req.query.groupId } : {}),
       deletedAt: null,
       ...(req.query.view === 'completed' ? { completedAt: { not: null } } : { completedAt: null }),
       ...(req.query.status ? { eventStatus: req.query.status } : {}),
@@ -173,6 +177,7 @@ router.post('/', asyncHandler(async (req, res) => {
   for (const field of WRITABLE_FIELDS) {
     if (rest[field] !== undefined) data[field] = rest[field];
   }
+  if (data.groupId && !await prisma.agencyGroup.findFirst({ where: { id: data.groupId, accountId: req.membership.accountId, active: true } })) return res.status(400).json({ error: 'Invalid managed group.' });
   // Historical blob records predate some of these fields entirely (e.g. the
   // seed sample event has no `history`) — default defensively rather than
   // assuming presence, since the blob-migration path (AuthContext.jsx)
@@ -206,6 +211,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   for (const field of WRITABLE_FIELDS) {
     if (req.body?.[field] !== undefined) data[field] = req.body[field];
   }
+  if (data.groupId && !await prisma.agencyGroup.findFirst({ where: { id: data.groupId, accountId: req.membership.accountId, active: true } })) return res.status(400).json({ error: 'Invalid managed group.' });
 
   const event = await prisma.event.update({ where: { id: existing.id }, data });
   res.json({ event: serializeEvent(event) });

@@ -41,6 +41,8 @@ import { pipelineSteps, proposalStatusInfo, contractStatusInfo } from '../lib/bo
 import { PRIORITIES } from '../lib/bookingPriorities';
 import { BOOKING_DISPOSITIONS, bookingDisposition } from '../lib/bookingDisposition';
 import { emptyForm, emptyVenue } from '../lib/bookingDefaults';
+import AgencyGroupSelect from '../components/AgencyGroupSelect';
+import { useAgencyBranding } from '../lib/useAgencyBranding';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -373,6 +375,7 @@ function PipelineStepper({ steps }) {
 export default function BookingFormPage() {
   const { bookingId } = useParams();
   const navigate = useNavigate();
+  const [initialTabSearchParams] = useSearchParams();
   const {
     clients, loadBooking, venues, searchVenues, eventTypes, addEventType, bookingStatuses,
     addBooking, updateBooking, convertBookingToEvent, addEvent,
@@ -402,13 +405,13 @@ export default function BookingFormPage() {
     return () => { cancelled = true; };
   }, [bookingId, loadBooking]);
 
-  const [form, setForm] = useState(emptyForm());
+  const [form, setForm] = useState(() => ({ ...emptyForm(), groupId: initialTabSearchParams.get('groupId') || '' }));
+  const businessInfo = useAgencyBranding(form.groupId, currentUser?.businessInfo, currentUser?.planTier === 'agency');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   // "?tab=invoices" (etc.) lets a link jump straight to a specific tab —
   // used by Reminders' related-record links for invoice reminders, which
   // land here since an Invoice has no page of its own.
-  const [initialTabSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(() => {
     const requested = initialTabSearchParams.get('tab');
     return TABS.some((t) => t.id === requested) ? requested : 'info';
@@ -873,6 +876,7 @@ export default function BookingFormPage() {
   }
 
   function validate() {
+    if (currentUser?.planTier === 'agency' && !form.groupId) return 'A managed group is required.';
     if (!form.clientId) return 'A client is required.';
     return '';
   }
@@ -948,7 +952,7 @@ export default function BookingFormPage() {
     const { patch, promise } = persistBooking();
     promise.catch((err) => showToast(err.message || 'Failed to save changes.', 'error'));
     try {
-      await generateProposalPdf({ booking: patch, client, businessInfo: currentUser.businessInfo || {} });
+      await generateProposalPdf({ booking: patch, client, businessInfo });
     } catch (err) {
       showToast(err.message || 'Failed to generate PDF', 'error');
     }
@@ -967,7 +971,7 @@ export default function BookingFormPage() {
     try {
       const { patch, promise } = persistBooking();
       promise.catch((err) => showToast(err.message || 'Failed to save changes.', 'error'));
-      const url = await getProposalPdfDataUrl({ booking: patch, client, businessInfo: currentUser.businessInfo || {} });
+      const url = await getProposalPdfDataUrl({ booking: patch, client, businessInfo });
       setProposalPreviewUrl(url);
       setShowProposalPreview(true);
     } catch (err) {
@@ -982,7 +986,7 @@ export default function BookingFormPage() {
   // is looking at on the public respond page, or already responded to.
   function buildProposalSnapshot(patch) {
     return {
-      businessInfo: currentUser.businessInfo || {},
+      businessInfo,
       client: client ? { firstName: client.firstName, lastName: client.lastName, email: client.email, phone: client.phone } : null,
       booking: {
         eventType: patch.eventType,
@@ -1012,7 +1016,6 @@ export default function BookingFormPage() {
     try {
       const { patch, promise } = persistBooking();
       promise.catch((err) => showToast(err.message || 'Failed to save changes.', 'error'));
-      const businessInfo = currentUser.businessInfo || {};
       const fromName = businessInfo.name || `${currentUser.firstName} ${currentUser.lastName}`;
       const recipientName = `${client.firstName} ${client.lastName}`.trim();
       // Created before the email goes out — the respond link only exists
@@ -1090,7 +1093,6 @@ export default function BookingFormPage() {
   }
 
   function buildContractSnapshot() {
-    const businessInfo = currentUser.businessInfo || {};
     return {
       businessInfo,
       client: client ? { firstName: client.firstName, lastName: client.lastName, email: client.email, phone: client.phone } : {},
@@ -1111,9 +1113,9 @@ export default function BookingFormPage() {
       title: contractTitle,
       sections: contractSections,
       style: {
-        accentColor: currentUser.businessInfo?.accentColor || DEFAULT_ACCENT_COLOR,
-        documentLayout: currentUser.businessInfo?.documentLayout,
-        documentTextScale: currentUser.businessInfo?.documentTextScale,
+        accentColor: businessInfo?.accentColor || DEFAULT_ACCENT_COLOR,
+        documentLayout: businessInfo?.documentLayout,
+        documentTextScale: businessInfo?.documentTextScale,
       },
     };
   }
@@ -1122,7 +1124,7 @@ export default function BookingFormPage() {
   // booking/hours/title/sections fields an invoice doesn't need.
   function buildInvoiceSnapshot() {
     return {
-      businessInfo: currentUser.businessInfo || {},
+      businessInfo,
       client: client ? { firstName: client.firstName, lastName: client.lastName, email: client.email, phone: client.phone } : {},
       event: { type: form.eventType, date: form.eventDate, venue: formatVenueLine(form.venue) },
       lineItems: newInvoiceOfferings,
@@ -1297,7 +1299,7 @@ export default function BookingFormPage() {
   async function handleDownloadInvoice() {
     try {
       await generateInvoicePdf({
-        businessInfo: currentUser.businessInfo,
+        businessInfo,
         client,
         event: { type: form.eventType, date: form.eventDate, venue: formatVenueLine(form.venue) },
         lineItems: newInvoiceOfferings,
@@ -1554,6 +1556,8 @@ export default function BookingFormPage() {
       `Contract total: ${currency(grandTotal)}`,
     ].filter(Boolean);
     const event = await addEvent({
+      id: uid('evt'),
+      groupId: booking.groupId || '',
       name,
       eventType: contractBooking.eventType || '',
       eventDate: contractBooking.eventDate || '',
@@ -1819,6 +1823,8 @@ export default function BookingFormPage() {
                 <label className={labelClass}>Event Name</label>
                 <input value={form.eventName} onChange={(e) => update('eventName', e.target.value)} data-testid="booking-form-event-name-input" className={inputClass} />
               </div>
+
+              <AgencyGroupSelect value={form.groupId} onChange={(value) => update('groupId', value)} />
 
               {isWedding(form.eventType) && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2102,13 +2108,13 @@ export default function BookingFormPage() {
               <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
                 <div className="flex items-start justify-between gap-4 pb-5 mb-5 border-b border-slate-100 flex-wrap">
                   <div className="flex items-center gap-3">
-                    {currentUser.businessInfo?.logo && (
-                      <img src={currentUser.businessInfo.logo} alt="" className="h-12 w-auto object-contain" />
+                    {businessInfo?.logo && (
+                      <img src={businessInfo.logo} alt="" className="h-12 w-auto object-contain" />
                     )}
                     <div>
-                      <div className="font-bold text-slate-800">{currentUser.businessInfo?.name || 'Your Business'}</div>
+                      <div className="font-bold text-slate-800">{businessInfo?.name || 'Your Business'}</div>
                       <div className="text-xs text-slate-400">
-                        {[currentUser.businessInfo?.address, currentUser.businessInfo?.phone, currentUser.businessInfo?.email].filter(Boolean).join('  ·  ')}
+                        {[businessInfo?.address, businessInfo?.phone, businessInfo?.email].filter(Boolean).join('  ·  ')}
                       </div>
                     </div>
                   </div>
@@ -3236,7 +3242,7 @@ export default function BookingFormPage() {
                     {showInvoicePreview && (
                       <div className="mt-5 max-w-2xl" data-testid="booking-form-invoice-preview-container">
                         <InvoiceDocument
-                          businessInfo={currentUser.businessInfo}
+                          businessInfo={businessInfo}
                           client={client}
                           event={{ type: form.eventType, date: form.eventDate, venue: formatVenueLine(form.venue) }}
                           lineItems={newInvoiceOfferings}

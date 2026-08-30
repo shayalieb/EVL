@@ -88,6 +88,7 @@ model Account {
   events                  Event[]
   adminNotes              AccountAdminNote[]
   activities              AccountActivity[]
+  agencyGroups            AgencyGroup[]
 
   // Stripe Connect (Express) — set once onboarding starts. The three
   // booleans are a local cache of the connected Account object, synced by
@@ -134,11 +135,12 @@ model Account {
   // never gated on in membership.js's attachMembership, so accounts that
   // predate billing (or that an admin created directly) aren't affected.
   subscriptionStatus   String?
-  planTier             String? // 'solo' | 'team' | 'studio' — see lib/plans.js
+  planTier             String? // 'solo' | 'team' | 'studio' | 'agency' — see lib/plans.js
   billingInterval      String? // 'month' | 'year'
   // Denormalized from planTier so team.js's invite route can check the seat
   // cap with a plain count query, no Stripe API call needed per invite.
   seatLimit            Int?
+  agencyGroupLimit     Int? // purchased managed-group capacity for Agency tier
   trialEndsAt          DateTime?
   // Acquisition context, captured when the account is created so platform
   // admins can distinguish public signups from manually-created accounts.
@@ -1280,6 +1282,8 @@ model Booking {
   id        String  @id
   accountId String
   account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  groupId   String?
+  group     AgencyGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
   eventName          String?
   clientId           String?
@@ -1325,6 +1329,7 @@ model Booking {
 
   @@index([accountId])
   @@index([accountId, deletedAt, createdAt, id])
+  @@index([accountId, groupId, deletedAt, eventDate])
   @@index([deletedAt])
   // Queried directly by the reminder rule engine and the deleted-record
   // purger (both scan across accounts), not just filtered client-side —
@@ -1342,6 +1347,8 @@ model Event {
   id        String  @id
   accountId String
   account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  groupId   String?
+  group     AgencyGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
   name                       String?
   eventType                  String?
@@ -1383,7 +1390,31 @@ model Event {
   @@index([accountId])
   @@index([accountId, deletedAt, createdAt, id])
   @@index([accountId, deletedAt, completedAt, eventDate, id])
+  @@index([accountId, groupId, deletedAt, eventDate])
   @@index([deletedAt])
+}
+
+// A managed act/band inside an agency account. Shared directories remain at
+// Account scope; only workflow records point at a group. This keeps searches
+// global and prevents duplicate clients, venues, and contractors as an agency
+// grows. Branding is structured JSON so stationery can evolve without schema
+// churn (document layout, colors, footer, contact details, etc.).
+model AgencyGroup {
+  id          String   @id @default(cuid())
+  accountId   String
+  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name        String
+  description String?  @db.Text
+  logo        String?  @db.Text
+  stationery  Json     @default("{}")
+  active      Boolean  @default(true)
+  bookings    Booking[]
+  events      Event[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([accountId, name])
+  @@index([accountId, active, name])
 }
 
 // The one shareable RSVP link per event — a guest visiting it adds
@@ -1455,6 +1486,7 @@ model WaitlistEntry {
   status          String   @default("new") // 'new' | 'contacted' | 'converted' | 'archived'
   selectedPlan    String?
   billingInterval String?
+  requestedGroupCount Int?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

@@ -17,13 +17,18 @@ test('website configuration preserves safe editable pricing and copy', () => {
   assert.equal(config.pricing.tiers[0].name, 'Starter');
   assert.equal(config.pricing.tiers[0].monthlyAmountCents, 2900);
   assert.equal(config.pricing.tiers[0].monthlyPriceId, 'price_new');
-  assert.equal(config.pricing.tiers.length, 3);
+  assert.equal(config.pricing.tiers.length, 4);
+  assert.equal(config.pricing.tiers[3].id, 'agency');
+  assert.equal(config.pricing.tiers[3].includedGroupCount, 2);
+  assert.equal(config.pricing.tiers[3].monthlyAdditionalGroupCents, 3500);
   assert.equal(config.navigation.signup, 'Start Free Trial');
   assert.equal(config.story.paragraphs.length, 2);
   assert.equal(config.painPoints.items.length, 6);
   assert.equal(config.features.groups.length, 4);
   assert.equal(config.features.comparison.categories.length, 4);
   assert.equal(config.features.comparison.categories[0].rows[0].solo, 'Included');
+  assert.equal(config.agency.enabled, true);
+  assert.equal(config.agency.features.length, 5);
   assert.equal(config.testimonials.enabled, false);
   assert.deepEqual(config.testimonials.reviews, []);
   assert.equal(config.faq.items.length, 7);
@@ -58,5 +63,5 @@ test('website configuration rejects unsafe price ranges and unknown tiers', () =
     pricing: { tiers: [{ id: 'solo', monthlyAmountCents: -1 }, { id: 'fake', monthlyAmountCents: 9999 }] },
   });
   assert.equal(config.pricing.tiers[0].monthlyAmountCents, DEFAULT_WEBSITE_CONFIG.pricing.tiers[0].monthlyAmountCents);
-  assert.deepEqual(config.pricing.tiers.map((tier) => tier.id), ['solo', 'team', 'studio']);
+  assert.deepEqual(config.pricing.tiers.map((tier) => tier.id), ['solo', 'team', 'studio', 'agency']);
 });

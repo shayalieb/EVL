@@ -172,6 +172,20 @@ router.get('/accounts/:id/profile', asyncHandler(async (req, res) => {
   });
 }));
 
+router.patch('/accounts/:id/plan', requireAdminPermission('manageAccountStatus'), asyncHandler(async (req, res) => {
+  const planTier = ['solo', 'team', 'studio', 'agency'].includes(req.body?.planTier) ? req.body.planTier : null;
+  if (!planTier) return res.status(400).json({ error: 'Select a valid plan.' });
+  const seatLimits = { solo: 1, team: 2, studio: 5, agency: null };
+  const existing = await prisma.account.findUnique({ where: { id: req.params.id }, select: { planTier: true } });
+  if (!existing) return res.status(404).json({ error: 'Account not found.' });
+  const account = await prisma.$transaction(async (tx) => {
+    const updated = await tx.account.update({ where: { id: req.params.id }, data: { planTier, seatLimit: seatLimits[planTier], ...(planTier === 'agency' ? { subscriptionStatus: 'active', billingInterval: null, agencyGroupLimit: 2 } : {}) } });
+    await tx.accountActivity.create({ data: { accountId: req.params.id, actorUserId: req.user.id, type: 'plan_changed', summary: `Plan changed to ${planTier}`, metadata: { from: existing.planTier, to: planTier } } });
+    return updated;
+  });
+  res.json({ planTier: account.planTier, seatLimit: account.seatLimit, subscriptionStatus: account.subscriptionStatus });
+}));
+
 const ACCOUNT_NOTE_CATEGORIES = ['general', 'sales', 'onboarding', 'billing', 'support', 'risk'];
 router.post('/accounts/:id/notes', asyncHandler(async (req, res) => {
   const { body, category, pinned, followUpAt } = req.body || {};
@@ -467,6 +481,9 @@ router.put('/website/config', asyncHandler(async (req, res) => {
   let stripe = null;
   for (const tier of config.pricing.tiers) {
     const previous = current.pricing.tiers.find((item) => item.id === tier.id);
+    // Agency checkout uses a calculated recurring price based on the chosen
+    // group count, so there is intentionally no single reusable Stripe Price.
+    if (tier.id === 'agency') continue;
     for (const interval of ['month', 'year']) {
       const amountKey = interval === 'month' ? 'monthlyAmountCents' : 'annualAmountCents';
       const priceKey = interval === 'month' ? 'monthlyPriceId' : 'annualPriceId';

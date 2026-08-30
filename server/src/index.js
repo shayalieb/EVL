@@ -44,6 +44,7 @@ import setListLibraryRouter from './routes/setListLibrary.js';
 import bookingsRouter from './routes/bookings.js';
 import eventsRouter from './routes/events.js';
 import dashboardRouter from './routes/dashboard.js';
+import agencyGroupsRouter from './routes/agencyGroups.js';
 import portalRouter from './routes/portal.js';
 import { startReminderScheduler } from './lib/reminderScheduler.js';
 import { startReminderRuleEngine } from './lib/reminderRuleEngine.js';
@@ -209,6 +210,7 @@ app.get('/api/ready', asyncHandler(async (req, res) => {
 app.use('/api/auth', authRouter);
 app.use('/api/team', teamRouter);
 app.use('/api/account-data', accountDataRouter);
+app.use('/api/agency-groups', agencyGroupsRouter);
 app.use('/api/email/threads', emailThreadsRouter);
 app.use('/api/email', emailRouter);
 app.use('/api/documents', eventDocumentsRouter);

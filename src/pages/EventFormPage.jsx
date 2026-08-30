@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import ContractorPickerRow from '../components/ContractorPickerRow';
 import ContractorSelect from '../components/ContractorSelect';
 import ContractorModal from '../components/ContractorModal';
@@ -33,6 +33,8 @@ import { listGuests, createGuest, updateGuest, deleteGuest, getRsvpLink } from '
 import { InfoIcon, MapPinIcon, ClockIcon, UsersIcon, ClipboardIcon, NoteIcon, FileIcon } from '../components/ui/icons';
 import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
 import { isWedding } from '../lib/eventType';
+import AgencyGroupSelect from '../components/AgencyGroupSelect';
+import { useAgencyBranding } from '../lib/useAgencyBranding';
 
 const StagePlotEditorPage = lazy(() => import('./StagePlotEditorPage'));
 
@@ -120,6 +122,7 @@ function emptyForm() {
     // while composing a brand-new, not-yet-saved event still have a stable
     // eventId to log against — addEvent() preserves a pre-supplied id.
     id: uid('evt'),
+    groupId: '',
     name: '', eventType: '', eventDate: '', eventDayOfTheWeek: '',
     clientId: '',
     brideName: '', groomName: '',
@@ -189,6 +192,7 @@ const NEW_EVENT_DRAFT_KEY = 'gigworks:newEventDraft';
 export default function EventFormPage() {
   const { eventId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const {
     eventTypes, addEventType, eventStatuses, inquiryStatuses, addInquiryStatus, emailTemplates, loadEvent, loadContractors,
     contractors, searchContractors, contractorTypes, addEvent, updateEvent, computeDurationHours,
@@ -224,7 +228,8 @@ export default function EventFormPage() {
   // already used for Settings -> Users/Billing.
   const isAdminOrOwner = role === 'owner' || role === 'admin';
 
-  const [form, setForm] = useState(emptyForm());
+  const [form, setForm] = useState(() => ({ ...emptyForm(), groupId: searchParams.get('groupId') || '' }));
+  const businessInfo = useAgencyBranding(form.groupId, currentUser?.businessInfo, currentUser?.planTier === 'agency');
   const [addingType, setAddingType] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [stagePlotModalOpen, setStagePlotModalOpen] = useState(false);
@@ -561,7 +566,7 @@ export default function EventFormPage() {
 
   const duration = computeDurationHours(form.startTime, form.endTime);
   const prepContractors = getPrepContractors(form, contractors);
-  const prepEmailDraft = renderPrepSheetEmail(form, prepContractors, form.requests, undefined, currentUser.businessInfo, currentUser.vertical, contractors);
+  const prepEmailDraft = renderPrepSheetEmail(form, prepContractors, form.requests, undefined, businessInfo, currentUser.vertical, contractors);
   // Documents attached directly to a request are shown inline on that
   // request's row, not duplicated in the general Documents widget/picker.
   const requestDocumentIds = new Set(form.requests.map((r) => r.documentId).filter(Boolean));
@@ -994,7 +999,7 @@ export default function EventFormPage() {
     }
   }
 
-  const fromName = currentUser.businessInfo?.name || `${currentUser.firstName} ${currentUser.lastName}`;
+  const fromName = businessInfo?.name || `${currentUser.firstName} ${currentUser.lastName}`;
 
   async function sendAndMarkEmailed(contractor, templateId, subject, body) {
     await sendThreadedEmail({
@@ -1055,7 +1060,7 @@ export default function EventFormPage() {
 
   async function handleDownloadPdf() {
     try {
-      await generatePrepSheetPdf(form, prepContractors, form.requests, currentUser.businessInfo, currentUser.vertical, contractors);
+      await generatePrepSheetPdf(form, prepContractors, form.requests, businessInfo, currentUser.vertical, contractors);
     } catch (err) {
       showToast(err.message || 'Failed to generate PDF', 'error');
     }
@@ -1068,7 +1073,7 @@ export default function EventFormPage() {
       // they were never offered as a separate checkbox in the modal.
       const requestDocIds = form.requests.map((r) => r.documentId).filter(Boolean);
       const mergedDocumentIds = Array.from(new Set([...documentIds, ...requestDocIds]));
-      const pdfAttachment = await generatePrepSheetPdfAttachment(form, prepContractors, form.requests, currentUser.businessInfo, currentUser.vertical, contractors);
+      const pdfAttachment = await generatePrepSheetPdfAttachment(form, prepContractors, form.requests, businessInfo, currentUser.vertical, contractors);
       let successCount = 0;
       for (const contractorId of recipientIds) {
         const contractor = contractors.find((c) => c.id === contractorId);
@@ -1180,6 +1185,7 @@ export default function EventFormPage() {
   }
 
   function validate() {
+    if (currentUser?.planTier === 'agency' && !form.groupId) return 'A managed group is required.';
     if (!form.name.trim()) return 'Event name is required.';
     if (!form.eventType) return 'Event type is required.';
     if (!form.eventDate) return 'Event date is required.';
@@ -1532,6 +1538,8 @@ export default function EventFormPage() {
                 <label className={labelClass}>Event Name *</label>
                 <input required value={form.name} onChange={(e) => update('name', e.target.value)} data-testid="event-form-name-input" className={inputClass} />
               </div>
+
+              <AgencyGroupSelect value={form.groupId} onChange={(value) => update('groupId', value)} />
 
               <div>
                 <label className={labelClass}>Client</label>

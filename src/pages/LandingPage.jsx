@@ -148,8 +148,8 @@ const FAQS = [
   },
 ];
 
-function signupHref(plan = 'team', interval = 'month') {
-  return `/auth?mode=signup&plan=${plan}&interval=${interval}`;
+function signupHref(plan = 'team', interval = 'month', groupCount) {
+  return `/auth?mode=signup&plan=${plan}&interval=${interval}${plan === 'agency' ? `&groups=${groupCount || 2}` : ''}`;
 }
 
 function FieldError({ children }) {
@@ -267,7 +267,7 @@ export default function LandingPage() {
   const [waitlistError, setWaitlistError] = useState('');
   const [waitlistDone, setWaitlistDone] = useState(false);
 
-  const [contactForm, setContactForm] = useState({ name: '', email: '', message: '' });
+  const [contactForm, setContactForm] = useState({ name: '', email: '', message: '', selectedPlan: '' });
   const [contactSubmitting, setContactSubmitting] = useState(false);
   const [contactError, setContactError] = useState('');
   const [contactDone, setContactDone] = useState(false);
@@ -275,6 +275,7 @@ export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState(0);
   const [pricingInterval, setPricingInterval] = useState('year');
+  const [agencyGroupCount, setAgencyGroupCount] = useState(2);
   const [websiteConfig, setWebsiteConfig] = useState(null);
   const publicSignupsEnabled = websiteConfig?.publicSignupsEnabled ?? DEFAULT_PUBLIC_SIGNUPS_ENABLED;
   const navigation = websiteConfig?.navigation;
@@ -283,6 +284,7 @@ export default function LandingPage() {
   const painSection = websiteConfig?.painPoints;
   const painPoints = painSection?.items || PAIN_POINTS;
   const featureSection = websiteConfig?.features;
+  const agencySection = websiteConfig?.agency;
   const featureGroups = featureSection?.groups || FEATURE_GROUPS;
   const featureComparison = featureSection?.comparison;
   const pricing = websiteConfig?.pricing;
@@ -302,12 +304,15 @@ export default function LandingPage() {
   const pricingTiers = pricing?.tiers?.map((tier) => ({
     id: tier.id,
     name: tier.name,
-    seats: tier.seatLimit === 1 ? '1 team member' : `Up to ${tier.seatLimit} team members`,
+    seats: tier.id === 'agency' ? `${tier.includedGroupCount || 2} managed groups included` : tier.seatLimit === 1 ? '1 team member' : `Up to ${tier.seatLimit} team members`,
     monthly: tier.monthlyAmountCents / 100,
     annualMonthly: Math.round(tier.annualAmountCents / 12) / 100,
     annualTotal: tier.annualAmountCents / 100,
     description: tier.description,
     featured: tier.featured,
+    includedGroupCount: tier.includedGroupCount,
+    monthlyAdditionalGroupCents: tier.monthlyAdditionalGroupCents,
+    annualAdditionalGroupCents: tier.annualAdditionalGroupCents,
   })) || PRICING_TIERS;
   const trialDays = pricing?.trialDays ?? 14;
   const trustStats = [
@@ -612,11 +617,11 @@ export default function LandingPage() {
                   <tbody>
                     {featureComparison.categories.map((category) => (
                       <Fragment key={category.id}>
-                        <tr><th colSpan={4} className="bg-slate-100 px-5 py-2.5 text-left text-xs font-bold uppercase tracking-wide text-slate-600">{category.name}</th></tr>
+                        <tr><th colSpan={pricingTiers.length + 1} className="bg-slate-100 px-5 py-2.5 text-left text-xs font-bold uppercase tracking-wide text-slate-600">{category.name}</th></tr>
                         {category.rows.map((row) => (
                           <tr key={row.id} className="border-t border-slate-100">
                             <th className="sticky left-0 z-10 bg-white px-5 py-3.5 text-left font-medium text-slate-700">{row.feature}</th>
-                            {['solo', 'team', 'studio'].map((tierId) => <td key={tierId} className={`px-4 py-3.5 text-center ${tierId === 'team' ? 'bg-indigo-50/30' : ''}`}>{row[tierId].toLowerCase() === 'included' ? <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-700"><span aria-hidden="true">✓</span><span>Included</span></span> : <span className="text-slate-600">{row[tierId]}</span>}</td>)}
+                            {pricingTiers.map((tier) => <td key={tier.id} className={`px-4 py-3.5 text-center ${tier.featured ? 'bg-indigo-50/30' : ''}`}>{String(row[tier.id] || 'Included').toLowerCase() === 'included' ? <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-700"><span aria-hidden="true">✓</span><span>Included</span></span> : <span className="text-slate-600">{row[tier.id]}</span>}</td>)}
                           </tr>
                         ))}
                       </Fragment>
@@ -632,6 +637,16 @@ export default function LandingPage() {
 
       {testimonials?.enabled && <ReviewSlider section={testimonials} />}
 
+      {agencySection?.enabled && <section className="relative overflow-hidden bg-slate-950 text-white">
+        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 20% 20%, #6366f1 0, transparent 35%), radial-gradient(circle at 80% 70%, #d946ef 0, transparent 35%)' }} aria-hidden="true" />
+        <Reveal className="relative max-w-6xl mx-auto px-4 sm:px-6 py-16 md:py-24">
+          <div className="grid lg:grid-cols-[0.9fr_1.1fr] gap-10 items-center">
+            <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-300">{agencySection.label}</p><h2 className="text-3xl sm:text-4xl font-bold mt-4 leading-tight">{agencySection.heading}</h2><p className="text-slate-300 mt-5 leading-relaxed">{agencySection.description}</p><a href="#pricing" className="inline-flex mt-7 rounded-xl bg-white px-5 py-3 text-sm font-bold text-slate-900 hover:bg-indigo-50">{agencySection.ctaLabel}</a></div>
+            <div className="grid sm:grid-cols-2 gap-3">{agencySection.features.map((feature, index) => <div key={feature} className={`rounded-2xl border border-white/10 bg-white/[0.07] p-5 ${index === agencySection.features.length - 1 && agencySection.features.length % 2 ? 'sm:col-span-2' : ''}`}><span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/25 text-indigo-200 font-bold">{index + 1}</span><p className="mt-3 font-semibold text-slate-100">{feature}</p></div>)}</div>
+          </div>
+        </Reveal>
+      </section>}
+
       {/* Pricing is visible during early access; only the action changes at launch. */}
       <section id="pricing" className="bg-white scroll-mt-16">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16 md:py-24">
@@ -644,7 +659,7 @@ export default function LandingPage() {
               <button type="button" onClick={() => setPricingInterval('year')} data-testid="landing-pricing-year" className={`px-4 py-2 rounded-lg text-sm font-semibold ${pricingInterval === 'year' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>{pricing?.annualLabel || 'Annual'} <span className="text-emerald-600">{pricing?.annualSavingsLabel || 'Save up to 20%'}</span></button>
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mt-10 items-stretch">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mt-10 items-stretch">
             {pricingTiers.map((tier) => (
               <Reveal
                 key={tier.id}
@@ -658,16 +673,17 @@ export default function LandingPage() {
                 {tier.featured && <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-wide px-3 py-1 rounded-full shadow-sm">{pricing?.featuredLabel || 'Most popular'}</span>}
                 <h3 className="text-lg font-bold text-slate-900">{tier.name}</h3>
                 <p className="text-sm text-slate-500 mt-1 min-h-10">{tier.description}</p>
-                <div className="mt-5"><span className="text-4xl font-bold text-slate-900">${pricingInterval === 'year' ? tier.annualMonthly : tier.monthly}</span><span className="text-sm text-slate-500"> {pricing?.perMonthLabel || '/month'}</span></div>
-                <p className="text-xs text-slate-400 mt-1 h-5">{pricingInterval === 'year' ? `$${tier.annualTotal} ${pricing?.billedAnnuallyLabel || 'billed annually'}` : (pricing?.billedMonthlyLabel || 'Billed monthly')}</p>
+                {tier.id === 'agency' && <label className="mt-5 block text-xs font-semibold text-slate-500">Number of managed groups<select value={agencyGroupCount} onChange={(e) => setAgencyGroupCount(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800">{Array.from({ length: 49 }, (_, index) => index + 2).map((count) => <option key={count} value={count}>{count} groups</option>)}</select></label>}
+                <div className={tier.id === 'agency' ? 'mt-3' : 'mt-5'}><span className="text-4xl font-bold text-slate-900">${tier.id === 'agency' ? pricingInterval === 'year' ? Math.round((tier.annualTotal + Math.max(0, agencyGroupCount - tier.includedGroupCount) * tier.annualAdditionalGroupCents / 100) / 12 * 100) / 100 : tier.monthly + Math.max(0, agencyGroupCount - tier.includedGroupCount) * tier.monthlyAdditionalGroupCents / 100 : pricingInterval === 'year' ? tier.annualMonthly : tier.monthly}</span><span className="text-sm text-slate-500"> {pricing?.perMonthLabel || '/month'}</span></div>
+                <p className="text-xs text-slate-400 mt-1 h-5">{tier.id === 'agency' ? `${tier.includedGroupCount} groups included · ${pricingInterval === 'year' ? `$${tier.annualAdditionalGroupCents / 100}/year` : `$${tier.monthlyAdditionalGroupCents / 100}/month`} each additional` : pricingInterval === 'year' ? `$${tier.annualTotal} ${pricing?.billedAnnuallyLabel || 'billed annually'}` : (pricing?.billedMonthlyLabel || 'Billed monthly')}</p>
                 <p className="text-sm font-semibold text-indigo-700 mt-5">{tier.seats}</p>
                 <ul className="space-y-2 mt-5 mb-6 text-sm text-slate-600 flex-1">
                   {includedFeatures.map((feature) => <li key={feature} className="flex gap-2"><span className="text-emerald-500" aria-hidden="true">✓</span><span>{feature}</span></li>)}
                 </ul>
                 {publicSignupsEnabled ? (
-                  <Link to={signupHref(tier.id, pricingInterval)} className={`text-center rounded-xl px-4 py-2.5 text-sm font-semibold transition-all ${tier.featured ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25 hover:bg-indigo-700 hover:shadow-lg' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}>{(pricing?.trialButtonLabel || 'Start {days}-day free trial').replace('{days}', trialDays)}</Link>
+                  <Link to={signupHref(tier.id, pricingInterval, agencyGroupCount)} className={`text-center rounded-xl px-4 py-2.5 text-sm font-semibold transition-all ${tier.featured ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25 hover:bg-indigo-700 hover:shadow-lg' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}>{(pricing?.trialButtonLabel || 'Start {days}-day free trial').replace('{days}', trialDays)}</Link>
                 ) : (
-                  <a href="#waitlist" onClick={() => setWaitlistForm((current) => ({ ...current, selectedPlan: tier.id, billingInterval: pricingInterval }))} className={`text-center rounded-xl px-4 py-2.5 text-sm font-semibold transition-all ${tier.featured ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25 hover:bg-indigo-700 hover:shadow-lg' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}>Join the waitlist</a>
+                  <a href="#waitlist" onClick={() => setWaitlistForm((current) => ({ ...current, selectedPlan: tier.id, billingInterval: pricingInterval, groupCount: tier.id === 'agency' ? agencyGroupCount : undefined }))} className={`text-center rounded-xl px-4 py-2.5 text-sm font-semibold transition-all ${tier.featured ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25 hover:bg-indigo-700 hover:shadow-lg' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}>Join the waitlist</a>
                 )}
               </Reveal>
             ))}
@@ -723,7 +739,7 @@ export default function LandingPage() {
             <p className="text-sm text-slate-500 mt-1 mb-5">{waitlistContent?.description}</p>
             {waitlistForm.selectedPlan && !waitlistDone && (
               <p className="text-xs font-semibold text-indigo-700 bg-indigo-50 rounded-lg px-3 py-2 mb-3">
-                Interested in {pricingTiers.find((tier) => tier.id === waitlistForm.selectedPlan)?.name} · {waitlistForm.billingInterval === 'year' ? 'Annual' : 'Monthly'}
+                Interested in {pricingTiers.find((tier) => tier.id === waitlistForm.selectedPlan)?.name}{waitlistForm.selectedPlan === 'agency' ? ` · ${waitlistForm.groupCount} groups` : ''} · {waitlistForm.billingInterval === 'year' ? 'Annual' : 'Monthly'}
               </p>
             )}
             {waitlistDone ? (
@@ -764,6 +780,7 @@ export default function LandingPage() {
               </p>
             ) : (
               <form onSubmit={handleContactSubmit} className="space-y-3">
+                {contactForm.selectedPlan === 'agency' && <div className="rounded-lg bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700">Agency plan inquiry</div>}
                 <input
                   required placeholder={contactContent?.namePlaceholder || 'Your name'} value={contactForm.name}
                   onChange={(e) => setContactForm((f) => ({ ...f, name: e.target.value }))}

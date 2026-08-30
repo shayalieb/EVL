@@ -4,17 +4,17 @@ export async function getLandingConfig() {
   return apiFetch('/landing/config');
 }
 
-export async function joinWaitlist({ name, email, businessName, selectedPlan, billingInterval }) {
+export async function joinWaitlist({ name, email, businessName, selectedPlan, billingInterval, groupCount }) {
   return apiFetch('/landing/waitlist', {
     method: 'POST',
-    body: JSON.stringify({ name, email, businessName, selectedPlan, billingInterval }),
+    body: JSON.stringify({ name, email, businessName, selectedPlan, billingInterval, groupCount }),
   });
 }
 
-export async function sendContactMessage({ name, email, message }) {
+export async function sendContactMessage({ name, email, message, selectedPlan }) {
   return apiFetch('/landing/contact', {
     method: 'POST',
-    body: JSON.stringify({ name, email, message }),
+    body: JSON.stringify({ name, email, message, selectedPlan }),
   });
 }
 

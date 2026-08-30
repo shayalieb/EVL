@@ -80,7 +80,7 @@ export function serializeMembership(membership) {
       accountId: null, role: null, permissions: emptyPermissions(),
       vertical: null, allVerticalsEnabled: false, activeVerticals: [],
       accountApproved: false,
-      subscriptionStatus: null, planTier: null, seatLimit: null, trialEndsAt: null, subscriptionBlocked: false,
+      subscriptionStatus: null, planTier: null, seatLimit: null, agencyGroupLimit: null, trialEndsAt: null, subscriptionBlocked: false,
     };
   }
   return {
@@ -101,6 +101,7 @@ export function serializeMembership(membership) {
     subscriptionStatus: membership.account.subscriptionStatus,
     planTier: membership.account.planTier,
     seatLimit: membership.account.seatLimit,
+    agencyGroupLimit: membership.account.agencyGroupLimit,
     trialEndsAt: membership.account.trialEndsAt,
     subscriptionBlocked: isSubscriptionBlocked(membership.account),
   };

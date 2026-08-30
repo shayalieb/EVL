@@ -13,6 +13,7 @@ function emptyScheduleItem() {
 
 export function emptyForm() {
   return {
+    groupId: '',
     id: uid('bkg'),
     eventName: '', clientId: '', eventDate: '', eventType: '',
     brideName: '', groomName: '',

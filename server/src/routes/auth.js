@@ -70,12 +70,12 @@ async function notifyPendingSignup(user) {
 }
 
 router.post('/signup', credentialsLimiter, asyncHandler(async (req, res) => {
-  const { firstName, lastName, email, phone, password, vertical, selectedPlan, billingInterval } = req.body || {};
+  const { firstName, lastName, email, phone, password, vertical, selectedPlan, billingInterval, groupCount } = req.body || {};
   const websiteConfig = await getWebsiteConfig();
   if (!websiteConfig.publicSignupsEnabled) {
     return res.status(403).json({ error: 'Public signup is not currently available. Please join the waitlist or use your admin invitation link.' });
   }
-  if (!['solo', 'team', 'studio'].includes(selectedPlan) || !['month', 'year'].includes(billingInterval)) {
+  if (!['solo', 'team', 'studio', 'agency'].includes(selectedPlan) || !['month', 'year'].includes(billingInterval)) {
     return res.status(400).json({ error: 'Choose a plan from the pricing page before creating an account.' });
   }
   const normalizedEmail = normalizeValidEmail(email);
@@ -102,14 +102,15 @@ router.post('/signup', credentialsLimiter, asyncHandler(async (req, res) => {
         data: {
           ...(accountVertical ? { vertical: accountVertical } : {}),
           signupSource: 'public',
-          signupPlan: ['solo', 'team', 'studio'].includes(selectedPlan) ? selectedPlan : null,
+          signupPlan: ['solo', 'team', 'studio', 'agency'].includes(selectedPlan) ? selectedPlan : null,
           signupInterval: ['month', 'year'].includes(billingInterval) ? billingInterval : null,
+          agencyGroupLimit: selectedPlan === 'agency' ? Math.min(500, Math.max(2, Number.parseInt(groupCount, 10) || 2)) : null,
         },
       });
       const membership = await tx.membership.create({
         data: { userId: user.id, accountId: account.id, role: 'owner', permissions: allPermissions() },
       });
-      await tx.accountActivity.create({ data: { accountId: account.id, actorUserId: user.id, type: 'account_created', summary: 'Account created from public signup', metadata: { source: 'public', selectedPlan: selectedPlan || null, billingInterval: billingInterval || null } } });
+      await tx.accountActivity.create({ data: { accountId: account.id, actorUserId: user.id, type: 'account_created', summary: 'Account created from public signup', metadata: { source: 'public', selectedPlan: selectedPlan || null, billingInterval: billingInterval || null, groupCount: selectedPlan === 'agency' ? account.agencyGroupLimit : null } } });
       return { user, membership, account };
     });
     await establishSession(req, { userId: user.id });

@@ -13,7 +13,7 @@ const STATUS_OPTIONS = [
   { value: 'converted', label: 'Converted' },
   { value: 'archived', label: 'Archived' },
 ];
-const PLAN_LABELS = { solo: 'Solo', team: 'Team', studio: 'Studio' };
+const PLAN_LABELS = { solo: 'Solo', team: 'Team', studio: 'Studio', agency: 'Agency' };
 
 export default function AdminWaitlistPage() {
   const { showToast } = useToast();
@@ -70,7 +70,7 @@ export default function AdminWaitlistPage() {
                 <tr key={entry.id} className="border-b border-slate-50 last:border-0">
                   <td className="px-4 py-3"><div className="font-medium text-slate-800">{entry.name}</div><a href={`mailto:${entry.email}`} className="text-xs text-indigo-600">{entry.email}</a></td>
                   <td className="px-4 py-3 text-slate-500">{entry.businessName || '—'}</td>
-                  <td className="px-4 py-3 text-slate-500">{entry.selectedPlan ? `${PLAN_LABELS[entry.selectedPlan]} · ${entry.billingInterval === 'year' ? 'Annual' : 'Monthly'}` : 'Not selected'}</td>
+                  <td className="px-4 py-3 text-slate-500">{entry.selectedPlan ? entry.selectedPlan === 'agency' ? `Agency · ${entry.requestedGroupCount || 2} groups · ${entry.billingInterval === 'year' ? 'Annual' : 'Monthly'}` : `${PLAN_LABELS[entry.selectedPlan]} · ${entry.billingInterval === 'year' ? 'Annual' : 'Monthly'}` : 'Not selected'}</td>
                   <td className="px-4 py-3 text-slate-500 text-xs">{new Date(entry.createdAt).toLocaleDateString()}</td>
                   <td className="px-4 py-3"><select value={entry.status} onChange={(e) => updateStatus(entry, e.target.value)} className="px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold">{STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></td>
                 </tr>

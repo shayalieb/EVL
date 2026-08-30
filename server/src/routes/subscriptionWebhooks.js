@@ -52,6 +52,7 @@ router.post('/stripe-billing', asyncHandler(async (req, res) => {
 
     const priceId = subscription.items?.data?.[0]?.price?.id;
     let resolved = priceId ? tierForPriceId(priceId) : null;
+    if (subscription.metadata?.gigworksTier === 'agency') resolved = { tier: { id: 'agency', seatLimit: null }, interval: subscription.metadata.gigworksInterval === 'year' ? 'year' : 'month', groupCount: Math.min(500, Math.max(2, Number.parseInt(subscription.metadata.gigworksGroupCount, 10) || 2)) };
     if (priceId && !resolved) {
       const websiteConfig = await getWebsiteAdminConfig();
       for (const tier of websiteConfig.pricing.tiers) {
@@ -64,7 +65,7 @@ router.post('/stripe-billing', asyncHandler(async (req, res) => {
       await tx.account.update({ where: { id: account.id }, data: {
         stripeSubscriptionId: subscription.id,
         subscriptionStatus: subscription.status,
-        ...(resolved ? { planTier: resolved.tier.id, seatLimit: resolved.tier.seatLimit, billingInterval: resolved.interval } : {}),
+        ...(resolved ? { planTier: resolved.tier.id, seatLimit: resolved.tier.seatLimit, billingInterval: resolved.interval, ...(resolved.tier.id === 'agency' ? { agencyGroupLimit: resolved.groupCount } : {}) } : {}),
         trialEndsAt: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,
         // First time this account's subscription is ever confirmed active/
         // trialing — same auto-approval moment as checkout.session.completed

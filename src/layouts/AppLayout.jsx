@@ -108,6 +108,7 @@ export default function AppLayout() {
         ? { ...group, items: [...group.items, { to: '/admin', label: 'Admin', icon: '🛡️' }] }
         : group
     ));
+  if (currentUser?.planTier === 'agency') navGroups[0] = { ...navGroups[0], items: [...navGroups[0].items, { to: '/agency/groups', label: 'Managed Groups', icon: '🏢' }] };
 
   async function handleLogout() {
     await logout();

@@ -4,10 +4,10 @@ export async function getSubscriptionStatus() {
   return apiFetch('/subscription/status');
 }
 
-export async function startCheckout(tier, interval) {
+export async function startCheckout(tier, interval, groupCount) {
   const data = await apiFetch('/subscription/checkout', {
     method: 'POST',
-    body: JSON.stringify({ tier, interval }),
+    body: JSON.stringify({ tier, interval, groupCount }),
   });
   return data.url;
 }

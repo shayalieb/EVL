@@ -19,7 +19,7 @@ export default function PendingApprovalPage() {
   const [preferredPlan] = useState(() => {
     try {
       const saved = JSON.parse(sessionStorage.getItem('gigworksSelectedPlan'));
-      return ['solo', 'team', 'studio'].includes(saved?.plan) ? saved.plan : null;
+      return ['solo', 'team', 'studio', 'agency'].includes(saved?.plan) ? saved.plan : null;
     } catch {
       return null;
     }
@@ -32,6 +32,7 @@ export default function PendingApprovalPage() {
     }
   });
   const [startingTier, setStartingTier] = useState(null);
+  const [agencyGroupCount, setAgencyGroupCount] = useState(() => { try { return Math.min(500, Math.max(2, Number.parseInt(JSON.parse(sessionStorage.getItem('gigworksSelectedPlan'))?.groupCount, 10) || 2)); } catch { return 2; } });
   const [checkoutError, setCheckoutError] = useState('');
 
   useEffect(() => {
@@ -42,7 +43,7 @@ export default function PendingApprovalPage() {
     setCheckoutError('');
     setStartingTier(tierId);
     try {
-      const url = await startCheckout(tierId, interval);
+      const url = await startCheckout(tierId, interval, tierId === 'agency' ? agencyGroupCount : undefined);
       // Stripe Checkout must load top-level, not in an iframe/popup.
       window.location.href = url;
     } catch (err) {
@@ -88,9 +89,10 @@ export default function PendingApprovalPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 max-w-3xl mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 max-w-6xl mx-auto">
             {status.tiers.map((tier) => {
-              const cents = interval === 'year' ? tier.annualAmountCents : tier.monthlyAmountCents;
+              const extraGroups = tier.id === 'agency' ? Math.max(0, agencyGroupCount - tier.includedGroupCount) : 0;
+              const cents = interval === 'year' ? tier.annualAmountCents + extraGroups * (tier.annualAdditionalGroupCents || 0) : tier.monthlyAmountCents + extraGroups * (tier.monthlyAdditionalGroupCents || 0);
               const perMonth = interval === 'year' ? cents / 12 : cents;
               return (
                 <div key={tier.id} className={`relative bg-white rounded-xl p-6 flex flex-col ${preferredPlan === tier.id ? 'border-2 border-indigo-500 shadow-md' : 'border border-slate-200'}`} data-testid={`plan-picker-card-${tier.id}`}>
@@ -100,7 +102,8 @@ export default function PendingApprovalPage() {
                     </span>
                   )}
                   <div className="text-sm font-bold text-slate-700 mb-1">{tier.label}</div>
-                  <div className="text-xs text-slate-400 mb-4">{tier.seatLimit} team member{tier.seatLimit === 1 ? '' : 's'}</div>
+                  <div className="text-xs text-slate-400 mb-4">{tier.id === 'agency' ? `${tier.includedGroupCount} groups included` : `${tier.seatLimit} team member${tier.seatLimit === 1 ? '' : 's'}`}</div>
+                  {tier.id === 'agency' && <label className="text-xs font-semibold text-slate-500 mb-3">Managed groups<select value={agencyGroupCount} onChange={(event) => setAgencyGroupCount(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm">{Array.from({ length: 49 }, (_, index) => index + 2).map((count) => <option key={count} value={count}>{count}</option>)}</select></label>}
                   <div className="mb-1">
                     <span className="text-3xl font-bold text-slate-800">{formatPrice(perMonth)}</span>
                     <span className="text-sm text-slate-400"> /mo</span>

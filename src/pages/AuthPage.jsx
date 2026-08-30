@@ -7,7 +7,7 @@ import { formatPhoneNumber } from '../lib/format';
 
 const inputClass = 'w-full px-3.5 py-3 rounded-xl border border-slate-300 bg-white text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 outline-none transition';
 const labelClass = 'block text-sm font-semibold text-slate-700 mb-1.5';
-const PLAN_LABELS = { solo: 'Solo', team: 'Team', studio: 'Studio' };
+const PLAN_LABELS = { solo: 'Solo', team: 'Team', studio: 'Studio', agency: 'Agency' };
 
 // Keep in sync with server/src/lib/verticals.js's SIGNUP_VERTICALS list.
 // party_planning and photography are pulled from signup entirely to keep
@@ -20,7 +20,8 @@ export default function AuthPage() {
   const [searchParams] = useSearchParams();
   const selectedPlan = searchParams.get('plan');
   const selectedInterval = searchParams.get('interval');
-  const validPlanSelection = ['solo', 'team', 'studio'].includes(selectedPlan) && ['month', 'year'].includes(selectedInterval);
+  const selectedGroupCount = Math.min(500, Math.max(2, Number.parseInt(searchParams.get('groups'), 10) || 2));
+  const validPlanSelection = ['solo', 'team', 'studio', 'agency'].includes(selectedPlan) && ['month', 'year'].includes(selectedInterval);
   const [tab, setTab] = useState(searchParams.get('mode') === 'signup' && validPlanSelection ? 'signup' : 'signin');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -42,9 +43,9 @@ export default function AuthPage() {
   // the backend still validate the tier and interval before checkout.
   useEffect(() => {
     if (validPlanSelection) {
-      sessionStorage.setItem('gigworksSelectedPlan', JSON.stringify({ plan: selectedPlan, interval: selectedInterval }));
+      sessionStorage.setItem('gigworksSelectedPlan', JSON.stringify({ plan: selectedPlan, interval: selectedInterval, groupCount: selectedPlan === 'agency' ? selectedGroupCount : undefined }));
     }
-  }, [selectedInterval, selectedPlan, validPlanSelection]);
+  }, [selectedGroupCount, selectedInterval, selectedPlan, validPlanSelection]);
 
   // Switches tabs and clears whatever error was showing — otherwise a
   // failed sign-in attempt's error banner (authError lives in context, not
@@ -103,6 +104,7 @@ export default function AuthPage() {
       firstName, lastName, businessName, email, phone, password, vertical,
       selectedPlan,
       billingInterval: selectedInterval,
+      groupCount: selectedPlan === 'agency' ? selectedGroupCount : undefined,
     });
     setSubmitting(false);
   }
@@ -132,7 +134,7 @@ export default function AuthPage() {
             <div className="mb-7">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-600">GigWorks</p>
               <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mt-2">{tab === 'signup' ? 'Create your account' : tab === 'forgot' ? 'Reset your password' : 'Welcome back'}</h1>
-              <p className="text-sm text-slate-500 mt-2">{tab === 'signup' ? `You selected ${PLAN_LABELS[selectedPlan]} · ${selectedInterval === 'year' ? 'Annual' : 'Monthly'} billing.` : tab === 'forgot' ? 'We’ll help you get back into your account.' : 'Sign in to manage your bookings, roster, and event details.'}</p>
+              <p className="text-sm text-slate-500 mt-2">{tab === 'signup' ? `You selected ${PLAN_LABELS[selectedPlan]}${selectedPlan === 'agency' ? ` · ${selectedGroupCount} groups` : ''} · ${selectedInterval === 'year' ? 'Annual' : 'Monthly'} billing.` : tab === 'forgot' ? 'We’ll help you get back into your account.' : 'Sign in to manage your bookings, roster, and event details.'}</p>
             </div>
 
             {tab === 'signup' && <div className="mb-5 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-800"><span className="font-semibold">14-day free trial</span> · No charge until your trial ends.</div>}

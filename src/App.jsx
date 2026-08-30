@@ -49,6 +49,7 @@ const StagePlotLibraryPage = lazy(() => import('./pages/StagePlotLibraryPage'));
 const StagePlotLibraryEditorPage = lazy(() => import('./pages/StagePlotLibraryEditorPage'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const CustomerStoriesPage = lazy(() => import('./pages/CustomerStoriesPage'));
+const AgencyGroupsPage = lazy(() => import('./pages/AgencyGroupsPage'));
 const ReviewSubmissionPage = lazy(() => import('./pages/ReviewSubmissionPage'));
 
 // The marketing site lives at the exact root path, which otherwise sits
@@ -168,6 +169,7 @@ function AppRoutes() {
       <Route path="/" element={<ProtectedArea />}>
         <Route index element={<Navigate to="/home" replace />} />
         <Route path="home" element={<HomePage />} />
+        <Route path="agency/groups" element={<AgencyGroupsPage />} />
         <Route path="contractors" element={<ContractorsPage />} />
         <Route path="clients" element={<ClientsPage />} />
         <Route path="venues" element={<VenuesPage />} />

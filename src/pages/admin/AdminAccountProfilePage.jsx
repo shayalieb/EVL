@@ -42,6 +42,14 @@ export default function AdminAccountProfilePage() {
     catch (err) { showToast(err.message, 'error'); }
   }
 
+  async function changePlan(planTier) {
+    try {
+      const data = await apiFetch(`/admin/accounts/${accountId}/plan`, { method: 'PATCH', body: JSON.stringify({ planTier }) });
+      setProfile((current) => ({ ...current, ...data }));
+      showToast(planTier === 'agency' ? 'Agency workspace activated' : 'Plan updated');
+    } catch (err) { showToast(err.message, 'error'); }
+  }
+
   if (error) return <div className="text-sm text-red-600">{error}</div>;
   if (!profile) return <div className="text-sm text-slate-400">Loading profile…</div>;
   const status = profile.disabledAt ? 'Disabled' : !profile.approvedAt ? 'Needs approval' : 'Active';
@@ -53,6 +61,7 @@ export default function AdminAccountProfilePage() {
     {tab === 'overview' && <div className="space-y-5">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3"><Stat label="Team users" value={profile.members.length} detail={`${profile.planTier || profile.signupPlan || 'No plan'} plan`} /><Stat label="Bookings" value={profile.dataSummary.bookings} /><Stat label="Events" value={profile.dataSummary.events} /><Stat label="Support" value={(profile.supportSummary.open || 0) + (profile.supportSummary.closed || 0)} detail={`${profile.supportSummary.open || 0} open`} /></div>
       <div className="grid md:grid-cols-2 gap-5"><section className="rounded-xl border border-slate-200 bg-white p-5"><h3 className="font-bold text-slate-800">Business profile</h3><dl className="mt-4 grid sm:grid-cols-2 gap-5"><Info label="Business name">{profile.business.name}</Info><Info label="Business type">{VERTICAL_LABELS[profile.vertical] || profile.vertical}{profile.allVerticalsEnabled ? ' · All types enabled' : ''}</Info><Info label="Business email">{profile.business.email}</Info><Info label="Business phone">{profile.business.phone}</Info><Info label="Address">{profile.business.address}</Info><Info label="Owner">{owner ? `${owner.user.firstName} ${owner.user.lastName}` : ''}</Info></dl></section><section className="rounded-xl border border-slate-200 bg-white p-5"><h3 className="font-bold text-slate-800">Plan and acquisition</h3><dl className="mt-4 grid sm:grid-cols-2 gap-5"><Info label="Current plan">{profile.planTier || profile.signupPlan || 'No plan'}</Info><Info label="Billing">{profile.billingInterval || profile.signupInterval || 'Not selected'}</Info><Info label="Subscription">{profile.subscriptionStatus || 'Not started'}</Info><Info label="Trial ends">{profile.trialEndsAt ? new Date(profile.trialEndsAt).toLocaleDateString() : '—'}</Info><Info label="Signup source">{profile.signupSource === 'public' ? 'Website' : 'Admin invitation'}</Info><Info label="Stripe payments">{profile.stripeConnected ? (profile.stripeChargesEnabled ? 'Connected and active' : 'Connected, action needed') : 'Not connected'}</Info></dl></section></div>
+      <section className="rounded-xl border border-slate-200 bg-white p-5"><div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"><div><h3 className="font-bold text-slate-800">Plan access</h3><p className="text-sm text-slate-500 mt-1">Agency activates managed groups and custom branding without self-service Stripe pricing.</p></div><select aria-label="Account plan" value={profile.planTier || ''} onChange={(event) => changePlan(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold"><option value="" disabled>Select plan</option><option value="solo">Solo</option><option value="team">Team</option><option value="studio">Studio</option><option value="agency">Agency</option></select></div></section>
       <section className="rounded-xl border border-slate-200 bg-white p-5"><h3 className="font-bold text-slate-800">Data footprint</h3><div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm"><Info label="Clients">{profile.dataSummary.clients}</Info><Info label="Contractors">{profile.dataSummary.contractors}</Info><Info label="Bookings">{profile.dataSummary.bookings}</Info><Info label="Events">{profile.dataSummary.events}</Info></div></section>
     </div>}
 

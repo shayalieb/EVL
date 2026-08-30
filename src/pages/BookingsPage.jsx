@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { PRIORITIES } from '../lib/bookingPriorities';
@@ -61,6 +61,8 @@ export default function BookingsPage() {
   const canEdit = can('manageBookings');
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const groupId = searchParams.get('groupId') || '';
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [completeTarget, setCompleteTarget] = useState(null);
   const [activeTab, setActiveTab] = useState('active');
@@ -129,13 +131,13 @@ export default function BookingsPage() {
 
   const hasFilters = !!(search || statusFilter || priorityFilter || eventTypeFilter || depositFilter);
   const { items: pagedBookings, pageCount, pageSize, total: totalItems, loading, error, refresh } = useServerList(
-    () => queryBookings({ page, pageSize: 25, view: activeTab, search, status: statusFilter, priority: priorityFilter, eventType: eventTypeFilter, deposit: depositFilter, sort, direction: sort === 'eventDate' || sort === 'eventName' ? 'asc' : 'desc' }),
-    [page, activeTab, search, statusFilter, priorityFilter, eventTypeFilter, depositFilter, sort],
+    () => queryBookings({ page, pageSize: 25, view: activeTab, search, groupId, status: statusFilter, priority: priorityFilter, eventType: eventTypeFilter, deposit: depositFilter, sort, direction: sort === 'eventDate' || sort === 'eventName' ? 'asc' : 'desc' }),
+    [page, activeTab, search, groupId, statusFilter, priorityFilter, eventTypeFilter, depositFilter, sort],
   );
   useEffect(() => { setPage(1); }, [activeTab, search, statusFilter, priorityFilter, eventTypeFilter, depositFilter]);
 
   function openAdd() {
-    navigate('/bookings/new');
+    navigate(groupId ? `/bookings/new?groupId=${groupId}` : '/bookings/new');
   }
 
   function openEdit(booking) {

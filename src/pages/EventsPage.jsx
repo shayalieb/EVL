@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -43,6 +43,8 @@ export default function EventsPage() {
   const canEdit = can('manageEvents');
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const groupId = searchParams.get('groupId') || '';
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [completeTarget, setCompleteTarget] = useState(null);
   const [page, setPage] = useState(1);
@@ -95,8 +97,8 @@ export default function EventsPage() {
 
   const hasFilters = !!(search || statusFilter || vendorFilter || eventTypeFilter || contractorsFilter);
   const { items: pagedEvents, pageCount, pageSize, total: totalItems, loading, error, refresh } = useServerList(
-    () => queryEvents({ page, pageSize: 25, view: activeTab === 'completed' ? 'completed' : 'active', search, status: statusFilter, vendor: vendorFilter, eventType: eventTypeFilter, contractors: contractorsFilter, sort, direction: sort === 'createdAt' || sort === 'updatedAt' ? 'desc' : 'asc' }),
-    [page, activeTab, search, statusFilter, vendorFilter, eventTypeFilter, contractorsFilter, sort],
+    () => queryEvents({ page, pageSize: 25, view: activeTab === 'completed' ? 'completed' : 'active', search, groupId, status: statusFilter, vendor: vendorFilter, eventType: eventTypeFilter, contractors: contractorsFilter, sort, direction: sort === 'createdAt' || sort === 'updatedAt' ? 'desc' : 'asc' }),
+    [page, activeTab, search, groupId, statusFilter, vendorFilter, eventTypeFilter, contractorsFilter, sort],
   );
   useContractorHydration([...pagedEvents, ...calendarEvents].flatMap((event) => (event.contractorBookings || []).map((booking) => booking.contractorId)));
   useEffect(() => { setPage(1); }, [activeTab, search, statusFilter, vendorFilter, eventTypeFilter, contractorsFilter]);
@@ -109,6 +111,7 @@ export default function EventsPage() {
         from, to,
         view: 'active',
         search,
+        groupId,
         status: statusFilter,
         vendor: vendorFilter,
         eventType: eventTypeFilter,
@@ -122,7 +125,7 @@ export default function EventsPage() {
     } finally {
       setCalendarLoading(false);
     }
-  }, [search, statusFilter, vendorFilter, eventTypeFilter, contractorsFilter]);
+  }, [search, groupId, statusFilter, vendorFilter, eventTypeFilter, contractorsFilter]);
 
   return (
     <div>
@@ -130,7 +133,7 @@ export default function EventsPage() {
         <h2 className="text-2xl font-bold text-slate-800">Events</h2>
         <button
           type="button"
-          onClick={() => navigate('/events/new')}
+          onClick={() => navigate(groupId ? `/events/new?groupId=${groupId}` : '/events/new')}
           disabled={!canEdit}
           data-testid="events-add-button"
           className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
