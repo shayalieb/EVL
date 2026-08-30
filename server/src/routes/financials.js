@@ -139,7 +139,7 @@ router.get('/summary', requireFinancialPermission('viewFinancials'), asyncHandle
         missingRateRows.push({ assignmentId: booking.id || booking.contractorId, eventId: event.id, eventName: event.name, eventDate: event.eventDate, bookingId: relatedBooking?.id || null, bookingName: relatedBooking?.eventName || null, contractorId: booking.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor' });
       }
       if (amount !== null && amount > 0) {
-        const timing = contractorPaymentTiming(booking.paymentDueDate);
+        const timing = contractorPaymentTiming({ dueDate: booking.paymentDueDate, eventDate: event.eventDate });
         const row = { assignmentId: booking.id || booking.contractorId, eventId: event.id, eventName: event.name, eventDate: event.eventDate, bookingId: relatedBooking?.id || null, bookingName: relatedBooking?.eventName || null, paymentDueDate: booking.paymentDueDate || null, contractorId: booking.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor', amount, ...timing };
         contractorCostRows.push(row);
         if (booking.paymentStatus !== 'paid') {
@@ -162,7 +162,7 @@ router.get('/summary', requireFinancialPermission('viewFinancials'), asyncHandle
     return billed > 0 ? { bookingId: booking.id, eventId: event?.id || null, name: booking.eventName || event?.name || 'Untitled booking', billed, ...snapshot } : null;
   }).filter(Boolean).sort((a, b) => b.billed - a.billed).slice(0, 10);
   const paymentPriority = { overdue: 0, due: 1, missing: 2, upcoming: 3 };
-  payableRows.sort((a, b) => paymentPriority[a.status] - paymentPriority[b.status] || (a.paymentDueDate || '').localeCompare(b.paymentDueDate || '') || b.amount - a.amount);
+  payableRows.sort((a, b) => paymentPriority[a.status] - paymentPriority[b.status] || (a.effectiveDueDate || '').localeCompare(b.effectiveDueDate || '') || b.amount - a.amount);
   res.json({ summary: {
     inflow: inflowCents / 100, outflow: outflowCents / 100, netCash: (inflowCents - outflowCents) / 100,
     accountsReceivable: receivableCents / 100, accountsPayable: payableRows.reduce((sum, row) => sum + row.amount, 0), payableCount: payableRows.length, payables: payableRows.slice(0, 10), missingRateCount: missingRateRows.length, missingRates: missingRateRows.slice(0, 10), profitability,
@@ -184,7 +184,7 @@ router.patch('/contractor-payments/:eventId/:assignmentId', requireFinancialPerm
   if (!markPaid) {
     assignments[assignmentIndex] = { ...existing, paymentDueDate: paymentDueDate || null };
     await prisma.event.update({ where: { id: event.id }, data: { contractorBookings: assignments } });
-    return res.json({ payment: { eventId: event.id, assignmentId: req.params.assignmentId, paymentDueDate: paymentDueDate || null, ...contractorPaymentTiming(paymentDueDate || null) } });
+    return res.json({ payment: { eventId: event.id, assignmentId: req.params.assignmentId, paymentDueDate: paymentDueDate || null, ...contractorPaymentTiming({ dueDate: paymentDueDate || null, eventDate: event.eventDate }) } });
   }
   if (existing.paymentStatus === 'paid') return res.status(409).json({ error: 'This contractor payment is already marked paid.' });
   const amount = Number(req.body?.amount);
@@ -253,13 +253,13 @@ router.get('/reports', requireFinancialPermission('viewFinancials'), asyncHandle
       const expectedAmount = contractorAssignmentCost(assignment, contractor);
       if (expectedAmount === null) { incompleteEventCosts.add(event.id); continue; }
       if (assignment.paymentStatus !== 'paid' && inIsoDateRange(event.eventDate, from, to)) {
-        const timing = contractorPaymentTiming(assignment.paymentDueDate, asOf.toISOString().slice(0, 10));
+        const timing = contractorPaymentTiming({ dueDate: assignment.paymentDueDate, eventDate: event.eventDate, today: asOf.toISOString().slice(0, 10) });
         payables.push({ assignmentId: assignment.id || assignment.contractorId, eventId: event.id, eventName: event.name || 'Untitled event', eventDate: event.eventDate, paymentDueDate: assignment.paymentDueDate || null, contractorId: assignment.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor', expectedAmount, pricingComplete: true, ...timing });
       }
     }
   }
   const payablePriority = { overdue: 0, due: 1, missing: 2, upcoming: 3 };
-  payables.sort((a, b) => payablePriority[a.status] - payablePriority[b.status] || (a.paymentDueDate || '').localeCompare(b.paymentDueDate || '') || b.expectedAmount - a.expectedAmount);
+  payables.sort((a, b) => payablePriority[a.status] - payablePriority[b.status] || (a.effectiveDueDate || '').localeCompare(b.effectiveDueDate || '') || b.expectedAmount - a.expectedAmount);
 
   const qualityIssues = [];
   const invoicesWithoutDueDate = scopedInvoices.filter((invoice) => !invoice.dueDate && Math.max(0, invoiceTotal(invoice) - (Number(invoice.paidAmount) || 0)) > 0);

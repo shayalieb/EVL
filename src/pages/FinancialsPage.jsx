@@ -41,12 +41,12 @@ function ReceivablesReport({ report }) {
 
 function PaymentStatus({ row }) {
   const styles = { overdue: 'bg-rose-100 text-rose-700', due: 'bg-amber-100 text-amber-800', missing: 'bg-slate-100 text-slate-600', upcoming: 'bg-blue-100 text-blue-700' };
-  return <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${styles[row.status] || styles.missing}`}>{row.label || 'Payment date missing'}</span>;
+  return <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${styles[row.status] || styles.missing}`}>{row.label || 'No due date set'}</span>;
 }
 
 function PaymentActions({ row, canRecord, savingDueDate, onDueDate, onPay }) {
   if (!canRecord) return null;
-  return <div className="flex min-w-44 flex-col items-end gap-2"><label className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Due date<input type="date" value={row.paymentDueDate || ''} disabled={savingDueDate === row.assignmentId} onChange={(event) => onDueDate(row, event.target.value)} className="mt-1 min-h-10 rounded-lg border border-slate-200 px-2 text-sm text-slate-700 disabled:opacity-60" /></label><button type="button" onClick={() => onPay(row)} className="min-h-10 rounded-lg bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-700">Mark paid</button></div>;
+  return <div className="flex min-w-44 flex-col items-end gap-2"><label className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Due date<input type="date" value={row.paymentDueDate || row.effectiveDueDate || ''} disabled={savingDueDate === row.assignmentId} onChange={(event) => onDueDate(row, event.target.value)} className="mt-1 min-h-10 rounded-lg border border-slate-200 px-2 text-sm text-slate-700 disabled:opacity-60" />{row.dueDateIsDefault && <span className="mt-1 block text-[11px] font-normal normal-case text-slate-400">Defaults to the event date — set your own to override.</span>}</label><button type="button" onClick={() => onPay(row)} className="min-h-10 rounded-lg bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-700">Mark paid</button></div>;
 }
 
 function PayablesReport({ report, canRecord, savingDueDate, onDueDate, onPay }) {

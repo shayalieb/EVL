@@ -57,14 +57,22 @@ export function bookingProfitabilitySnapshot({ billed, event, assignments = [], 
   };
 }
 
-export function contractorPaymentTiming(dueDate, today = new Date().toISOString().slice(0, 10)) {
-  if (!dueDate) return { status: 'missing', label: 'Payment date missing', overdueDays: 0 };
-  if (dueDate < today) {
-    const overdueDays = dateDaysBetween(new Date(`${today}T12:00:00.000Z`), new Date(`${dueDate}T12:00:00.000Z`));
-    return { status: 'overdue', label: `${overdueDays} day${overdueDays === 1 ? '' : 's'} overdue`, overdueDays };
+// A contractor payment with no explicit due date defaults to "due by the
+// event date" instead of showing as perpetually missing — every gig has a
+// date already, so there's no reason a payment due date should start blank.
+// effectiveDueDate/dueDateIsDefault let the client show what date is
+// actually in effect and make clear when it's a default versus something
+// someone explicitly chose.
+export function contractorPaymentTiming({ dueDate, eventDate, today = new Date().toISOString().slice(0, 10) } = {}) {
+  const effectiveDueDate = dueDate || eventDate || null;
+  const dueDateIsDefault = !dueDate && !!eventDate;
+  if (!effectiveDueDate) return { status: 'missing', label: 'No due date set', overdueDays: 0, effectiveDueDate: null, dueDateIsDefault: false };
+  if (effectiveDueDate < today) {
+    const overdueDays = dateDaysBetween(new Date(`${today}T12:00:00.000Z`), new Date(`${effectiveDueDate}T12:00:00.000Z`));
+    return { status: 'overdue', label: `${overdueDays} day${overdueDays === 1 ? '' : 's'} overdue`, overdueDays, effectiveDueDate, dueDateIsDefault };
   }
-  if (dueDate === today) return { status: 'due', label: 'Due today', overdueDays: 0 };
-  return { status: 'upcoming', label: 'Upcoming', overdueDays: 0 };
+  if (effectiveDueDate === today) return { status: 'due', label: 'Due today', overdueDays: 0, effectiveDueDate, dueDateIsDefault };
+  return { status: 'upcoming', label: 'Upcoming', overdueDays: 0, effectiveDueDate, dueDateIsDefault };
 }
 
 export function inIsoDateRange(value, from, to) {
