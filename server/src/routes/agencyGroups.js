@@ -25,6 +25,19 @@ function cleanStationery(input = {}) {
   };
 }
 
+function cleanLogo(input) {
+  const logo = String(input || '').trim();
+  if (!logo) return null;
+  const isImageData = /^data:image\/(png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(logo);
+  const isWebUrl = /^https:\/\/[^\s]+$/i.test(logo);
+  if ((!isImageData && !isWebUrl) || logo.length > 750000) {
+    const error = new Error('Upload a valid PNG, JPG, or WebP logo.');
+    error.status = 400;
+    throw error;
+  }
+  return logo;
+}
+
 function serialize(group, stats = {}) {
   return { ...group, stationery: group.stationery || {}, stats: { activeBookings: 0, upcomingEvents: 0, completedEvents: 0, revenue: 0, ...stats } };
 }
@@ -48,7 +61,7 @@ router.post('/', asyncHandler(async (req, res) => {
   if (!name) return res.status(400).json({ error: 'Group name is required.' });
   const [account, groupCount] = await Promise.all([prisma.account.findUnique({ where: { id: req.membership.accountId }, select: { agencyGroupLimit: true } }), prisma.agencyGroup.count({ where: { accountId: req.membership.accountId, active: true } })]);
   if (account?.agencyGroupLimit && groupCount >= account.agencyGroupLimit) return res.status(409).json({ error: `Your Agency plan includes ${account.agencyGroupLimit} active groups. Increase the group count in Plan settings before adding another.` });
-  const group = await prisma.agencyGroup.create({ data: { accountId: req.membership.accountId, name: name.slice(0, 140), description: String(req.body?.description || '').trim().slice(0, 2000) || null, logo: String(req.body?.logo || '').slice(0, 100000) || null, stationery: cleanStationery(req.body?.stationery) } });
+  const group = await prisma.agencyGroup.create({ data: { accountId: req.membership.accountId, name: name.slice(0, 140), description: String(req.body?.description || '').trim().slice(0, 2000) || null, logo: cleanLogo(req.body?.logo), stationery: cleanStationery(req.body?.stationery) } });
   res.status(201).json({ group: serialize(group) });
 }));
 
@@ -63,7 +76,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   const data = {};
   if (req.body?.name !== undefined) { const name = String(req.body.name).trim(); if (!name) return res.status(400).json({ error: 'Group name is required.' }); data.name = name.slice(0, 140); }
   if (req.body?.description !== undefined) data.description = String(req.body.description).trim().slice(0, 2000) || null;
-  if (req.body?.logo !== undefined) data.logo = String(req.body.logo).slice(0, 100000) || null;
+  if (req.body?.logo !== undefined) data.logo = cleanLogo(req.body.logo);
   if (req.body?.stationery !== undefined) data.stationery = cleanStationery(req.body.stationery);
   if (req.body?.active !== undefined) data.active = req.body.active === true;
   const group = await prisma.agencyGroup.update({ where: { id: existing.id }, data });
