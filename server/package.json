@@ -21,6 +21,7 @@
     "backfill:storage": "node scripts/backfillFileStorage.js",
     "migrate:storage:railway": "node scripts/migrateStorageToRailway.js",
     "backfill:share-token-hash": "node scripts/backfillShareTokenHash.js",
+    "cleanup:contractor-due-dates": "node scripts/cleanupInvalidContractorDueDates.js",
     "setup:billing-plans": "node scripts/setupBillingPlans.js"
   },
   "dependencies": {

@@ -22,7 +22,8 @@ export function SavingIndicatorProvider({ children }) {
       <div
         data-testid="saving-indicator"
         className={`fixed bottom-4 left-4 z-50 transition-opacity duration-300 ${visible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-        aria-live="polite"
+        aria-hidden={!visible}
+        aria-live={visible ? 'polite' : 'off'}
       >
         <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium text-white bg-slate-800">
           <span className="w-3 h-3 rounded-full border-2 border-white/40 border-t-white animate-spin" />
