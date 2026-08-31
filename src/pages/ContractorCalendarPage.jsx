@@ -7,7 +7,12 @@ import { Skeleton, SkeletonTable } from '../components/ui/Skeleton';
 import Modal from '../components/ui/Modal';
 import { formatCurrency as currency } from '../lib/format';
 
-const PAYMENT_METHOD_LABELS = { ach: 'ACH', check: 'Check', card: 'Credit/Debit Card', other: 'Other' };
+const PAYMENT_METHOD_LABELS = { ach: 'ACH', check: 'Check', card: 'Credit/Debit Card', cash: 'Cash', wire: 'Wire', other: 'Other' };
+
+function friendlyDate(value) {
+  if (!value) return null;
+  return new Date(`${value}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
 
 const BUCKET_COLORS = [
   { id: 'confirmed', color: '#22c55e' },
@@ -160,8 +165,11 @@ export default function ContractorCalendarPage() {
                           data-testid="contractor-calendar-gig-paid-badge"
                           className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700"
                         >
-                          💰 Paid
+                          ✓ Paid
                         </span>
+                      )}
+                      {g.paymentStatus !== 'paid' && (
+                        <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Payment pending</span>
                       )}
                     </div>
                     <div className="text-xs text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-2">
@@ -254,14 +262,23 @@ export default function ContractorCalendarPage() {
             <div className="space-y-1">
               <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Payment</div>
               {selectedGig.paymentStatus === 'paid' ? (
-                <div data-testid="contractor-gig-detail-payment-paid" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs bg-indigo-50 text-indigo-700 p-2.5 rounded-lg border border-indigo-100">
-                  <span className="font-bold text-sm">💰 Paid{selectedGig.paidAmount != null ? ` — ${currency(selectedGig.paidAmount)}` : ''}</span>
-                  {selectedGig.paidAt && <span>{new Date(`${selectedGig.paidAt}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
-                  {selectedGig.paymentMethod && <span>{PAYMENT_METHOD_LABELS[selectedGig.paymentMethod] || selectedGig.paymentMethod}</span>}
+                <div data-testid="contractor-gig-detail-payment-paid" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                  <div className="mb-3 flex items-center gap-2 text-sm font-bold text-emerald-800"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">✓</span>Paid</div>
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+                    <div><dt className="font-semibold text-emerald-700">Amount paid</dt><dd className="mt-0.5 text-sm font-bold text-slate-800">{selectedGig.paidAmount != null ? currency(selectedGig.paidAmount) : 'Not recorded'}</dd></div>
+                    <div><dt className="font-semibold text-emerald-700">Paid on</dt><dd className="mt-0.5 text-slate-800">{friendlyDate(selectedGig.paidAt) || 'Not recorded'}</dd></div>
+                    <div><dt className="font-semibold text-emerald-700">Method</dt><dd className="mt-0.5 text-slate-800">{PAYMENT_METHOD_LABELS[selectedGig.paymentMethod] || selectedGig.paymentMethod || 'Not recorded'}</dd></div>
+                    {selectedGig.paymentReference && <div><dt className="font-semibold text-emerald-700">Reference</dt><dd className="mt-0.5 break-words text-slate-800">{selectedGig.paymentReference}</dd></div>}
+                    {selectedGig.paymentDueDate && <div><dt className="font-semibold text-emerald-700">Originally due</dt><dd className="mt-0.5 text-slate-800">{friendlyDate(selectedGig.paymentDueDate)}</dd></div>}
+                  </dl>
                 </div>
               ) : (
-                <div data-testid="contractor-gig-detail-payment-unpaid" className="text-xs text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                  Not yet paid
+                <div data-testid="contractor-gig-detail-payment-unpaid" className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <div className="text-sm font-bold text-amber-800">Payment pending</div>
+                  <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+                    <div><dt className="font-semibold text-amber-700">Expected pay</dt><dd className="mt-0.5 text-sm font-bold text-slate-800">{selectedGig.expectedAmount != null ? currency(selectedGig.expectedAmount) : 'Rate not set'}</dd></div>
+                    <div><dt className="font-semibold text-amber-700">Expected by</dt><dd className="mt-0.5 text-slate-800">{friendlyDate(selectedGig.paymentDueDate) || 'Not scheduled'}{selectedGig.paymentDueDateIsDefault ? ' (event date)' : ''}</dd></div>
+                  </dl>
                 </div>
               )}
             </div>

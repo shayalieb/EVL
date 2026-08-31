@@ -4,6 +4,8 @@ import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { hashToken } from '../lib/resetToken.js';
 import { statusBucket } from '../lib/inquiryStatusBucket.js';
+import { contractorAssignmentCost, contractorPaymentTiming } from '../lib/financialReports.js';
+import { contractorCalendarPaymentInfo } from '../lib/contractorCalendarPayment.js';
 
 // Public (unauthenticated, token-based) — mounted separately in index.js,
 // same separation as publicRsvpRouter. See contractors.js's
@@ -30,8 +32,8 @@ async function findLinkByToken(token) {
 // Only what a contractor needs to see their own gig on the calendar — same
 // "narrow projection for a public route" reasoning as guests.js's
 // publicEventInfo, plus the derived `bucket` this route computes.
-function publicGigInfo(event, booking, bucket) {
-  const isPaid = booking?.paymentStatus === 'paid';
+function publicGigInfo(event, booking, bucket, expectedAmount) {
+  const paymentTiming = contractorPaymentTiming({ dueDate: booking?.paymentDueDate, eventDate: event.eventDate });
   return {
     id: event.id,
     name: event.name || '',
@@ -48,13 +50,9 @@ function publicGigInfo(event, booking, bucket) {
       notes: event.venue?.notes || '',
     },
     bucket,
-    // Manual payment tracking mirrors EventFormPage's markContractorPaid —
-    // only surface amount/date/method once actually marked paid, not the
-    // business's other bookkeeping fields (check number, memo).
-    paymentStatus: isPaid ? 'paid' : 'unpaid',
-    paidAmount: isPaid ? (booking.paidAmount ?? null) : null,
-    paidAt: isPaid ? (booking.paidAt ?? null) : null,
-    paymentMethod: isPaid ? (booking.paymentMethod ?? null) : null,
+    // This token is scoped to one contractor, so it can show that person's
+    // own payment details. Internal bookkeeping memos remain private.
+    ...contractorCalendarPaymentInfo(booking, expectedAmount, paymentTiming),
   };
 }
 
@@ -87,7 +85,7 @@ publicContractorCalendarRouter.get('/:token', calendarViewLimiter, asyncHandler(
   if (!link) return res.status(404).json({ error: 'This link is invalid.' });
 
   const [contractor, accountData, events] = await Promise.all([
-    prisma.contractor.findUnique({ where: { id: link.contractorId }, select: { id: true, firstName: true, accountId: true } }),
+    prisma.contractor.findUnique({ where: { id: link.contractorId }, select: { id: true, firstName: true, accountId: true, pricingTiers: true } }),
     prisma.accountData.findUnique({ where: { accountId: link.accountId } }),
     prisma.event.findMany({
       where: { accountId: link.accountId, deletedAt: null },
@@ -106,7 +104,7 @@ publicContractorCalendarRouter.get('/:token', calendarViewLimiter, asyncHandler(
     if (bucket === 'unavailable') continue; // not really "their" gig anymore
     if (bucket === 'confirmed' && !link.showConfirmed) continue;
     if (bucket === 'tentative' && !link.showTentative) continue;
-    gigs.push(publicGigInfo(event, booking, bucket));
+    gigs.push(publicGigInfo(event, booking, bucket, contractorAssignmentCost(booking, contractor)));
   }
   gigs.sort((a, b) => (a.eventDate || '').localeCompare(b.eventDate || ''));
 

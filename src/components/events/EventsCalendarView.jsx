@@ -158,7 +158,7 @@ export default function EventsCalendarView({ events, eventStatuses, onSelectEven
                       className="w-full text-left px-1.5 py-0.5 rounded truncate text-xs font-medium hover:opacity-80"
                       style={{ backgroundColor: `${color}22`, color }}
                     >
-                      {evt.paid && <span title="Paid">💰</span>} {evt.name}
+                      {evt.paid && <span aria-label="Paid" title="Paid" className="mr-0.5 font-bold">✓</span>}{evt.name}
                     </button>
                   );
                 })}
