@@ -191,6 +191,10 @@ router.post('/', asyncHandler(async (req, res) => {
     if (rest[field] !== undefined) data[field] = rest[field];
   }
   if (data.groupId && !await prisma.agencyGroup.findFirst({ where: { id: data.groupId, accountId: req.membership.accountId, active: true } })) return res.status(400).json({ error: 'Invalid managed group.' });
+  // groupId is a real foreign key (unlike clientId's loose-string pattern
+  // elsewhere in this schema) — an empty string isn't "no group" to Postgres
+  // the way it is to the check above, and fails the constraint outright.
+  if (!data.groupId) data.groupId = null;
   // Historical blob records predate some of these fields entirely (e.g. the
   // seed sample event has no `history`) — default defensively rather than
   // assuming presence, since the blob-migration path (AuthContext.jsx)
@@ -218,6 +222,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     if (req.body?.[field] !== undefined) data[field] = req.body[field];
   }
   if (data.groupId && !await prisma.agencyGroup.findFirst({ where: { id: data.groupId, accountId: req.membership.accountId, active: true } })) return res.status(400).json({ error: 'Invalid managed group.' });
+  if (data.groupId === '') data.groupId = null;
 
   const booking = await prisma.booking.update({ where: { id: existing.id }, data });
   res.json({ booking: serializeBooking(booking) });
