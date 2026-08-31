@@ -131,7 +131,7 @@ export default function ContractorPickerRow({
               onChange={(e) => setSelectedTemplateId(e.target.value)}
               disabled={!hasValidEmail}
               data-testid="contractor-picker-row-template-select"
-              className={`shrink-0 w-36 px-2 py-1.5 rounded-lg border border-slate-300 text-xs ${hasValidEmail ? '' : 'invisible'}`}
+              className={`shrink-0 w-36 px-2 py-1.5 rounded-lg border border-slate-300 text-xs ${hasValidEmail ? '' : 'hidden'}`}
             >
               <option value="">Select template…</option>
               {emailTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -141,7 +141,7 @@ export default function ContractorPickerRow({
               onClick={handleSend}
               disabled={!hasValidEmail || !selectedTemplateId}
               data-testid="contractor-picker-row-send-email-button"
-              className={`${sendEmailButtonClass} ${hasValidEmail ? '' : 'invisible'}`}
+              className={`${sendEmailButtonClass} ${hasValidEmail ? '' : 'hidden'}`}
             >
               Send Email
             </button>
@@ -232,7 +232,7 @@ export default function ContractorPickerRow({
         </button>
       </div>
 
-      <div className="flex items-center gap-2 px-3.5 pb-3.5 pl-9">
+      <div className="flex flex-wrap items-center gap-2 px-3.5 pb-3.5 sm:pl-9">
         <label className="text-xs font-semibold text-slate-400">Start</label>
         <input
           type="time"
@@ -252,7 +252,7 @@ export default function ContractorPickerRow({
       </div>
 
       {tierTracksOvertime && (
-        <div className="flex items-center gap-2 px-3.5 pb-3.5 pl-9">
+        <div className="flex flex-wrap items-center gap-2 px-3.5 pb-3.5 sm:pl-9">
           <label className="text-xs font-semibold text-slate-400">OT Hours</label>
           <input
             type="number"

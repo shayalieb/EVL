@@ -1378,7 +1378,7 @@ export default function EventFormPage() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
+      <div className="sticky top-0 z-20 -mx-4 mb-4 flex flex-wrap items-center justify-between gap-3 bg-slate-50 px-4 pb-3 pt-1 shadow-[0_4px_6px_-6px_rgba(0,0,0,0.1)] sm:mx-0 sm:mb-6 sm:gap-4 sm:px-0">
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
@@ -1391,13 +1391,13 @@ export default function EventFormPage() {
           </button>
           <h2 className="text-2xl font-bold text-slate-800 truncate">{isEditing ? event.name : 'Add Event'}</h2>
         </div>
-        <div className="flex gap-2 shrink-0">
+        <div className="flex w-full gap-2 overflow-x-auto pb-1 sm:w-auto sm:shrink-0 sm:pb-0">
           {isEditing && sourceBooking && (
             <button
               type="button"
               onClick={() => navigate(`/bookings/${sourceBooking.id}`)}
               data-testid="event-form-view-booking-button"
-              className="px-4 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
+              className="min-h-11 shrink-0 px-4 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
             >
               View Booking →
             </button>
@@ -1407,7 +1407,7 @@ export default function EventFormPage() {
               type="button"
               onClick={() => setStagePlotModalOpen(true)}
               data-testid="event-form-stage-plot-link"
-              className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
+              className="min-h-11 shrink-0 px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
             >
               Stage Plot
             </button>
@@ -1416,7 +1416,7 @@ export default function EventFormPage() {
             <Link
               to={`/events/${eventId}/set-lists`}
               data-testid="event-form-set-lists-link"
-              className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
+              className="min-h-11 shrink-0 px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
             >
               Set Lists
             </Link>
@@ -1425,7 +1425,7 @@ export default function EventFormPage() {
             <Link
               to={`/events/${eventId}/floor-plan`}
               data-testid="event-form-floor-plan-link"
-              className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
+              className="min-h-11 shrink-0 px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
             >
               Floor Plan
             </Link>
@@ -1435,15 +1435,15 @@ export default function EventFormPage() {
               type="button"
               onClick={() => setHistoryModalOpen(true)}
               data-testid="event-form-history-button"
-              className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
+              className="min-h-11 shrink-0 px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
             >
               History
             </button>
           )}
-          <button type="button" onClick={handleLeaveWithoutSaving} data-testid="event-form-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">
+          <button type="button" onClick={handleLeaveWithoutSaving} data-testid="event-form-cancel-button" className="min-h-11 shrink-0 px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">
             Cancel
           </button>
-          <button type="button" onClick={handleSaveDraft} data-testid="event-form-save-draft-button" className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+          <button type="button" onClick={handleSaveDraft} data-testid="event-form-save-draft-button" className="min-h-11 shrink-0 px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-slate-50">
             Save as Draft
           </button>
           <button
@@ -1451,7 +1451,7 @@ export default function EventFormPage() {
             form="event-form"
             disabled={saving}
             data-testid="event-form-submit-button"
-            className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
+            className="min-h-11 shrink-0 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
           >
             {saving && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
             {isEditing ? 'Save Changes' : 'Add Event'}
