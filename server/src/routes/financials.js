@@ -180,7 +180,11 @@ router.patch('/contractor-payments/:eventId/:assignmentId', requireFinancialPerm
   const paymentDueDate = req.body?.paymentDueDate;
   const markPaid = req.body?.markPaid === true;
   if (!markPaid && paymentDueDate === undefined) return res.status(400).json({ error: 'Select a payment due date or mark the payment paid.' });
-  if (paymentDueDate !== undefined && paymentDueDate !== null && paymentDueDate !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(paymentDueDate)) return res.status(400).json({ error: 'Select a valid payment due date.' });
+  // Requires a plausible 4-digit year, not just any 4 digits — a native
+  // <input type="date"> can commit a partial year while someone's still
+  // typing (e.g. "0002" instead of "2026"), and a bare \d{4} would happily
+  // accept that and later render as "45320 days overdue."
+  if (paymentDueDate !== undefined && paymentDueDate !== null && paymentDueDate !== '' && !/^(19|20)\d{2}-\d{2}-\d{2}$/.test(paymentDueDate)) return res.status(400).json({ error: 'Select a valid payment due date.' });
   if (!markPaid) {
     assignments[assignmentIndex] = { ...existing, paymentDueDate: paymentDueDate || null };
     await prisma.event.update({ where: { id: event.id }, data: { contractorBookings: assignments } });
