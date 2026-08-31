@@ -35,6 +35,7 @@ import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
 import { isWedding } from '../lib/eventType';
 import AgencyGroupSelect from '../components/AgencyGroupSelect';
 import { useAgencyBranding } from '../lib/useAgencyBranding';
+import { depositPaymentState } from '../lib/depositPaymentState';
 
 const StagePlotEditorPage = lazy(() => import('./StagePlotEditorPage'));
 
@@ -688,9 +689,11 @@ export default function EventFormPage() {
   // date-only strings parsed at local midnight (same pattern as the
   // eventDate formatting elsewhere on this page) so this doesn't drift a
   // day off around a UTC boundary.
+  const depositState = depositPaymentState({ amount: sourceBooking?.depositAmount, bookingPaid: sourceBooking?.depositPaid, invoices: eventInvoices });
   const depositInfo = sourceBooking?.depositAmount ? {
     amount: Number(sourceBooking.depositAmount) || 0,
-    paid: !!sourceBooking.depositPaid,
+    paid: depositState.paid,
+    paidViaInvoices: depositState.paidViaInvoices,
     dueDate: sourceBooking.depositDueDate,
     daysUntilDue: sourceBooking.depositDueDate
       ? Math.round((new Date(`${sourceBooking.depositDueDate}T00:00:00`) - new Date(new Date().toDateString())) / 86400000)
@@ -2515,7 +2518,7 @@ export default function EventFormPage() {
                         >
                           {currency(depositInfo.amount)} deposit —{' '}
                           {depositInfo.paid
-                            ? 'paid'
+                            ? depositInfo.paidViaInvoices ? 'paid through invoices' : 'paid'
                             : depositOverdue
                             ? `${Math.abs(depositInfo.daysUntilDue)} day${Math.abs(depositInfo.daysUntilDue) === 1 ? '' : 's'} overdue`
                             : depositInfo.daysUntilDue === 0
