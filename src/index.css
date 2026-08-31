@@ -57,3 +57,74 @@ details > summary::-webkit-details-marker { display: none; }
   to { opacity: 1; transform: translateY(0); }
 }
 .animate-toast-in { animation: toast-in 0.15s ease-out; }
+
+/* Financial payment history becomes a scannable card list on phones instead
+   of making users pan a five-column table sideways. The accessible table
+   markup remains intact for larger screens and assistive technology. */
+@media (max-width: 639px) {
+  section:has(input[aria-label="Search payment history"]) .overflow-x-auto {
+    overflow: visible;
+  }
+
+  section:has(input[aria-label="Search payment history"]) table,
+  section:has(input[aria-label="Search payment history"]) tbody {
+    display: block;
+    width: 100%;
+  }
+
+  section:has(input[aria-label="Search payment history"]) thead {
+    display: none;
+  }
+
+  section:has(input[aria-label="Search payment history"]) tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem 0.75rem;
+    padding: 1rem;
+    border-bottom: 1px solid #f1f5f9;
+  }
+
+  section:has(input[aria-label="Search payment history"]) tbody td {
+    padding: 0;
+  }
+
+  section:has(input[aria-label="Search payment history"]) tbody td:nth-child(1) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    font-size: 0.75rem;
+  }
+
+  section:has(input[aria-label="Search payment history"]) tbody td:nth-child(2) {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  section:has(input[aria-label="Search payment history"]) tbody td:nth-child(3) {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+
+  section:has(input[aria-label="Search payment history"]) tbody td:nth-child(4) {
+    grid-column: 2;
+    grid-row: 1;
+    white-space: nowrap;
+  }
+
+  section:has(input[aria-label="Search payment history"]) tbody td:nth-child(5) {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    border-top: 1px solid #f1f5f9;
+    padding-top: 0.25rem;
+  }
+
+  section:has(input[aria-label="Search payment history"]) tbody tr:has(td[colspan]) {
+    display: block;
+    padding: 0;
+  }
+
+  section:has(input[aria-label="Search payment history"]) tbody tr:has(td[colspan]) td {
+    padding: 2.5rem 1.25rem;
+    text-align: center;
+  }
+}
