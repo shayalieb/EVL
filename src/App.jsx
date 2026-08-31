@@ -50,6 +50,9 @@ const StagePlotLibraryPage = lazy(() => import('./pages/StagePlotLibraryPage'));
 const StagePlotLibraryEditorPage = lazy(() => import('./pages/StagePlotLibraryEditorPage'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const CustomerStoriesPage = lazy(() => import('./pages/CustomerStoriesPage'));
+const TermsOfServicePage = lazy(() => import('./pages/TermsOfServicePage'));
+const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'));
+const CookiePolicyPage = lazy(() => import('./pages/CookiePolicyPage'));
 const AgencyGroupsPage = lazy(() => import('./pages/AgencyGroupsPage'));
 const FinancialsPage = lazy(() => import('./pages/FinancialsPage'));
 const ReviewSubmissionPage = lazy(() => import('./pages/ReviewSubmissionPage'));
@@ -164,6 +167,9 @@ function AppRoutes() {
       <Routes>
       <Route path="/auth" element={<AuthGate><AuthPage /></AuthGate>} />
       <Route path="/customer-stories" element={<CustomerStoriesPage />} />
+      <Route path="/terms" element={<TermsOfServicePage />} />
+      <Route path="/privacy" element={<PrivacyPolicyPage />} />
+      <Route path="/cookies" element={<CookiePolicyPage />} />
       <Route path="/review/:token" element={<ReviewSubmissionPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/sign/:token" element={<ContractSignPage />} />

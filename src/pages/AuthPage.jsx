@@ -216,6 +216,9 @@ export default function AuthPage() {
                 ))}
               </div>
             </div>
+            <p className="text-center text-xs text-slate-400">
+              By creating an account, you agree to our <Link to="/terms" target="_blank" rel="noreferrer" className="font-semibold text-indigo-600 hover:underline">Terms of Service</Link> and <Link to="/privacy" target="_blank" rel="noreferrer" className="font-semibold text-indigo-600 hover:underline">Privacy Policy</Link>.
+            </p>
             <SubmitButton loading={submitting} testId="auth-signup-submit-button">Create Account</SubmitButton>
             <button type="button" onClick={() => switchTab('signin')} className="w-full text-sm font-semibold text-slate-500 hover:text-slate-700">Back to sign in</button>
           </form>

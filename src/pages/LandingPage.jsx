@@ -821,8 +821,13 @@ export default function LandingPage() {
               <Link to="/auth" className="text-sm font-medium text-slate-500 hover:text-indigo-700 transition-colors">{navigation?.login || 'Log In'}</Link>
             </nav>
           </div>
-          <div className="mt-6 pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-400">
+          <div className="mt-6 pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
             <p>{footerContent?.tagline || 'GigWorks — built for the gig.'}</p>
+            <nav className="flex items-center gap-4">
+              <Link to="/terms" className="hover:text-indigo-700 transition-colors">Terms</Link>
+              <Link to="/privacy" className="hover:text-indigo-700 transition-colors">Privacy</Link>
+              <Link to="/cookies" className="hover:text-indigo-700 transition-colors">Cookies</Link>
+            </nav>
             <p>© {new Date().getFullYear()} GigWorks. All rights reserved.</p>
           </div>
         </div>

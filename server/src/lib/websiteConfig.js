@@ -98,6 +98,12 @@ export const DEFAULT_WEBSITE_CONFIG = {
   waitlist: { heading: 'Get Waitlisted', description: "GigWorks is currently onboarding a small first group of agencies and bandleaders directly. Join the waitlist and I'll reach out personally.", success: "You're on the list — thanks for the interest. I'll be in touch soon.", submitLabel: 'Join the Waitlist', namePlaceholder: 'Your name', emailPlaceholder: 'Email address', businessPlaceholder: 'Business or band name (optional)' },
   contact: { heading: 'Get in Touch', description: 'Have a question, or want to talk through whether this fits how your business runs? Send a message directly.', success: "Got it — thanks for reaching out. I'll reply personally as soon as I can.", submitLabel: 'Send Message', namePlaceholder: 'Your name', emailPlaceholder: 'Email address', messagePlaceholder: "What's on your mind?" },
   footer: { tagline: 'GigWorks — built for the gig.' },
+  // Backs the Terms of Service / Privacy Policy / Cookie Policy pages
+  // (src/pages/TermsOfServicePage.jsx etc.) — kept admin-editable rather
+  // than hardcoded into those pages, same reasoning as every other section
+  // here. The prose on those pages itself stays static; only these
+  // identifying details are configurable.
+  legal: { entityName: 'GigWorks', governingLaw: 'New York', contactEmail: 'shaya.gigworks@gmail.com', effectiveDate: '2026-08-31' },
 };
 
 function text(value, fallback, max = 1000) { return typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : fallback; }
@@ -169,6 +175,7 @@ export function normalizeWebsiteConfig(input = {}) {
     waitlist: section(input.waitlist, d.waitlist),
     contact: section(input.contact, d.contact),
     footer: section(input.footer, d.footer),
+    legal: section(input.legal, d.legal, { entityName: 200, governingLaw: 100, contactEmail: 200, effectiveDate: 20 }),
   };
 }
 

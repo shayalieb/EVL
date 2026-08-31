@@ -7,7 +7,7 @@ const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm 
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 const TABS = [
   ['launch', 'Launch'], ['hero', 'Navigation & Hero'], ['story', 'Story'], ['problems', 'Problems'],
-  ['features', 'Features'], ['agency', 'Agency Tier'], ['reviews', 'Reviews & Stories'], ['pricing', 'Pricing'], ['faq', 'FAQ'], ['forms', 'Forms & Footer'],
+  ['features', 'Features'], ['agency', 'Agency Tier'], ['reviews', 'Reviews & Stories'], ['pricing', 'Pricing'], ['faq', 'FAQ'], ['forms', 'Forms & Footer'], ['legal', 'Legal'],
 ];
 
 // Keep in sync with server/src/lib/websiteConfig.js's ICON_KEYS and
@@ -237,6 +237,16 @@ export default function AdminWebsitePage() {
       {tab === 'faq' && <div className="space-y-5"><Card title="FAQ introduction"><Field label="Heading" value={config.faq.heading} onChange={(v) => updateSection('faq', 'heading', v)} /><Field label="Description" value={config.faq.description} onChange={(v) => updateSection('faq', 'description', v)} /></Card>{config.faq.items.map((item, index) => <Card key={index} title={`Question ${index + 1}`}><Field label="Question" value={item.question} onChange={(v) => updateNested('faq', 'items', index, 'question', v)} /><Field label="Answer" rows={4} value={item.answer} onChange={(v) => updateNested('faq', 'items', index, 'answer', v)} /></Card>)}</div>}
 
       {tab === 'forms' && <div className="grid md:grid-cols-2 gap-5"><Card title="Waitlist"><Field label="Heading" value={config.waitlist.heading} onChange={(v) => updateSection('waitlist', 'heading', v)} /><Field label="Description" rows={3} value={config.waitlist.description} onChange={(v) => updateSection('waitlist', 'description', v)} /><Field label="Success message" rows={2} value={config.waitlist.success} onChange={(v) => updateSection('waitlist', 'success', v)} /><Field label="Submit button" value={config.waitlist.submitLabel} onChange={(v) => updateSection('waitlist', 'submitLabel', v)} /><Field label="Name placeholder" value={config.waitlist.namePlaceholder} onChange={(v) => updateSection('waitlist', 'namePlaceholder', v)} /><Field label="Email placeholder" value={config.waitlist.emailPlaceholder} onChange={(v) => updateSection('waitlist', 'emailPlaceholder', v)} /><Field label="Business placeholder" value={config.waitlist.businessPlaceholder} onChange={(v) => updateSection('waitlist', 'businessPlaceholder', v)} /></Card><Card title="Contact"><Field label="Heading" value={config.contact.heading} onChange={(v) => updateSection('contact', 'heading', v)} /><Field label="Description" rows={3} value={config.contact.description} onChange={(v) => updateSection('contact', 'description', v)} /><Field label="Success message" rows={2} value={config.contact.success} onChange={(v) => updateSection('contact', 'success', v)} /><Field label="Submit button" value={config.contact.submitLabel} onChange={(v) => updateSection('contact', 'submitLabel', v)} /><Field label="Name placeholder" value={config.contact.namePlaceholder} onChange={(v) => updateSection('contact', 'namePlaceholder', v)} /><Field label="Email placeholder" value={config.contact.emailPlaceholder} onChange={(v) => updateSection('contact', 'emailPlaceholder', v)} /><Field label="Message placeholder" value={config.contact.messagePlaceholder} onChange={(v) => updateSection('contact', 'messagePlaceholder', v)} /></Card><Card title="Footer"><Field label="Tagline" value={config.footer.tagline} onChange={(v) => updateSection('footer', 'tagline', v)} /></Card></div>}
+
+      {tab === 'legal' && <Card title="Terms of Service / Privacy Policy / Cookie Policy">
+        <p className="text-sm text-slate-500">These identifying details are used across all three legal pages (/terms, /privacy, /cookies). The rest of each document's text is fixed.</p>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="Legal entity name" value={config.legal.entityName} onChange={(v) => updateSection('legal', 'entityName', v)} />
+          <Field label="Governing law (state/country)" value={config.legal.governingLaw} onChange={(v) => updateSection('legal', 'governingLaw', v)} />
+          <Field label="Contact email" type="email" value={config.legal.contactEmail} onChange={(v) => updateSection('legal', 'contactEmail', v)} />
+          <Field label="Last updated" type="date" value={config.legal.effectiveDate} onChange={(v) => updateSection('legal', 'effectiveDate', v)} />
+        </div>
+      </Card>}
     </form>
   );
 }
