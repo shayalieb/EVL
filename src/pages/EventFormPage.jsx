@@ -36,6 +36,7 @@ import { isWedding } from '../lib/eventType';
 import AgencyGroupSelect from '../components/AgencyGroupSelect';
 import { useAgencyBranding } from '../lib/useAgencyBranding';
 import { depositPaymentState } from '../lib/depositPaymentState';
+import { activeContractorBookingCount, normalizeNoOutsideContractorsNeeded } from '../lib/eventStaffingState';
 
 const StagePlotEditorPage = lazy(() => import('./StagePlotEditorPage'));
 
@@ -348,7 +349,7 @@ export default function EventFormPage() {
         contactPhone: event.contactPhone, contactPhoneExt: event.contactPhoneExt || '', contactEmail: event.contactEmail,
         startTime: event.startTime, endTime: event.endTime,
         eventNote: event.eventNote || '',
-        noOutsideContractorsNeeded: !!event.noOutsideContractorsNeeded,
+        noOutsideContractorsNeeded: normalizeNoOutsideContractorsNeeded(event.noOutsideContractorsNeeded, event.contractorBookings, inquiryStatuses),
         contractorBookings: [...event.contractorBookings],
         categoryTabs,
         schedule: event.schedule || [emptyScheduleItem()],
@@ -377,7 +378,7 @@ export default function EventFormPage() {
     setAddingType(false);
     setPickerOpen(false);
     autoSaveSkipRef.current = true;
-  }, [eventId, event, contractors, isEditing]);
+  }, [eventId, event, contractors, inquiryStatuses, isEditing]);
 
   // Mirrors the in-progress draft of a brand-new (not-yet-saved) event into
   // sessionStorage on every change, so a discarded/reloaded tab can recover
@@ -788,6 +789,7 @@ export default function EventFormPage() {
     const addedStatus = getOrCreateInquiryStatus('Added', '#94a3b8');
     setForm((f) => ({
       ...f,
+      noOutsideContractorsNeeded: false,
       contractorBookings: [...f.contractorBookings, {
         contractorId, inquiryStatusId: addedStatus?.id, pricingTierId,
         startTime: f.startTime, endTime: f.endTime,
@@ -838,16 +840,24 @@ export default function EventFormPage() {
           startTime: f.startTime,
           endTime: f.endTime,
         }));
-      return { ...f, contractorBookings: [...f.contractorBookings, ...newBookings] };
+      return {
+        ...f,
+        noOutsideContractorsNeeded: newBookings.length ? false : f.noOutsideContractorsNeeded,
+        contractorBookings: [...f.contractorBookings, ...newBookings],
+      };
     });
     setEnsemblePickerOpen(false);
   }
 
   function changeBookingStatus(contractorId, inquiryStatusId) {
-    setForm((f) => ({
-      ...f,
-      contractorBookings: f.contractorBookings.map((b) => (b.contractorId === contractorId ? { ...b, inquiryStatusId } : b)),
-    }));
+    setForm((f) => {
+      const contractorBookings = f.contractorBookings.map((b) => (b.contractorId === contractorId ? { ...b, inquiryStatusId } : b));
+      return {
+        ...f,
+        noOutsideContractorsNeeded: normalizeNoOutsideContractorsNeeded(f.noOutsideContractorsNeeded, contractorBookings, inquiryStatuses),
+        contractorBookings,
+      };
+    });
   }
 
   // Shared by sendAndMarkEmailed and the manual-contact-log handler below —
@@ -1873,17 +1883,22 @@ export default function EventFormPage() {
             )}
           </div>
 
-          <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-3 mb-5">
+          <label className={`flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-3 mb-5 ${activeContractorBookingCount(form.contractorBookings, inquiryStatuses) ? 'cursor-not-allowed opacity-70' : ''}`}>
             <input
               type="checkbox"
-              checked={form.noOutsideContractorsNeeded}
+              checked={normalizeNoOutsideContractorsNeeded(form.noOutsideContractorsNeeded, form.contractorBookings, inquiryStatuses)}
               onChange={(e) => update('noOutsideContractorsNeeded', e.target.checked)}
+              disabled={activeContractorBookingCount(form.contractorBookings, inquiryStatuses) > 0}
               data-testid="event-form-no-outside-contractors-checkbox"
               className="mt-0.5"
             />
             <span>
               <span className="block text-sm font-semibold text-slate-700">No outside staffing required</span>
-              <span className="block text-xs text-slate-500 mt-0.5">The owner or internal team will cover this event without paid contractors.</span>
+              <span className="block text-xs text-slate-500 mt-0.5">
+                {activeContractorBookingCount(form.contractorBookings, inquiryStatuses) > 0
+                  ? 'Remove or mark all assigned contractors Not Avail before selecting this option.'
+                  : 'The owner or internal team will cover this event without paid contractors.'}
+              </span>
             </span>
           </label>
 

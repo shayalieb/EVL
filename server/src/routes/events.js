@@ -7,9 +7,16 @@ import { createWithPreservedId } from '../lib/idPreservingCreate.js';
 import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPageResponse } from '../lib/pagination.js';
 import { randomUUID } from 'node:crypto';
 import { dollarsToCents } from '../lib/financialLedger.js';
+import { normalizeNoOutsideContractorsNeeded } from '../lib/eventStaffingState.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
+
+async function normalizeStaffingFlag(accountId, value, contractorBookings) {
+  if (!value || !contractorBookings?.length) return Boolean(value);
+  const accountData = await prisma.accountData.findUnique({ where: { accountId }, select: { data: true } });
+  return normalizeNoOutsideContractorsNeeded(value, contractorBookings, accountData?.data?.inquiryStatuses || []);
+}
 
 function serializeEvent(e) {
   return {
@@ -199,6 +206,7 @@ router.post('/', asyncHandler(async (req, res) => {
   if (data.otherExpenses === undefined) data.otherExpenses = [];
   if (data.history === undefined) data.history = [];
   if (data.setLists === undefined) data.setLists = [];
+  data.noOutsideContractorsNeeded = await normalizeStaffingFlag(data.accountId, data.noOutsideContractorsNeeded, data.contractorBookings);
 
   const event = await createWithPreservedId(prisma.event, data, req.membership.accountId);
   res.status(201).json({ event: serializeEvent(event) });
@@ -219,6 +227,11 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   }
   if (data.groupId && !await prisma.agencyGroup.findFirst({ where: { id: data.groupId, accountId: req.membership.accountId, active: true } })) return res.status(400).json({ error: 'Invalid managed group.' });
   if (data.groupId === '') data.groupId = null;
+  const effectiveBookings = data.contractorBookings ?? existing.contractorBookings ?? [];
+  const effectiveNoOutsideStaffing = data.noOutsideContractorsNeeded ?? existing.noOutsideContractorsNeeded;
+  if (effectiveNoOutsideStaffing) {
+    data.noOutsideContractorsNeeded = await normalizeStaffingFlag(existing.accountId, effectiveNoOutsideStaffing, effectiveBookings);
+  }
 
   const event = await prisma.$transaction(async (tx) => {
     const saved = await tx.event.update({ where: { id: existing.id }, data });
