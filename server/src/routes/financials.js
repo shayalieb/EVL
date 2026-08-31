@@ -6,7 +6,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { dollarsToCents } from '../lib/financialLedger.js';
 import { invoiceTotal } from './invoices.js';
-import { bookingProfitabilitySnapshot, contractorAssignmentCost, contractorPaymentTiming, inIsoDateRange, receivableAgingBucket } from '../lib/financialReports.js';
+import { bookingProfitabilitySnapshot, contractorAssignmentCost, contractorPaymentTiming, inIsoDateRange, plausibleIsoDate, receivableAgingBucket } from '../lib/financialReports.js';
 import { createSignedUpload, deleteFile, getSignedDownloadUrl, getSignedPreviewUrl, uploadedFileSize } from '../lib/fileStorage.js';
 
 const router = Router();
@@ -140,7 +140,7 @@ router.get('/summary', requireFinancialPermission('viewFinancials'), asyncHandle
       }
       if (amount !== null && amount > 0) {
         const timing = contractorPaymentTiming({ dueDate: booking.paymentDueDate, eventDate: event.eventDate });
-        const row = { assignmentId: booking.id || booking.contractorId, eventId: event.id, eventName: event.name, eventDate: event.eventDate, bookingId: relatedBooking?.id || null, bookingName: relatedBooking?.eventName || null, paymentDueDate: booking.paymentDueDate || null, contractorId: booking.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor', amount, ...timing };
+        const row = { assignmentId: booking.id || booking.contractorId, eventId: event.id, eventName: event.name, eventDate: event.eventDate, bookingId: relatedBooking?.id || null, bookingName: relatedBooking?.eventName || null, paymentDueDate: plausibleIsoDate(booking.paymentDueDate), contractorId: booking.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor', amount, ...timing };
         contractorCostRows.push(row);
         if (booking.paymentStatus !== 'paid') {
           payableRows.push(row);
@@ -258,7 +258,7 @@ router.get('/reports', requireFinancialPermission('viewFinancials'), asyncHandle
       if (expectedAmount === null) { incompleteEventCosts.add(event.id); continue; }
       if (assignment.paymentStatus !== 'paid' && inIsoDateRange(event.eventDate, from, to)) {
         const timing = contractorPaymentTiming({ dueDate: assignment.paymentDueDate, eventDate: event.eventDate, today: asOf.toISOString().slice(0, 10) });
-        payables.push({ assignmentId: assignment.id || assignment.contractorId, eventId: event.id, eventName: event.name || 'Untitled event', eventDate: event.eventDate, paymentDueDate: assignment.paymentDueDate || null, contractorId: assignment.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor', expectedAmount, pricingComplete: true, ...timing });
+        payables.push({ assignmentId: assignment.id || assignment.contractorId, eventId: event.id, eventName: event.name || 'Untitled event', eventDate: event.eventDate, paymentDueDate: plausibleIsoDate(assignment.paymentDueDate), contractorId: assignment.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor', expectedAmount, pricingComplete: true, ...timing });
       }
     }
   }

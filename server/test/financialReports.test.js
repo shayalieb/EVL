@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bookingProfitabilitySnapshot, contractorAssignmentCost, contractorPaymentTiming, inIsoDateRange, receivableAgingBucket } from '../src/lib/financialReports.js';
+import { bookingProfitabilitySnapshot, contractorAssignmentCost, contractorPaymentTiming, inIsoDateRange, plausibleIsoDate, receivableAgingBucket } from '../src/lib/financialReports.js';
 
 test('receivables are assigned to stable aging buckets', () => {
   const asOf = new Date('2026-08-30T23:59:59.999Z');
@@ -47,10 +47,19 @@ test('profitability is available when contractor costs are complete', () => {
 });
 
 test('contractor payment timing distinguishes missing, due, overdue, and upcoming dates', () => {
-  assert.equal(contractorPaymentTiming(null, '2026-08-30').status, 'missing');
-  assert.equal(contractorPaymentTiming('2026-08-30', '2026-08-30').status, 'due');
-  assert.deepEqual(contractorPaymentTiming('2026-08-28', '2026-08-30'), { status: 'overdue', label: '2 days overdue', overdueDays: 2 });
-  assert.equal(contractorPaymentTiming('2026-09-01', '2026-08-30').status, 'upcoming');
+  assert.equal(contractorPaymentTiming({ today: '2026-08-30' }).status, 'missing');
+  assert.equal(contractorPaymentTiming({ dueDate: '2026-08-30', today: '2026-08-30' }).status, 'due');
+  assert.deepEqual(contractorPaymentTiming({ dueDate: '2026-08-28', today: '2026-08-30' }), { status: 'overdue', label: '2 days overdue', overdueDays: 2, effectiveDueDate: '2026-08-28', dueDateIsDefault: false });
+  assert.equal(contractorPaymentTiming({ dueDate: '2026-09-01', today: '2026-08-30' }).status, 'upcoming');
+});
+
+test('invalid historical contractor due dates fall back to the event date', () => {
+  assert.equal(plausibleIsoDate('0002-08-01'), null);
+  assert.equal(plausibleIsoDate('2026-02-30'), null);
+  assert.equal(plausibleIsoDate('2026-08-01'), '2026-08-01');
+  assert.deepEqual(contractorPaymentTiming({ dueDate: '0002-08-01', eventDate: '2026-09-05', today: '2026-08-30' }), {
+    status: 'upcoming', label: 'Upcoming', overdueDays: 0, effectiveDueDate: '2026-09-05', dueDateIsDefault: true,
+  });
 });
 
 test('ISO event dates respect report boundaries', () => {

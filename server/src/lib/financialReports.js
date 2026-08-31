@@ -63,9 +63,17 @@ export function bookingProfitabilitySnapshot({ billed, event, assignments = [], 
 // effectiveDueDate/dueDateIsDefault let the client show what date is
 // actually in effect and make clear when it's a default versus something
 // someone explicitly chose.
+export function plausibleIsoDate(value) {
+  if (typeof value !== 'string' || !/^(19|20)\d{2}-\d{2}-\d{2}$/.test(value)) return null;
+  const parsed = new Date(`${value}T12:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value ? value : null;
+}
+
 export function contractorPaymentTiming({ dueDate, eventDate, today = new Date().toISOString().slice(0, 10) } = {}) {
-  const effectiveDueDate = dueDate || eventDate || null;
-  const dueDateIsDefault = !dueDate && !!eventDate;
+  const safeDueDate = plausibleIsoDate(dueDate);
+  const safeEventDate = plausibleIsoDate(eventDate);
+  const effectiveDueDate = safeDueDate || safeEventDate;
+  const dueDateIsDefault = !safeDueDate && !!safeEventDate;
   if (!effectiveDueDate) return { status: 'missing', label: 'No due date set', overdueDays: 0, effectiveDueDate: null, dueDateIsDefault: false };
   if (effectiveDueDate < today) {
     const overdueDays = dateDaysBetween(new Date(`${today}T12:00:00.000Z`), new Date(`${effectiveDueDate}T12:00:00.000Z`));
