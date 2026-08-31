@@ -2404,7 +2404,7 @@ export default function BookingFormPage() {
                   </div>
                 )}
                 <Modal open={showProposalPreview} onClose={() => setShowProposalPreview(false)} title="Proposal Preview" widthClass="max-w-4xl" bodyClassName="p-0">
-                  {proposalPreviewUrl && <iframe title="Proposal preview" src={proposalPreviewUrl} data-testid="booking-form-proposal-preview-frame" className="w-full h-[70vh] border-0" />}
+                  {proposalPreviewUrl && <iframe title="Proposal preview" src={proposalPreviewUrl} data-testid="booking-form-proposal-preview-frame" className="h-[calc(100dvh-4.75rem)] w-full border-0 sm:h-[70vh]" />}
                 </Modal>
               </div>
 
@@ -2667,7 +2667,7 @@ export default function BookingFormPage() {
                 </div>
               )}
               <Modal open={showContractPreview} onClose={() => setShowContractPreview(false)} title="Contract Preview" widthClass="max-w-4xl" bodyClassName="p-0">
-                {contractPreviewUrl && <iframe title="Contract preview" src={contractPreviewUrl} data-testid="booking-form-contract-preview-frame" className="w-full h-[70vh] border-0" />}
+                {contractPreviewUrl && <iframe title="Contract preview" src={contractPreviewUrl} data-testid="booking-form-contract-preview-frame" className="h-[calc(100dvh-4.75rem)] w-full border-0 sm:h-[70vh]" />}
               </Modal>
             </div>
           ) : (
@@ -3237,7 +3237,7 @@ export default function BookingFormPage() {
                       </button>
                     </div>
                     <Modal open={showInvoicePreview} onClose={() => setShowInvoicePreview(false)} title="Invoice Preview" widthClass="max-w-2xl">
-                      <div data-testid="booking-form-invoice-preview-container">
+                      <div data-testid="booking-form-invoice-preview-container" className="overflow-x-auto">
                         <InvoiceDocument
                           businessInfo={businessInfo}
                           client={client}

@@ -12,9 +12,9 @@ export default function DocumentPreviewModal({ document, onClose }) {
   return (
     <Modal open={!!document} onClose={onClose} title={document.filename} widthClass="max-w-3xl" bodyClassName="p-0">
       {isPdf ? (
-        <iframe title={document.filename} src={documentPreviewUrl(document.id)} className="w-full h-[75vh] border-0" />
+        <iframe title={document.filename} src={documentPreviewUrl(document.id)} className="h-[calc(100dvh-8.5rem)] w-full border-0 sm:h-[75vh]" />
       ) : isImage ? (
-        <div className="flex items-center justify-center bg-slate-50 p-4 max-h-[75vh] overflow-auto">
+        <div className="flex max-h-[calc(100dvh-8.5rem)] items-center justify-center overflow-auto bg-slate-50 p-4 sm:max-h-[75vh]">
           <img src={documentPreviewUrl(document.id)} alt={document.filename} className="max-w-full h-auto" />
         </div>
       ) : (
@@ -22,7 +22,7 @@ export default function DocumentPreviewModal({ document, onClose }) {
           <p>This file type can't be previewed here.</p>
         </div>
       )}
-      <div className="px-4 py-2.5 border-t border-slate-100 text-right">
+      <div className="sticky bottom-0 border-t border-slate-100 bg-white px-4 py-2.5 text-right">
         <a href={documentDownloadUrl(document.id)} target="_blank" rel="noreferrer" data-testid="document-preview-download-link" className="text-xs text-indigo-600 font-semibold hover:underline">
           Download {document.filename}
         </a>
