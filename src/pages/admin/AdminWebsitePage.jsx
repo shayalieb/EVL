@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
+import Modal from '../../components/ui/Modal';
+import LandingPage from '../LandingPage';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -19,19 +22,27 @@ const ICON_OPTIONS = [
   ['star', 'Star'], ['shield', 'Shield'], ['chart', 'Chart'], ['bolt', 'Bolt'],
 ];
 
-function Field({ label, value, onChange, rows = 0, type = 'text', min, max, step }) {
-  const props = { value, onChange: (e) => onChange(e.target.value), className: inputClass };
-  return <div><label className={labelClass}>{label}</label>{rows ? <textarea rows={rows} {...props} /> : <input type={type} min={min} max={max} step={step} {...props} />}</div>;
+// maxLength, when given, both caps what the browser will accept (so there's
+// nothing left to silently trim on save) and shows a live count — kept in
+// sync by hand with server/src/lib/websiteConfig.js's normalizeWebsiteConfig
+// limits, same "keep in sync" convention already used for ICON_KEYS below.
+function Field({ label, value, onChange, rows = 0, type = 'text', min, max, step, maxLength }) {
+  const props = { value, onChange: (e) => onChange(e.target.value), className: inputClass, maxLength };
+  const nearLimit = maxLength && value.length >= maxLength * 0.9;
+  return <div><label className={labelClass}>{label}</label>{rows ? <textarea rows={rows} {...props} /> : <input type={type} min={min} max={max} step={step} {...props} />}{maxLength && <p className={`mt-1 text-right text-[11px] ${nearLimit ? 'font-semibold text-amber-600' : 'text-slate-400'}`}>{value.length}/{maxLength}</p>}</div>;
 }
 
 function Card({ title, children }) {
   return <section className="bg-white border border-slate-200 rounded-xl p-5 space-y-4"><h3 className="font-bold text-slate-800">{title}</h3>{children}</section>;
 }
 
-function StringList({ items, onChange, label = 'Items' }) {
+// maxItems, when given, disables "+ Add item" at the cap and shows a count
+// — same kept-in-sync-by-hand convention as Field's maxLength above.
+function StringList({ items, onChange, label = 'Items', maxItems }) {
+  const atCap = maxItems && items.length >= maxItems;
   return (
     <div className="space-y-2">
-      <label className={labelClass}>{label}</label>
+      <label className={labelClass}>{label}{maxItems && <span className="ml-2 font-normal normal-case text-slate-400">{items.length}/{maxItems}</span>}</label>
       {items.map((item, index) => (
         <div key={index} className="flex gap-2 items-center">
           <input className={`${inputClass} flex-1`} value={item} onChange={(e) => onChange(items.map((current, i) => i === index ? e.target.value : current))} />
@@ -46,7 +57,7 @@ function StringList({ items, onChange, label = 'Items' }) {
           </button>
         </div>
       ))}
-      <button type="button" onClick={() => onChange([...items, ''])} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">+ Add item</button>
+      <button type="button" onClick={() => onChange([...items, ''])} disabled={atCap} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 disabled:opacity-30 disabled:cursor-not-allowed">+ Add item</button>
     </div>
   );
 }
@@ -57,6 +68,11 @@ export default function AdminWebsitePage() {
   const [config, setConfig] = useState(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState(null);
+  const [historyError, setHistoryError] = useState('');
+  const [restoringId, setRestoringId] = useState('');
   const [tab, setTab] = useState(() => TABS.some(([id]) => id === searchParams.get('tab')) ? searchParams.get('tab') : 'launch');
   const [reviewRequests, setReviewRequests] = useState([]);
   const [requestForm, setRequestForm] = useState({ recipientName: '', recipientEmail: '', groupName: '' });
@@ -129,26 +145,80 @@ export default function AdminWebsitePage() {
     catch (err) { showToast(err.message, 'error'); } finally { setSaving(false); }
   }
 
+  async function openHistory() {
+    setHistoryOpen(true); setHistoryError('');
+    try { const data = await apiFetch('/admin/website/history'); setHistory(data.versions); }
+    catch (err) { setHistoryError(err.message || 'Could not load version history.'); }
+  }
+
+  async function restoreVersion(version) {
+    setRestoringId(version.id);
+    try {
+      const data = await apiFetch(`/admin/website/history/${version.id}`);
+      setConfig(data.config);
+      setHistoryOpen(false);
+      showToast(`Loaded the version from ${new Date(version.publishedAt).toLocaleString()}. Preview it, then Publish to make it live.`);
+    } catch (err) { showToast(err.message || 'Could not load that version.', 'error'); }
+    finally { setRestoringId(''); }
+  }
+
   if (error) return <div className="text-sm text-red-600">{error}</div>;
   if (!config) return <div className="text-sm text-slate-400">Loading…</div>;
 
   return (
     <form onSubmit={save} className="max-w-6xl space-y-5">
-      <div className="flex items-center justify-between gap-4"><div><h2 className="text-2xl font-bold text-slate-800">Website</h2><p className="text-sm text-slate-500 mt-1">Edit and publish every section of the public landing page.</p></div><button disabled={saving} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold disabled:opacity-50">{saving ? 'Publishing…' : 'Publish changes'}</button></div>
+      <div className="flex items-center justify-between gap-4"><div><h2 className="text-2xl font-bold text-slate-800">Website</h2><p className="text-sm text-slate-500 mt-1">Edit and publish every section of the public landing page.</p></div><div className="flex gap-2"><button type="button" onClick={openHistory} className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50">History</button><button type="button" onClick={() => setPreviewOpen(true)} className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50">Preview</button><button disabled={saving} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold disabled:opacity-50">{saving ? 'Publishing…' : 'Publish changes'}</button></div></div>
+
+      <Modal open={historyOpen} onClose={() => setHistoryOpen(false)} title="Version history" widthClass="max-w-lg">
+        {historyError && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{historyError}</div>}
+        {!historyError && !history && <p className="text-sm text-slate-400">Loading…</p>}
+        {!historyError && history && history.length === 0 && <p className="text-sm text-slate-400">No previous versions yet — history starts building after your next publish.</p>}
+        {!historyError && history && history.length > 0 && (
+          <ul className="divide-y divide-slate-100">
+            {history.map((version) => (
+              <li key={version.id} className="flex items-center justify-between gap-3 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-700">{new Date(version.publishedAt).toLocaleString()}</p>
+                  <p className="text-xs text-slate-400">Published by {version.publishedBy ? `${version.publishedBy.firstName} ${version.publishedBy.lastName}` : 'System'}</p>
+                </div>
+                <button type="button" disabled={restoringId === version.id} onClick={() => restoreVersion(version)} className="shrink-0 rounded-lg border border-indigo-200 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50">
+                  {restoringId === version.id ? 'Loading…' : 'Load into editor'}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Modal>
+
+      {previewOpen && createPortal(
+        // Rendered via a portal, outside this page's own <form> — LandingPage
+        // contains its own forms (waitlist/contact), and nested <form>
+        // elements aren't valid HTML.
+        <div className="fixed inset-0 z-50 flex flex-col bg-white">
+          <div className="flex shrink-0 items-center justify-between gap-4 border-b border-amber-200 bg-amber-50 px-4 py-2.5">
+            <p className="text-sm font-semibold text-amber-800">Previewing unpublished changes — this isn't live yet.</p>
+            <button type="button" onClick={() => setPreviewOpen(false)} className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-semibold text-amber-800 hover:bg-amber-100">← Back to editing</button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <LandingPage previewConfig={config} />
+          </div>
+        </div>,
+        document.body,
+      )}
       <div className="overflow-x-auto border-b border-slate-200"><div className="flex min-w-max gap-1">{TABS.map(([id, label]) => <button key={id} type="button" onClick={() => setTab(id)} className={`px-4 py-2.5 text-sm font-semibold border-b-2 ${tab === id ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>{label}{id === 'reviews' && reviewRequests.some((item) => item.status === 'submitted') && <span className="ml-2 inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] text-white">{reviewRequests.filter((item) => item.status === 'submitted').length}</span>}</button>)}</div></div>
 
       {tab === 'launch' && <Card title="Public signup"><div className="flex items-start justify-between gap-4"><p className="text-sm text-slate-500 max-w-xl">When disabled, visitors join the waitlist. When enabled, pricing buttons create accounts and start checkout.</p><label className="flex items-center gap-2 text-sm font-semibold text-slate-700"><input type="checkbox" checked={config.publicSignupsEnabled} onChange={(e) => setConfig((current) => ({ ...current, publicSignupsEnabled: e.target.checked }))} className="w-4 h-4 rounded" />Public signup live</label></div></Card>}
 
-      {tab === 'agency' && <div className="space-y-5"><Card title="Agency pricing"><p className="text-sm text-slate-500">Set the price for the included group package, then the amount automatically added for every group above that number.</p>{config.pricing.tiers.filter((tier) => tier.id === 'agency').map((tier) => { const index = config.pricing.tiers.findIndex((item) => item.id === tier.id); return <div key={tier.id} className="space-y-4"><div className="grid sm:grid-cols-3 gap-3"><Field label="Groups included" type="number" min="2" max="100" value={tier.includedGroupCount} onChange={(v) => updateTier(index, 'includedGroupCount', Number(v))} /><Field label="Base monthly $" type="number" min="1" step="0.01" value={(tier.monthlyAmountCents / 100).toFixed(2)} onChange={(v) => updateTierDollars(index, 'monthlyAmountCents', v)} /><Field label="Each added group / month $" type="number" min="1" step="0.01" value={(tier.monthlyAdditionalGroupCents / 100).toFixed(2)} onChange={(v) => updateTierDollars(index, 'monthlyAdditionalGroupCents', v)} /></div><div className="grid sm:grid-cols-2 gap-3"><Field label="Base annual $" type="number" min="1" step="0.01" value={(tier.annualAmountCents / 100).toFixed(2)} onChange={(v) => updateTierDollars(index, 'annualAmountCents', v)} /><Field label="Each added group / year $" type="number" min="1" step="0.01" value={(tier.annualAdditionalGroupCents / 100).toFixed(2)} onChange={(v) => updateTierDollars(index, 'annualAdditionalGroupCents', v)} /></div><Field label="Tier description" rows={3} value={tier.description} onChange={(v) => updateTier(index, 'description', v)} /></div>; })}</Card><Card title="Agency landing section"><div className="flex items-start justify-between gap-4"><p className="text-sm text-slate-500 max-w-2xl">This section explains the multi-group workspace and sends visitors to the live pricing calculator.</p><label className="flex items-center gap-2 text-sm font-semibold text-slate-700 shrink-0"><input type="checkbox" checked={config.agency.enabled} onChange={(e) => updateSection('agency', 'enabled', e.target.checked)} />Section live</label></div><div className="grid sm:grid-cols-2 gap-3"><Field label="Section label" value={config.agency.label} onChange={(v) => updateSection('agency', 'label', v)} /><Field label="Calculator button" value={config.agency.ctaLabel} onChange={(v) => updateSection('agency', 'ctaLabel', v)} /></div><Field label="Heading" rows={2} value={config.agency.heading} onChange={(v) => updateSection('agency', 'heading', v)} /><Field label="Description" rows={4} value={config.agency.description} onChange={(v) => updateSection('agency', 'description', v)} /><StringList label="Agency benefits" items={config.agency.features} onChange={(items) => updateSection('agency', 'features', items)} /></Card><Card title="Automatic management"><div className="grid md:grid-cols-3 gap-3 text-sm"><div className="rounded-xl bg-slate-50 p-4"><p className="font-bold text-slate-800">1. Customer selects groups</p><p className="text-slate-500 mt-1">The landing calculator shows the exact recurring total.</p></div><div className="rounded-xl bg-slate-50 p-4"><p className="font-bold text-slate-800">2. Checkout bills the total</p><p className="text-slate-500 mt-1">The selected capacity is stored with the subscription.</p></div><div className="rounded-xl bg-slate-50 p-4"><p className="font-bold text-slate-800">3. Capacity is enforced</p><p className="text-slate-500 mt-1">An agency can add groups up to its paid group limit.</p></div></div></Card></div>}
+      {tab === 'agency' && <div className="space-y-5"><Card title="Agency pricing"><p className="text-sm text-slate-500">Set the price for the included group package, then the amount automatically added for every group above that number.</p>{config.pricing.tiers.filter((tier) => tier.id === 'agency').map((tier) => { const index = config.pricing.tiers.findIndex((item) => item.id === tier.id); return <div key={tier.id} className="space-y-4"><div className="grid sm:grid-cols-3 gap-3"><Field label="Groups included" type="number" min="2" max="100" value={tier.includedGroupCount} onChange={(v) => updateTier(index, 'includedGroupCount', Number(v))} /><Field label="Base monthly $" type="number" min="1" step="0.01" value={(tier.monthlyAmountCents / 100).toFixed(2)} onChange={(v) => updateTierDollars(index, 'monthlyAmountCents', v)} /><Field label="Each added group / month $" type="number" min="1" step="0.01" value={(tier.monthlyAdditionalGroupCents / 100).toFixed(2)} onChange={(v) => updateTierDollars(index, 'monthlyAdditionalGroupCents', v)} /></div><div className="grid sm:grid-cols-2 gap-3"><Field label="Base annual $" type="number" min="1" step="0.01" value={(tier.annualAmountCents / 100).toFixed(2)} onChange={(v) => updateTierDollars(index, 'annualAmountCents', v)} /><Field label="Each added group / year $" type="number" min="1" step="0.01" value={(tier.annualAdditionalGroupCents / 100).toFixed(2)} onChange={(v) => updateTierDollars(index, 'annualAdditionalGroupCents', v)} /></div><Field label="Tier description" rows={3} value={tier.description} onChange={(v) => updateTier(index, 'description', v)} /></div>; })}</Card><Card title="Agency landing section"><div className="flex items-start justify-between gap-4"><p className="text-sm text-slate-500 max-w-2xl">This section explains the multi-group workspace and sends visitors to the live pricing calculator.</p><label className="flex items-center gap-2 text-sm font-semibold text-slate-700 shrink-0"><input type="checkbox" checked={config.agency.enabled} onChange={(e) => updateSection('agency', 'enabled', e.target.checked)} />Section live</label></div><div className="grid sm:grid-cols-2 gap-3"><Field label="Section label" maxLength={100} value={config.agency.label} onChange={(v) => updateSection('agency', 'label', v)} /><Field label="Calculator button" maxLength={80} value={config.agency.ctaLabel} onChange={(v) => updateSection('agency', 'ctaLabel', v)} /></div><Field label="Heading" rows={2} maxLength={180} value={config.agency.heading} onChange={(v) => updateSection('agency', 'heading', v)} /><Field label="Description" rows={4} value={config.agency.description} onChange={(v) => updateSection('agency', 'description', v)} /><StringList label="Agency benefits" maxItems={10} items={config.agency.features} onChange={(items) => updateSection('agency', 'features', items)} /></Card><Card title="Automatic management"><div className="grid md:grid-cols-3 gap-3 text-sm"><div className="rounded-xl bg-slate-50 p-4"><p className="font-bold text-slate-800">1. Customer selects groups</p><p className="text-slate-500 mt-1">The landing calculator shows the exact recurring total.</p></div><div className="rounded-xl bg-slate-50 p-4"><p className="font-bold text-slate-800">2. Checkout bills the total</p><p className="text-slate-500 mt-1">The selected capacity is stored with the subscription.</p></div><div className="rounded-xl bg-slate-50 p-4"><p className="font-bold text-slate-800">3. Capacity is enforced</p><p className="text-slate-500 mt-1">An agency can add groups up to its paid group limit.</p></div></div></Card></div>}
 
-      {tab === 'hero' && <div className="space-y-5"><Card title="Navigation labels"><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">{Object.entries(config.navigation).map(([key, value]) => <Field key={key} label={key.replace(/([A-Z])/g, ' $1')} value={value} onChange={(next) => updateSection('navigation', key, next)} />)}</div></Card><Card title="Hero"><Field label="Audience label" value={config.hero.eyebrow} onChange={(v) => updateSection('hero', 'eyebrow', v)} /><Field label="Headline" rows={2} value={config.hero.headline} onChange={(v) => updateSection('hero', 'headline', v)} /><Field label="Description" rows={4} value={config.hero.description} onChange={(v) => updateSection('hero', 'description', v)} /><Field label="Contact button" value={config.hero.contactButton} onChange={(v) => updateSection('hero', 'contactButton', v)} /></Card></div>}
+      {tab === 'hero' && <div className="space-y-5"><Card title="Navigation labels"><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">{Object.entries(config.navigation).map(([key, value]) => <Field key={key} label={key.replace(/([A-Z])/g, ' $1')} value={value} onChange={(next) => updateSection('navigation', key, next)} />)}</div></Card><Card title="Hero"><Field label="Audience label" value={config.hero.eyebrow} onChange={(v) => updateSection('hero', 'eyebrow', v)} /><Field label="Headline" rows={2} maxLength={180} value={config.hero.headline} onChange={(v) => updateSection('hero', 'headline', v)} /><Field label="Description" rows={4} value={config.hero.description} onChange={(v) => updateSection('hero', 'description', v)} /><Field label="Contact button" value={config.hero.contactButton} onChange={(v) => updateSection('hero', 'contactButton', v)} /></Card></div>}
 
-      {tab === 'story' && <Card title="Founder story"><Field label="Section label" value={config.story.label} onChange={(v) => updateSection('story', 'label', v)} />{config.story.paragraphs.map((paragraph, index) => <Field key={index} label={`Paragraph ${index + 1}`} rows={5} value={paragraph} onChange={(value) => updateSection('story', 'paragraphs', config.story.paragraphs.map((item, i) => i === index ? value : item))} />)}</Card>}
+      {tab === 'story' && <Card title="Founder story"><Field label="Section label" maxLength={120} value={config.story.label} onChange={(v) => updateSection('story', 'label', v)} />{config.story.paragraphs.map((paragraph, index) => <Field key={index} label={`Paragraph ${index + 1}`} rows={5} value={paragraph} onChange={(value) => updateSection('story', 'paragraphs', config.story.paragraphs.map((item, i) => i === index ? value : item))} />)}</Card>}
 
-      {tab === 'problems' && <div className="space-y-5"><Card title="Section introduction"><Field label="Heading" value={config.painPoints.heading} onChange={(v) => updateSection('painPoints', 'heading', v)} /><Field label="Description" rows={2} value={config.painPoints.description} onChange={(v) => updateSection('painPoints', 'description', v)} /></Card>{config.painPoints.items.map((item, index) => <Card key={index} title={`Problem ${index + 1}`}><Field label="Title" value={item.title} onChange={(v) => updateNested('painPoints', 'items', index, 'title', v)} /><Field label="Problem" rows={2} value={item.problem} onChange={(v) => updateNested('painPoints', 'items', index, 'problem', v)} /><Field label="Solution" rows={2} value={item.fix} onChange={(v) => updateNested('painPoints', 'items', index, 'fix', v)} /></Card>)}</div>}
+      {tab === 'problems' && <div className="space-y-5"><Card title="Section introduction"><Field label="Heading" maxLength={120} value={config.painPoints.heading} onChange={(v) => updateSection('painPoints', 'heading', v)} /><Field label="Description" rows={2} value={config.painPoints.description} onChange={(v) => updateSection('painPoints', 'description', v)} /></Card>{config.painPoints.items.map((item, index) => <Card key={index} title={`Problem ${index + 1}`}><Field label="Title" maxLength={160} value={item.title} onChange={(v) => updateNested('painPoints', 'items', index, 'title', v)} /><Field label="Problem" rows={2} value={item.problem} onChange={(v) => updateNested('painPoints', 'items', index, 'problem', v)} /><Field label="Solution" rows={2} value={item.fix} onChange={(v) => updateNested('painPoints', 'items', index, 'fix', v)} /></Card>)}</div>}
 
       {tab === 'features' && <div className="space-y-5">
-        <Card title="Feature section"><Field label="Heading" value={config.features.heading} onChange={(v) => updateSection('features', 'heading', v)} /></Card>
+        <Card title="Feature section"><Field label="Heading" maxLength={120} value={config.features.heading} onChange={(v) => updateSection('features', 'heading', v)} /></Card>
         <div className="grid md:grid-cols-2 gap-5">
           {config.features.groups.map((group, index) => (
             <Card key={group.id} title={`Feature card ${index + 1}`}>
@@ -161,7 +231,7 @@ export default function AdminWebsitePage() {
                 </div>
                 <div className="flex-1"><Field label="Title" value={group.title} onChange={(v) => updateNested('features', 'groups', index, 'title', v)} /></div>
               </div>
-              <StringList label="Bullet points" items={group.items} onChange={(items) => updateNested('features', 'groups', index, 'items', items)} />
+              <StringList label="Bullet points" maxItems={8} items={group.items} onChange={(items) => updateNested('features', 'groups', index, 'items', items)} />
               <button
                 type="button"
                 onClick={() => removeFeatureGroup(index)}
@@ -182,9 +252,9 @@ export default function AdminWebsitePage() {
         {config.features.comparison.categories.map((category, categoryIndex) => <Card key={category.id} title={category.name}>
           <div className="flex gap-2 items-end"><div className="flex-1"><Field label="Category name" value={category.name} onChange={(name) => updateComparisonCategory(categoryIndex, (current) => ({ ...current, name }))} /></div><button type="button" onClick={() => updateComparison('categories', config.features.comparison.categories.filter((_, index) => index !== categoryIndex))} className="mb-0.5 px-3 py-2 rounded-lg text-xs font-semibold text-red-600 hover:bg-red-50">Remove category</button></div>
           <div className="overflow-x-auto"><table className="w-full min-w-[800px] text-sm"><thead><tr className="text-left text-xs text-slate-500"><th className="pb-2">Feature</th><th className="pb-2">Solo</th><th className="pb-2">Team</th><th className="pb-2">Studio</th><th className="pb-2">Agency</th><th /></tr></thead><tbody>{category.rows.map((row, rowIndex) => <tr key={row.id}><td className="pr-2 pb-2"><input className={inputClass} value={row.feature} onChange={(e) => updateComparisonCategory(categoryIndex, (current) => ({ ...current, rows: current.rows.map((item, index) => index === rowIndex ? { ...item, feature: e.target.value } : item) }))} /></td>{['solo', 'team', 'studio', 'agency'].map((tier) => <td key={tier} className="px-1 pb-2"><input className={inputClass} value={row[tier] || ''} onChange={(e) => updateComparisonCategory(categoryIndex, (current) => ({ ...current, rows: current.rows.map((item, index) => index === rowIndex ? { ...item, [tier]: e.target.value } : item) }))} /></td>)}<td className="pl-2 pb-2"><button type="button" onClick={() => updateComparisonCategory(categoryIndex, (current) => ({ ...current, rows: current.rows.filter((_, index) => index !== rowIndex) }))} className="text-red-500 hover:text-red-700" aria-label={`Remove ${row.feature}`}>×</button></td></tr>)}</tbody></table></div>
-          <button type="button" onClick={() => updateComparisonCategory(categoryIndex, (current) => ({ ...current, rows: [...current.rows, { id: `${current.id}-feature-${Date.now()}`, feature: 'New feature', solo: 'Included', team: 'Included', studio: 'Included', agency: 'Included' }] }))} className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">+ Add feature</button>
+          <button type="button" disabled={category.rows.length >= 30} onClick={() => updateComparisonCategory(categoryIndex, (current) => ({ ...current, rows: [...current.rows, { id: `${current.id}-feature-${Date.now()}`, feature: 'New feature', solo: 'Included', team: 'Included', studio: 'Included', agency: 'Included' }] }))} className="text-sm font-semibold text-indigo-600 hover:text-indigo-700 disabled:opacity-30 disabled:cursor-not-allowed">+ Add feature ({category.rows.length}/30)</button>
         </Card>)}
-        <button type="button" onClick={addComparisonCategory} className="px-4 py-2 rounded-lg border border-indigo-200 text-sm font-semibold text-indigo-700 hover:bg-indigo-50">+ Add category</button>
+        <button type="button" disabled={config.features.comparison.categories.length >= 12} onClick={addComparisonCategory} className="px-4 py-2 rounded-lg border border-indigo-200 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-30 disabled:cursor-not-allowed">+ Add category ({config.features.comparison.categories.length}/12)</button>
       </div>}
 
       {tab === 'reviews' && <div className="space-y-5">
@@ -205,7 +275,7 @@ export default function AdminWebsitePage() {
             <p className="text-sm text-slate-500 max-w-2xl">Nothing in this section appears publicly until the master switch and the individual review's publish switch are both enabled. Featured reviews rotate on the homepage and link to the customer stories page.</p>
             <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 shrink-0"><input type="checkbox" checked={config.testimonials.enabled} onChange={(e) => updateSection('testimonials', 'enabled', e.target.checked)} className="w-4 h-4 rounded" />Section live</label>
           </div>
-          <div className="grid sm:grid-cols-2 gap-3"><Field label="Homepage heading" value={config.testimonials.heading} onChange={(v) => updateSection('testimonials', 'heading', v)} /><Field label="Stories page heading" value={config.testimonials.pageHeading} onChange={(v) => updateSection('testimonials', 'pageHeading', v)} /></div>
+          <div className="grid sm:grid-cols-2 gap-3"><Field label="Homepage heading" maxLength={140} value={config.testimonials.heading} onChange={(v) => updateSection('testimonials', 'heading', v)} /><Field label="Stories page heading" maxLength={140} value={config.testimonials.pageHeading} onChange={(v) => updateSection('testimonials', 'pageHeading', v)} /></div>
           <Field label="Homepage description" rows={2} value={config.testimonials.description} onChange={(v) => updateSection('testimonials', 'description', v)} />
           <Field label="Stories page description" rows={2} value={config.testimonials.pageDescription} onChange={(v) => updateSection('testimonials', 'pageDescription', v)} />
         </Card>
@@ -232,18 +302,18 @@ export default function AdminWebsitePage() {
         <button type="button" onClick={addReview} disabled={config.testimonials.reviews.length >= 30} className="px-4 py-2 rounded-lg border border-indigo-200 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-40">+ Add customer review</button>
       </div>}
 
-      {tab === 'pricing' && <div className="space-y-5"><Card title="Pricing section"><div className="grid sm:grid-cols-2 gap-3"><Field label="Section label" value={config.pricing.label} onChange={(v) => updateSection('pricing', 'label', v)} /><Field label="Heading" value={config.pricing.heading} onChange={(v) => updateSection('pricing', 'heading', v)} /></div><Field label="Description" value={config.pricing.description} onChange={(v) => updateSection('pricing', 'description', v)} /><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3"><Field label="Monthly label" value={config.pricing.monthlyLabel} onChange={(v) => updateSection('pricing', 'monthlyLabel', v)} /><Field label="Annual label" value={config.pricing.annualLabel} onChange={(v) => updateSection('pricing', 'annualLabel', v)} /><Field label="Savings badge" value={config.pricing.annualSavingsLabel} onChange={(v) => updateSection('pricing', 'annualSavingsLabel', v)} /><Field label="Featured badge" value={config.pricing.featuredLabel} onChange={(v) => updateSection('pricing', 'featuredLabel', v)} /></div><div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3"><Field label="Per-month suffix" value={config.pricing.perMonthLabel} onChange={(v) => updateSection('pricing', 'perMonthLabel', v)} /><Field label="Annual billing label" value={config.pricing.billedAnnuallyLabel} onChange={(v) => updateSection('pricing', 'billedAnnuallyLabel', v)} /><Field label="Monthly billing label" value={config.pricing.billedMonthlyLabel} onChange={(v) => updateSection('pricing', 'billedMonthlyLabel', v)} /><Field label="Trial button ({days} supported)" value={config.pricing.trialButtonLabel} onChange={(v) => updateSection('pricing', 'trialButtonLabel', v)} /><Field label="Trial footer ({days} supported)" value={config.pricing.trialFooterLabel} onChange={(v) => updateSection('pricing', 'trialFooterLabel', v)} /></div><div className="grid sm:grid-cols-2 gap-3"><Field label="Trial days" type="number" min="0" max="60" value={config.pricing.trialDays} onChange={(v) => updateSection('pricing', 'trialDays', v)} /><Field label="Pricing footer" value={config.pricing.footer} onChange={(v) => updateSection('pricing', 'footer', v)} /></div><StringList label="Features included in every plan" items={config.pricing.includedFeatures} onChange={(items) => updateSection('pricing', 'includedFeatures', items)} /></Card><div className="grid md:grid-cols-3 gap-5">{config.pricing.tiers.map((tier, index) => <Card key={tier.id} title={tier.name}><Field label="Plan name" value={tier.name} onChange={(v) => updateTier(index, 'name', v)} /><div className="grid grid-cols-2 gap-2"><Field label="Monthly $" type="number" min="1" step="0.01" value={(tier.monthlyAmountCents / 100).toFixed(2)} onChange={(v) => updateTierDollars(index, 'monthlyAmountCents', v)} /><Field label="Annual $" type="number" min="1" step="0.01" value={(tier.annualAmountCents / 100).toFixed(2)} onChange={(v) => updateTierDollars(index, 'annualAmountCents', v)} /></div><Field label="Description" rows={3} value={tier.description} onChange={(v) => updateTier(index, 'description', v)} /><label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={tier.featured} onChange={(e) => updateTier(index, 'featured', e.target.checked)} />Featured plan</label></Card>)}</div><p className="text-xs text-slate-500">Changing an amount creates a new Stripe price for future customers. Existing subscribers keep their current rate.</p></div>}
+      {tab === 'pricing' && <div className="space-y-5"><Card title="Pricing section"><div className="grid sm:grid-cols-2 gap-3"><Field label="Section label" maxLength={60} value={config.pricing.label} onChange={(v) => updateSection('pricing', 'label', v)} /><Field label="Heading" maxLength={140} value={config.pricing.heading} onChange={(v) => updateSection('pricing', 'heading', v)} /></div><Field label="Description" value={config.pricing.description} onChange={(v) => updateSection('pricing', 'description', v)} /><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3"><Field label="Monthly label" maxLength={30} value={config.pricing.monthlyLabel} onChange={(v) => updateSection('pricing', 'monthlyLabel', v)} /><Field label="Annual label" maxLength={30} value={config.pricing.annualLabel} onChange={(v) => updateSection('pricing', 'annualLabel', v)} /><Field label="Savings badge" maxLength={60} value={config.pricing.annualSavingsLabel} onChange={(v) => updateSection('pricing', 'annualSavingsLabel', v)} /><Field label="Featured badge" maxLength={40} value={config.pricing.featuredLabel} onChange={(v) => updateSection('pricing', 'featuredLabel', v)} /></div><div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3"><Field label="Per-month suffix" maxLength={30} value={config.pricing.perMonthLabel} onChange={(v) => updateSection('pricing', 'perMonthLabel', v)} /><Field label="Annual billing label" maxLength={50} value={config.pricing.billedAnnuallyLabel} onChange={(v) => updateSection('pricing', 'billedAnnuallyLabel', v)} /><Field label="Monthly billing label" maxLength={50} value={config.pricing.billedMonthlyLabel} onChange={(v) => updateSection('pricing', 'billedMonthlyLabel', v)} /><Field label="Trial button ({days} supported)" maxLength={80} value={config.pricing.trialButtonLabel} onChange={(v) => updateSection('pricing', 'trialButtonLabel', v)} /><Field label="Trial footer ({days} supported)" maxLength={100} value={config.pricing.trialFooterLabel} onChange={(v) => updateSection('pricing', 'trialFooterLabel', v)} /></div><div className="grid sm:grid-cols-2 gap-3"><Field label="Trial days" type="number" min="0" max="60" value={config.pricing.trialDays} onChange={(v) => updateSection('pricing', 'trialDays', v)} /><Field label="Pricing footer" maxLength={200} value={config.pricing.footer} onChange={(v) => updateSection('pricing', 'footer', v)} /></div><StringList label="Features included in every plan" maxItems={12} items={config.pricing.includedFeatures} onChange={(items) => updateSection('pricing', 'includedFeatures', items)} /></Card><div className="grid md:grid-cols-3 gap-5">{config.pricing.tiers.map((tier, index) => <Card key={tier.id} title={tier.name}><Field label="Plan name" maxLength={40} value={tier.name} onChange={(v) => updateTier(index, 'name', v)} /><div className="grid grid-cols-2 gap-2"><Field label="Monthly $" type="number" min="1" step="0.01" value={(tier.monthlyAmountCents / 100).toFixed(2)} onChange={(v) => updateTierDollars(index, 'monthlyAmountCents', v)} /><Field label="Annual $" type="number" min="1" step="0.01" value={(tier.annualAmountCents / 100).toFixed(2)} onChange={(v) => updateTierDollars(index, 'annualAmountCents', v)} /></div><Field label="Description" rows={3} value={tier.description} onChange={(v) => updateTier(index, 'description', v)} /><label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={tier.featured} onChange={(e) => updateTier(index, 'featured', e.target.checked)} />Featured plan</label></Card>)}</div><p className="text-xs text-slate-500">Changing an amount creates a new Stripe price for future customers. Existing subscribers keep their current rate.</p></div>}
 
-      {tab === 'faq' && <div className="space-y-5"><Card title="FAQ introduction"><Field label="Heading" value={config.faq.heading} onChange={(v) => updateSection('faq', 'heading', v)} /><Field label="Description" value={config.faq.description} onChange={(v) => updateSection('faq', 'description', v)} /></Card>{config.faq.items.map((item, index) => <Card key={index} title={`Question ${index + 1}`}><Field label="Question" value={item.question} onChange={(v) => updateNested('faq', 'items', index, 'question', v)} /><Field label="Answer" rows={4} value={item.answer} onChange={(v) => updateNested('faq', 'items', index, 'answer', v)} /></Card>)}</div>}
+      {tab === 'faq' && <div className="space-y-5"><Card title="FAQ introduction"><Field label="Heading" maxLength={140} value={config.faq.heading} onChange={(v) => updateSection('faq', 'heading', v)} /><Field label="Description" value={config.faq.description} onChange={(v) => updateSection('faq', 'description', v)} /></Card>{config.faq.items.map((item, index) => <Card key={index} title={`Question ${index + 1}`}><Field label="Question" value={item.question} onChange={(v) => updateNested('faq', 'items', index, 'question', v)} /><Field label="Answer" rows={4} value={item.answer} onChange={(v) => updateNested('faq', 'items', index, 'answer', v)} /></Card>)}</div>}
 
       {tab === 'forms' && <div className="grid md:grid-cols-2 gap-5"><Card title="Waitlist"><Field label="Heading" value={config.waitlist.heading} onChange={(v) => updateSection('waitlist', 'heading', v)} /><Field label="Description" rows={3} value={config.waitlist.description} onChange={(v) => updateSection('waitlist', 'description', v)} /><Field label="Success message" rows={2} value={config.waitlist.success} onChange={(v) => updateSection('waitlist', 'success', v)} /><Field label="Submit button" value={config.waitlist.submitLabel} onChange={(v) => updateSection('waitlist', 'submitLabel', v)} /><Field label="Name placeholder" value={config.waitlist.namePlaceholder} onChange={(v) => updateSection('waitlist', 'namePlaceholder', v)} /><Field label="Email placeholder" value={config.waitlist.emailPlaceholder} onChange={(v) => updateSection('waitlist', 'emailPlaceholder', v)} /><Field label="Business placeholder" value={config.waitlist.businessPlaceholder} onChange={(v) => updateSection('waitlist', 'businessPlaceholder', v)} /></Card><Card title="Contact"><Field label="Heading" value={config.contact.heading} onChange={(v) => updateSection('contact', 'heading', v)} /><Field label="Description" rows={3} value={config.contact.description} onChange={(v) => updateSection('contact', 'description', v)} /><Field label="Success message" rows={2} value={config.contact.success} onChange={(v) => updateSection('contact', 'success', v)} /><Field label="Submit button" value={config.contact.submitLabel} onChange={(v) => updateSection('contact', 'submitLabel', v)} /><Field label="Name placeholder" value={config.contact.namePlaceholder} onChange={(v) => updateSection('contact', 'namePlaceholder', v)} /><Field label="Email placeholder" value={config.contact.emailPlaceholder} onChange={(v) => updateSection('contact', 'emailPlaceholder', v)} /><Field label="Message placeholder" value={config.contact.messagePlaceholder} onChange={(v) => updateSection('contact', 'messagePlaceholder', v)} /></Card><Card title="Footer"><Field label="Tagline" value={config.footer.tagline} onChange={(v) => updateSection('footer', 'tagline', v)} /></Card></div>}
 
       {tab === 'legal' && <Card title="Terms of Service / Privacy Policy / Cookie Policy">
         <p className="text-sm text-slate-500">These identifying details are used across all three legal pages (/terms, /privacy, /cookies). The rest of each document's text is fixed.</p>
         <div className="grid sm:grid-cols-2 gap-3">
-          <Field label="Legal entity name" value={config.legal.entityName} onChange={(v) => updateSection('legal', 'entityName', v)} />
-          <Field label="Governing law (state/country)" value={config.legal.governingLaw} onChange={(v) => updateSection('legal', 'governingLaw', v)} />
-          <Field label="Contact email" type="email" value={config.legal.contactEmail} onChange={(v) => updateSection('legal', 'contactEmail', v)} />
+          <Field label="Legal entity name" maxLength={200} value={config.legal.entityName} onChange={(v) => updateSection('legal', 'entityName', v)} />
+          <Field label="Governing law (state/country)" maxLength={100} value={config.legal.governingLaw} onChange={(v) => updateSection('legal', 'governingLaw', v)} />
+          <Field label="Contact email" type="email" maxLength={200} value={config.legal.contactEmail} onChange={(v) => updateSection('legal', 'contactEmail', v)} />
           <Field label="Last updated" type="date" value={config.legal.effectiveDate} onChange={(v) => updateSection('legal', 'effectiveDate', v)} />
         </div>
       </Card>}

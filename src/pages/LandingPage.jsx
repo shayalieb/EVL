@@ -265,7 +265,7 @@ function ReviewSlider({ section }) {
   );
 }
 
-export default function LandingPage() {
+export default function LandingPage({ previewConfig } = {}) {
   const [waitlistForm, setWaitlistForm] = useState({ name: '', email: '', businessName: '', selectedPlan: '', billingInterval: '' });
   const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
   const [waitlistError, setWaitlistError] = useState('');
@@ -326,8 +326,12 @@ export default function LandingPage() {
     { value: '100%', label: 'Your money, straight via Stripe' },
   ];
   useEffect(() => {
+    // Admin "Preview" (src/pages/admin/AdminWebsitePage.jsx) injects the
+    // in-memory, not-yet-published config directly — skip the network
+    // fetch entirely rather than momentarily flashing the live content.
+    if (previewConfig) { setWebsiteConfig(previewConfig); return; }
     getLandingConfig().then((data) => setWebsiteConfig(data.config)).catch(() => {});
-  }, []);
+  }, [previewConfig]);
 
   // Scoped to this page only (not a global app-wide CSS change) — added on
   // mount, removed on unmount, so an in-page "#waitlist" jump glides instead

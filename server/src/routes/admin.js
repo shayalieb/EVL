@@ -10,7 +10,7 @@ import { sendMail, buildFromHeader, buildActionEmailHtml, escapeHtml } from '../
 import { uploadFile, getSignedDownloadUrl } from '../lib/fileStorage.js';
 import { VERTICALS } from '../lib/verticals.js';
 import { requireCsrfHeader } from '../lib/csrf.js';
-import { getWebsiteAdminConfig, normalizeWebsiteConfig } from '../lib/websiteConfig.js';
+import { DEFAULT_WEBSITE_CONFIG, getWebsiteAdminConfig, normalizeWebsiteConfig } from '../lib/websiteConfig.js';
 import { getStripeClient } from '../lib/stripe.js';
 import { priceIdFor } from '../lib/plans.js';
 
@@ -407,6 +407,23 @@ router.get('/website/config', asyncHandler(async (req, res) => {
   res.json({ config: await getWebsiteAdminConfig() });
 }));
 
+// publishedById is a loose string (see WebsiteSettingVersion's schema
+// comment, same non-FK convention as WebsiteSetting.updatedById) — resolved
+// to a name here with one lookup rather than a Prisma relation include.
+router.get('/website/history', asyncHandler(async (req, res) => {
+  const versions = await prisma.websiteSettingVersion.findMany({ orderBy: { publishedAt: 'desc' }, take: 20, select: { id: true, publishedAt: true, publishedById: true } });
+  const userIds = [...new Set(versions.map((v) => v.publishedById).filter(Boolean))];
+  const users = userIds.length ? await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, firstName: true, lastName: true } }) : [];
+  const userById = new Map(users.map((u) => [u.id, u]));
+  res.json({ versions: versions.map((v) => ({ id: v.id, publishedAt: v.publishedAt, publishedBy: userById.get(v.publishedById) ? { firstName: userById.get(v.publishedById).firstName, lastName: userById.get(v.publishedById).lastName } : null })) });
+}));
+
+router.get('/website/history/:id', asyncHandler(async (req, res) => {
+  const version = await prisma.websiteSettingVersion.findUnique({ where: { id: req.params.id } });
+  if (!version) return res.status(404).json({ error: 'Version not found.' });
+  res.json({ config: normalizeWebsiteConfig(version.config) });
+}));
+
 function reviewRequestLink(request) { return `${process.env.FRONTEND_URL || 'http://localhost:5173'}/review/${request.publicToken}`; }
 function serializeReviewRequest(request) {
   return { ...request, tokenHash: undefined, publicToken: undefined, reviewLink: reviewRequestLink(request) };
@@ -476,7 +493,8 @@ router.post('/website/review-requests/:id/decline', asyncHandler(async (req, res
 }));
 
 router.put('/website/config', asyncHandler(async (req, res) => {
-  const current = await getWebsiteAdminConfig();
+  const existingRow = await prisma.websiteSetting.findUnique({ where: { id: 'main' } });
+  const current = normalizeWebsiteConfig(existingRow?.config || DEFAULT_WEBSITE_CONFIG);
   const config = normalizeWebsiteConfig(req.body?.config);
   let stripe = null;
   for (const tier of config.pricing.tiers) {
@@ -503,11 +521,18 @@ router.put('/website/config', asyncHandler(async (req, res) => {
       tier[priceKey] = newPrice.id;
     }
   }
-  await prisma.websiteSetting.upsert({
-    where: { id: 'main' },
-    create: { id: 'main', config, updatedById: req.user.id },
-    update: { config, updatedById: req.user.id },
-  });
+  await prisma.$transaction([
+    ...(existingRow ? [prisma.websiteSettingVersion.create({ data: { config: existingRow.config, publishedById: existingRow.updatedById, publishedAt: existingRow.updatedAt } })] : []),
+    prisma.websiteSetting.upsert({
+      where: { id: 'main' },
+      create: { id: 'main', config, updatedById: req.user.id },
+      update: { config, updatedById: req.user.id },
+    }),
+  ]);
+  // Best-effort cleanup, not correctness-critical — keep only the most
+  // recent 20 snapshots so this table doesn't grow unbounded.
+  const staleIds = (await prisma.websiteSettingVersion.findMany({ orderBy: { publishedAt: 'desc' }, skip: 20, select: { id: true } })).map((v) => v.id);
+  if (staleIds.length) await prisma.websiteSettingVersion.deleteMany({ where: { id: { in: staleIds } } });
   res.json({ config });
 }));
 

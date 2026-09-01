@@ -1626,6 +1626,20 @@ model WebsiteSetting {
   updatedAt   DateTime @updatedAt
 }
 
+// A short undo history for WebsiteSetting — every publish snapshots the
+// version it's about to replace here (see PUT /admin/website/config), so a
+// bad publish can be loaded back into the admin editor. Not itself the live
+// config; publishedAt is when this snapshot *was* live, copied from the
+// outgoing row's own updatedAt, not when it stopped being live.
+model WebsiteSettingVersion {
+  id            String   @id @default(cuid())
+  config        Json
+  publishedById String?
+  publishedAt   DateTime
+
+  @@index([publishedAt])
+}
+
 // Secure, platform-owned review invitations and their original submissions.
 // Approved submissions are copied into WebsiteSetting as unpublished drafts;
 // this record remains unchanged as the moderation/audit source of truth.
