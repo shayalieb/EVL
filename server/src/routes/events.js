@@ -266,6 +266,12 @@ router.patch('/:id', asyncHandler(async (req, res) => {
           metadata: { contractorBookingId: booking.id, previousPaidAmount: oldPaid, newPaidAmount: newPaid },
           createdById: req.session.userId,
         } });
+        await tx.contractorPaymentRequest.updateMany({
+          where: { accountId: existing.accountId, eventId: saved.id, contractorId: booking.contractorId },
+          data: newPaid > 0
+            ? { status: 'paid', paidAt: postingDate, reviewedAt: new Date() }
+            : { status: 'submitted', paidAt: null, reviewedAt: null },
+        });
       }
     }
     return saved;

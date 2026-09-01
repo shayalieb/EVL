@@ -82,6 +82,7 @@ model Account {
   eventRsvpLinks          EventRsvpLink[]
   contractorCalendarLinks ContractorCalendarLink[]
   contractors             Contractor[]
+  contractorPaymentRequests ContractorPaymentRequest[]
   clients                 Client[]
   venues                  Venue[]
   offerings               Offering[]
@@ -1155,6 +1156,7 @@ model Contractor {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  paymentRequests ContractorPaymentRequest[]
 
   @@index([accountId])
   @@index([accountId, createdAt, id])
@@ -1515,12 +1517,37 @@ model Event {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  contractorPaymentRequests ContractorPaymentRequest[]
 
   @@index([accountId])
   @@index([accountId, deletedAt, createdAt, id])
   @@index([accountId, deletedAt, completedAt, eventDate, id])
   @@index([accountId, groupId, deletedAt, eventDate])
   @@index([deletedAt])
+}
+
+model ContractorPaymentRequest {
+  id           String     @id @default(cuid())
+  accountId    String
+  account      Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  eventId      String
+  event        Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  contractorId String
+  contractor   Contractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+  assignmentId String
+  amountCents  Int
+  invoiceNumber String?
+  note         String?    @db.Text
+  status       String     @default("submitted") // submitted | approved | disputed | paid
+  submittedAt  DateTime   @default(now())
+  reviewedAt   DateTime?
+  paidAt       DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([eventId, contractorId])
+  @@index([accountId, status, submittedAt])
+  @@index([contractorId, submittedAt])
 }
 
 // A managed act/band inside an agency account. Shared directories remain at

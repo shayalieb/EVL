@@ -97,3 +97,11 @@ export async function respondToGigByToken(token, eventId, action) {
     body: JSON.stringify({ action }),
   });
 }
+
+export async function requestContractorPaymentByToken(token, eventId, request) {
+  const data = await apiFetch(`/contractor-calendar/${encodeURIComponent(token)}/gigs/${encodeURIComponent(eventId)}/payment-request`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+  return data.paymentRequest;
+}

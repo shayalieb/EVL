@@ -99,13 +99,14 @@ router.get('/summary', requireFinancialPermission('viewFinancials'), asyncHandle
   const accountId = req.membership.accountId;
   const occurredAt = dateRange(req);
   const groupFilter = req.query.groupId ? { groupId: req.query.groupId } : {};
-  const [transactions, invoices, events, bookings, contractors, accountData] = await Promise.all([
+  const [transactions, invoices, events, bookings, contractors, accountData, paymentRequests] = await Promise.all([
     prisma.financialTransaction.findMany({ where: { accountId, ...groupFilter, ...(occurredAt ? { occurredAt } : {}) }, select: { amountCents: true, category: true } }),
     prisma.invoice.findMany({ where: { accountId, status: { in: ['sent', 'partial', 'paid'] } } }),
     prisma.event.findMany({ where: { accountId, deletedAt: null, ...groupFilter }, select: { id: true, name: true, eventDate: true, noOutsideContractorsNeeded: true, contractorBookings: true, otherExpenses: true } }),
     prisma.booking.findMany({ where: { accountId, deletedAt: null, ...groupFilter }, select: { id: true, eventName: true, convertedEventId: true } }),
     prisma.contractor.findMany({ where: { accountId }, select: { id: true, firstName: true, lastName: true, pricingTiers: true } }),
     prisma.accountData.findUnique({ where: { accountId }, select: { data: true } }),
+    prisma.contractorPaymentRequest.findMany({ where: { accountId }, select: { id: true, eventId: true, contractorId: true, status: true, amountCents: true, invoiceNumber: true, note: true, submittedAt: true } }),
   ]);
   const scopedBookingIds = new Set(bookings.map((booking) => booking.id));
   const scopedInvoices = req.query.groupId ? invoices.filter((invoice) => scopedBookingIds.has(invoice.bookingId)) : invoices;
@@ -115,6 +116,7 @@ router.get('/summary', requireFinancialPermission('viewFinancials'), asyncHandle
   const contractorById = new Map(contractors.map((c) => [c.id, c]));
   const bookingByEvent = new Map(bookings.filter((booking) => booking.convertedEventId).map((booking) => [booking.convertedEventId, booking]));
   const inquiryStatuses = accountData?.data?.inquiryStatuses || [];
+  const paymentRequestByGig = new Map(paymentRequests.map((request) => [`${request.eventId}:${request.contractorId}`, request]));
   const isUnavailable = (assignment) => {
     const status = inquiryStatuses.find((item) => item.id === assignment.inquiryStatusId);
     return status && (!status.isConfirmed && /not.?avail|declin/i.test(status.label || ''));
@@ -140,7 +142,8 @@ router.get('/summary', requireFinancialPermission('viewFinancials'), asyncHandle
       }
       if (amount !== null && amount > 0) {
         const timing = contractorPaymentTiming({ dueDate: booking.paymentDueDate, eventDate: event.eventDate });
-        const row = { assignmentId: booking.id || booking.contractorId, eventId: event.id, eventName: event.name, eventDate: event.eventDate, bookingId: relatedBooking?.id || null, bookingName: relatedBooking?.eventName || null, paymentDueDate: plausibleIsoDate(booking.paymentDueDate), contractorId: booking.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor', amount, ...timing };
+        const request = paymentRequestByGig.get(`${event.id}:${booking.contractorId}`);
+        const row = { assignmentId: booking.id || booking.contractorId, eventId: event.id, eventName: event.name, eventDate: event.eventDate, bookingId: relatedBooking?.id || null, bookingName: relatedBooking?.eventName || null, paymentDueDate: plausibleIsoDate(booking.paymentDueDate), contractorId: booking.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor', amount, paymentRequest: request ? { id: request.id, status: request.status, amount: request.amountCents / 100, invoiceNumber: request.invoiceNumber, note: request.note, submittedAt: request.submittedAt } : null, ...timing };
         contractorCostRows.push(row);
         if (booking.paymentStatus !== 'paid') {
           payableRows.push(row);
@@ -203,6 +206,7 @@ router.patch('/contractor-payments/:eventId/:assignmentId', requireFinancialPerm
   await prisma.$transaction(async (tx) => {
     await tx.event.update({ where: { id: event.id }, data: { contractorBookings: assignments } });
     await tx.financialTransaction.create({ data: { accountId: event.accountId, groupId: event.groupId, eventId: event.id, contractorId: existing.contractorId || null, category: 'contractor_payment', amountCents: -dollarsToCents(amount), description: `Contractor paid · ${contractorName}`, occurredAt: new Date(`${paymentDate}T12:00:00.000Z`), sourceType: 'event_contractor_payment', sourceId: randomUUID(), paymentMethod, reference: String(req.body?.paymentReference || '').trim().slice(0, 160) || null, memo: String(req.body?.paymentMemo || '').trim().slice(0, 1000) || null, metadata: { contractorBookingId: existing.id || req.params.assignmentId, previousPaidAmount: 0, newPaidAmount: amount }, createdById: req.session.userId } });
+    await tx.contractorPaymentRequest.updateMany({ where: { accountId: event.accountId, eventId: event.id, contractorId: existing.contractorId }, data: { status: 'paid', paidAt: new Date(`${paymentDate}T12:00:00.000Z`), reviewedAt: new Date() } });
   });
   res.json({ payment: { eventId: event.id, assignmentId: req.params.assignmentId, paymentStatus: 'paid', paidAmount: amount, paidAt: paymentDate, paymentMethod } });
 }));

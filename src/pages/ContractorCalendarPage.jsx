@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { API_BASE } from '../context/AuthContext';
-import { getContractorCalendarByToken, respondToGigByToken } from '../lib/contractors';
+import { getContractorCalendarByToken, requestContractorPaymentByToken, respondToGigByToken } from '../lib/contractors';
 import EventsCalendarView from '../components/events/EventsCalendarView';
 import { Skeleton, SkeletonTable } from '../components/ui/Skeleton';
 import Modal from '../components/ui/Modal';
@@ -26,6 +26,9 @@ export default function ContractorCalendarPage() {
   const [loading, setLoading] = useState(true);
   const [selectedGig, setSelectedGig] = useState(null);
   const [respondingGigId, setRespondingGigId] = useState(null);
+  const [requestingPayment, setRequestingPayment] = useState(false);
+  const [paymentRequestForm, setPaymentRequestForm] = useState({ invoiceNumber: '', note: '', certified: false });
+  const [paymentRequestError, setPaymentRequestError] = useState('');
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
@@ -79,6 +82,23 @@ export default function ContractorCalendarPage() {
       alert(err.message || 'Failed to update gig status.');
     } finally {
       setRespondingGigId(null);
+    }
+  }
+
+  async function handlePaymentRequest(event) {
+    event.preventDefault();
+    setRequestingPayment(true);
+    setPaymentRequestError('');
+    try {
+      await requestContractorPaymentByToken(token, selectedGig.id, paymentRequestForm);
+      const updatedData = await getContractorCalendarByToken(token);
+      setData(updatedData);
+      setSelectedGig(updatedData.gigs.find((gig) => gig.id === selectedGig.id) || null);
+      setPaymentRequestForm({ invoiceNumber: '', note: '', certified: false });
+    } catch (err) {
+      setPaymentRequestError(err.message || 'The payment request could not be submitted.');
+    } finally {
+      setRequestingPayment(false);
     }
   }
 
@@ -169,7 +189,7 @@ export default function ContractorCalendarPage() {
                         </span>
                       )}
                       {g.paymentStatus !== 'paid' && (
-                        <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Payment pending</span>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${g.paymentRequest ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-600'}`}>{g.paymentRequest ? 'Payment requested' : 'Payment pending'}</span>
                       )}
                     </div>
                     <div className="text-xs text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-2">
@@ -274,14 +294,26 @@ export default function ContractorCalendarPage() {
                 </div>
               ) : (
                 <div data-testid="contractor-gig-detail-payment-unpaid" className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-                  <div className="text-sm font-bold text-amber-800">Payment pending</div>
+                  <div className="text-sm font-bold text-amber-800">{selectedGig.paymentRequest ? 'Payment requested' : 'Payment pending'}</div>
                   <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
                     <div><dt className="font-semibold text-amber-700">Expected pay</dt><dd className="mt-0.5 text-sm font-bold text-slate-800">{selectedGig.expectedAmount != null ? currency(selectedGig.expectedAmount) : 'Rate not set'}</dd></div>
                     <div><dt className="font-semibold text-amber-700">Expected by</dt><dd className="mt-0.5 text-slate-800">{friendlyDate(selectedGig.paymentDueDate) || 'Not scheduled'}{selectedGig.paymentDueDateIsDefault ? ' (event date)' : ''}</dd></div>
                   </dl>
+                  {selectedGig.paymentRequest && <div className="mt-3 border-t border-amber-200 pt-3 text-xs text-slate-700"><p><strong>Status:</strong> {selectedGig.paymentRequest.status === 'disputed' ? 'Needs an update' : 'Sent to the business for review'}</p><p className="mt-1"><strong>Requested:</strong> {currency(selectedGig.paymentRequest.amount)}</p>{selectedGig.paymentRequest.invoiceNumber && <p className="mt-1"><strong>Invoice/reference:</strong> {selectedGig.paymentRequest.invoiceNumber}</p>}{selectedGig.paymentRequest.note && <p className="mt-1 whitespace-pre-wrap"><strong>Note:</strong> {selectedGig.paymentRequest.note}</p>}</div>}
                 </div>
               )}
             </div>
+
+            {selectedGig.paymentStatus !== 'paid' && (!selectedGig.paymentRequest || selectedGig.paymentRequest.status === 'disputed') && selectedGig.eventDate && selectedGig.eventDate <= new Date().toISOString().slice(0, 10) && selectedGig.expectedAmount > 0 && (
+              <form onSubmit={handlePaymentRequest} className="space-y-3 rounded-lg border border-violet-200 bg-violet-50 p-3">
+                <div><h3 className="text-sm font-bold text-violet-900">Request payment</h3><p className="mt-1 text-xs text-violet-700">This is a payment request, not an invoice. The business will review it before recording payment.</p></div>
+                <label className="block text-xs font-semibold text-slate-600">Invoice or reference number (optional)<input value={paymentRequestForm.invoiceNumber} maxLength={100} onChange={(e) => setPaymentRequestForm((form) => ({ ...form, invoiceNumber: e.target.value }))} className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-800" /></label>
+                <label className="block text-xs font-semibold text-slate-600">Note (optional)<textarea value={paymentRequestForm.note} maxLength={1000} rows={3} onChange={(e) => setPaymentRequestForm((form) => ({ ...form, note: e.target.value }))} className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-3 text-sm font-normal text-slate-800" /></label>
+                <label className="flex items-start gap-2 text-xs text-slate-700"><input type="checkbox" checked={paymentRequestForm.certified} onChange={(e) => setPaymentRequestForm((form) => ({ ...form, certified: e.target.checked }))} className="mt-0.5 h-4 w-4" /><span>I confirm the services were completed and this request for {currency(selectedGig.expectedAmount)} is accurate.</span></label>
+                {paymentRequestError && <p className="text-xs font-semibold text-rose-600">{paymentRequestError}</p>}
+                <button type="submit" disabled={requestingPayment || !paymentRequestForm.certified} className="min-h-11 rounded-lg bg-violet-600 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{requestingPayment ? 'Submitting…' : 'Submit payment request'}</button>
+              </form>
+            )}
 
             {selectedGig.venue?.name && (
               <div className="space-y-1">
