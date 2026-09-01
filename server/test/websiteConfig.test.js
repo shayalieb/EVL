@@ -31,7 +31,8 @@ test('website configuration preserves safe editable pricing and copy', () => {
   assert.equal(config.agency.features.length, 5);
   assert.equal(config.testimonials.enabled, false);
   assert.deepEqual(config.testimonials.reviews, []);
-  assert.equal(config.faq.items.length, 8);
+  assert.equal(config.faq.items.length, 13);
+  assert.match(config.faq.items[7].question, /bring over/i);
   assert.equal(config.waitlist.namePlaceholder, 'Your name');
   assert.match(config.legal.privacyPolicyContent, /Information We Collect/);
   assert.match(config.legal.termsOfServiceContent, /Description of the Service/);

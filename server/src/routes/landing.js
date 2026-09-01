@@ -23,6 +23,21 @@ publicLandingRouter.get('/config', asyncHandler(async (req, res) => {
   res.json({ config: await getWebsiteConfig() });
 }));
 
+publicLandingRouter.get('/sitemap.xml', asyncHandler(async (_req, res) => {
+  const config = await getWebsiteConfig();
+  const urls = [
+    ['https://www.gigworks.io/', 'monthly', '1.0'],
+    ...(config.testimonials?.enabled && config.testimonials.reviews?.length
+      ? [['https://www.gigworks.io/customer-stories', 'monthly', '0.7']]
+      : []),
+    ['https://www.gigworks.io/privacy', 'yearly', '0.3'],
+    ['https://www.gigworks.io/terms', 'yearly', '0.3'],
+    ['https://www.gigworks.io/cookies', 'yearly', '0.3'],
+  ];
+  const entries = urls.map(([loc, changefreq, priority]) => `  <url>\n    <loc>${loc}</loc>\n    <changefreq>${changefreq}</changefreq>\n    <priority>${priority}</priority>\n  </url>`).join('\n');
+  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries}\n</urlset>\n`);
+}));
+
 publicLandingRouter.get('/review/:token', asyncHandler(async (req, res) => {
   const request = await prisma.websiteReviewRequest.findUnique({ where: { tokenHash: hashToken(req.params.token) } });
   if (!request) return res.status(404).json({ error: 'This review link is invalid.' });

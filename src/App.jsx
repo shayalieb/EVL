@@ -6,6 +6,7 @@ import { AgencyGroupProvider } from './context/AgencyGroupContext';
 import { PortalAuthProvider, usePortalAuth } from './context/PortalAuthContext';
 import { ToastProvider } from './components/ui/Toast';
 import { SavingIndicatorProvider } from './components/ui/SavingIndicator';
+import SeoMetadata from './components/SeoMetadata';
 
 const AuthPage = lazy(() => import('./pages/AuthPage'));
 const PortalLoginPage = lazy(() => import('./pages/portal/PortalLoginPage'));
@@ -228,6 +229,7 @@ function AppRoutes() {
 function App() {
   return (
     <BrowserRouter>
+      <SeoMetadata />
       <AuthProvider>
         <ToastProvider>
           <SavingIndicatorProvider>

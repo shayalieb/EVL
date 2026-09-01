@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://gigworks.io/sitemap.xml
+Sitemap: https://www.gigworks.io/sitemap.xml
