@@ -15,10 +15,10 @@ export async function listContracts() {
 // `manual`+`reason`: skips the actual outbound email and logs a
 // 'manual_sent' entry with the reason instead of 'sent' — for contracts
 // delivered outside GigWorks (printed, texted, signed in person, etc.).
-export async function sendContract({ bookingId, recipientEmail, recipientName, snapshot, terms, manual, reason }) {
+export async function sendContract({ bookingId, recipientEmail, recipientName, snapshot, terms, manual, reason, expiration }) {
   return apiFetch('/contracts', {
     method: 'POST',
-    body: JSON.stringify({ bookingId, recipientEmail, recipientName, snapshot, terms, manual, reason }),
+    body: JSON.stringify({ bookingId, recipientEmail, recipientName, snapshot, terms, manual, reason, expiration }),
   });
 }
 
@@ -36,8 +36,8 @@ export async function addContractLogNote(contractId, note) {
 // Issues a fresh client sign link, invalidating whatever the old one was —
 // use when the original link was lost (never emailed, e.g. a manually-sent
 // contract) or the client needs a new one for any other reason.
-export async function regenerateClientSignLink(contractId) {
-  return apiFetch(`/contracts/${contractId}/regenerate-client-link`, { method: 'POST' });
+export async function regenerateClientSignLink(contractId, expiration) {
+  return apiFetch(`/contracts/${contractId}/regenerate-client-link`, { method: 'POST', body: JSON.stringify({ expiration }) });
 }
 
 export async function ownerSignContract(contractId, { signatureName, signatureImage }) {

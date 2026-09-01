@@ -3,6 +3,8 @@ import { apiFetch } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
 import Modal from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import LinkExpirationPicker from '../../components/LinkExpirationPicker';
+import { emptyLinkExpiration, serializeLinkExpiration } from '../../lib/linkExpiration';
 import SearchInput from '../../components/ui/SearchInput';
 import FilterSelect from '../../components/ui/FilterSelect';
 import { matchesSearch } from '../../lib/search';
@@ -302,12 +304,14 @@ function InviteAdminModal({ open, onClose, onInvited }) {
   const [permissions, setPermissions] = useState({});
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [expiration, setExpiration] = useState(() => emptyLinkExpiration('7_days'));
 
   useEffect(() => {
     if (open) {
       setForm({ firstName: '', lastName: '', email: '' });
       setPermissions({});
       setError('');
+      setExpiration(emptyLinkExpiration('7_days'));
     }
   }, [open]);
 
@@ -322,7 +326,7 @@ function InviteAdminModal({ open, onClose, onInvited }) {
     try {
       const data = await apiFetch('/admin/platform-admins/invite', {
         method: 'POST',
-        body: JSON.stringify({ ...form, email: form.email.trim().toLowerCase(), permissions }),
+        body: JSON.stringify({ ...form, email: form.email.trim().toLowerCase(), permissions, expiration: serializeLinkExpiration(expiration) }),
       });
       onInvited(data.admin);
     } catch (err) {
@@ -355,6 +359,7 @@ function InviteAdminModal({ open, onClose, onInvited }) {
         </div>
 
         <PermissionCheckboxes value={permissions} onChange={setPermissions} />
+        <LinkExpirationPicker value={expiration} onChange={setExpiration} label="Invitation expiration" testId="admin-admins-invite-expiration" />
 
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} data-testid="admin-admins-invite-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>

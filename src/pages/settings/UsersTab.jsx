@@ -6,6 +6,8 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import SearchInput from '../../components/ui/SearchInput';
 import FilterSelect from '../../components/ui/FilterSelect';
 import { matchesSearch } from '../../lib/search';
+import LinkExpirationPicker from '../../components/LinkExpirationPicker';
+import { emptyLinkExpiration, serializeLinkExpiration } from '../../lib/linkExpiration';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -101,7 +103,7 @@ export default function UsersTab() {
           data-testid="settings-users-invite-button"
           className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
         >
-          + Add Member
+          + Invite Member
         </button>
       </div>
 
@@ -158,7 +160,14 @@ export default function UsersTab() {
             )}
             {filteredMembers.map((m) => (
               <tr key={m.id} data-testid="settings-users-row" className="border-b border-slate-50 last:border-0">
-                <td className="px-4 py-3 font-medium text-slate-800">{m.firstName} {m.lastName}</td>
+                <td className="px-4 py-3 font-medium text-slate-800">
+                  {m.firstName} {m.lastName}
+                  {m.invitation && m.invitation.status !== 'used' && (
+                    <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${m.invitation.status === 'active' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                      {m.invitation.status === 'active' ? 'Invite pending' : 'Invite expired'}
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-slate-500">{m.email}</td>
                 <td className="px-4 py-3">
                   {m.role === 'owner' && <span className="text-xs font-semibold text-indigo-600">Owner</span>}
@@ -235,14 +244,16 @@ export default function UsersTab() {
 }
 
 function AddMemberModal({ open, onClose, onAdded }) {
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '' });
+  const [form, setForm] = useState({ firstName: '', lastName: '', email: '' });
+  const [expiration, setExpiration] = useState(() => emptyLinkExpiration('7_days'));
   const [permissions, setPermissions] = useState(emptyPermissions());
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setForm({ firstName: '', lastName: '', email: '', password: '' });
+      setForm({ firstName: '', lastName: '', email: '' });
+      setExpiration(emptyLinkExpiration('7_days'));
       setPermissions(emptyPermissions());
       setError('');
     }
@@ -259,7 +270,7 @@ function AddMemberModal({ open, onClose, onAdded }) {
     try {
       const data = await apiFetch('/team/members', {
         method: 'POST',
-        body: JSON.stringify({ ...form, email: form.email.trim().toLowerCase(), permissions }),
+        body: JSON.stringify({ ...form, email: form.email.trim().toLowerCase(), permissions, expiration: serializeLinkExpiration(expiration) }),
       });
       onAdded(data.member);
     } catch (err) {
@@ -270,7 +281,7 @@ function AddMemberModal({ open, onClose, onAdded }) {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Add Team Member">
+    <Modal open={open} onClose={onClose} title="Invite Team Member">
       <form onSubmit={handleSubmit} className="space-y-3">
         {error && <div data-testid="settings-users-add-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
@@ -290,10 +301,7 @@ function AddMemberModal({ open, onClose, onAdded }) {
           <input required type="email" value={form.email} onChange={(e) => update('email', e.target.value)} data-testid="settings-users-add-email-input" className={inputClass} />
         </div>
 
-        <div>
-          <label className={labelClass}>Temporary Password</label>
-          <input required type="text" minLength={8} value={form.password} onChange={(e) => update('password', e.target.value)} data-testid="settings-users-add-password-input" className={inputClass} />
-        </div>
+        <LinkExpirationPicker value={expiration} onChange={setExpiration} label="Invitation expiration" testId="settings-users-invite-expiration" />
 
         <div>
           <label className={labelClass}>Permissions</label>
@@ -315,7 +323,7 @@ function AddMemberModal({ open, onClose, onAdded }) {
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} data-testid="settings-users-add-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
           <button type="submit" disabled={saving} data-testid="settings-users-add-submit-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
-            {saving ? 'Adding…' : 'Add Member'}
+            {saving ? 'Sending…' : 'Send Invitation'}
           </button>
         </div>
       </form>

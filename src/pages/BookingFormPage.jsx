@@ -43,6 +43,8 @@ import { PRIORITIES } from '../lib/bookingPriorities';
 import { BOOKING_DISPOSITIONS, bookingDisposition } from '../lib/bookingDisposition';
 import { emptyForm, emptyVenue } from '../lib/bookingDefaults';
 import AgencyGroupSelect from '../components/AgencyGroupSelect';
+import LinkExpirationPicker from '../components/LinkExpirationPicker';
+import { emptyLinkExpiration, serializeLinkExpiration, formatLinkExpiration } from '../lib/linkExpiration';
 import { useAgencyBranding } from '../lib/useAgencyBranding';
 import { mergedProposalLog } from '../lib/proposalLog';
 
@@ -434,6 +436,7 @@ export default function BookingFormPage() {
   const [sendingProposal, setSendingProposal] = useState(false);
   const [contract, setContract] = useState(null);
   const [proposalResponse, setProposalResponse] = useState(null);
+  const [proposalLinkExpiration, setProposalLinkExpiration] = useState(() => emptyLinkExpiration('14_days'));
   const [contractRecipientEmail, setContractRecipientEmail] = useState('');
   const [contractRecipientName, setContractRecipientName] = useState('');
   const [contractHours, setContractHours] = useState('');
@@ -501,6 +504,7 @@ export default function BookingFormPage() {
   const [sendingContract, setSendingContract] = useState(false);
   const [regeneratingClientLink, setRegeneratingClientLink] = useState(false);
   const [contractSubmitAttempted, setContractSubmitAttempted] = useState(false);
+  const [contractLinkExpiration, setContractLinkExpiration] = useState(() => emptyLinkExpiration('30_days'));
   const [lastSignLink, setLastSignLink] = useState('');
   const [lastOwnerSignLink, setLastOwnerSignLink] = useState('');
   const [ownerSignerName, setOwnerSignerName] = useState('');
@@ -1028,6 +1032,7 @@ export default function BookingFormPage() {
         recipientEmail: client.email,
         recipientName,
         snapshot: buildProposalSnapshot(patch),
+        expiration: serializeLinkExpiration(proposalLinkExpiration),
       });
       setProposalResponse(createdResponse);
       const pdfAttachment = await generateProposalPdfAttachment({ booking: patch, client, businessInfo });
@@ -1071,6 +1076,7 @@ export default function BookingFormPage() {
           snapshot: buildProposalSnapshot(patch),
           manual: true,
           reason,
+          expiration: serializeLinkExpiration(proposalLinkExpiration),
         });
         setProposalResponse(createdResponse);
         responseLogged = true;
@@ -1408,6 +1414,7 @@ export default function BookingFormPage() {
       const url = await getContractPdfDataUrl({
         snapshot: buildContractSnapshot(),
         terms: contractTerms,
+        expiration: serializeLinkExpiration(contractLinkExpiration),
         clientSignature: null,
         ownerSignature: null,
       });
@@ -1470,6 +1477,7 @@ export default function BookingFormPage() {
         terms: contractTerms,
         manual: true,
         reason,
+        expiration: serializeLinkExpiration(contractLinkExpiration),
       });
       setContract(created);
       // Manual mode skips the email, but the server still issues both sign
@@ -1496,7 +1504,7 @@ export default function BookingFormPage() {
   async function handleRegenerateClientLink() {
     setRegeneratingClientLink(true);
     try {
-      const { contract: updated, signLink } = await regenerateClientSignLink(contract.id);
+      const { contract: updated, signLink } = await regenerateClientSignLink(contract.id, serializeLinkExpiration(contractLinkExpiration));
       setContract(updated);
       setLastSignLink(signLink);
       showToast('New client sign link generated');
@@ -2302,6 +2310,9 @@ export default function BookingFormPage() {
               </div>
 
               <div className={cardClass}>
+                <div className="mb-4 max-w-sm">
+                  <LinkExpirationPicker value={proposalLinkExpiration} onChange={setProposalLinkExpiration} label="Proposal link expiration" testId="booking-form-proposal-expiration" />
+                </div>
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <div className="text-sm text-slate-500" data-testid="booking-form-proposal-sent-status">
                     {form.proposal.sentAt ? (
@@ -2355,6 +2366,7 @@ export default function BookingFormPage() {
                     </button>
                   </div>
                 </div>
+                {proposalResponse && <div className="mt-3 text-xs font-medium text-slate-500">Current response link: {formatLinkExpiration(proposalResponse.expiresAt)}</div>}
                 {proposalResponse?.status === 'revision_requested' && (
                   <div data-testid="booking-form-proposal-revision-banner" className="mt-4 text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2.5">
                     <div className="font-semibold">{proposalResponse.recipientName || proposalResponse.recipientEmail} requested changes</div>
@@ -2630,6 +2642,9 @@ export default function BookingFormPage() {
                   Send Contract for Signature
                 </button>
               </div>
+              <div className="mt-4 max-w-sm">
+                <LinkExpirationPicker value={contractLinkExpiration} onChange={setContractLinkExpiration} label="Contract signing link expiration" testId="booking-form-contract-expiration" />
+              </div>
               {markingContractSentManually && (
                 <div className="mt-4 pt-4 border-t border-slate-100 max-w-2xl">
                   <label className={labelClass}>Why was this marked as sent manually?</label>
@@ -2675,6 +2690,11 @@ export default function BookingFormPage() {
           ) : (
             <>
               <div className={cardClass}>
+                {!contract.clientSignedAt && (
+                  <div className="mb-4 max-w-sm">
+                    <LinkExpirationPicker value={contractLinkExpiration} onChange={setContractLinkExpiration} label="Replacement link expiration" testId="booking-form-contract-replacement-expiration" />
+                  </div>
+                )}
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <div>
                     <div className="text-sm font-semibold text-slate-700" data-testid="booking-form-contract-status-banner">
@@ -2687,6 +2707,7 @@ export default function BookingFormPage() {
                       Sent {new Date(contract.sentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} to{' '}
                       <span className="font-semibold text-slate-600">{contract.recipientEmail}</span>
                     </div>
+                    <div className="mt-1 text-xs font-medium text-slate-500">Client link: {formatLinkExpiration(contract.clientLinkExpiresAt)}</div>
                   </div>
                   <div className="flex gap-2">
                     {!contract.clientSignedAt && (
@@ -2697,7 +2718,7 @@ export default function BookingFormPage() {
                         data-testid="booking-form-contract-regenerate-client-link-button"
                         className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60"
                       >
-                        {regeneratingClientLink ? 'Generating…' : 'Get Client Sign Link'}
+                        {regeneratingClientLink ? 'Replacing…' : 'Replace Client Sign Link'}
                       </button>
                     )}
                     <button

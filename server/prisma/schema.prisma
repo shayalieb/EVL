@@ -217,11 +217,15 @@ model PasswordResetToken {
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   tokenHash String    @unique
-  expiresAt DateTime
+  expiresAt DateTime?
+  purpose   String    @default("password_reset") // password_reset | account_invite | team_invite | platform_admin_invite
+  revokedAt DateTime?
   usedAt    DateTime?
   createdAt DateTime  @default(now())
 
   @@index([userId])
+  @@index([userId, purpose])
+  @@index([expiresAt])
 }
 
 model Session {
@@ -507,6 +511,8 @@ model Contract {
 
   clientTokenHash String? @unique
   ownerTokenHash  String? @unique
+  clientLinkExpiresAt DateTime?
+  ownerLinkExpiresAt  DateTime?
 
   clientSignedAt       DateTime?
   clientSignatureName  String?
@@ -528,6 +534,7 @@ model Contract {
   log Json @default("[]")
 
   @@index([accountId, bookingId])
+  @@index([clientLinkExpiresAt])
 }
 
 // A client's response to a sent proposal — Accept (optionally with a note)
@@ -554,6 +561,7 @@ model ProposalResponse {
   ownerEmail     String
 
   tokenHash String? @unique
+  expiresAt DateTime?
 
   respondedAt  DateTime?
   responseNote String?   @db.Text // optional on accept, required on revision request
@@ -568,6 +576,7 @@ model ProposalResponse {
   log Json @default("[]")
 
   @@index([accountId, bookingId])
+  @@index([expiresAt])
 }
 
 // A link the agent sends a prospective client so they can self-report their

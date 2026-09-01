@@ -4,6 +4,8 @@ import { apiFetch, useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
 import Modal from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import LinkExpirationPicker from '../../components/LinkExpirationPicker';
+import { emptyLinkExpiration, serializeLinkExpiration } from '../../lib/linkExpiration';
 import SearchInput from '../../components/ui/SearchInput';
 import FilterSelect from '../../components/ui/FilterSelect';
 import Pagination from '../../components/ui/Pagination';
@@ -415,11 +417,13 @@ function NewAccountModal({ open, onClose, onCreated }) {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const { showToast } = useToast();
+  const [expiration, setExpiration] = useState(() => emptyLinkExpiration('7_days'));
 
   useEffect(() => {
     if (open) {
       setForm({ firstName: '', lastName: '', email: '' });
       setError('');
+      setExpiration(emptyLinkExpiration('7_days'));
     }
   }, [open]);
 
@@ -434,7 +438,7 @@ function NewAccountModal({ open, onClose, onCreated }) {
     try {
       await apiFetch('/admin/accounts', {
         method: 'POST',
-        body: JSON.stringify({ ...form, email: form.email.trim().toLowerCase() }),
+        body: JSON.stringify({ ...form, email: form.email.trim().toLowerCase(), expiration: serializeLinkExpiration(expiration) }),
       });
       showToast('Invite sent');
       onCreated();
@@ -466,6 +470,8 @@ function NewAccountModal({ open, onClose, onCreated }) {
           <input required type="email" value={form.email} onChange={(e) => update('email', e.target.value)} data-testid="admin-accounts-new-account-email-input" className={inputClass} />
           <p className="mt-1 text-xs text-slate-400">They'll get an email with a link to set their own password.</p>
         </div>
+
+        <LinkExpirationPicker value={expiration} onChange={setExpiration} label="Invitation expiration" testId="admin-accounts-invite-expiration" />
 
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} data-testid="admin-accounts-new-account-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>

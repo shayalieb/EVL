@@ -17,10 +17,10 @@ export async function listProposalResponses() {
 // 'manual_sent' entry with the reason instead of 'sent' — for proposals
 // delivered outside GigWorks. The link is still generated either way, same
 // as sendContract, in case it's useful to share by hand.
-export async function sendProposalResponseLink({ bookingId, recipientEmail, recipientName, snapshot, manual, reason }) {
+export async function sendProposalResponseLink({ bookingId, recipientEmail, recipientName, snapshot, manual, reason, expiration }) {
   return apiFetch('/proposal-responses', {
     method: 'POST',
-    body: JSON.stringify({ bookingId, recipientEmail, recipientName, snapshot, manual, reason }),
+    body: JSON.stringify({ bookingId, recipientEmail, recipientName, snapshot, manual, reason, expiration }),
   });
 }
 

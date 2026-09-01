@@ -7,6 +7,7 @@ import { attachMembership } from '../lib/membership.js';
 import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { normalizeValidEmail } from '../lib/emailAddress.js';
+import { resolveLinkExpiration, linkAvailability } from '../lib/linkExpiration.js';
 
 const router = Router();
 
@@ -34,6 +35,7 @@ function serializeForOwner(pr) {
     responseNote: pr.responseNote,
     sentAt: pr.sentAt,
     createdAt: pr.createdAt,
+    expiresAt: pr.expiresAt,
     log: pr.log,
   };
 }
@@ -45,6 +47,7 @@ function serializeForPublic(pr) {
     recipientName: pr.recipientName,
     respondedAt: pr.respondedAt,
     responseNote: pr.responseNote,
+    expiresAt: pr.expiresAt,
   };
 }
 
@@ -74,7 +77,7 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 router.post('/', asyncHandler(async (req, res) => {
-  const { bookingId, recipientEmail, recipientName, snapshot, manual, reason } = req.body || {};
+  const { bookingId, recipientEmail, recipientName, snapshot, manual, reason, expiration } = req.body || {};
   const normalizedRecipientEmail = normalizeValidEmail(recipientEmail);
   if (!bookingId?.trim() || !normalizedRecipientEmail || !snapshot) {
     return res.status(400).json({ error: 'bookingId, a valid recipient email, and snapshot are required.' });
@@ -82,6 +85,8 @@ router.post('/', asyncHandler(async (req, res) => {
   if (manual && !reason?.trim()) {
     return res.status(400).json({ error: 'A reason is required to mark a proposal as sent manually.' });
   }
+  const resolvedExpiration = resolveLinkExpiration(expiration, { defaultPreset: '14_days' });
+  if (resolvedExpiration.error) return res.status(400).json({ error: resolvedExpiration.error });
 
   const owner = await prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } });
   const normalizedOwnerEmail = normalizeValidEmail(owner?.email);
@@ -99,6 +104,7 @@ router.post('/', asyncHandler(async (req, res) => {
       recipientName: recipientName || null,
       ownerEmail: normalizedOwnerEmail,
       tokenHash: hashToken(token),
+      expiresAt: resolvedExpiration.expiresAt,
       sentAt,
       log: manual
         ? withLogEntry([], { type: 'manual_sent', actorEmail: normalizedOwnerEmail, note: reason.trim() })
@@ -123,9 +129,17 @@ async function findByToken(token) {
   return prisma.proposalResponse.findUnique({ where: { tokenHash: hashToken(token) } });
 }
 
+function rejectUnavailable(pr, res) {
+  const availability = linkAvailability({ expiresAt: pr.expiresAt });
+  if (availability.available) return false;
+  res.status(410).json({ error: 'This proposal link has expired. Please contact the sender for a new link.', reason: availability.status });
+  return true;
+}
+
 publicProposalResponsesRouter.get('/:token', asyncHandler(async (req, res) => {
   const pr = await findByToken(req.params.token);
   if (!pr) return res.status(404).json({ error: 'This link is invalid or has expired.' });
+  if (rejectUnavailable(pr, res)) return;
   res.json({ proposalResponse: serializeForPublic(pr) });
 }));
 
@@ -194,6 +208,7 @@ publicProposalResponsesRouter.post('/:token/respond', asyncHandler(async (req, r
 
   const pr = await findByToken(req.params.token);
   if (!pr) return res.status(404).json({ error: 'This link is invalid or has expired.' });
+  if (rejectUnavailable(pr, res)) return;
   if (pr.status !== 'sent') return res.status(409).json({ error: 'This proposal has already received a response.' });
 
   const status = action === 'accept' ? 'accepted' : 'revision_requested';

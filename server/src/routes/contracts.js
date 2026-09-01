@@ -8,6 +8,7 @@ import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '.
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { withSerializableTransaction } from '../lib/serializableTransaction.js';
 import { normalizeValidEmail } from '../lib/emailAddress.js';
+import { resolveLinkExpiration, linkAvailability } from '../lib/linkExpiration.js';
 
 const router = Router();
 
@@ -40,6 +41,8 @@ function serializeForOwner(contract) {
     ownerSignatureImage: contract.ownerSignatureImage,
     sentAt: contract.sentAt,
     createdAt: contract.createdAt,
+    clientLinkExpiresAt: contract.clientLinkExpiresAt,
+    ownerLinkExpiresAt: contract.ownerLinkExpiresAt,
     log: contract.log,
   };
 }
@@ -57,6 +60,7 @@ function serializeForPublic(contract, role) {
     ownerSignedAt: contract.ownerSignedAt,
     ownerSignatureName: contract.ownerSignatureName,
     ownerSignatureImage: contract.ownerSignatureImage,
+    expiresAt: role === 'client' ? contract.clientLinkExpiresAt : contract.ownerLinkExpiresAt,
   };
 }
 
@@ -103,7 +107,7 @@ router.post('/', asyncHandler(async (req, res) => {
   if (!effectivePermissions(req.membership).manageBookings) {
     return res.status(403).json({ error: 'Not authorized.' });
   }
-  const { bookingId, recipientEmail, recipientName, snapshot, terms, manual, reason } = req.body || {};
+  const { bookingId, recipientEmail, recipientName, snapshot, terms, manual, reason, expiration } = req.body || {};
   const normalizedRecipientEmail = normalizeValidEmail(recipientEmail);
   if (!bookingId?.trim() || !normalizedRecipientEmail || !snapshot) {
     return res.status(400).json({ error: 'bookingId, a valid recipient email, and snapshot are required.' });
@@ -111,6 +115,8 @@ router.post('/', asyncHandler(async (req, res) => {
   if (manual && !reason?.trim()) {
     return res.status(400).json({ error: 'A reason is required to mark a contract as sent manually.' });
   }
+  const resolvedExpiration = resolveLinkExpiration(expiration, { defaultPreset: '30_days' });
+  if (resolvedExpiration.error) return res.status(400).json({ error: resolvedExpiration.error });
 
   const owner = await prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } });
   const normalizedOwnerEmail = normalizeValidEmail(owner?.email);
@@ -134,6 +140,8 @@ router.post('/', asyncHandler(async (req, res) => {
       ownerEmail: normalizedOwnerEmail,
       clientTokenHash: hashToken(clientToken),
       ownerTokenHash: hashToken(ownerToken),
+      clientLinkExpiresAt: resolvedExpiration.expiresAt,
+      ownerLinkExpiresAt: resolvedExpiration.expiresAt,
       sentAt,
       // Delivered outside GigWorks (printed, texted, signed in person,
       // etc.) skips the actual email below, but still gets sign tokens so
@@ -268,11 +276,14 @@ router.post('/:id/regenerate-client-link', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'The client has already signed this contract.' });
   }
   const owner = await prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } });
+  const resolvedExpiration = resolveLinkExpiration(req.body?.expiration, { defaultPreset: '30_days' });
+  if (resolvedExpiration.error) return res.status(400).json({ error: resolvedExpiration.error });
   const clientToken = generateToken();
   const updated = await prisma.contract.update({
     where: { id: contract.id },
     data: {
       clientTokenHash: hashToken(clientToken),
+      clientLinkExpiresAt: resolvedExpiration.expiresAt,
       log: withLogEntry(contract.log, { type: 'client_link_regenerated', actorEmail: owner.email, note: null }),
     },
   });
@@ -292,12 +303,20 @@ async function findByToken(token, database = prisma) {
   });
   if (!contract) return null;
   const role = contract.clientTokenHash === hash ? 'client' : 'owner';
-  return { contract, role };
+  const expiresAt = role === 'client' ? contract.clientLinkExpiresAt : contract.ownerLinkExpiresAt;
+  return { contract, role, availability: linkAvailability({ expiresAt }) };
+}
+
+function rejectUnavailable(found, res) {
+  if (found.availability.available) return false;
+  res.status(410).json({ error: 'This contract link has expired. Please contact the sender for a new link.', reason: found.availability.status });
+  return true;
 }
 
 publicContractsRouter.get('/:token', asyncHandler(async (req, res) => {
   const found = await findByToken(req.params.token);
   if (!found) return res.status(404).json({ error: 'This link is invalid or has expired.' });
+  if (rejectUnavailable(found, res)) return;
 
   const { contract, role } = found;
   res.json({ contract: serializeForPublic(contract, role) });
@@ -306,6 +325,7 @@ publicContractsRouter.get('/:token', asyncHandler(async (req, res) => {
 publicContractsRouter.post('/:token/view', asyncHandler(async (req, res) => {
   const found = await findByToken(req.params.token);
   if (!found) return res.status(404).json({ error: 'This link is invalid or has expired.' });
+  if (rejectUnavailable(found, res)) return;
 
   const { contract, role } = found;
   const { email } = req.body || {};
@@ -328,6 +348,7 @@ publicContractsRouter.post('/:token/submit', asyncHandler(async (req, res) => {
   const result = await withSerializableTransaction(prisma, async (tx) => {
     const found = await findByToken(req.params.token, tx);
     if (!found) return { error: { status: 404, message: 'This link is invalid or has expired.' } };
+    if (!found.availability.available) return { error: { status: 410, message: 'This contract link has expired. Please contact the sender for a new link.' } };
 
     const { contract, role } = found;
     if (email?.trim()) {

@@ -191,9 +191,9 @@ router.post('/forgot-password', passwordResetLimiter, asyncHandler(async (req, r
   const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (user) {
     const token = generateToken();
-    await prisma.passwordResetToken.deleteMany({ where: { userId: user.id, usedAt: null } });
+    await prisma.passwordResetToken.deleteMany({ where: { userId: user.id, purpose: 'password_reset', usedAt: null } });
     await prisma.passwordResetToken.create({
-      data: { userId: user.id, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS) },
+      data: { userId: user.id, tokenHash: hashToken(token), purpose: 'password_reset', expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS) },
     });
 
     const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${token}`;
@@ -226,7 +226,7 @@ router.post('/reset-password', passwordResetLimiter, asyncHandler(async (req, re
   }
 
   const record = await prisma.passwordResetToken.findUnique({ where: { tokenHash: hashToken(token) } });
-  if (!record || record.usedAt || record.expiresAt < new Date()) {
+  if (!record || record.usedAt || record.revokedAt || (record.expiresAt && record.expiresAt < new Date())) {
     return res.status(400).json({ error: 'This reset link is invalid or has expired.' });
   }
 
@@ -237,17 +237,31 @@ router.post('/reset-password', passwordResetLimiter, asyncHandler(async (req, re
     // row from unused to used; the other transaction makes no password
     // change.
     const result = await tx.passwordResetToken.updateMany({
-      where: { id: record.id, usedAt: null, expiresAt: { gt: new Date() } },
+      where: {
+        id: record.id,
+        usedAt: null,
+        revokedAt: null,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
       data: { usedAt: new Date() },
     });
     if (result.count !== 1) return false;
 
     await tx.user.update({ where: { id: record.userId }, data: { passwordHash } });
+    // Whichever valid setup/recovery link succeeds first completes the
+    // account credential flow. Revoke every other outstanding link for the
+    // same user so an older invitation cannot later replace the password.
+    await tx.passwordResetToken.updateMany({
+      where: { userId: record.userId, id: { not: record.id }, usedAt: null, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
     // Account recovery should revoke sessions that may already be in an
     // attacker's possession. PrismaSessionStore JSON-serializes session data
     // without whitespace, so this exact property match avoids matching an ID
     // that merely appears elsewhere in a session.
-    await tx.session.deleteMany({ where: { data: { contains: `"userId":"${record.userId}"` } } });
+    if (record.purpose === 'password_reset') {
+      await tx.session.deleteMany({ where: { data: { contains: `"userId":"${record.userId}"` } } });
+    }
     return true;
   });
   if (!consumed) {

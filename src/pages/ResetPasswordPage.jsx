@@ -9,6 +9,7 @@ const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm 
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
+  const isInvitation = searchParams.get('invite') === '1';
   const { resetPassword } = useAuth();
 
   const [newPassword, setNewPassword] = useState('');
@@ -43,16 +44,16 @@ export default function ResetPasswordPage() {
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
         <div className="text-center mb-6">
           <Logo className="h-12 w-auto mx-auto mb-3" />
-          <p className="text-sm text-slate-500">Reset your password</p>
+          <p className="text-sm text-slate-500">{isInvitation ? 'Accept your invitation' : 'Reset your password'}</p>
         </div>
 
         {!token ? (
           <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 text-center">
-            This reset link is missing its token. Request a new one from the sign-in page.
+            This {isInvitation ? 'invitation' : 'reset link'} is missing its token. {isInvitation ? 'Ask the sender for a new invitation.' : 'Request a new one from the sign-in page.'}
           </p>
         ) : done ? (
           <div className="space-y-4 text-center">
-            <p data-testid="reset-password-done-message" className="text-sm text-slate-600">Your password has been reset.</p>
+            <p data-testid="reset-password-done-message" className="text-sm text-slate-600">{isInvitation ? 'Your invitation is accepted and your account is ready.' : 'Your password has been reset.'}</p>
             <Link to="/auth" data-testid="reset-password-back-to-signin-link" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
               Back to sign in
             </Link>
@@ -66,7 +67,7 @@ export default function ResetPasswordPage() {
             )}
             <input type="password" required minLength={8} placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} data-testid="reset-password-new-password-input" className={inputClass} />
             <input type="password" required placeholder="Confirm new password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} data-testid="reset-password-confirm-password-input" className={inputClass} />
-            <SubmitButton loading={submitting} testId="reset-password-submit-button">Reset Password</SubmitButton>
+            <SubmitButton loading={submitting} testId="reset-password-submit-button">{isInvitation ? 'Accept Invitation' : 'Reset Password'}</SubmitButton>
           </form>
         )}
       </div>

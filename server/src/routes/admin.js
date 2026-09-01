@@ -13,9 +13,9 @@ import { requireCsrfHeader } from '../lib/csrf.js';
 import { DEFAULT_WEBSITE_CONFIG, getWebsiteAdminConfig, normalizeWebsiteConfig } from '../lib/websiteConfig.js';
 import { getStripeClient } from '../lib/stripe.js';
 import { priceIdFor } from '../lib/plans.js';
+import { resolveLinkExpiration } from '../lib/linkExpiration.js';
 
 const router = Router();
-const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 const REVIEW_LINK_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_FILES = 3;
@@ -246,7 +246,7 @@ function clampToCallerPermissions(req, input) {
   return sanitized;
 }
 
-async function createInvitedUser({ firstName, lastName, email }, { grantAdmin = false, permissions, approvedById } = {}) {
+async function createInvitedUser({ firstName, lastName, email, expiration }, { grantAdmin = false, permissions, approvedById } = {}) {
   const normalizedEmail = normalizeValidEmail(email);
   if (!normalizedEmail) throw Object.assign(new Error('A valid email address is required.'), { status: 400 });
 
@@ -281,16 +281,22 @@ async function createInvitedUser({ firstName, lastName, email }, { grantAdmin = 
   }
 
   const token = generateToken();
+  const resolvedExpiration = resolveLinkExpiration(expiration, { defaultPreset: '7_days' });
+  if (resolvedExpiration.error) throw Object.assign(new Error(resolvedExpiration.error), { status: 400 });
+  const purpose = grantAdmin ? 'platform_admin_invite' : 'account_invite';
   await prisma.passwordResetToken.create({
-    data: { userId: user.id, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS) },
+    data: { userId: user.id, tokenHash: hashToken(token), purpose, expiresAt: resolvedExpiration.expiresAt },
   });
-  const setupUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${token}`;
+  const setupUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${token}&invite=1`;
+  const expirationCopy = resolvedExpiration.expiresAt
+    ? `This link expires ${resolvedExpiration.expiresAt.toLocaleString()}.`
+    : 'This invitation does not expire unless an administrator revokes or replaces it.';
   try {
     await sendMail({
       from: buildFromHeader(),
       to: normalizedEmail,
       subject: grantAdmin ? "You've been invited to GigWorks as an admin" : "You've been invited to GigWorks",
-      html: `<p>An account has been created for you${grantAdmin ? ' with admin access' : ''}. Click below to set your password and get started. This link expires in 1 hour.</p><p><a href="${setupUrl}">${setupUrl}</a></p>`,
+      html: `<p>An account has been created for you${grantAdmin ? ' with admin access' : ''}. Click below to set your password and get started. ${expirationCopy}</p><p><a href="${setupUrl}">${setupUrl}</a></p>`,
     });
   } catch {
     // best effort — the account still exists even if the invite email fails to send
@@ -300,12 +306,12 @@ async function createInvitedUser({ firstName, lastName, email }, { grantAdmin = 
 }
 
 router.post('/accounts', asyncHandler(async (req, res) => {
-  const { firstName, lastName, email } = req.body || {};
+  const { firstName, lastName, email, expiration } = req.body || {};
   if (!firstName?.trim() || !lastName?.trim() || !normalizeValidEmail(email)) {
     return res.status(400).json({ error: 'First name, last name, and a valid email address are required.' });
   }
   try {
-    await createInvitedUser({ firstName, lastName, email }, { approvedById: req.user.id });
+    await createInvitedUser({ firstName, lastName, email, expiration }, { approvedById: req.user.id });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     throw err;
@@ -839,13 +845,13 @@ router.post('/platform-admins', asyncHandler(async (req, res) => {
 // Combines account creation + admin grant in one step, for someone who
 // doesn't have an account yet.
 router.post('/platform-admins/invite', asyncHandler(async (req, res) => {
-  const { firstName, lastName, email, permissions } = req.body || {};
+  const { firstName, lastName, email, permissions, expiration } = req.body || {};
   if (!firstName?.trim() || !lastName?.trim() || !normalizeValidEmail(email)) {
     return res.status(400).json({ error: 'First name, last name, and a valid email address are required.' });
   }
   let user;
   try {
-    user = await createInvitedUser({ firstName, lastName, email }, { grantAdmin: true, permissions: clampToCallerPermissions(req, permissions), approvedById: req.user.id });
+    user = await createInvitedUser({ firstName, lastName, email, expiration }, { grantAdmin: true, permissions: clampToCallerPermissions(req, permissions), approvedById: req.user.id });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     throw err;
