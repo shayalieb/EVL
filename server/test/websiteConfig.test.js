@@ -33,6 +33,18 @@ test('website configuration preserves safe editable pricing and copy', () => {
   assert.deepEqual(config.testimonials.reviews, []);
   assert.equal(config.faq.items.length, 8);
   assert.equal(config.waitlist.namePlaceholder, 'Your name');
+  assert.match(config.legal.privacyPolicyContent, /Information We Collect/);
+  assert.match(config.legal.termsOfServiceContent, /Description of the Service/);
+});
+
+test('legal policies are fully editable while remaining bounded plain text', () => {
+  const config = normalizeWebsiteConfig({ legal: {
+    privacyPolicyContent: '## Privacy\nA custom privacy policy.',
+    termsOfServiceContent: '## Terms\nCustom terms for {entityName}.',
+  } });
+  assert.equal(config.legal.privacyPolicyContent, '## Privacy\nA custom privacy policy.');
+  assert.equal(config.legal.termsOfServiceContent, '## Terms\nCustom terms for {entityName}.');
+  assert.equal(normalizeWebsiteConfig({ legal: { privacyPolicyContent: 'x'.repeat(31000) } }).legal.privacyPolicyContent.length, 30000);
 });
 
 test('website configuration safely stores controlled customer reviews and stories', () => {

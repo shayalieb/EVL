@@ -84,6 +84,86 @@ const comparisonCategories = [
   rows: rows.map(([feature, solo, team, studio], rowIndex) => ({ id: `feature-${categoryIndex + 1}-${rowIndex + 1}`, feature, solo, team, studio, agency: feature === 'Team members' ? 'Custom' : 'Included' })),
 }));
 
+const privacyPolicyContent = `This Privacy Policy explains how {entityName} ("we," "us," or "our") collects, uses, and shares information when you use GigWorks (the "Service"). It covers both your own account information and the business data you enter into the Service.
+
+## 1. Information We Collect
+We collect a few different kinds of information:
+- Account information you give us directly: your name, email, phone number, business name, and a securely hashed password. We never store your password in readable form.
+- Business data you enter to use the Service: your clients' and contractors' contact details, bookings, events, proposals, contracts, invoices, and financial records. This data belongs to you—see our Terms of Service at /terms.
+- Payment information: when you or your clients pay through the Service, card details are entered directly into Stripe's secure checkout. We never see or store full card numbers.
+- Usage information: basic technical information such as IP address and browser type, collected for security and reliability.
+
+## 2. How We Use Information
+We use this information to operate and provide the Service: to run your account, process payments, send transactional emails, respond to support requests, and keep the Service secure and reliable. We don't sell your information or use your business data to advertise to your clients or contractors.
+
+## 3. Third-Party Service Providers
+We rely on trusted service providers to run GigWorks. Each processes information only as needed to provide its service to us, including payment processing, transactional email, infrastructure hosting, database and file storage, and error monitoring. We don't share information with other third parties except as needed to provide the Service, comply with law, or protect our rights.
+
+## 4. Data Retention and Deletion
+We retain account and business data while an account is active, plus a reasonable period afterward. To request deletion, contact {contactEmail}.
+
+## 5. Your Rights
+You can request access to, correction of, or deletion of your personal information by contacting {contactEmail}. If your information was entered by one of our business customers, contact that business directly or contact us and we'll help route the request.
+
+## 6. Data Security
+We take reasonable steps to protect information, including encryption in transit, password hashing, and authenticated sessions. No system is perfectly secure, but we work to keep the Service safe.
+
+## 7. Children's Privacy
+GigWorks is a business tool and isn't directed at children. We don't knowingly collect information from anyone under 18.
+
+## 8. Changes to This Policy
+We may update this Privacy Policy from time to time. If we make material changes, we'll take reasonable steps to notify you.
+
+## 9. Contact
+Questions about this Privacy Policy? Contact {contactEmail}.`;
+
+const termsOfServiceContent = `These Terms of Service ("Terms") govern your access to and use of GigWorks, a booking, staffing, and event-management platform for entertainment businesses (the "Service"), provided by {entityName}. By creating an account or using the Service, you agree to these Terms. If you agree on behalf of a business, you confirm that you have authority to bind that business.
+
+## 1. Description of the Service
+The Service helps entertainment businesses manage the lifecycle of a gig, including inquiries, proposals, electronic-signature contracts, invoicing, payments, contractor rosters, confirmations, production tools, and financial tracking.
+
+## 2. Eligibility
+The Service is intended for business and professional use. You must be at least 18 years old and able to form a binding contract.
+
+## 3. Your Account
+You are responsible for your credentials and all activity under your account. Provide accurate information and contact {contactEmail} promptly if you believe your account has been compromised. Account owners may invite team members and control their access.
+
+## 4. Subscription Plans, Billing, and Free Trial
+Paid plans recur monthly or annually through Stripe. New accounts may receive a {trialDays}-day free trial. You may cancel at any time, effective at the end of the billing period. We do not provide refunds or credits for partial billing periods. Prices and plan features may change with notice.
+
+## 5. Payments for Your Clients and Contractors
+The Service may let you invoice clients and collect payment through your connected Stripe account. {entityName} is not a party to your transactions, does not take custody of those funds, and is not responsible for your tax or legal compliance. Stripe's terms also apply.
+
+## 6. Your Business Data
+You retain ownership of data you enter into the Service. You are responsible for its accuracy and for having the right to process it. We process it on your behalf as described in the Privacy Policy at /privacy.
+
+## 7. Acceptable Use
+You may not use the Service illegally or fraudulently, gain unauthorized access, disrupt its operation, reverse-engineer its source code, or send unlawful unsolicited communications.
+
+## 8. Intellectual Property
+{entityName} owns the Service, software, design, and branding. You retain rights to your data and content.
+
+## 9. Electronic Signatures
+Contracts sent through the Service include electronic-signature consent at signing. That consent governs the document being signed.
+
+## 10. Availability and Disclaimers
+We aim to keep the Service reliable but do not guarantee uninterrupted or error-free operation. The Service is provided "as is" and "as available" to the fullest extent permitted by law.
+
+## 11. Limitation of Liability
+To the fullest extent permitted by law, {entityName} is not liable for indirect, incidental, special, consequential, or punitive damages or lost profits. Total liability is limited to the amount paid to us in the twelve months before the claim.
+
+## 12. Suspension and Termination
+We may suspend an account that violates these Terms. Access may be restricted if a subscription lapses. When access ends, data may be retained for a reasonable period, subject to the Privacy Policy.
+
+## 13. Changes to These Terms
+We may update these Terms. For material changes, we'll take reasonable steps to notify you. Continued use after changes take effect means you accept the updated Terms.
+
+## 14. Governing Law
+These Terms are governed by the laws of {governingLaw}, without regard to conflict-of-law principles.
+
+## 15. Contact
+Questions about these Terms? Contact {contactEmail}.`;
+
 export const DEFAULT_WEBSITE_CONFIG = {
   publicSignupsEnabled: false,
   navigation: { story: 'Story', features: 'Features', pricing: 'Pricing', faq: 'FAQ', login: 'Log In', waitlist: 'Join Waitlist', signup: 'Start Free Trial' },
@@ -103,7 +183,7 @@ export const DEFAULT_WEBSITE_CONFIG = {
   // than hardcoded into those pages, same reasoning as every other section
   // here. The prose on those pages itself stays static; only these
   // identifying details are configurable.
-  legal: { entityName: 'GigWorks', governingLaw: 'New York', contactEmail: 'shaya.gigworks@gmail.com', effectiveDate: '2026-08-31' },
+  legal: { entityName: 'GigWorks', governingLaw: 'New York', contactEmail: 'shaya.gigworks@gmail.com', effectiveDate: '2026-08-31', privacyPolicyContent, termsOfServiceContent },
 };
 
 function text(value, fallback, max = 1000) { return typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : fallback; }
@@ -175,7 +255,7 @@ export function normalizeWebsiteConfig(input = {}) {
     waitlist: section(input.waitlist, d.waitlist),
     contact: section(input.contact, d.contact),
     footer: section(input.footer, d.footer),
-    legal: section(input.legal, d.legal, { entityName: 200, governingLaw: 100, contactEmail: 200, effectiveDate: 20 }),
+    legal: section(input.legal, d.legal, { entityName: 200, governingLaw: 100, contactEmail: 200, effectiveDate: 20, privacyPolicyContent: 30000, termsOfServiceContent: 30000 }),
   };
 }
 

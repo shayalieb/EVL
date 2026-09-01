@@ -10,7 +10,7 @@ const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm 
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 const TABS = [
   ['launch', 'Launch'], ['hero', 'Navigation & Hero'], ['story', 'Story'], ['problems', 'Problems'],
-  ['features', 'Features'], ['agency', 'Agency Tier'], ['reviews', 'Reviews & Stories'], ['pricing', 'Pricing'], ['faq', 'FAQ'], ['forms', 'Forms & Footer'], ['legal', 'Legal'],
+  ['features', 'Features'], ['agency', 'Agency Tier'], ['reviews', 'Reviews & Stories'], ['pricing', 'Pricing'], ['faq', 'FAQ'], ['forms', 'Forms & Footer'], ['legal', 'Legal Details'], ['privacy', 'Privacy Policy'], ['terms', 'Terms of Service'],
 ];
 
 // Keep in sync with server/src/lib/websiteConfig.js's ICON_KEYS and
@@ -308,14 +308,27 @@ export default function AdminWebsitePage() {
 
       {tab === 'forms' && <div className="grid md:grid-cols-2 gap-5"><Card title="Waitlist"><Field label="Heading" value={config.waitlist.heading} onChange={(v) => updateSection('waitlist', 'heading', v)} /><Field label="Description" rows={3} value={config.waitlist.description} onChange={(v) => updateSection('waitlist', 'description', v)} /><Field label="Success message" rows={2} value={config.waitlist.success} onChange={(v) => updateSection('waitlist', 'success', v)} /><Field label="Submit button" value={config.waitlist.submitLabel} onChange={(v) => updateSection('waitlist', 'submitLabel', v)} /><Field label="Name placeholder" value={config.waitlist.namePlaceholder} onChange={(v) => updateSection('waitlist', 'namePlaceholder', v)} /><Field label="Email placeholder" value={config.waitlist.emailPlaceholder} onChange={(v) => updateSection('waitlist', 'emailPlaceholder', v)} /><Field label="Business placeholder" value={config.waitlist.businessPlaceholder} onChange={(v) => updateSection('waitlist', 'businessPlaceholder', v)} /></Card><Card title="Contact"><Field label="Heading" value={config.contact.heading} onChange={(v) => updateSection('contact', 'heading', v)} /><Field label="Description" rows={3} value={config.contact.description} onChange={(v) => updateSection('contact', 'description', v)} /><Field label="Success message" rows={2} value={config.contact.success} onChange={(v) => updateSection('contact', 'success', v)} /><Field label="Submit button" value={config.contact.submitLabel} onChange={(v) => updateSection('contact', 'submitLabel', v)} /><Field label="Name placeholder" value={config.contact.namePlaceholder} onChange={(v) => updateSection('contact', 'namePlaceholder', v)} /><Field label="Email placeholder" value={config.contact.emailPlaceholder} onChange={(v) => updateSection('contact', 'emailPlaceholder', v)} /><Field label="Message placeholder" value={config.contact.messagePlaceholder} onChange={(v) => updateSection('contact', 'messagePlaceholder', v)} /></Card><Card title="Footer"><Field label="Tagline" value={config.footer.tagline} onChange={(v) => updateSection('footer', 'tagline', v)} /></Card></div>}
 
-      {tab === 'legal' && <Card title="Terms of Service / Privacy Policy / Cookie Policy">
-        <p className="text-sm text-slate-500">These identifying details are used across all three legal pages (/terms, /privacy, /cookies). The rest of each document's text is fixed.</p>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <Field label="Legal entity name" maxLength={200} value={config.legal.entityName} onChange={(v) => updateSection('legal', 'entityName', v)} />
-          <Field label="Governing law (state/country)" maxLength={100} value={config.legal.governingLaw} onChange={(v) => updateSection('legal', 'governingLaw', v)} />
-          <Field label="Contact email" type="email" maxLength={200} value={config.legal.contactEmail} onChange={(v) => updateSection('legal', 'contactEmail', v)} />
-          <Field label="Last updated" type="date" value={config.legal.effectiveDate} onChange={(v) => updateSection('legal', 'effectiveDate', v)} />
-        </div>
+      {tab === 'legal' && <Card title="Legal document settings">
+          <p className="text-sm text-slate-500">These details update automatically wherever their placeholders appear. Publishing creates a restorable version in Website History.</p>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <Field label="Legal entity name" maxLength={200} value={config.legal.entityName} onChange={(v) => updateSection('legal', 'entityName', v)} />
+            <Field label="Governing law (state/country)" maxLength={100} value={config.legal.governingLaw} onChange={(v) => updateSection('legal', 'governingLaw', v)} />
+            <Field label="Contact email" type="email" maxLength={200} value={config.legal.contactEmail} onChange={(v) => updateSection('legal', 'contactEmail', v)} />
+            <Field label="Last updated" type="date" value={config.legal.effectiveDate} onChange={(v) => updateSection('legal', 'effectiveDate', v)} />
+          </div>
+          <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
+            Formatting: start headings with <code>##</code> and list items with <code>-</code>. Available placeholders: <code>{'{entityName}'}</code>, <code>{'{contactEmail}'}</code>, <code>{'{governingLaw}'}</code>, and <code>{'{trialDays}'}</code>.
+          </div>
+      </Card>}
+      {tab === 'privacy' && <Card title="Privacy Policy">
+          <p className="text-sm text-slate-500">Published at <a href="/privacy" target="_blank" rel="noreferrer" className="font-semibold text-indigo-600 hover:underline">/privacy</a>.</p>
+          <p className="rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">Start headings with <code>##</code> and list items with <code>-</code>. You can use <code>{'{entityName}'}</code> and <code>{'{contactEmail}'}</code>.</p>
+          <Field label="Privacy Policy content" rows={24} maxLength={30000} value={config.legal.privacyPolicyContent} onChange={(v) => updateSection('legal', 'privacyPolicyContent', v)} />
+      </Card>}
+      {tab === 'terms' && <Card title="Terms of Service">
+          <p className="text-sm text-slate-500">Published at <a href="/terms" target="_blank" rel="noreferrer" className="font-semibold text-indigo-600 hover:underline">/terms</a>.</p>
+          <p className="rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">Start headings with <code>##</code> and list items with <code>-</code>. You can use <code>{'{entityName}'}</code>, <code>{'{contactEmail}'}</code>, <code>{'{governingLaw}'}</code>, and <code>{'{trialDays}'}</code>.</p>
+          <Field label="Terms of Service content" rows={24} maxLength={30000} value={config.legal.termsOfServiceContent} onChange={(v) => updateSection('legal', 'termsOfServiceContent', v)} />
       </Card>}
     </form>
   );
