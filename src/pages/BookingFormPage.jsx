@@ -44,6 +44,7 @@ import { BOOKING_DISPOSITIONS, bookingDisposition } from '../lib/bookingDisposit
 import { emptyForm, emptyVenue } from '../lib/bookingDefaults';
 import AgencyGroupSelect from '../components/AgencyGroupSelect';
 import { useAgencyBranding } from '../lib/useAgencyBranding';
+import { mergedProposalLog } from '../lib/proposalLog';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -1041,7 +1042,6 @@ export default function BookingFormPage() {
         ...(patch.proposal || {}),
         sentAt: new Date().toISOString(),
         sentTo: client.email,
-        log: appendLogEntry(patch.proposal?.log, { type: 'sent', actorEmail: currentUser.email, note: null }),
       };
       enqueueBookingUpdate(booking.id, { proposal: sentProposal });
       update('proposal', sentProposal);
@@ -1060,6 +1060,7 @@ export default function BookingFormPage() {
   // respond link is still generated (skipping only the email itself) in
   // case it's useful to share by hand, same as Contract's manual-sent path.
   async function handleMarkProposalSentManually(reason) {
+    let responseLogged = false;
     try {
       const { patch } = persistBooking();
       if (client?.email) {
@@ -1072,6 +1073,7 @@ export default function BookingFormPage() {
           reason,
         });
         setProposalResponse(createdResponse);
+        responseLogged = true;
       }
     } catch (err) {
       showToast(err.message || 'Failed to record the manual send.', 'error');
@@ -1080,7 +1082,7 @@ export default function BookingFormPage() {
       ...form.proposal,
       sentAt: new Date().toISOString(),
       sentTo: client?.email || form.proposal.sentTo || 'Marked sent manually',
-      log: appendLogEntry(form.proposal.log, { type: 'manual_sent', actorEmail: currentUser.email, note: reason }),
+      log: responseLogged ? form.proposal.log : appendLogEntry(form.proposal.log, { type: 'manual_sent', actorEmail: currentUser.email, note: reason }),
     };
     enqueueBookingUpdate(booking.id, { proposal: sentProposal });
     update('proposal', sentProposal);
@@ -2411,7 +2413,7 @@ export default function BookingFormPage() {
               <div className={cardClass}>
                 <h3 className={cardTitleClass}>Proposal Log</h3>
                 <EventLogPanel
-                  entries={[...(form.proposal.log || []), ...(proposalResponse?.log || [])].sort((a, b) => new Date(a.at) - new Date(b.at))}
+                  entries={mergedProposalLog(form.proposal.log, proposalResponse?.log)}
                   labelForType={(entry) => PROPOSAL_LOG_LABELS[entry.type] || entry.type}
                   onAddNote={handleAddProposalLogNote}
                   testIdPrefix="booking-form-proposal-log"
