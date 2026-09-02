@@ -283,6 +283,7 @@ model EmailMessage {
   thread   EmailThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
   direction   String // 'outbound' | 'inbound'
+  channel     String @default("email") // email | sms | whatsapp | phone | in_person | other
   fromAddress String
   toAddress   String
   subject     String
@@ -290,7 +291,13 @@ model EmailMessage {
 
   templateId      String?
   sentByUserId    String?
-  resendMessageId String? @unique
+  resendMessageId   String? @unique
+  provider          String?
+  providerMessageId String? @unique
+  deliveryStatus    String @default("sent") // queued | sent | delivered | failed | received
+  deliveredAt       DateTime?
+  failedAt          DateTime?
+  failureCode       String?
   inReplyTo       String?
   references      String?
 
@@ -304,6 +311,7 @@ model EmailMessage {
   aiClassification String?
 
   @@index([threadId, createdAt])
+  @@index([channel, deliveryStatus])
 }
 
 // The team's shared contractors/clients/events/bookings/settings, as a
@@ -1105,6 +1113,12 @@ model Guest {
   // always participate safely in booking communications.
   email      String?
   phone      String?
+  smsConsentStatus      String @default("unknown") // unknown | opted_in | opted_out
+  smsConsentedAt        DateTime?
+  smsOptedOutAt         DateTime?
+  whatsappConsentStatus String @default("unknown") // unknown | opted_in | opted_out
+  whatsappConsentedAt   DateTime?
+  whatsappOptedOutAt    DateTime?
   partySize  Int     @default(1)
   rsvpStatus String  @default("invited") // 'invited' | 'confirmed' | 'declined'
   notes      String? @db.Text

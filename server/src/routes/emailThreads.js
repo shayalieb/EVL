@@ -27,6 +27,7 @@ function serializeMessage(m) {
   return {
     id: m.id,
     direction: m.direction,
+    channel: m.channel,
     fromAddress: m.fromAddress,
     toAddress: m.toAddress,
     subject: m.subject,
@@ -36,6 +37,11 @@ function serializeMessage(m) {
     readAt: m.readAt,
     createdAt: m.createdAt,
     aiClassification: m.aiClassification,
+    provider: m.provider,
+    deliveryStatus: m.deliveryStatus,
+    deliveredAt: m.deliveredAt,
+    failedAt: m.failedAt,
+    failureCode: m.failureCode,
   };
 }
 
@@ -133,6 +139,7 @@ router.post('/send', requireEmailSendPermission, emailSendLimiter, asyncHandler(
     data: {
       threadId: thread.id,
       direction: 'outbound',
+      channel: 'email',
       fromAddress,
       toAddress: contractorEmail,
       subject,
@@ -140,6 +147,9 @@ router.post('/send', requireEmailSendPermission, emailSendLimiter, asyncHandler(
       templateId: templateId || null,
       sentByUserId: req.session.userId,
       resendMessageId: sent.data?.id || null,
+      provider: 'resend',
+      providerMessageId: sent.data?.id || null,
+      deliveryStatus: 'sent',
     },
   });
   await prisma.emailThread.update({
@@ -173,11 +183,13 @@ router.post('/log', asyncHandler(async (req, res) => {
     data: {
       threadId: thread.id,
       direction: 'manual',
+      channel: channel === 'Text Message' ? 'sms' : channel === 'Phone Call' ? 'phone' : channel === 'In Person' ? 'in_person' : 'other',
       fromAddress: 'internal',
       toAddress: contractorEmail,
       subject: channel?.trim() || 'Manual entry',
       body: note.trim(),
       sentByUserId: req.session.userId,
+      deliveryStatus: 'sent',
     },
   });
   await prisma.emailThread.update({
