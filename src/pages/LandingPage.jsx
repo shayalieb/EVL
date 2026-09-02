@@ -288,6 +288,7 @@ export default function LandingPage({ previewConfig } = {}) {
   const painSection = websiteConfig?.painPoints;
   const painPoints = painSection?.items || PAIN_POINTS;
   const featureSection = websiteConfig?.features;
+  const comingSoon = websiteConfig?.comingSoon;
   const agencySection = websiteConfig?.agency;
   const featureGroups = featureSection?.groups || FEATURE_GROUPS;
   const featureComparison = featureSection?.comparison;
@@ -314,6 +315,8 @@ export default function LandingPage({ previewConfig } = {}) {
     annualTotal: tier.annualAmountCents / 100,
     description: tier.description,
     featured: tier.featured,
+    includedTexts: tier.includedTexts || 0,
+    includedTextsPerGroup: tier.includedTextsPerGroup,
     includedGroupCount: tier.includedGroupCount,
     monthlyAdditionalGroupCents: tier.monthlyAdditionalGroupCents,
     annualAdditionalGroupCents: tier.annualAdditionalGroupCents,
@@ -643,6 +646,14 @@ export default function LandingPage({ previewConfig } = {}) {
         </section>
       )}
 
+      {comingSoon?.enabled && <section className="relative overflow-hidden border-b border-indigo-100 bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950 text-white">
+        <div className="pointer-events-none absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 15% 10%, #6366f1 0, transparent 32%), radial-gradient(circle at 85% 85%, #d946ef 0, transparent 30%)' }} aria-hidden="true" />
+        <Reveal className="relative max-w-5xl mx-auto px-4 sm:px-6 py-16 md:py-20">
+          <div className="max-w-2xl"><span className="inline-flex rounded-full border border-indigo-300/30 bg-indigo-400/15 px-3 py-1 text-xs font-bold uppercase tracking-wide text-indigo-200">{comingSoon.label}</span><h2 className="mt-4 text-2xl sm:text-3xl font-bold tracking-tight">{comingSoon.heading}</h2><p className="mt-3 text-slate-300">{comingSoon.description}</p></div>
+          <div className="mt-9 grid gap-4 sm:grid-cols-2">{comingSoon.items.map((item, index) => <article key={`${item.header}-${index}`} className="rounded-2xl border border-white/10 bg-white/[0.07] p-5 backdrop-blur-sm"><div className="flex items-start gap-3"><span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-400/20 text-indigo-200"><BoltIcon className="h-5 w-5" /></span><div><h3 className="font-bold text-white">{item.header}</h3><p className="mt-1.5 text-sm leading-relaxed text-slate-300">{item.description}</p></div></div></article>)}</div>
+        </Reveal>
+      </section>}
+
       {testimonials?.enabled && <ReviewSlider section={testimonials} />}
 
       {agencySection?.enabled && <section className="relative overflow-hidden bg-slate-950 text-white">
@@ -685,6 +696,10 @@ export default function LandingPage({ previewConfig } = {}) {
                 <div className={tier.id === 'agency' ? 'mt-3' : 'mt-5'}><span className="text-4xl font-bold text-slate-900">${tier.id === 'agency' ? pricingInterval === 'year' ? Math.round((tier.annualTotal + Math.max(0, agencyGroupCount - tier.includedGroupCount) * tier.annualAdditionalGroupCents / 100) / 12 * 100) / 100 : tier.monthly + Math.max(0, agencyGroupCount - tier.includedGroupCount) * tier.monthlyAdditionalGroupCents / 100 : pricingInterval === 'year' ? tier.annualMonthly : tier.monthly}</span><span className="text-sm text-slate-500"> {pricing?.perMonthLabel || '/month'}</span></div>
                 <p className="text-xs text-slate-400 mt-1 h-5">{tier.id === 'agency' ? `${tier.includedGroupCount} groups included · ${pricingInterval === 'year' ? `$${tier.annualAdditionalGroupCents / 100}/year` : `$${tier.monthlyAdditionalGroupCents / 100}/month`} each additional` : pricingInterval === 'year' ? `$${tier.annualTotal} ${pricing?.billedAnnuallyLabel || 'billed annually'}` : (pricing?.billedMonthlyLabel || 'Billed monthly')}</p>
                 <p className="text-sm font-semibold text-indigo-700 mt-5">{tier.seats}</p>
+                <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2.5">
+                  <p className="text-sm font-bold text-indigo-900">{tier.includedTexts.toLocaleString()} texts included each month{tier.includedTextsPerGroup ? ' per group' : ''}</p>
+                  <p className="mt-0.5 text-xs text-indigo-600">SMS and WhatsApp · available when messaging launches</p>
+                </div>
                 <ul className="space-y-2 mt-5 mb-6 text-sm text-slate-600 flex-1">
                   {includedFeatures.map((feature) => <li key={feature} className="flex gap-2"><span className="text-emerald-500" aria-hidden="true">✓</span><span>{feature}</span></li>)}
                 </ul>
@@ -696,6 +711,13 @@ export default function LandingPage({ previewConfig } = {}) {
               </Reveal>
             ))}
           </div>
+          {pricing?.messaging && <div className="mt-10 rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-6 sm:p-8">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="max-w-2xl"><span className="inline-flex rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-700">{pricing.messaging.availabilityLabel}</span><h3 className="mt-3 text-xl font-bold text-slate-900">{pricing.messaging.heading}</h3><p className="mt-1 text-sm text-slate-600">{pricing.messaging.description}</p></div>
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">{pricing.messaging.packages.map((textPackage) => <div key={`${textPackage.texts}-${textPackage.monthlyAmountCents}`} className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm"><p className="text-lg font-bold text-slate-900">{textPackage.texts.toLocaleString()} additional texts</p><p className="mt-1 text-sm font-semibold text-indigo-700">${textPackage.monthlyAmountCents / 100}/month</p></div>)}</div>
+            <p className="mt-4 text-xs text-slate-500">{pricing.messaging.usageNote}</p>
+          </div>}
           <p className="text-center text-xs text-slate-400 mt-6">{(pricing?.trialFooterLabel || '{days}-day free trial at launch.').replace('{days}', trialDays)} {pricing?.footer || 'Cancel anytime. Secure billing through Stripe.'}</p>
         </div>
       </section>
