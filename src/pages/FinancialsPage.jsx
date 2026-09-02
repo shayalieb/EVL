@@ -8,7 +8,7 @@ import { useToast } from '../components/ui/Toast';
 import Modal from '../components/ui/Modal';
 import Pagination from '../components/ui/Pagination';
 import BookkeeperExportModal from '../components/BookkeeperExportModal';
-import { authorizeFinancialExport, createFinancialExpense, financialReceiptUrl, getFinancialReports, getFinancialSummary, listFinancialTransactions, reverseFinancialTransaction, updateContractorPayment, uploadFinancialReceipt } from '../lib/financials';
+import { authorizeFinancialExport, createFinancialExpense, financialReceiptUrl, getFinancialReports, getFinancialSummary, listContractorPaymentRequests, listFinancialTransactions, reverseFinancialTransaction, reviewContractorPaymentRequest, updateContractorPayment, uploadFinancialReceipt } from '../lib/financials';
 import { exportFinancialReportCsv, exportFinancialReportPdf } from '../lib/financialReportExports';
 
 const inputClass = 'w-full min-h-11 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100';
@@ -22,7 +22,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const startOfYear = () => `${new Date().getFullYear()}-01-01`;
 const emptyExpenseForm = () => ({ amount: '', category: 'contractor_payment', description: '', occurredAt: today(), paymentMethod: '', payee: '', reference: '', memo: '', groupId: '', bookingId: '', eventId: '', contractorId: '' });
 const reportTabs = [['receivables', 'Who owes you'], ['payables', 'Who you owe']];
-const pageSections = [['overview', 'Overview'], ['payments', 'Payments'], ['reports', 'Reports']];
+const pageSections = [['overview', 'Overview'], ['requests', 'Payment requests'], ['payments', 'Payments'], ['reports', 'Reports']];
 
 function friendlyDate(value) {
   if (!value) return null;
@@ -96,6 +96,14 @@ function displayedReports(reports, tab, search, sort) {
   return copy;
 }
 
+const requestStatusStyles = { submitted: 'bg-amber-100 text-amber-800', approved: 'bg-emerald-100 text-emerald-700', disputed: 'bg-rose-100 text-rose-700', paid: 'bg-indigo-100 text-indigo-700' };
+
+function PaymentRequestQueue({ data, loading, status, setStatus, search, setSearch, page, setPage, canRecord, onReview, onPay }) {
+  const counts = data?.counts || {};
+  const statuses = [['submitted', 'Needs review'], ['approved', 'Approved'], ['disputed', 'Returned'], ['paid', 'Paid'], ['all', 'All']];
+  return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-100 p-5"><h2 className="font-bold text-slate-800">Contractor payment requests</h2><p className="mt-1 text-sm text-slate-500">Review every request before money is recorded as paid.</p><div className="mt-4 flex flex-wrap gap-2">{statuses.map(([id, label]) => <button key={id} type="button" onClick={() => { setStatus(id); setPage(1); }} className={`min-h-10 rounded-lg px-3 text-xs font-semibold ${status === id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{label}{id !== 'all' ? ` (${counts[id] || 0})` : ''}</button>)}</div><input type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search contractor, event, invoice, or note…" aria-label="Search payment requests" className={`${inputClass} mt-3`} /></div>{loading ? <p className="p-10 text-center text-sm text-slate-400">Loading payment requests…</p> : data?.requests?.length ? <div className="divide-y divide-slate-100">{data.requests.map((request) => <article key={request.id} className="p-5"><div className="flex flex-col justify-between gap-4 md:flex-row"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-bold text-slate-800">{request.contractorName}</h3><span className={`rounded-full px-2 py-1 text-xs font-semibold ${requestStatusStyles[request.status]}`}>{request.status === 'submitted' ? 'Needs review' : request.status === 'disputed' ? 'Returned for update' : request.status[0].toUpperCase() + request.status.slice(1)}</span></div><Link to={`/events/${request.event.id}?tab=financials`} className="mt-1 block text-sm font-semibold text-indigo-600">{request.event.name || 'Untitled event'} · {friendlyDate(request.event.eventDate) || 'Date TBD'}</Link><p className="mt-2 text-xs text-slate-500">Submitted {new Date(request.submittedAt).toLocaleString()}</p>{request.invoiceNumber && <p className="mt-2 text-sm text-slate-700"><strong>Invoice/reference:</strong> {request.invoiceNumber}</p>}{request.note && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{request.note}</p>}{request.reviewNote && <p className="mt-2 rounded-lg bg-rose-50 p-2 text-xs text-rose-700"><strong>Returned because:</strong> {request.reviewNote}</p>}</div><div className="shrink-0 md:text-right"><p className="text-xl font-bold text-slate-800">{money(request.amount)}</p>{canRecord && request.status === 'submitted' && <div className="mt-3 flex flex-wrap gap-2 md:justify-end"><button type="button" onClick={() => onReview(request, 'approve')} className="min-h-10 rounded-lg bg-emerald-600 px-3 text-xs font-semibold text-white">Approve</button><button type="button" onClick={() => onReview(request, 'return')} className="min-h-10 rounded-lg border border-rose-200 px-3 text-xs font-semibold text-rose-700">Return for update</button></div>}{canRecord && request.status === 'approved' && <button type="button" onClick={() => onPay({ ...request, eventId: request.eventId, contractorName: request.contractorName, amount: request.amount })} className="mt-3 min-h-10 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white">Record payment</button>}</div></div></article>)}</div> : <p className="p-10 text-center text-sm text-slate-400">No payment requests match this view.</p>}<Pagination page={page} pageCount={data?.pageCount || 1} onChange={setPage} totalItems={data?.total || 0} pageSize={data?.pageSize || 25} testId="payment-requests-pagination" /></section>;
+}
+
 export default function FinancialsPage() {
   const { currentUser, can } = useAuth();
   const { showToast } = useToast();
@@ -132,10 +140,17 @@ export default function FinancialsPage() {
   const [saving, setSaving] = useState(false);
   const [payingContractor, setPayingContractor] = useState(null);
   const [savingDueDate, setSavingDueDate] = useState('');
+  const [paymentRequests, setPaymentRequests] = useState(null);
+  const [requestStatus, setRequestStatus] = useState('submitted');
+  const [requestSearchInput, setRequestSearchInput] = useState('');
+  const [requestSearch, setRequestSearch] = useState('');
+  const [requestPage, setRequestPage] = useState(1);
+  const [requestsLoading, setRequestsLoading] = useState(false);
   const expenseRequestId = useRef('');
 
   useEffect(() => { setGroupId(requestedGroupId); }, [requestedGroupId]);
   useEffect(() => { const timer = setTimeout(() => { setLedgerPage(1); setLedgerSearch(ledgerSearchInput.trim()); }, 300); return () => clearTimeout(timer); }, [ledgerSearchInput]);
+  useEffect(() => { const timer = setTimeout(() => { setRequestPage(1); setRequestSearch(requestSearchInput.trim()); }, 300); return () => clearTimeout(timer); }, [requestSearchInput]);
   useEffect(() => { setLedgerPage(1); }, [groupId, ledgerDirection, ledgerCategory]);
 
   function selectSection(nextSection) {
@@ -168,6 +183,15 @@ export default function FinancialsPage() {
   }, [groupId, ledgerCategory, ledgerDirection, ledgerPage, ledgerSearch]);
 
   useEffect(() => { loadLedger(); }, [loadLedger]);
+
+  const loadPaymentRequests = useCallback(async () => {
+    setRequestsLoading(true);
+    try { setPaymentRequests(await listContractorPaymentRequests({ status: requestStatus, search: requestSearch.trim(), page: requestPage, pageSize: 25, ...(groupId ? { groupId } : {}) })); }
+    catch (err) { setError(err.message || 'Payment requests could not be loaded.'); }
+    finally { setRequestsLoading(false); }
+  }, [groupId, requestPage, requestSearch, requestStatus]);
+
+  useEffect(() => { if (activeSection === 'requests') loadPaymentRequests(); }, [activeSection, loadPaymentRequests]);
 
   const visibleReports = displayedReports(reports, reportTab, reportSearch, reportSort);
 
@@ -244,7 +268,15 @@ export default function FinancialsPage() {
     if (!payingContractor) return;
     await updateContractorPayment(payingContractor.eventId, payingContractor.assignmentId, { markPaid: true, amount: payload.amount, paymentDate: payload.paymentDate, paymentMethod: payload.method, paymentReference: payload.checkNumber, paymentMemo: payload.memo });
     setPayingContractor(null);
-    await Promise.all([load(), loadLedger()]);
+    await Promise.all([load(), loadLedger(), loadPaymentRequests()]);
+  }
+
+  async function reviewPaymentRequest(request, action) {
+    const reviewNote = action === 'return' ? window.prompt('What does the contractor need to update?') : '';
+    if (action === 'return' && !reviewNote?.trim()) return;
+    setError('');
+    try { await reviewContractorPaymentRequest(request.id, action, reviewNote?.trim()); showToast(action === 'approve' ? 'Payment request approved' : 'Payment request returned'); await Promise.all([load(), loadPaymentRequests()]); }
+    catch (err) { setError(err.message || 'Payment request could not be reviewed.'); }
   }
 
   return (
@@ -258,7 +290,7 @@ export default function FinancialsPage() {
         {pageSections.map(([id, label]) => <button key={id} type="button" onClick={() => selectSection(id)} aria-current={activeSection === id ? 'page' : undefined} className={`min-h-11 flex-1 whitespace-nowrap rounded-lg px-4 text-sm font-semibold transition-colors ${activeSection === id ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}>{label}</button>)}
       </nav>
 
-      {activeSection !== 'payments' && <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      {(activeSection === 'overview' || activeSection === 'reports') && <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-end gap-3">
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">From<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={`${inputClass} mt-1`} /></label>
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">To<input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={`${inputClass} mt-1`} /></label>
@@ -274,6 +306,7 @@ export default function FinancialsPage() {
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       {activeSection === 'payments' && <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold text-slate-800">Payments</h2><p className="mt-1 text-sm text-slate-500">Review recorded money in and money out, or add an expense.</p></div>{can('recordFinancialTransactions') && <button type="button" onClick={() => showExpense ? closeExpenseForm() : setShowExpense(true)} className="min-h-11 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">{showExpense ? 'Cancel' : '+ Add money paid out'}</button>}</div>}
       {activeSection === 'payments' && showExpense && <FinancialExpenseForm form={form} setForm={setForm} receiptFile={receiptFile} setReceiptFile={setReceiptFile} groups={groups} selectedGroup={selectedGroup} saving={saving} onSubmit={saveExpense} onCancel={closeExpenseForm} />}
+      {activeSection === 'requests' && <PaymentRequestQueue data={paymentRequests} loading={requestsLoading} status={requestStatus} setStatus={setRequestStatus} search={requestSearchInput} setSearch={setRequestSearchInput} page={requestPage} setPage={setRequestPage} canRecord={can('recordFinancialTransactions')} onReview={reviewPaymentRequest} onPay={setPayingContractor} />}
 
       {loading && !summary ? <div className="py-20 text-center text-sm text-slate-400">Loading financials…</div> : activeSection === 'overview' && summary && <>
         <section aria-labelledby="cash-already-moved-heading">

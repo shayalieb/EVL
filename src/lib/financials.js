@@ -20,6 +20,15 @@ export async function listFinancialTransactions(filters) {
   return apiFetch(`/financials${queryString(filters)}`);
 }
 
+export async function listContractorPaymentRequests(filters) {
+  return apiFetch(`/financials/payment-requests${queryString(filters)}`);
+}
+
+export async function reviewContractorPaymentRequest(id, action, reviewNote = '') {
+  const data = await apiFetch(`/financials/payment-requests/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ action, reviewNote }) });
+  return data.paymentRequest;
+}
+
 export async function createFinancialExpense(expense) {
   const data = await apiFetch('/financials/expenses', { method: 'POST', body: JSON.stringify(expense) });
   return data.transaction;

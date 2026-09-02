@@ -1541,6 +1541,8 @@ model ContractorPaymentRequest {
   status       String     @default("submitted") // submitted | approved | disputed | paid
   submittedAt  DateTime   @default(now())
   reviewedAt   DateTime?
+  reviewedByUserId String?
+  reviewNote   String?    @db.Text
   paidAt       DateTime?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt

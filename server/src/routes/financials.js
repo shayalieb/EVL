@@ -173,6 +173,57 @@ router.get('/summary', requireFinancialPermission('viewFinancials'), asyncHandle
   } });
 }));
 
+router.get('/payment-requests', requireFinancialPermission('viewFinancials'), asyncHandler(async (req, res) => {
+  const accountId = req.membership.accountId;
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(100, Math.max(10, Number(req.query.pageSize) || 25));
+  const status = String(req.query.status || 'submitted');
+  const search = String(req.query.search || '').trim().slice(0, 100);
+  const allowedStatuses = new Set(['all', 'submitted', 'approved', 'disputed', 'paid']);
+  if (!allowedStatuses.has(status)) return res.status(400).json({ error: 'Select a valid payment-request status.' });
+  const groupId = String(req.query.groupId || '').trim();
+  const where = {
+    accountId,
+    ...(status !== 'all' ? { status } : {}),
+    ...(groupId ? { event: { groupId } } : {}),
+    ...(search ? { OR: [
+      { invoiceNumber: { contains: search, mode: 'insensitive' } },
+      { note: { contains: search, mode: 'insensitive' } },
+      { event: { name: { contains: search, mode: 'insensitive' } } },
+      { contractor: { OR: [{ firstName: { contains: search, mode: 'insensitive' } }, { lastName: { contains: search, mode: 'insensitive' } }] } },
+    ] } : {}),
+  };
+  const [requests, total, counts] = await Promise.all([
+    prisma.contractorPaymentRequest.findMany({ where, include: { event: { select: { id: true, name: true, eventDate: true, groupId: true } }, contractor: { select: { id: true, firstName: true, lastName: true } } }, orderBy: [{ submittedAt: 'asc' }, { id: 'asc' }], skip: (page - 1) * pageSize, take: pageSize }),
+    prisma.contractorPaymentRequest.count({ where }),
+    prisma.contractorPaymentRequest.groupBy({ by: ['status'], where: { accountId, ...(groupId ? { event: { groupId } } : {}) }, _count: { _all: true } }),
+  ]);
+  res.json({
+    requests: requests.map((request) => ({ ...request, amount: request.amountCents / 100, amountCents: undefined, contractorName: `${request.contractor.firstName} ${request.contractor.lastName}`.trim() })),
+    total,
+    page,
+    pageSize,
+    pageCount: Math.max(1, Math.ceil(total / pageSize)),
+    counts: Object.fromEntries(counts.map((item) => [item.status, item._count._all])),
+  });
+}));
+
+router.patch('/payment-requests/:id', requireFinancialPermission('recordFinancialTransactions'), asyncHandler(async (req, res) => {
+  const request = await prisma.contractorPaymentRequest.findFirst({ where: { id: req.params.id, accountId: req.membership.accountId } });
+  if (!request) return res.status(404).json({ error: 'Payment request not found.' });
+  if (request.status === 'paid') return res.status(409).json({ error: 'This request is already paid.' });
+  const action = String(req.body?.action || '');
+  if (!['approve', 'return'].includes(action)) return res.status(400).json({ error: 'Select approve or return for update.' });
+  const reviewNote = String(req.body?.reviewNote || '').trim().slice(0, 1000) || null;
+  if (action === 'return' && !reviewNote) return res.status(400).json({ error: 'Explain what the contractor needs to update.' });
+  const updated = await prisma.$transaction(async (tx) => {
+    const saved = await tx.contractorPaymentRequest.update({ where: { id: request.id }, data: { status: action === 'approve' ? 'approved' : 'disputed', reviewedAt: new Date(), reviewedByUserId: req.session.userId, reviewNote } });
+    await tx.accountActivity.create({ data: { accountId: request.accountId, actorUserId: req.session.userId, type: action === 'approve' ? 'contractor_payment_request_approved' : 'contractor_payment_request_returned', summary: action === 'approve' ? 'Contractor payment request approved' : 'Contractor payment request returned for update', metadata: { paymentRequestId: request.id, eventId: request.eventId, contractorId: request.contractorId, reviewNote } } });
+    return saved;
+  });
+  res.json({ paymentRequest: { id: updated.id, status: updated.status, reviewedAt: updated.reviewedAt, reviewNote: updated.reviewNote } });
+}));
+
 router.patch('/contractor-payments/:eventId/:assignmentId', requireFinancialPermission('recordFinancialTransactions'), asyncHandler(async (req, res) => {
   const event = await prisma.event.findFirst({ where: { id: req.params.eventId, accountId: req.membership.accountId, deletedAt: null } });
   if (!event) return res.status(404).json({ error: 'Event not found.' });

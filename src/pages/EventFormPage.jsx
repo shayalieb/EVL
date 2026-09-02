@@ -1992,6 +1992,8 @@ export default function EventFormPage() {
                           onOpenThread={setOpenThreadContractorId}
                           onPayClick={setPayingContractorId}
                           onMarkUnpaid={markContractorUnpaid}
+                          paymentRequest={event?.paymentRequests?.find((request) => request.contractorId === bk.contractorId)}
+                          onReviewPaymentRequest={() => navigate('/financials?section=requests')}
                           onDragStart={(idx) => { dragIndex.current = idx; }}
                           onDragOver={(idx) => setDragOverIndex(idx)}
                           onDrop={handleDrop}

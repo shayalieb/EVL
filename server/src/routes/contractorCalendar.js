@@ -58,6 +58,7 @@ function publicGigInfo(event, booking, bucket, expectedAmount, paymentRequest) {
       amount: paymentRequest.amountCents / 100,
       invoiceNumber: paymentRequest.invoiceNumber,
       note: paymentRequest.note,
+      reviewNote: paymentRequest.reviewNote,
       submittedAt: paymentRequest.submittedAt,
     } : null,
   };
@@ -156,7 +157,7 @@ publicContractorCalendarRouter.post('/:token/gigs/:eventId/payment-request', pay
   if (existing && existing.status !== 'disputed') return res.status(409).json({ error: 'A payment request has already been submitted for this gig.' });
 
   const paymentRequest = existing
-    ? await prisma.contractorPaymentRequest.update({ where: { id: existing.id }, data: { amountCents: Math.round(amount * 100), invoiceNumber, note, status: 'submitted', submittedAt: new Date(), reviewedAt: null } })
+    ? await prisma.contractorPaymentRequest.update({ where: { id: existing.id }, data: { amountCents: Math.round(amount * 100), invoiceNumber, note, status: 'submitted', submittedAt: new Date(), reviewedAt: null, reviewedByUserId: null, reviewNote: null } })
     : await prisma.contractorPaymentRequest.create({ data: { accountId: link.accountId, eventId: event.id, contractorId: contractor.id, assignmentId: assignment.id || contractor.id, amountCents: Math.round(amount * 100), invoiceNumber, note } });
 
   const owner = await prisma.membership.findFirst({ where: { accountId: link.accountId, role: 'owner' } });

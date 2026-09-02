@@ -18,7 +18,7 @@ async function normalizeStaffingFlag(accountId, value, contractorBookings) {
   return normalizeNoOutsideContractorsNeeded(value, contractorBookings, accountData?.data?.inquiryStatuses || []);
 }
 
-function serializeEvent(e) {
+function serializeEvent(e, paymentRequests = []) {
   return {
     id: e.id,
     groupId: e.groupId,
@@ -54,6 +54,7 @@ function serializeEvent(e) {
     setLists: e.setLists,
     createdAt: e.createdAt,
     updatedAt: e.updatedAt,
+    paymentRequests: paymentRequests.map((request) => ({ id: request.id, contractorId: request.contractorId, assignmentId: request.assignmentId, amount: request.amountCents / 100, invoiceNumber: request.invoiceNumber, note: request.note, status: request.status, submittedAt: request.submittedAt, reviewNote: request.reviewNote })),
   };
 }
 
@@ -170,7 +171,10 @@ router.get('/:id', asyncHandler(async (req, res) => {
   if (!event || event.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Event not found.' });
   }
-  res.json({ event: serializeEvent(event) });
+  const paymentRequests = effectivePermissions(req.membership).viewFinancials
+    ? await prisma.contractorPaymentRequest.findMany({ where: { accountId: event.accountId, eventId: event.id }, orderBy: { submittedAt: 'desc' } })
+    : [];
+  res.json({ event: serializeEvent(event, paymentRequests) });
 }));
 
 router.post('/', asyncHandler(async (req, res) => {
