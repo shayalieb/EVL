@@ -33,7 +33,7 @@ test('website configuration preserves safe editable pricing and copy', () => {
   assert.equal(config.agency.features.length, 5);
   assert.equal(config.comingSoon.enabled, true);
   assert.equal(config.comingSoon.items.length, 1);
-  assert.match(config.comingSoon.items[0].header, /SMS/i);
+  assert.match(config.comingSoon.items[0].header, /Contractor Messaging/i);
   assert.equal(config.testimonials.enabled, false);
   assert.deepEqual(config.testimonials.reviews, []);
   assert.equal(config.faq.items.length, 16);

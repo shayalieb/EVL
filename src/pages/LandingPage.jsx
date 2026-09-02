@@ -697,8 +697,8 @@ export default function LandingPage({ previewConfig } = {}) {
                 <p className="text-xs text-slate-400 mt-1 h-5">{tier.id === 'agency' ? `${tier.includedGroupCount} groups included · ${pricingInterval === 'year' ? `$${tier.annualAdditionalGroupCents / 100}/year` : `$${tier.monthlyAdditionalGroupCents / 100}/month`} each additional` : pricingInterval === 'year' ? `$${tier.annualTotal} ${pricing?.billedAnnuallyLabel || 'billed annually'}` : (pricing?.billedMonthlyLabel || 'Billed monthly')}</p>
                 <p className="text-sm font-semibold text-indigo-700 mt-5">{tier.seats}</p>
                 <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2.5">
-                  <p className="text-sm font-bold text-indigo-900">{Number(tier.includedTexts || 0).toLocaleString()} texts included each month{tier.includedTextsPerGroup ? ' per group' : ''}</p>
-                  <p className="mt-0.5 text-xs text-indigo-600">SMS and WhatsApp · available when messaging launches</p>
+                  <p className="text-sm font-bold text-indigo-900">{Number(tier.includedTexts || 0).toLocaleString()} contractor messages included monthly{tier.includedTextsPerGroup ? ' per group' : ''}</p>
+                  <p className="mt-0.5 text-xs text-indigo-600">Choose SMS or WhatsApp when messaging launches</p>
                 </div>
                 <ul className="space-y-2 mt-5 mb-6 text-sm text-slate-600 flex-1">
                   {includedFeatures.map((feature) => <li key={feature} className="flex gap-2"><span className="text-emerald-500" aria-hidden="true">✓</span><span>{feature}</span></li>)}
@@ -715,7 +715,7 @@ export default function LandingPage({ previewConfig } = {}) {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="max-w-2xl"><span className="inline-flex rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-700">{pricing.messaging.availabilityLabel}</span><h3 className="mt-3 text-xl font-bold text-slate-900">{pricing.messaging.heading}</h3><p className="mt-1 text-sm text-slate-600">{pricing.messaging.description}</p></div>
             </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">{pricing.messaging.packages.map((textPackage) => <div key={`${textPackage.texts}-${textPackage.monthlyAmountCents}`} className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm"><p className="text-lg font-bold text-slate-900">{textPackage.texts.toLocaleString()} additional texts</p><p className="mt-1 text-sm font-semibold text-indigo-700">${textPackage.monthlyAmountCents / 100}/month</p></div>)}</div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">{pricing.messaging.packages.map((messagePackage) => <div key={`${messagePackage.texts}-${messagePackage.monthlyAmountCents}`} className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm"><p className="text-lg font-bold text-slate-900">{messagePackage.texts.toLocaleString()} additional messages</p><p className="mt-1 text-sm font-semibold text-indigo-700">${messagePackage.monthlyAmountCents / 100}/month</p></div>)}</div>
             <p className="mt-4 text-xs text-slate-500">{pricing.messaging.usageNote}</p>
           </div>}
           <p className="text-center text-xs text-slate-400 mt-6">{(pricing?.trialFooterLabel || '{days}-day free trial at launch.').replace('{days}', trialDays)} {pricing?.footer || 'Cancel anytime. Secure billing through Stripe.'}</p>
