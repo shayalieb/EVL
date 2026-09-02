@@ -23,9 +23,9 @@ const ICON_COMPONENTS = {
 };
 
 const PRICING_TIERS = [
-  { id: 'solo', name: 'Solo', seats: '1 team member', monthly: 25, annualMonthly: 20, annualTotal: 240, description: 'For independent bandleaders and performers running their own calendar.' },
-  { id: 'team', name: 'Team', seats: 'Up to 2 team members', monthly: 45, annualMonthly: 38, annualTotal: 456, description: 'For small teams sharing bookings, staffing, and client follow-up.', featured: true },
-  { id: 'studio', name: 'Studio', seats: 'Up to 5 team members', monthly: 89, annualMonthly: 75, annualTotal: 900, description: 'For growing entertainment companies coordinating multiple people.' },
+  { id: 'solo', name: 'Solo', seats: '1 team member', monthly: 25, annualMonthly: 20, annualTotal: 240, includedTexts: 100, description: 'For independent bandleaders and performers running their own calendar.' },
+  { id: 'team', name: 'Team', seats: 'Up to 2 team members', monthly: 45, annualMonthly: 38, annualTotal: 456, includedTexts: 500, description: 'For small teams sharing bookings, staffing, and client follow-up.', featured: true },
+  { id: 'studio', name: 'Studio', seats: 'Up to 5 team members', monthly: 89, annualMonthly: 75, annualTotal: 900, includedTexts: 1500, description: 'For growing entertainment companies coordinating multiple people.' },
 ];
 
 const INCLUDED_FEATURES = [
@@ -697,7 +697,7 @@ export default function LandingPage({ previewConfig } = {}) {
                 <p className="text-xs text-slate-400 mt-1 h-5">{tier.id === 'agency' ? `${tier.includedGroupCount} groups included · ${pricingInterval === 'year' ? `$${tier.annualAdditionalGroupCents / 100}/year` : `$${tier.monthlyAdditionalGroupCents / 100}/month`} each additional` : pricingInterval === 'year' ? `$${tier.annualTotal} ${pricing?.billedAnnuallyLabel || 'billed annually'}` : (pricing?.billedMonthlyLabel || 'Billed monthly')}</p>
                 <p className="text-sm font-semibold text-indigo-700 mt-5">{tier.seats}</p>
                 <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2.5">
-                  <p className="text-sm font-bold text-indigo-900">{tier.includedTexts.toLocaleString()} texts included each month{tier.includedTextsPerGroup ? ' per group' : ''}</p>
+                  <p className="text-sm font-bold text-indigo-900">{Number(tier.includedTexts || 0).toLocaleString()} texts included each month{tier.includedTextsPerGroup ? ' per group' : ''}</p>
                   <p className="mt-0.5 text-xs text-indigo-600">SMS and WhatsApp · available when messaging launches</p>
                 </div>
                 <ul className="space-y-2 mt-5 mb-6 text-sm text-slate-600 flex-1">
