@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import Badge from './ui/Badge';
-import { formatCurrency as currency, isValidEmailAddress } from '../lib/format';
+import { formatCurrency as currency, formatEventTime, isValidEmailAddress } from '../lib/format';
 import { getPricingTier, getPricingTiers, getOvertimeHours, getOvertimeAmount } from '../lib/pricingTiers';
 import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
 
@@ -38,7 +38,7 @@ export default function ContractorPickerRow({ booking, contractor, inquiryStatus
       <button type="button" onClick={() => onRemove(booking.contractorId)} className="flex h-10 w-8 shrink-0 items-center justify-center rounded-lg text-slate-300 hover:bg-red-50 hover:text-red-600" aria-label="Remove contractor" data-testid="contractor-picker-row-remove-button">✕</button>
     </div>
     {!editing && <div data-testid="contractor-picker-row-readonly-details" className="grid gap-x-5 gap-y-2 border-t border-slate-100 bg-slate-50/50 px-3 py-3 text-xs sm:grid-cols-2 lg:grid-cols-4 sm:pl-9">
-      <div><span className="font-semibold text-slate-400">Schedule</span><p className="mt-0.5 font-medium text-slate-700">{booking.startTime || 'Start TBD'} – {booking.endTime || 'End TBD'}</p></div>
+      <div><span className="font-semibold text-slate-400">Schedule</span><p className="mt-0.5 font-medium text-slate-700">{formatEventTime(booking.startTime) || 'Start TBD'} – {formatEventTime(booking.endTime) || 'End TBD'}</p></div>
       <div><span className="font-semibold text-slate-400">Rate</span><p className="mt-0.5 font-medium text-slate-700">{currency(activeTier?.price)}{activeTier?.name ? ` · ${activeTier.name}` : ''}{overtimeAmount > 0 ? ` · +${currency(overtimeAmount)} OT` : ''}</p></div>
       <div><span className="font-semibold text-slate-400">Payment</span><p className={`mt-0.5 font-semibold ${booking.paymentStatus === 'paid' ? 'text-emerald-700' : 'text-slate-600'}`}>{booking.paymentStatus === 'paid' ? `Paid ${currency(booking.paidAmount)}${booking.paidAt ? ` on ${booking.paidAt}` : ''}${booking.paymentMethod ? ` via ${PAYMENT_METHOD_LABELS[booking.paymentMethod] || booking.paymentMethod}` : ''}` : `Not paid${booking.paymentDueDate ? ` · due ${booking.paymentDueDate}` : ''}`}</p></div>
       <div><span className="font-semibold text-slate-400">Payment request</span>{paymentRequest ? <div className="mt-0.5 text-slate-700"><button type="button" onClick={() => onReviewPaymentRequest(paymentRequest)} className="font-semibold text-indigo-600 hover:underline">{requestLabel[paymentRequest.status] || 'Payment request'} · {currency(paymentRequest.amount)}</button>{paymentRequest.invoiceNumber && <p className="mt-0.5">Ref: {paymentRequest.invoiceNumber}</p>}{paymentRequest.note && <p className="mt-0.5 line-clamp-2" title={paymentRequest.note}>{paymentRequest.note}</p>}{paymentRequest.reviewNote && <p className="mt-1 text-rose-700">Update requested: {paymentRequest.reviewNote}</p>}</div> : <p className="mt-0.5 text-slate-500">No request submitted</p>}</div>
