@@ -14,7 +14,7 @@ export const ICON_FILL = '#e2e8f0'; // slate-200, for solid/filled areas (tablet
 // pass a category color pair instead. Only the wrapper's paint attributes
 // change — the hand-authored inner shapes are untouched either way.
 export function icon(inner, { stroke = STROKE, fill = 'none' } = {}) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="${fill}" stroke="${stroke}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="${fill}" stroke="${stroke}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><style>*{vector-effect:non-scaling-stroke}</style>${inner}</svg>`;
 }
 
 // Builds a { id, label, category, svg } lookup map (keyed by id) from a flat

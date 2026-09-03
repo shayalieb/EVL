@@ -178,6 +178,7 @@ function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSe
           offsetY={((linearWidth != null ? LINEAR_HEIGHT : ICON_SIZE) + 10) / 2}
           stroke="#4f46e5"
           strokeWidth={1.5}
+          strokeScaleEnabled={false}
           dash={[4, 3]}
           cornerRadius={6}
           listening={false}

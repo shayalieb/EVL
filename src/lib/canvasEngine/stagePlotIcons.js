@@ -34,12 +34,18 @@ function svgFor(category, inner) {
   return icon(inner, CATEGORY_COLORS[category]);
 }
 
+// Professional front-view drafting symbols use neutral paper and dark
+// linework so their equipment details remain legible in print and exports.
+function equipmentSvg(inner) {
+  return icon(inner, { stroke: '#111827', fill: '#ffffff' });
+}
+
 export const STAGE_PLOT_ICON_LIST = [
   {
     id: 'vocal-mic',
     label: 'Vocal Mic',
     category: 'Mics',
-    svg: svgFor('Mics', '<circle cx="32" cy="18" r="9"/><line x1="32" y1="27" x2="32" y2="50"/><line x1="18" y1="50" x2="46" y2="50"/>'),
+    svg: equipmentSvg('<ellipse cx="35" cy="10" rx="6" ry="8"/><path d="M30 7h10M29 11h12M31 15h8M34 18l-3 7M31 25L18 43M18 43v13M18 56L8 62M18 56l10 6M18 56v7M31 25h5" fill="none"/>'),
   },
   {
     id: 'instrument-mic',
@@ -97,7 +103,7 @@ export const STAGE_PLOT_ICON_LIST = [
     id: 'monitor-wedge',
     label: 'Monitor Wedge',
     category: 'Amps',
-    svg: svgFor('Amps', '<polygon points="14,50 50,50 42,20 22,20"/>'),
+    svg: equipmentSvg('<path d="M7 53h50L49 22H19L7 53Z"/><path d="M19 22l8 9h22M13 48h41" fill="none"/><ellipse cx="34" cy="40" rx="11" ry="6"/><ellipse cx="34" cy="40" rx="5" ry="3"/><path d="M11 53v4M53 53v4" fill="none"/>'),
   },
   {
     id: 'iem-pack',
@@ -169,7 +175,7 @@ export const STAGE_PLOT_ICON_LIST = [
     id: 'drum-kit',
     label: 'Drum Kit',
     category: 'Drums',
-    svg: svgFor('Drums', '<circle cx="12" cy="16" r="8" stroke-width="1.5"/><circle cx="52" cy="14" r="8" stroke-width="1.5"/><circle cx="20" cy="22" r="6"/><circle cx="44" cy="20" r="6"/><circle cx="48" cy="38" r="7"/><circle cx="32" cy="44" r="12"/><circle cx="32" cy="27" r="5"/>'),
+    svg: equipmentSvg('<ellipse cx="11" cy="9" rx="10" ry="4"/><ellipse cx="53" cy="8" rx="10" ry="4"/><path d="M11 13v35M53 12v37M11 48L4 58M11 48l7 10M53 49l-7 9M53 49l7 9" fill="none"/><path d="M15 20h15v22H15zM38 20h15v22H38z"/><path d="M15 24h15M15 38h15M38 24h15M38 38h15M20 18V8M48 18V7M27 16h4v8M37 16h-4v8" fill="none"/><circle cx="34" cy="46" r="16"/><circle cx="34" cy="46" r="13"/><path d="M18 17h32" fill="none"/>'),
   },
   {
     id: 'timpani',
@@ -214,7 +220,7 @@ export const STAGE_PLOT_ICON_LIST = [
     id: 'keyboard',
     label: 'Keyboard',
     category: 'Keys',
-    svg: svgFor('Keys', '<rect x="10" y="26" width="44" height="14" rx="1"/><line x1="16" y1="26" x2="16" y2="35"/><line x1="20.75" y1="26" x2="20.75" y2="35"/><line x1="25.5" y1="26" x2="25.5" y2="35"/><line x1="30.25" y1="26" x2="30.25" y2="35"/><line x1="35" y1="26" x2="35" y2="35"/><line x1="39.75" y1="26" x2="39.75" y2="35"/><line x1="44.5" y1="26" x2="44.5" y2="35"/><line x1="49.25" y1="26" x2="49.25" y2="35"/><line x1="20" y1="40" x2="16" y2="50"/><line x1="44" y1="40" x2="48" y2="50"/>'),
+    svg: equipmentSvg('<path d="M4 18h56l-4 24H8L4 18Z"/><path d="M9 27h46v11H9zM15 27v11M21 27v11M27 27v11M33 27v11M39 27v11M45 27v11M51 27v11M13 22h19M38 22h4M46 22h4M54 22h2M13 42L6 61M51 42l7 19M18 42l28 19M46 42L18 61" fill="none"/>'),
   },
   {
     id: 'grand-piano',
@@ -252,19 +258,19 @@ export const STAGE_PLOT_ICON_LIST = [
     id: 'electric-guitar',
     label: 'Electric Guitar',
     category: 'Guitars',
-    svg: svgFor('Guitars', '<ellipse cx="26" cy="42" rx="12" ry="9"/><rect x="32" y="14" width="6" height="30" rx="2"/><rect x="30" y="9" width="10" height="6" rx="1"/>'),
+    svg: equipmentSvg('<path d="M20 58c-8 3-15-4-12-12 2-5 7-7 12-6-2-5 1-10 6-12 8-3 14 5 11 12-2 5-7 7-17 18Z"/><path d="M31 32 49 8l7 5-18 25M49 8l3-5 8 6-4 4M17 47l12 3M23 38l7 2M35 31l17-21M38 34l17-21" fill="none"/><circle cx="27" cy="43" r="3"/>'),
   },
   {
     id: 'acoustic-guitar',
     label: 'Acoustic Guitar',
     category: 'Guitars',
-    svg: svgFor('Guitars', '<circle cx="22" cy="38" r="8"/><circle cx="22" cy="52" r="10"/><rect x="19" y="8" width="6" height="32" rx="2"/><rect x="17" y="4" width="10" height="6" rx="1"/>'),
+    svg: equipmentSvg('<path d="M20 59C9 58 6 47 13 40c3-3 7-4 11-3-2-4-1-9 2-12 6-6 16-2 17 6 1 6-3 10-8 13-5 3-6 15-15 15Z"/><circle cx="29" cy="37" r="5"/><path d="M33 28 49 8l7 5-17 22M49 8l3-5 8 6-4 4M17 48l16-10M36 29l17-19M39 32l17-19" fill="none"/>'),
   },
   {
     id: 'bass-guitar',
     label: 'Bass Guitar',
     category: 'Basses',
-    svg: svgFor('Basses', '<ellipse cx="24" cy="46" rx="13" ry="9"/><rect x="30" y="9" width="6" height="37" rx="2"/><rect x="28" y="5" width="10" height="6" rx="1"/>'),
+    svg: equipmentSvg('<path d="M18 59C9 61 3 52 8 44c3-4 7-5 12-4-1-5 2-10 7-12 8-2 14 6 10 13-3 5-8 7-19 18Z"/><path d="M32 32 51 7l6 5-19 26M51 7l3-5 8 6-5 4M14 49l15 2M23 39l7 2M35 31 53 9M38 34l18-22" fill="none"/><circle cx="27" cy="44" r="2.5"/>'),
   },
   {
     id: 'upright-bass',
@@ -334,37 +340,37 @@ export const STAGE_PLOT_ICON_LIST = [
     id: 'trumpet',
     label: 'Trumpet',
     category: 'Brass & Woodwind',
-    svg: svgFor('Brass & Woodwind', '<rect x="12" y="28" width="26" height="6" rx="2"/><path d="M38 24 L52 19 L52 41 L38 36 Z"/><rect x="18" y="21" width="3" height="8"/><rect x="24" y="21" width="3" height="8"/><rect x="30" y="21" width="3" height="8"/>'),
+    svg: equipmentSvg('<path d="M5 34h37L57 23v22L42 34"/><path d="M11 30v8M17 22v12M23 21v13M29 22v12M17 22h4M23 21h4M29 22h4M20 34v10h22M27 34v10M34 34v10M57 23c7 2 7 20 0 22" fill="none"/><circle cx="7" cy="34" r="2"/>'),
   },
   {
     id: 'trombone',
     label: 'Trombone',
     category: 'Brass & Woodwind',
-    svg: svgFor('Brass & Woodwind', '<rect x="8" y="27" width="22" height="5" rx="2"/><rect x="12" y="34" width="22" height="5" rx="2"/><path d="M30 25 L46 20 L46 40 L30 40 Z"/>'),
+    svg: equipmentSvg('<path d="M5 24h35L55 14v20L40 24"/><path d="M12 24v28h34M18 30h25M43 30v16M46 52c8 0 10-6 10-12M55 14c7 2 7 18 0 20" fill="none"/><circle cx="7" cy="24" r="2"/>'),
   },
   {
     id: 'saxophone',
     label: 'Saxophone',
     category: 'Brass & Woodwind',
-    svg: svgFor('Brass & Woodwind', '<path d="M26 10 Q40 10 40 26 Q40 40 30 44 Q22 47 24 54" fill="none" stroke-width="4"/><circle cx="26" cy="10" r="4"/><path d="M20 52 L30 58 L22 58 Z"/>'),
+    svg: equipmentSvg('<path d="M27 5c14 1 20 10 16 21l-6 16c-3 8 3 14 11 9 6-4 7-12 4-18l10-4c7 15-1 31-16 35-16 4-29-11-24-26l6-18c2-6-1-9-6-10l5-5Z"/><path d="M24 15c7 1 11 5 10 11M31 27l7 3M28 35l7 3M26 43l7 3M52 33c7 4 10 11 8 18" fill="none"/><circle cx="35" cy="29" r="1.5"/><circle cx="32" cy="37" r="1.5"/><circle cx="30" cy="45" r="1.5"/>'),
   },
   {
     id: 'clarinet',
     label: 'Clarinet',
     category: 'Brass & Woodwind',
-    svg: svgFor('Brass & Woodwind', '<rect x="28" y="6" width="8" height="46" rx="2"/><path d="M26 52 L38 52 L34 60 L30 60 Z"/><line x1="28" y1="16" x2="36" y2="16"/><line x1="28" y1="24" x2="36" y2="24"/><line x1="28" y1="32" x2="36" y2="32"/>'),
+    svg: equipmentSvg('<path d="m29 4 7 4-2 7 5 39-4 7-8-7 4-39-3-7 1-4Z"/><path d="M30 22h6M29 30h8M28 38h10M27 46h12" fill="none"/><circle cx="33" cy="25" r="1.3"/><circle cx="33" cy="33" r="1.3"/><circle cx="33" cy="41" r="1.3"/>'),
   },
   {
     id: 'flute',
     label: 'Flute',
     category: 'Brass & Woodwind',
-    svg: svgFor('Brass & Woodwind', '<rect x="8" y="28" width="48" height="6" rx="3"/><circle cx="16" cy="31" r="1.5" fill="#78350f"/><circle cx="24" cy="31" r="1.5" fill="#78350f"/><circle cx="32" cy="31" r="1.5" fill="#78350f"/>'),
+    svg: equipmentSvg('<path d="M4 30h56v6H4z"/><path d="m4 27 8 6-8 6M60 27v12M18 30v6M27 30v6M36 30v6M45 30v6M54 30v6" fill="none"/><circle cx="18" cy="33" r="1.5"/><circle cx="27" cy="33" r="1.5"/><circle cx="36" cy="33" r="1.5"/><circle cx="45" cy="33" r="1.5"/>'),
   },
   {
     id: 'french-horn',
     label: 'French Horn',
     category: 'Brass & Woodwind',
-    svg: svgFor('Brass & Woodwind', '<circle cx="26" cy="32" r="16"/><circle cx="26" cy="32" r="9"/><path d="M42 26 L54 20 L54 40 L42 38 Z"/>'),
+    svg: equipmentSvg('<path d="M31 59C12 56 8 33 22 22c10-8 25-2 27 10 2 9-5 17-14 15-7-1-9-9-4-14 4-3 9-1 9 4"/><path d="M22 22 12 10l6-6 14 14M12 10 5 5M30 33c5 1 8 5 8 10M48 29l11-7v20l-11-7" fill="none"/><circle cx="35" cy="38" r="2"/>'),
   },
   {
     id: 'oboe',
