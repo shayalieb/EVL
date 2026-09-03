@@ -1629,7 +1629,13 @@ export default function BookingFormPage() {
     setContractOfferings(snapshot.offerings || []);
     setContractTitle(snapshot.title || 'Event Contract');
     setContractSections(snapshot.sections || []);
-    setContractTerms(contract.terms || '');
+    // Signing a revision only binds the parties to *this* document — the
+    // original signature doesn't carry forward to changed terms. Stating
+    // supersession explicitly avoids ambiguity over whether unedited clauses
+    // from the original are still meant to apply.
+    const originalDate = new Date(contract.sentAt || contract.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const supersessionNotice = `This agreement (Version ${(contract.revisionNumber || 1) + 1}) supersedes and replaces in its entirety the contract dated ${originalDate}, and reflects the parties' complete and updated agreement regarding the services described herein.`;
+    setContractTerms(contract.terms ? `${supersessionNotice}\n\n${contract.terms}` : supersessionNotice);
     setContractRecipientEmail(contract.recipientEmail || '');
     setContractRecipientName(contract.recipientName || '');
     setContractSubmitAttempted(false);
