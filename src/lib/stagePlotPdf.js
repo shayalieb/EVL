@@ -1,14 +1,9 @@
 import { getDocumentStyle } from './documentLayouts';
 import { drawLetterhead, drawHeaderRule, drawImageBlock, getAutoTableStyle } from './documentPdfKit';
 import { fetchStagePlotPageThumbnail } from './stagePlots';
+import { stagePlotNotesToPlainText } from './stagePlotNotes';
 
 const PROVIDED_BY_LABELS = { band: 'Band', venue: 'Venue', rental: 'Rental' };
-
-// Notes are rich text (RichTextToolbar/contentEditable) — flatten to plain
-// text for the PDF table cell rather than printing raw HTML tags.
-function plainText(html) {
-  return html ? html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : '';
-}
 
 const DEFAULT_INCLUDE = { pages: true, channels: true, backlineItems: true };
 
@@ -76,7 +71,7 @@ async function buildStagePlotDoc({ eventId, eventName, stagePlot, businessInfo, 
       body: stagePlot.channels
         .slice()
         .sort((a, b) => a.channelNumber - b.channelNumber)
-        .map((c) => [c.channelNumber, c.musicianName || '', c.source, c.phantomPower ? '✓' : '', c.powerNeeded ? '✓' : '', plainText(c.monitorNotes)]),
+        .map((c) => [c.channelNumber, c.musicianName || '', c.source, c.phantomPower ? '✓' : '', c.powerNeeded ? '✓' : '', stagePlotNotesToPlainText(c.monitorNotes)]),
       ...tableStyle,
     });
   }
@@ -97,7 +92,7 @@ async function buildStagePlotDoc({ eventId, eventName, stagePlot, businessInfo, 
       startY: y,
       margin: { left: marginX },
       head: [['Item', 'Qty', 'Provided By', 'Notes']],
-      body: stagePlot.backlineItems.map((i) => [i.item, i.quantity, PROVIDED_BY_LABELS[i.providedBy] || 'TBD', plainText(i.notesHtml)]),
+      body: stagePlot.backlineItems.map((i) => [i.item, i.quantity, PROVIDED_BY_LABELS[i.providedBy] || 'TBD', stagePlotNotesToPlainText(i.notesHtml)]),
       ...tableStyle,
     });
   }

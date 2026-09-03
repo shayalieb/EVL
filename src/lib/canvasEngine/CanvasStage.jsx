@@ -3,7 +3,7 @@ import { Stage, Layer, Rect, Text, Line, Arrow, Group, Image as KonvaImage, Tran
 import { gridLinePositions, snapPointToGrid } from './measurement';
 import { computeDragSnap, SNAP_THRESHOLD_PX } from './alignment';
 import { useSvgImage, preloadIconRegistry } from './useSvgImage';
-import RichTextToolbar from '../../components/ui/RichTextToolbar';
+import { stagePlotNotesToPlainText } from '../stagePlotNotes';
 
 // Exported for alignment.js's autoAlignAll — its row/cluster-gap thresholds
 // scale off this same fixed icon footprint, so it reads sensibly against
@@ -359,7 +359,6 @@ const CanvasStage = forwardRef(function CanvasStage({
   const shapeRefs = useRef({});
   const editTextareaRef = useRef(null);
   const nameInputRef = useRef(null);
-  const descriptionEditRef = useRef(null);
   // Guide lines are plain Konva nodes updated imperatively (see
   // makeElementDragBoundFunc below), never through React state — see that
   // function's comment for why. lastGuidesRef carries the previous tick's
@@ -408,23 +407,6 @@ const CanvasStage = forwardRef(function CanvasStage({
     if (!editingElementId) return;
     const raf = requestAnimationFrame(() => nameInputRef.current?.focus());
     return () => cancelAnimationFrame(raf);
-  }, [editingElementId]);
-
-  // contentEditable isn't a controlled input — its content has to be set
-  // imperatively when a new editing session starts (same pattern as every
-  // other RichTextToolbar usage in this app, e.g. PrepEmailModal.jsx).
-  // Deliberately only keyed on editingElementId, not draftDescriptionHtml —
-  // syncing on every keystroke would reset the cursor to the start on each
-  // one, since onInput below is what drives draftDescriptionHtml in the
-  // first place.
-  useEffect(() => {
-    if (editingElementId && descriptionEditRef.current) {
-      descriptionEditRef.current.innerHTML = draftDescriptionHtml;
-    }
-    // draftDescriptionHtml is intentionally captured only when a new editing
-    // session starts; adding it would reset the contentEditable caret on each
-    // keystroke.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingElementId]);
 
   function assignStageRef(node) {
@@ -674,7 +656,7 @@ const CanvasStage = forwardRef(function CanvasStage({
     setEditingElementRect(node.getClientRect({ relativeTo: internalStageRef.current }));
     const existing = elementContent?.[elementId];
     setDraftName(existing?.name || '');
-    setDraftDescriptionHtml(existing?.description || '');
+    setDraftDescriptionHtml(stagePlotNotesToPlainText(existing?.description));
     setEditingElementId(elementId);
   }
 
@@ -688,7 +670,7 @@ const CanvasStage = forwardRef(function CanvasStage({
     setEditingElementId(null);
     const hadExisting = !!elementContent?.[id];
     const nameTrimmed = draftName.trim();
-    const descriptionTextOnly = draftDescriptionHtml.replace(/<[^>]*>/g, '').trim();
+    const descriptionTextOnly = draftDescriptionHtml.trim();
     if (hadExisting || nameTrimmed || descriptionTextOnly) {
       onUpdateElementContent?.(id, { name: draftName, description: draftDescriptionHtml });
     }
@@ -1199,14 +1181,13 @@ const CanvasStage = forwardRef(function CanvasStage({
               {addToListLabel}
             </button>
           )}
-          <RichTextToolbar editorRef={descriptionEditRef} onFormat={() => setDraftDescriptionHtml(descriptionEditRef.current?.innerHTML || '')} />
-          <div
-            ref={descriptionEditRef}
-            contentEditable
-            suppressContentEditableWarning
-            onInput={() => setDraftDescriptionHtml(descriptionEditRef.current?.innerHTML || '')}
+          <textarea
+            value={draftDescriptionHtml}
+            onChange={(event) => setDraftDescriptionHtml(event.target.value)}
+            rows={5}
+            placeholder="Production notes, inputs, monitor mix, or power needs…"
             data-testid="canvas-element-popup-description-input"
-            className="w-full min-h-[70px] max-h-40 overflow-y-auto px-2 py-1.5 rounded border border-slate-300 text-sm outline-none focus:border-indigo-400"
+            className="w-full resize-y px-2.5 py-2 rounded border border-slate-300 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
           />
         </div>
       )}

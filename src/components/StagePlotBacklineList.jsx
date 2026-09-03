@@ -1,14 +1,10 @@
 import { useState } from 'react';
 import CanvasNotesPopover from './CanvasNotesPopover';
+import { stagePlotNotesToPlainText } from '../lib/stagePlotNotes';
 
 const PROVIDED_BY_OPTIONS = ['', 'band', 'venue', 'rental'];
 const PROVIDED_BY_LABELS = { band: 'Band', venue: 'Venue', rental: 'Rental' };
 const cellInputClass = 'w-full px-1.5 py-1 rounded border border-transparent hover:border-slate-200 focus:border-indigo-400 text-xs bg-transparent';
-
-function plainTextPreview(html) {
-  if (!html) return '';
-  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-}
 
 // Equipment the venue/production needs on hand (amps, drum kit, risers,
 // monitors) — same "own panel next to the canvas, not drawn on it" reasoning
@@ -51,13 +47,13 @@ export default function StagePlotBacklineList({ api, items, onItemsChange }) {
         <button type="button" onClick={handleAdd} data-testid="stageplot-add-backline-item-button" className="text-xs font-semibold text-indigo-600">+ Add Item</button>
       </div>
       <div className="border border-slate-200 rounded-lg overflow-x-auto">
-        <table className="w-full text-xs min-w-[30rem]">
+        <table className="w-full text-xs min-w-[42rem]">
           <thead className="bg-slate-50 text-slate-400">
             <tr>
               <th className="px-2 py-1.5 text-left">Item</th>
               <th className="px-2 py-1.5 text-left w-16">Qty</th>
               <th className="px-2 py-1.5 text-left w-24">Provided By</th>
-              <th className="px-2 py-1.5 text-left w-20">Notes</th>
+              <th className="px-2 py-1.5 text-left w-64">Notes</th>
               <th className="px-2 py-1.5 text-right w-8" />
             </tr>
           </thead>
@@ -103,9 +99,9 @@ export default function StagePlotBacklineList({ api, items, onItemsChange }) {
                     onClick={() => setOpenItemId(item.id)}
                     data-testid="stageplot-backline-notes-button"
                     className={`block w-full text-left truncate px-1.5 py-1 rounded hover:bg-slate-50 ${item.notesHtml ? 'text-slate-600' : 'text-slate-300'}`}
-                    title={plainTextPreview(item.notesHtml) || 'Add notes'}
+                    title={stagePlotNotesToPlainText(item.notesHtml) || 'Add notes'}
                   >
-                    {plainTextPreview(item.notesHtml) || 'Add notes…'}
+                    {stagePlotNotesToPlainText(item.notesHtml) || 'Add notes…'}
                   </button>
                   {openItemId === item.id && (
                     <CanvasNotesPopover

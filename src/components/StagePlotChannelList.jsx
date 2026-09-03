@@ -1,13 +1,9 @@
 import { useRef, useState } from 'react';
 import CanvasNotesPopover from './CanvasNotesPopover';
+import { stagePlotNotesToPlainText } from '../lib/stagePlotNotes';
 import { useToast } from './ui/Toast';
 
 const cellInputClass = 'w-full px-1.5 py-1 rounded border border-transparent hover:border-slate-200 focus:border-indigo-400 text-xs bg-transparent';
-
-function plainTextPreview(html) {
-  if (!html) return '';
-  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-}
 
 // Who's playing what, and what they need — kept as its own panel next to
 // the canvas (not drawn on it) since it's tabular data a business
@@ -179,9 +175,9 @@ export default function StagePlotChannelList({ api, channels, onChannelsChange, 
                     onClick={() => setOpenChannelId(channel.id)}
                     data-testid="stageplot-channel-notes-button"
                     className={`block w-full text-left truncate px-1.5 py-1 rounded hover:bg-slate-50 ${channel.monitorNotes ? 'text-slate-600' : 'text-slate-300'}`}
-                    title={plainTextPreview(channel.monitorNotes) || 'Add notes'}
+                    title={stagePlotNotesToPlainText(channel.monitorNotes) || 'Add notes'}
                   >
-                    {plainTextPreview(channel.monitorNotes) || 'DI, monitor mix, other needs…'}
+                    {stagePlotNotesToPlainText(channel.monitorNotes) || 'DI, monitor mix, other needs…'}
                   </button>
                   {openChannelId === channel.id && (
                     <CanvasNotesPopover

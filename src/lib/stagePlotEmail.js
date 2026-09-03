@@ -1,6 +1,7 @@
 import { formatEventDate } from './format';
 import { escapeHtml } from './htmlEscape';
 import { fetchStagePlotPageThumbnail } from './stagePlots';
+import { stagePlotNotesToPlainText } from './stagePlotNotes';
 
 const PROVIDED_BY_LABELS = { band: 'Band', venue: 'Venue', rental: 'Rental' };
 
@@ -27,6 +28,10 @@ const cellStyle = 'padding:4px 8px;border-bottom:1px solid #e2e8f0;';
 const headStyle = 'padding:4px 8px;border-bottom:2px solid #cbd5e1;';
 const sectionHeadingStyle = 'font-size:14px;font-weight:700;color:#1e293b;margin:20px 0 8px;';
 const emptyStyle = 'font-size:13px;color:#94a3b8;';
+
+function emailNotes(value) {
+  return escapeHtml(stagePlotNotesToPlainText(value)).replace(/\n/g, '<br />');
+}
 
 function tableHtml(headers, rows) {
   if (!rows.length) return `<div style="${emptyStyle}">Nothing here yet.</div>`;
@@ -88,7 +93,7 @@ export async function buildStagePlotViewsHtml({ eventId, stagePlot, checked }) {
         <td style="${cellStyle}">${escapeHtml(c.source)}</td>
         <td style="${cellStyle}">${c.phantomPower ? '✓' : ''}</td>
         <td style="${cellStyle}">${c.powerNeeded ? '✓' : ''}</td>
-        <td style="${cellStyle}">${c.monitorNotes || ''}</td>
+        <td style="${cellStyle}">${emailNotes(c.monitorNotes)}</td>
       </tr>`);
     sections.push(`<h3 style="${sectionHeadingStyle}">Production List</h3>${tableHtml(['#', 'Musician', 'Instrument', '48V', 'Power', 'Notes'], rows)}`);
   }
@@ -98,7 +103,7 @@ export async function buildStagePlotViewsHtml({ eventId, stagePlot, checked }) {
         <td style="${cellStyle}">${escapeHtml(i.item)}</td>
         <td style="${cellStyle}">${i.quantity}</td>
         <td style="${cellStyle}">${escapeHtml(PROVIDED_BY_LABELS[i.providedBy] || 'TBD')}</td>
-        <td style="${cellStyle}">${i.notesHtml || ''}</td>
+        <td style="${cellStyle}">${emailNotes(i.notesHtml)}</td>
       </tr>`);
     sections.push(`<h3 style="${sectionHeadingStyle}">Backline List</h3>${tableHtml(['Item', 'Qty', 'Provided By', 'Notes'], rows)}`);
   }
