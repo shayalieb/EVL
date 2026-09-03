@@ -15,11 +15,18 @@ export async function listContracts() {
 // `manual`+`reason`: skips the actual outbound email and logs a
 // 'manual_sent' entry with the reason instead of 'sent' — for contracts
 // delivered outside GigWorks (printed, texted, signed in person, etc.).
-export async function sendContract({ bookingId, recipientEmail, recipientName, snapshot, terms, manual, reason, expiration }) {
+export async function sendContract({ bookingId, recipientEmail, recipientName, snapshot, terms, manual, reason, expiration, previousContractId }) {
   return apiFetch('/contracts', {
     method: 'POST',
-    body: JSON.stringify({ bookingId, recipientEmail, recipientName, snapshot, terms, manual, reason, expiration }),
+    body: JSON.stringify({ bookingId, recipientEmail, recipientName, snapshot, terms, manual, reason, expiration, previousContractId }),
   });
+}
+
+// Walks the revision chain for a contract, oldest first — used to show
+// "Contract history" once a contract has been revised at least once.
+export async function getContractHistory(contractId) {
+  const data = await apiFetch(`/contracts/${contractId}/history`);
+  return data.contracts;
 }
 
 // Manual free-text log entry — same idea as a booking's Activity Log, but

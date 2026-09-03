@@ -21,8 +21,8 @@ import { uid } from '../lib/storage';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
 import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, bookingDocumentDownloadUrl } from '../lib/bookingDocuments';
 import { generateProposalPdf, generateProposalPdfAttachment, getProposalPdfDataUrl } from '../lib/proposalPdf';
-import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms, addContractLogNote, regenerateClientSignLink } from '../lib/contracts';
-import { getProposalResponseForBooking, sendProposalResponseLink } from '../lib/proposalResponses';
+import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms, addContractLogNote, regenerateClientSignLink, getContractHistory } from '../lib/contracts';
+import { getProposalResponseForBooking, sendProposalResponseLink, getProposalResponseHistory } from '../lib/proposalResponses';
 import { listInquiryLinks } from '../lib/inquiryLinks';
 import { buildBookingMergePatch } from '../lib/applyInquiry';
 import { listInvoices, createInvoice, updateInvoice, sendInvoice, markInvoicePayment, sendReceipt, voidInvoice, getNextInvoiceInfo } from '../lib/invoices';
@@ -345,6 +345,95 @@ function CollapsibleSection({ title, subtitle, defaultOpen, badge, children, cla
   );
 }
 
+// One prior version inside "Contract History" — a compact read-only summary
+// of that version's frozen snapshot (deposit/price included, since
+// buildContractSnapshot() already captures those at send time), expandable
+// on demand rather than always shown inline.
+function ContractHistoryEntry({ contract }) {
+  const [open, setOpen] = useState(false);
+  const snapshot = contract.snapshot || {};
+  return (
+    <div className="border border-slate-200 rounded-lg p-3" data-testid="booking-form-contract-history-entry">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="w-full flex items-center justify-between gap-3 text-left">
+        <div>
+          <div className="text-sm font-semibold text-slate-700">Version {contract.revisionNumber}</div>
+          <div className="text-xs text-slate-400">
+            Sent {contract.sentAt ? new Date(contract.sentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'} · Superseded
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-sm font-bold text-slate-800">{currency(computeGrandTotal(snapshot.lineItems, snapshot.offerings))}</span>
+          <span className={`text-slate-400 text-xs transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
+        </div>
+      </button>
+      {open && (
+        <div className="mt-3 pt-3 border-t border-slate-100 space-y-1 text-sm">
+          {(snapshot.lineItems || []).map((item) => (
+            <div key={item.id} className="flex justify-between text-slate-600">
+              <span>{item.name}</span>
+              <span className="font-medium">{currency(item.amount)}</span>
+            </div>
+          ))}
+          {(snapshot.offerings || []).map((o) => (
+            <div key={o.id} className="flex justify-between text-slate-600">
+              <span>{o.name}</span>
+              <span className="font-medium">{currency(computeOfferingTotal(o))}</span>
+            </div>
+          ))}
+          {snapshot.booking?.depositAmount != null && (
+            <div className="flex justify-between text-slate-500 pt-1 mt-1 border-t border-slate-100">
+              <span>Deposit</span>
+              <span className="font-medium">{currency(snapshot.booking.depositAmount)}</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// One prior response inside "Proposal History" — mirrors ContractHistoryEntry
+// above, using proposal's own snapshot shape (snapshot.proposal.lineItems/
+// offerings rather than the top-level fields Contract's snapshot uses).
+function ProposalHistoryEntry({ proposalResponse: pr }) {
+  const [open, setOpen] = useState(false);
+  const proposal = pr.snapshot?.proposal || {};
+  const statusLabel = pr.status === 'accepted' ? 'Accepted' : pr.status === 'revision_requested' ? 'Changes requested' : 'Sent';
+  return (
+    <div className="border border-slate-200 rounded-lg p-3" data-testid="booking-form-proposal-history-entry">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="w-full flex items-center justify-between gap-3 text-left">
+        <div>
+          <div className="text-sm font-semibold text-slate-700">
+            {pr.sentAt ? new Date(pr.sentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+          </div>
+          <div className="text-xs text-slate-400">{statusLabel}</div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-sm font-bold text-slate-800">{currency(computeGrandTotal(proposal.lineItems, proposal.offerings))}</span>
+          <span className={`text-slate-400 text-xs transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
+        </div>
+      </button>
+      {open && (
+        <div className="mt-3 pt-3 border-t border-slate-100 space-y-1 text-sm">
+          {(proposal.lineItems || []).map((item) => (
+            <div key={item.id} className="flex justify-between text-slate-600">
+              <span>{item.name}</span>
+              <span className="font-medium">{currency(item.amount)}</span>
+            </div>
+          ))}
+          {(proposal.offerings || []).map((o) => (
+            <div key={o.id} className="flex justify-between text-slate-600">
+              <span>{o.name}</span>
+              <span className="font-medium">{currency(computeOfferingTotal(o))}</span>
+            </div>
+          ))}
+          {pr.responseNote && <div className="text-slate-500 italic pt-1">"{pr.responseNote}"</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // pipelineSteps/proposalStatusInfo/contractStatusInfo now live in
 // src/lib/bookingPipeline.js — shared with BookingsPage.jsx's Stage column,
 // so every view deriving "where is this booking really at" agrees.
@@ -435,7 +524,13 @@ export default function BookingFormPage() {
   const [docPendingDelete, setDocPendingDelete] = useState(null);
   const [sendingProposal, setSendingProposal] = useState(false);
   const [contract, setContract] = useState(null);
+  // The fully-signed contract currently being revised, or null. Non-null
+  // reopens the composer (seeded from this contract's snapshot) instead of
+  // the read-only signed view, without touching the contract state itself.
+  const [revisionDraft, setRevisionDraft] = useState(null);
+  const [contractHistory, setContractHistory] = useState([]);
   const [proposalResponse, setProposalResponse] = useState(null);
+  const [proposalHistory, setProposalHistory] = useState([]);
   const [proposalLinkExpiration, setProposalLinkExpiration] = useState(() => emptyLinkExpiration('14_days'));
   const [contractRecipientEmail, setContractRecipientEmail] = useState('');
   const [contractRecipientName, setContractRecipientName] = useState('');
@@ -652,11 +747,26 @@ export default function BookingFormPage() {
   }, [booking]);
 
   useEffect(() => {
+    if (!booking) { setProposalHistory([]); return; }
+    let cancelled = false;
+    getProposalResponseHistory(booking.id).then((list) => { if (!cancelled) setProposalHistory(list); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [booking, proposalResponse?.id]);
+
+  useEffect(() => {
     if (!booking) { setInvoices([]); return; }
     let cancelled = false;
     listInvoices(booking.id).then((list) => { if (!cancelled) setInvoices(list); }).catch(() => {});
     return () => { cancelled = true; };
   }, [booking]);
+
+  // Only fetched once a contract has actually been revised.
+  useEffect(() => {
+    if (!contract || contract.revisionNumber <= 1) { setContractHistory([]); return; }
+    let cancelled = false;
+    getContractHistory(contract.id).then((list) => { if (!cancelled) setContractHistory(list); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [contract]);
 
   // Seeds the new-invoice composer from the client and the current proposal
   // each time a different booking loads — same idea as the contract prep
@@ -1442,8 +1552,10 @@ export default function BookingFormPage() {
         recipientName: contractRecipientName.trim(),
         snapshot: buildContractSnapshot(),
         terms: contractTerms,
+        previousContractId: revisionDraft?.id,
       });
       setContract(created);
+      setRevisionDraft(null);
       setLastSignLink(signLink);
       setLastOwnerSignLink(ownerSignLink);
       if (emailError) showToast(emailError, 'error');
@@ -1478,8 +1590,10 @@ export default function BookingFormPage() {
         manual: true,
         reason,
         expiration: serializeLinkExpiration(contractLinkExpiration),
+        previousContractId: revisionDraft?.id,
       });
       setContract(created);
+      setRevisionDraft(null);
       // Manual mode skips the email, but the server still issues both sign
       // tokens — without capturing these, there'd be no way to actually get
       // the client a link to sign from.
@@ -1496,6 +1610,33 @@ export default function BookingFormPage() {
   async function handleAddContractLogNote(note) {
     const updated = await addContractLogNote(contract.id, note);
     setContract(updated);
+  }
+
+  // Reopens the composer seeded from a fully-signed contract's own snapshot
+  // (not the live proposal, which may have drifted since) so the business
+  // can add the new item and re-send for fresh signatures. These are all
+  // plain local useState — not part of the autosaved booking form — so
+  // seeding/discarding them is cheap and has no server-side side effect.
+  function startContractRevision() {
+    if (invoices.length > 0) {
+      const proceed = window.confirm('An invoice already exists for this booking — you may need to update it separately to match the new price.\n\nContinue creating a contract revision?');
+      if (!proceed) return;
+    }
+    const snapshot = contract.snapshot || {};
+    setRevisionDraft(contract);
+    setContractHours(snapshot.hours || '');
+    setContractLineItems(snapshot.lineItems || []);
+    setContractOfferings(snapshot.offerings || []);
+    setContractTitle(snapshot.title || 'Event Contract');
+    setContractSections(snapshot.sections || []);
+    setContractTerms(contract.terms || '');
+    setContractRecipientEmail(contract.recipientEmail || '');
+    setContractRecipientName(contract.recipientName || '');
+    setContractSubmitAttempted(false);
+  }
+
+  function cancelContractRevision() {
+    setRevisionDraft(null);
   }
 
   // Covers a lost/never-sent client link — e.g. a contract marked sent
@@ -2430,6 +2571,20 @@ export default function BookingFormPage() {
                   onAddNote={handleAddProposalLogNote}
                   testIdPrefix="booking-form-proposal-log"
                 />
+                {proposalHistory.filter((pr) => pr.id !== proposalResponse?.id).length > 0 && (
+                  <CollapsibleSection
+                    title="Proposal History"
+                    subtitle="Earlier sent versions of this proposal"
+                    defaultOpen={false}
+                    testId="booking-form-proposal-history-toggle"
+                  >
+                    <div className="space-y-3">
+                      {proposalHistory.filter((pr) => pr.id !== proposalResponse?.id).map((pr) => (
+                        <ProposalHistoryEntry key={pr.id} proposalResponse={pr} />
+                      ))}
+                    </div>
+                  </CollapsibleSection>
+                )}
               </div>
 
               {(form.proposal.offerings || []).length > 0 && (
@@ -2494,12 +2649,33 @@ export default function BookingFormPage() {
                 </button>
               </div>
             </div>
-          ) : !contract ? (
+          ) : (!contract || revisionDraft) ? (
             <div className={cardClass}>
-              <h3 className={cardTitleClass}>Move Proposal to Contract</h3>
-              <p className="text-sm text-slate-500 mb-5 max-w-xl">
-                Sends a contract for signature, built from the current proposal. Terms are locked once sent — the client signs first, then it's returned to you to countersign.
-              </p>
+              {revisionDraft ? (
+                <div className="flex items-start justify-between gap-3 mb-1 flex-wrap">
+                  <div>
+                    <h3 className={cardTitleClass}>Revise Contract</h3>
+                    <p className="text-sm text-slate-500 mb-5 max-w-xl">
+                      Sends an updated contract for signature. The current signed version stays on record as version {revisionDraft.revisionNumber} — both parties will need to sign this one too.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={cancelContractRevision}
+                    data-testid="booking-form-contract-cancel-revision-button"
+                    className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50 shrink-0"
+                  >
+                    Cancel Revision
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <h3 className={cardTitleClass}>Move Proposal to Contract</h3>
+                  <p className="text-sm text-slate-500 mb-5 max-w-xl">
+                    Sends a contract for signature, built from the current proposal. Terms are locked once sent — the client signs first, then it's returned to you to countersign.
+                  </p>
+                </>
+              )}
               <div className="max-w-2xl mb-5">
                 <label className={labelClass}>Contract Title</label>
                 <input value={contractTitle} onChange={(e) => setContractTitle(e.target.value)} data-testid="booking-form-contract-title-input" className={inputClass} />
@@ -2639,7 +2815,7 @@ export default function BookingFormPage() {
                   className={`${primaryButtonClass} disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
                 >
                   {sendingContract && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
-                  Send Contract for Signature
+                  {revisionDraft ? 'Send Revised Contract for Signature' : 'Send Contract for Signature'}
                 </button>
               </div>
               <div className="mt-4 max-w-sm">
@@ -2832,6 +3008,21 @@ export default function BookingFormPage() {
                     )}
                   </div>
                 </CollapsibleSection>
+
+                {contract.revisionNumber > 1 && (
+                  <CollapsibleSection
+                    title="Contract History"
+                    subtitle={`Version ${contract.revisionNumber} of ${contract.revisionNumber} — earlier signed versions stay on record`}
+                    defaultOpen={false}
+                    testId="booking-form-contract-history-toggle"
+                  >
+                    <div className="space-y-3">
+                      {contractHistory.filter((c) => c.id !== contract.id).map((prior) => (
+                        <ContractHistoryEntry key={prior.id} contract={prior} />
+                      ))}
+                    </div>
+                  </CollapsibleSection>
+                )}
               </div>
 
               <div className={cardClass}>
@@ -2929,18 +3120,31 @@ export default function BookingFormPage() {
                       </div>
                     </div>
                   </div>
-                  {booking.convertedEventId ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {booking.convertedEventId ? (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/events/${booking.convertedEventId}`)}
+                        data-testid="booking-form-contract-view-event-button"
+                        className="px-4 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
+                      >
+                        View Event →
+                      </button>
+                    ) : (
+                      <p className="text-xs text-slate-400">Setting up your event…</p>
+                    )}
                     <button
                       type="button"
-                      onClick={() => navigate(`/events/${booking.convertedEventId}`)}
-                      data-testid="booking-form-contract-view-event-button"
-                      className="px-4 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50"
+                      onClick={startContractRevision}
+                      data-testid="booking-form-contract-create-revision-button"
+                      className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
                     >
-                      View Event →
+                      Create a Revision
                     </button>
-                  ) : (
-                    <p className="text-xs text-slate-400">Setting up your event…</p>
-                  )}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-2">
+                    Need to change something? This creates a new version for both of you to sign — the current one stays on record.
+                  </p>
                 </div>
               )}
 

@@ -76,6 +76,21 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ proposalResponse: pr ? serializeForOwner(pr) : null });
 }));
 
+// Every response ever sent for one booking, oldest first — unlike GET /
+// above (which only returns the most recent), this is for a "Proposal
+// history" view showing each prior version's frozen snapshot.
+router.get('/history', asyncHandler(async (req, res) => {
+  const { bookingId } = req.query;
+  if (!bookingId?.trim()) {
+    return res.status(400).json({ error: 'bookingId is required.' });
+  }
+  const list = await prisma.proposalResponse.findMany({
+    where: { accountId: req.membership.accountId, bookingId },
+    orderBy: { createdAt: 'asc' },
+  });
+  res.json({ proposalResponses: list.map(serializeForOwner) });
+}));
+
 router.post('/', asyncHandler(async (req, res) => {
   const { bookingId, recipientEmail, recipientName, snapshot, manual, reason, expiration } = req.body || {};
   const normalizedRecipientEmail = normalizeValidEmail(recipientEmail);

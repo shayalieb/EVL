@@ -542,6 +542,17 @@ model Contract {
   // token-based sign page.
   log Json @default("[]")
 
+  // Revision chain: revising a fully_signed contract creates a new row
+  // pointing back at the one it replaces via previousContractId, instead of
+  // mutating it. The old row is never touched — it keeps its own signatures
+  // and snapshot (including deposit/price at the time) as the historical
+  // record. A real self-relation (unlike bookingId above) since both sides
+  // live in this same table.
+  revisionNumber     Int        @default(1)
+  previousContractId String?
+  previousContract   Contract?  @relation("ContractRevisions", fields: [previousContractId], references: [id])
+  revisions          Contract[] @relation("ContractRevisions")
+
   @@index([accountId, bookingId])
   @@index([clientLinkExpiresAt])
 }

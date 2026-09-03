@@ -44,6 +44,8 @@ function serializeForOwner(contract) {
     clientLinkExpiresAt: contract.clientLinkExpiresAt,
     ownerLinkExpiresAt: contract.ownerLinkExpiresAt,
     log: contract.log,
+    revisionNumber: contract.revisionNumber,
+    previousContractId: contract.previousContractId,
   };
 }
 
@@ -93,6 +95,28 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ contract: contract ? serializeForOwner(contract) : null });
 }));
 
+// Walks previousContractId back from the given contract to build the full
+// revision chain, oldest first. Bounded loop as a safety net against any
+// data corruption forming a cycle — the chain is otherwise always linear
+// (POST / rejects revising a contract that's already been revised).
+router.get('/:id/history', asyncHandler(async (req, res) => {
+  const contract = await prisma.contract.findUnique({ where: { id: req.params.id } });
+  if (!contract || contract.accountId !== req.membership.accountId) {
+    return res.status(404).json({ error: 'Contract not found.' });
+  }
+
+  const chain = [contract];
+  let cursor = contract;
+  for (let hop = 0; hop < 50 && cursor.previousContractId; hop += 1) {
+    const previous = await prisma.contract.findUnique({ where: { id: cursor.previousContractId } });
+    if (!previous) break;
+    chain.push(previous);
+    cursor = previous;
+  }
+  chain.reverse();
+  res.json({ contracts: chain.map(serializeForOwner) });
+}));
+
 // Derives status purely from which signatures are present so either party
 // can sign in either order — a 'client_signed'/'owner_signed' gate would
 // otherwise block whichever party didn't go first.
@@ -107,7 +131,7 @@ router.post('/', asyncHandler(async (req, res) => {
   if (!effectivePermissions(req.membership).manageBookings) {
     return res.status(403).json({ error: 'Not authorized.' });
   }
-  const { bookingId, recipientEmail, recipientName, snapshot, terms, manual, reason, expiration } = req.body || {};
+  const { bookingId, recipientEmail, recipientName, snapshot, terms, manual, reason, expiration, previousContractId } = req.body || {};
   const normalizedRecipientEmail = normalizeValidEmail(recipientEmail);
   if (!bookingId?.trim() || !normalizedRecipientEmail || !snapshot) {
     return res.status(400).json({ error: 'bookingId, a valid recipient email, and snapshot are required.' });
@@ -117,6 +141,21 @@ router.post('/', asyncHandler(async (req, res) => {
   }
   const resolvedExpiration = resolveLinkExpiration(expiration, { defaultPreset: '30_days' });
   if (resolvedExpiration.error) return res.status(400).json({ error: resolvedExpiration.error });
+
+  let previousContract = null;
+  if (previousContractId) {
+    previousContract = await prisma.contract.findUnique({ where: { id: previousContractId } });
+    if (!previousContract || previousContract.accountId !== req.membership.accountId || previousContract.bookingId !== bookingId) {
+      return res.status(400).json({ error: 'Invalid contract to revise.' });
+    }
+    if (previousContract.status !== 'fully_signed') {
+      return res.status(400).json({ error: 'Only a fully signed contract can be revised.' });
+    }
+    const alreadyRevised = await prisma.contract.findFirst({ where: { previousContractId } });
+    if (alreadyRevised) {
+      return res.status(409).json({ error: 'This contract has already been revised.' });
+    }
+  }
 
   const owner = await prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } });
   const normalizedOwnerEmail = normalizeValidEmail(owner?.email);
@@ -143,6 +182,8 @@ router.post('/', asyncHandler(async (req, res) => {
       clientLinkExpiresAt: resolvedExpiration.expiresAt,
       ownerLinkExpiresAt: resolvedExpiration.expiresAt,
       sentAt,
+      revisionNumber: previousContract ? previousContract.revisionNumber + 1 : 1,
+      previousContractId: previousContract ? previousContract.id : null,
       // Delivered outside GigWorks (printed, texted, signed in person,
       // etc.) skips the actual email below, but still gets sign tokens so
       // the client can come sign online later if that's still useful.

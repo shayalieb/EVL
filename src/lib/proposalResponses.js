@@ -5,6 +5,14 @@ export async function getProposalResponseForBooking(bookingId) {
   return data.proposalResponse;
 }
 
+// Every response ever sent for one booking, oldest first — for a "Proposal
+// history" view. Distinct from listProposalResponses() below, which is
+// account-wide and only used for BookingsPage.jsx's list-wide badges.
+export async function getProposalResponseHistory(bookingId) {
+  const data = await apiFetch(`/proposal-responses/history?bookingId=${encodeURIComponent(bookingId)}`);
+  return data.proposalResponses;
+}
+
 // Every proposal response on the account (see BookingsPage.jsx, which needs
 // each booking's response status — specifically revision requests — without
 // a fetch per row), same shape as listContracts().
