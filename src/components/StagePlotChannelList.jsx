@@ -1,9 +1,41 @@
-import { useRef, useState } from 'react';
-import CanvasNotesPopover from './CanvasNotesPopover';
+import { useEffect, useRef, useState } from 'react';
 import { stagePlotNotesToPlainText } from '../lib/stagePlotNotes';
 import { useToast } from './ui/Toast';
 
 const cellInputClass = 'w-full px-1.5 py-1 rounded border border-transparent hover:border-slate-200 focus:border-indigo-400 text-xs bg-transparent';
+
+function InlineProductionNotes({ value, onSave }) {
+  const savedValue = stagePlotNotesToPlainText(value);
+  const [draft, setDraft] = useState(savedValue);
+
+  useEffect(() => {
+    setDraft(savedValue);
+  }, [savedValue]);
+
+  function save() {
+    const nextValue = draft.trim();
+    if (nextValue !== savedValue) onSave(nextValue);
+  }
+
+  return (
+    <textarea
+      value={draft}
+      rows={2}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={save}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          setDraft(savedValue);
+          event.currentTarget.blur();
+        }
+      }}
+      placeholder="DI, monitor mix, other needs…"
+      aria-label="Production item notes"
+      data-testid="stageplot-channel-notes-input"
+      className="block w-full min-w-48 resize-y rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs leading-4 text-slate-700 placeholder:text-slate-300 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+    />
+  );
+}
 
 // Who's playing what, and what they need — kept as its own panel next to
 // the canvas (not drawn on it) since it's tabular data a business
@@ -16,7 +48,6 @@ const cellInputClass = 'w-full px-1.5 py-1 rounded border border-transparent hov
 export default function StagePlotChannelList({ api, channels, onChannelsChange, selectedElementId, selectedElement, onSelectElement }) {
   const { showToast } = useToast();
   const [busyId, setBusyId] = useState(null);
-  const [openChannelId, setOpenChannelId] = useState(null);
   const dragIndex = useRef(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const isLinked = (elementId) => channels.some((c) => c.elementId === elementId);
@@ -99,7 +130,7 @@ export default function StagePlotChannelList({ api, channels, onChannelsChange, 
         </div>
       </div>
       <div className="border border-slate-200 rounded-lg overflow-x-auto">
-        <table className="w-full text-xs min-w-[40rem]">
+        <table className="w-full text-xs min-w-[48rem]">
           <thead className="bg-slate-50 text-slate-400">
             <tr>
               <th className="px-1 py-1.5 w-5" aria-hidden="true" />
@@ -108,7 +139,7 @@ export default function StagePlotChannelList({ api, channels, onChannelsChange, 
               <th className="px-2 py-1.5 text-left w-28">Instrument</th>
               <th className="px-2 py-1.5 text-center w-10" title="Needs 48V phantom power">48V</th>
               <th className="px-2 py-1.5 text-center w-10" title="Needs AC power at this position">Power</th>
-              <th className="px-2 py-1.5 text-left">Notes</th>
+              <th className="px-2 py-1.5 text-left w-64">Notes</th>
               <th className="px-2 py-1.5 text-right w-16">Icon</th>
             </tr>
           </thead>
@@ -163,30 +194,11 @@ export default function StagePlotChannelList({ api, channels, onChannelsChange, 
                     data-testid="stageplot-channel-power-checkbox"
                   />
                 </td>
-                <td className="px-1 py-1 relative">
-                  {/* Rich text — a linked icon's notes can also be opened via
-                      its double-click popup on the canvas (CanvasStage.jsx);
-                      both write the same monitorNotes field, so either place
-                      works. Uses the same safe popover as the Backline
-                      List's Notes column so formatting round-trips intact
-                      instead of being stripped on every edit. */}
-                  <button
-                    type="button"
-                    onClick={() => setOpenChannelId(channel.id)}
-                    data-testid="stageplot-channel-notes-button"
-                    className={`block w-full text-left truncate px-1.5 py-1 rounded hover:bg-slate-50 ${channel.monitorNotes ? 'text-slate-600' : 'text-slate-300'}`}
-                    title={stagePlotNotesToPlainText(channel.monitorNotes) || 'Add notes'}
-                  >
-                    {stagePlotNotesToPlainText(channel.monitorNotes) || 'DI, monitor mix, other needs…'}
-                  </button>
-                  {openChannelId === channel.id && (
-                    <CanvasNotesPopover
-                      initialHtml={channel.monitorNotes}
-                      onCommit={(html) => handleFieldChange(channel, { monitorNotes: html })}
-                      onClose={() => setOpenChannelId(null)}
-                      testIdPrefix="stageplot-channel-notes-popover"
-                    />
-                  )}
+                <td className="px-1 py-1.5 align-top">
+                  <InlineProductionNotes
+                    value={channel.monitorNotes}
+                    onSave={(monitorNotes) => handleFieldChange(channel, { monitorNotes })}
+                  />
                 </td>
                 <td className="px-1 py-1">
                   <div className="flex items-center justify-end gap-1.5">
