@@ -1634,8 +1634,12 @@ export default function BookingFormPage() {
     // supersession explicitly avoids ambiguity over whether unedited clauses
     // from the original are still meant to apply.
     const originalDate = new Date(contract.sentAt || contract.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    const supersessionNotice = `This agreement (Version ${(contract.revisionNumber || 1) + 1}) supersedes and replaces in its entirety the contract dated ${originalDate}, and reflects the parties' complete and updated agreement regarding the services described herein.`;
-    setContractTerms(contract.terms ? `${supersessionNotice}\n\n${contract.terms}` : supersessionNotice);
+    // "Amends" rather than "supersedes in its entirety" — nothing from the
+    // original is silently dropped if it isn't restated below; only what's
+    // actually changed here takes effect. Safer default for a small change
+    // (e.g. adding a musician) than a full-reset framing would be.
+    const amendmentNotice = `This agreement (Version ${(contract.revisionNumber || 1) + 1}) amends the contract dated ${originalDate} to reflect the updated terms set forth herein. Except as expressly modified by this agreement, all other terms of the original agreement dated ${originalDate} remain in full force and effect.`;
+    setContractTerms(contract.terms ? `${amendmentNotice}\n\n${contract.terms}` : amendmentNotice);
     setContractRecipientEmail(contract.recipientEmail || '');
     setContractRecipientName(contract.recipientName || '');
     setContractSubmitAttempted(false);
