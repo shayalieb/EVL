@@ -15,6 +15,27 @@ export function isValidEmailAddress(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formatEmailInput(value || ''));
 }
 
+// WhatsApp's universal wa.me link opens the native app when the device has
+// it available and otherwise falls back to WhatsApp Web. Contractor phone
+// inputs are currently US-formatted, so an unqualified 10-digit number gets
+// the US country code. Explicit international numbers must include "+".
+export function buildWhatsAppClickToChatUrl({ phone, contractorName, eventName, eventDate } = {}) {
+  const rawPhone = String(phone || '').trim();
+  const digits = rawPhone.replace(/\D/g, '');
+  let internationalPhone = '';
+  if (rawPhone.startsWith('+') && digits.length >= 8 && digits.length <= 15) internationalPhone = digits;
+  else if (digits.length === 10) internationalPhone = `1${digits}`;
+  else if (digits.length === 11 && digits.startsWith('1')) internationalPhone = digits;
+  if (!internationalPhone) return '';
+
+  const firstName = String(contractorName || '').trim().split(/\s+/)[0];
+  const greeting = firstName ? `Hi ${firstName}, ` : 'Hi, ';
+  const eventLabel = String(eventName || '').trim() || 'an upcoming gig';
+  const dateLabel = formatEventDate(eventDate);
+  const message = `${greeting}I'm reaching out about ${eventLabel}${dateLabel ? ` on ${dateLabel}` : ''}.`;
+  return `https://wa.me/${internationalPhone}?text=${encodeURIComponent(message)}`;
+}
+
 export function formatZip(value) {
   return value.replace(/\D/g, '').slice(0, 5);
 }

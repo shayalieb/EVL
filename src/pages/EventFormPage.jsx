@@ -1977,6 +1977,8 @@ export default function EventFormPage() {
                         <ContractorPickerRow
                           key={bk.contractorId}
                           booking={bk}
+                          eventName={form.name}
+                          eventDate={form.eventDate}
                           index={i}
                           contractor={contractors.find((c) => c.id === bk.contractorId)}
                           inquiryStatuses={inquiryStatuses}
