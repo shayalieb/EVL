@@ -48,6 +48,7 @@ import dashboardRouter from './routes/dashboard.js';
 import agencyGroupsRouter from './routes/agencyGroups.js';
 import financialsRouter from './routes/financials.js';
 import quickBooksRouter from './routes/quickBooks.js';
+import quickBooksSyncRouter from './routes/quickBooksSync.js';
 import portalRouter from './routes/portal.js';
 import { startReminderScheduler } from './lib/reminderScheduler.js';
 import { startReminderRuleEngine } from './lib/reminderRuleEngine.js';
@@ -263,6 +264,7 @@ app.use('/api/events', eventsRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/financials', financialsRouter);
 app.use('/api/integrations/quickbooks', quickBooksRouter);
+app.use('/api/integrations/quickbooks/sync', quickBooksSyncRouter);
 // Client-facing self-service portal — public/token-login, own session
 // scope (portalSession above), see routes/portal.js.
 app.use('/api/portal', portalSession, portalRouter);

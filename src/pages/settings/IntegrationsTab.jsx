@@ -1,7 +1,107 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useToast } from '../../components/ui/Toast';
-import { beginQuickBooksConnection, checkQuickBooksConnection, disconnectQuickBooks, getQuickBooksStatus } from '../../lib/quickBooks';
+import { beginQuickBooksConnection, checkQuickBooksConnection, createQuickBooksCustomer, disconnectQuickBooks, findQuickBooksCustomerMatches, getQuickBooksSetup, getQuickBooksStatus, getQuickBooksSyncPreview, linkQuickBooksCustomer, refreshQuickBooksReferenceData, saveQuickBooksMappings, syncQuickBooksInvoice } from '../../lib/quickBooks';
+
+const mappingFields = [
+  ['incomeAccountId', 'Gig income', ['Income', 'Other Income'], 'Where invoice revenue is recorded.'],
+  ['contractorExpenseAccountId', 'Contractor payments', ['Expense', 'Cost of Goods Sold', 'Other Expense'], 'Where performer and crew costs are recorded.'],
+  ['otherExpenseAccountId', 'Other gig expenses', ['Expense', 'Cost of Goods Sold', 'Other Expense'], 'Default for production, travel, backline, and other costs.'],
+  ['accountsReceivableId', 'Money clients owe', ['Accounts Receivable'], 'QuickBooks accounts receivable account.'],
+  ['accountsPayableId', 'Money owed to contractors', ['Accounts Payable'], 'QuickBooks accounts payable account.'],
+  ['serviceItemId', 'Invoice service item', ['Service', 'NonInventory'], 'The QuickBooks product/service used for GigWorks invoice lines.'],
+];
+const expenseCategories = [['contractor_payment', 'Contractor payment'], ['production', 'Production'], ['backline', 'Backline'], ['travel', 'Travel'], ['processing_fee', 'Processing fee'], ['agency_commission', 'Agency commission'], ['tax', 'Tax'], ['reimbursement', 'Reimbursement'], ['other_expense', 'Other expense']];
+const blankMappings = { incomeAccountId: '', contractorExpenseAccountId: '', otherExpenseAccountId: '', accountsReceivableId: '', accountsPayableId: '', serviceItemId: '', agencyTrackingMode: 'none', categoryMappings: {}, groupMappings: {} };
+
+function AccountSelect({ value, onChange, accounts, allowedTypes, label }) {
+  const options = accounts.filter((account) => allowedTypes.includes(account.type));
+  return <select aria-label={label} required value={value || ''} onChange={(event) => onChange(event.target.value)} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"><option value="">Choose an account…</option>{options.map((account) => <option key={account.id} value={account.id}>{account.fullyQualifiedName || account.name}</option>)}</select>;
+}
+
+function AccountingSetup({ setup, setSetup }) {
+  const { showToast } = useToast();
+  const [form, setForm] = useState({ ...blankMappings, ...(setup?.mappings || {}), categoryMappings: setup?.mappings?.categoryMappings || {}, groupMappings: setup?.mappings?.groupMappings || {} });
+  const [working, setWorking] = useState(false);
+  const accounts = setup?.accounts || [];
+  const expenseAccounts = accounts.filter((account) => ['Expense', 'Cost of Goods Sold', 'Other Expense'].includes(account.type));
+
+  useEffect(() => setForm({ ...blankMappings, ...(setup?.mappings || {}), categoryMappings: setup?.mappings?.categoryMappings || {}, groupMappings: setup?.mappings?.groupMappings || {} }), [setup]);
+
+  async function refresh() {
+    setWorking(true);
+    try { const updated = await refreshQuickBooksReferenceData(); setSetup(updated); showToast('QuickBooks accounts imported'); }
+    catch (error) { showToast(error.message || 'Unable to import QuickBooks accounts', 'error'); }
+    finally { setWorking(false); }
+  }
+
+  async function save(event) {
+    event.preventDefault();
+    setWorking(true);
+    try { const updated = await saveQuickBooksMappings(form); setSetup(updated); showToast('Accounting setup saved'); }
+    catch (error) { showToast(error.message || 'Unable to save accounting setup', 'error'); }
+    finally { setWorking(false); }
+  }
+
+  return <section className="rounded-xl border border-slate-200 bg-white p-5">
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-bold text-slate-800">Accounting setup</h3><p className="mt-1 text-sm text-slate-500">Tell GigWorks where each kind of activity belongs. This setup does not create or change transactions.</p></div><button type="button" onClick={refresh} disabled={working} className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-600 hover:bg-indigo-50 disabled:opacity-50">{working ? 'Importing…' : accounts.length ? 'Refresh accounts' : 'Import accounts'}</button></div>
+    <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Setup checklist</p><div className="mt-3 grid gap-2 sm:grid-cols-3">{(setup?.readiness?.checks || []).map((check) => <div key={check.id} className="flex items-center gap-2 text-sm"><span className={`flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${check.complete ? 'bg-emerald-100 text-emerald-700' : 'bg-white text-slate-400'}`}>{check.complete ? '✓' : '○'}</span><span className={check.complete ? 'text-slate-700' : 'text-slate-500'}>{check.label}</span></div>)}</div>{setup?.readiness?.ready && <p className="mt-3 text-sm font-semibold text-emerald-700">Ready for controlled invoice synchronization.</p>}</div>
+    {!accounts.length ? <p className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">Import the QuickBooks chart of accounts to begin mapping.</p> : <form onSubmit={save} className="mt-6 space-y-6">
+      <div><h4 className="text-sm font-bold text-slate-700">Required accounts</h4><div className="mt-3 grid gap-4 sm:grid-cols-2">{mappingFields.map(([key, label, types, help]) => <label key={key} className={key === 'otherExpenseAccountId' ? 'sm:col-span-2' : ''}><span className="mb-1 block text-xs font-semibold text-slate-600">{label}</span><AccountSelect label={label} value={form[key]} accounts={key === 'serviceItemId' ? (setup.items || []) : accounts} allowedTypes={types} onChange={(value) => setForm((old) => ({ ...old, [key]: value }))} /><span className="mt-1 block text-xs text-slate-400">{help}</span></label>)}</div></div>
+      <div className="border-t border-slate-100 pt-5"><h4 className="text-sm font-bold text-slate-700">Agency group tracking</h4><p className="mt-1 text-xs text-slate-500">Optional. Use one QuickBooks dimension consistently across every group.</p><select value={form.agencyTrackingMode || 'none'} onChange={(event) => setForm((old) => ({ ...old, agencyTrackingMode: event.target.value, groupMappings: {} }))} className="mt-3 min-h-11 w-full max-w-sm rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="none">Do not track groups separately</option><option value="class" disabled={!setup.classes?.length}>QuickBooks Classes{!setup.classes?.length ? ' — none available' : ''}</option><option value="location" disabled={!setup.locations?.length}>QuickBooks Locations{!setup.locations?.length ? ' — none available' : ''}</option></select>{form.agencyTrackingMode !== 'none' && setup.agencyGroups?.length > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2">{setup.agencyGroups.map((group) => <label key={group.id}><span className="mb-1 block text-xs font-semibold text-slate-600">{group.name}</span><select required value={form.groupMappings?.[group.id] || ''} onChange={(event) => setForm((old) => ({ ...old, groupMappings: { ...old.groupMappings, [group.id]: event.target.value } }))} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Choose {form.agencyTrackingMode}…</option>{(form.agencyTrackingMode === 'class' ? setup.classes : setup.locations).map((item) => <option key={item.id} value={item.id}>{item.fullyQualifiedName || item.name}</option>)}</select></label>)}</div>}</div>
+      <details className="border-t border-slate-100 pt-5"><summary className="cursor-pointer text-sm font-bold text-indigo-600">Customize individual expense categories</summary><p className="mt-2 text-xs text-slate-500">Optional. Categories otherwise use the default contractor or other-expense account above.</p><div className="mt-4 grid gap-3 sm:grid-cols-2">{expenseCategories.map(([key, label]) => <label key={key}><span className="mb-1 block text-xs font-semibold text-slate-600">{label}</span><select value={form.categoryMappings?.[key] || ''} onChange={(event) => setForm((old) => ({ ...old, categoryMappings: { ...old.categoryMappings, [key]: event.target.value } }))} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Use default account</option>{expenseAccounts.map((account) => <option key={account.id} value={account.id}>{account.fullyQualifiedName || account.name}</option>)}</select></label>)}</div></details>
+      <button disabled={working} className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">{working ? 'Saving…' : 'Save accounting setup'}</button>
+    </form>}
+  </section>;
+}
+
+const syncLabels = { synced: 'Synced', ready: 'Ready', needs_customer: 'Match customer', not_eligible: 'Not issued', missing_client: 'Client missing', setup_required: 'Setup required', failed: 'Retry needed' };
+const syncColors = { synced: 'bg-emerald-100 text-emerald-700', ready: 'bg-blue-100 text-blue-700', needs_customer: 'bg-amber-100 text-amber-800', failed: 'bg-red-100 text-red-700', not_eligible: 'bg-slate-100 text-slate-500', missing_client: 'bg-red-100 text-red-700', setup_required: 'bg-slate-100 text-slate-500' };
+
+function InvoiceSyncReview() {
+  const { showToast } = useToast();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [workingId, setWorkingId] = useState(null);
+  const [matches, setMatches] = useState(null);
+  const [filter, setFilter] = useState('action');
+
+  async function reload() { setLoading(true); try { setData(await getQuickBooksSyncPreview()); } catch (error) { showToast(error.message, 'error'); } finally { setLoading(false); } }
+  useEffect(() => { reload(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function reviewCustomer(row) {
+    setWorkingId(row.id);
+    try { setMatches(await findQuickBooksCustomerMatches(row.client.id)); }
+    catch (error) { showToast(error.message || 'Unable to search QuickBooks customers', 'error'); }
+    finally { setWorkingId(null); }
+  }
+
+  async function chooseCustomer(quickBooksId) {
+    setWorkingId(matches.client.id);
+    try { await linkQuickBooksCustomer(matches.client.id, quickBooksId); setMatches(null); await reload(); showToast('Customer matched'); }
+    catch (error) { showToast(error.message || 'Unable to match customer', 'error'); }
+    finally { setWorkingId(null); }
+  }
+
+  async function createCustomer() {
+    setWorkingId(matches.client.id);
+    try { await createQuickBooksCustomer(matches.client.id); setMatches(null); await reload(); showToast('QuickBooks customer created'); }
+    catch (error) { showToast(error.message || 'Unable to create customer', 'error'); }
+    finally { setWorkingId(null); }
+  }
+
+  async function syncInvoice(row) {
+    setWorkingId(row.id);
+    try { await syncQuickBooksInvoice(row.id); await reload(); showToast(`Invoice #${row.number || ''} synchronized`); }
+    catch (error) { showToast(error.message || 'Unable to synchronize invoice', 'error'); }
+    finally { setWorkingId(null); }
+  }
+
+  if (loading && !data) return <p className="text-sm text-slate-400">Loading invoice sync review…</p>;
+  const rows = (data?.rows || []).filter((row) => filter === 'all' || (filter === 'action' ? ['ready', 'needs_customer', 'failed'].includes(row.syncStatus) : row.syncStatus === filter));
+  const actionCount = (data?.rows || []).filter((row) => ['ready', 'needs_customer', 'failed'].includes(row.syncStatus)).length;
+  return <section className="rounded-xl border border-slate-200 bg-white p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-bold text-slate-800">Review and sync invoices</h3><p className="mt-1 text-sm text-slate-500">Resolve customers first, then send issued invoices one at a time. Showing the 100 most recent invoices.</p></div><button type="button" onClick={reload} disabled={loading} className="text-sm font-semibold text-indigo-600">{loading ? 'Refreshing…' : 'Refresh'}</button></div><div className="mt-4 flex flex-wrap gap-2">{[['action', `Needs action (${actionCount})`], ['ready', 'Ready'], ['synced', 'Synced'], ['all', 'All']].map(([value, label]) => <button type="button" key={value} onClick={() => setFilter(value)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${filter === value ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>{label}</button>)}</div><div className="mt-4 divide-y divide-slate-100 rounded-lg border border-slate-200">{!rows.length ? <p className="p-6 text-center text-sm text-slate-400">No invoices in this view.</p> : rows.map((row) => <div key={row.id} className="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-center"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold text-slate-800">Invoice #{row.number || '—'} · {row.bookingName}</p><span className={`rounded-full px-2 py-1 text-xs font-semibold ${syncColors[row.syncStatus]}`}>{syncLabels[row.syncStatus]}</span></div><p className="mt-1 text-sm text-slate-500">{row.client?.name || 'No linked client'}{row.client?.email ? ` · ${row.client.email}` : ''} · {Number(row.total || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</p>{row.error && <p className="mt-1 text-xs text-red-600">{row.error}</p>}</div><div>{row.syncStatus === 'needs_customer' && <button type="button" disabled={workingId === row.id} onClick={() => reviewCustomer(row)} className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Review customer</button>}{['ready', 'failed'].includes(row.syncStatus) && <button type="button" disabled={workingId === row.id} onClick={() => syncInvoice(row)} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{workingId === row.id ? 'Syncing…' : row.syncStatus === 'failed' ? 'Retry' : 'Sync invoice'}</button>}</div></div>)}</div>{matches && <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4"><h4 className="font-bold text-slate-800">Compare {matches.client.name}</h4><p className="mt-1 text-xs text-slate-600">Choose a matching QuickBooks customer, or create a new one only if none match.</p>{matches.searchTruncated && <p className="mt-2 text-xs font-semibold text-amber-800">This company has more than 5,000 customers. Only the first 5,000 were checked; search directly in QuickBooks before creating a possible duplicate.</p>}<div className="mt-3 space-y-2">{matches.candidates.length ? matches.candidates.map((candidate) => <div key={candidate.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-white p-3"><div><p className="font-semibold text-slate-700">{candidate.displayName}</p><p className="text-xs text-slate-500">{candidate.email || 'No email'} · {candidate.phone || 'No phone'} · {candidate.score}% match</p></div><button type="button" onClick={() => chooseCustomer(candidate.id)} disabled={workingId === matches.client.id} className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-600">Use this customer</button></div>) : <p className="text-sm text-slate-600">No similar QuickBooks customers were found.</p>}</div><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={createCustomer} disabled={workingId === matches.client.id || matches.searchTruncated} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Create new customer</button><button type="button" onClick={() => setMatches(null)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-600">Cancel</button></div></div>}</section>;
+}
 
 export default function IntegrationsTab() {
   const { showToast } = useToast();
@@ -9,6 +109,8 @@ export default function IntegrationsTab() {
   const [connection, setConnection] = useState(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
+  const [setup, setSetup] = useState(null);
+  const [setupLoading, setSetupLoading] = useState(false);
 
   useEffect(() => {
     const result = searchParams.get('quickbooks');
@@ -22,6 +124,12 @@ export default function IntegrationsTab() {
     }
     getQuickBooksStatus().then(setConnection).catch((error) => showToast(error.message, 'error')).finally(() => setLoading(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!connection?.connected) { setSetup(null); return; }
+    setSetupLoading(true);
+    getQuickBooksSetup().then(setSetup).catch((error) => showToast(error.message, 'error')).finally(() => setSetupLoading(false));
+  }, [connection?.connected]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function connect() {
     setWorking(true);
@@ -73,6 +181,8 @@ export default function IntegrationsTab() {
       </div>
       {connected ? <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4"><p className="font-semibold text-slate-800">{connection.companyName || 'QuickBooks company'}</p><p className="mt-1 text-xs text-slate-500">Connected securely. Accounting synchronization will be enabled in the next integration phase.</p><div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={checkConnection} disabled={working} className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">{working ? 'Checking…' : 'Check connection'}</button><button type="button" onClick={disconnect} disabled={working} className="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50">Disconnect</button></div></div> : <div className="mt-5"><button type="button" onClick={connect} disabled={working || !connection?.configured} className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">{working ? 'Opening QuickBooks…' : connection?.status === 'needs_reauthorization' ? 'Reconnect QuickBooks' : 'Connect QuickBooks'}</button>{!connection?.configured && <p className="mt-2 text-xs text-amber-700">QuickBooks connection will become available after the Intuit production credentials are configured.</p>}</div>}
     </section>
-    <section className="rounded-xl border border-slate-200 bg-slate-50 p-5"><h3 className="font-bold text-slate-800">Planned synchronization</h3><div className="mt-3 grid gap-3 text-sm text-slate-600 sm:grid-cols-2"><p>✓ Clients and QuickBooks customers</p><p>✓ Invoices and client payments</p><p>✓ Contractors and vendors</p><p>✓ Contractor bills and payments</p></div><p className="mt-4 text-xs text-slate-500">Nothing is sent automatically during the connection phase. You will review account mappings and synchronization preferences first.</p></section>
+    {connected && (setupLoading ? <p className="text-sm text-slate-400">Loading accounting setup…</p> : setup && <AccountingSetup setup={setup} setSetup={setSetup} />)}
+    {connected && setup?.readiness?.ready && <InvoiceSyncReview />}
+    <section className="rounded-xl border border-slate-200 bg-slate-50 p-5"><h3 className="font-bold text-slate-800">Next: controlled synchronization</h3><div className="mt-3 grid gap-3 text-sm text-slate-600 sm:grid-cols-2"><p>✓ Clients and QuickBooks customers</p><p>✓ Invoices and client payments</p><p>✓ Contractors and vendors</p><p>✓ Contractor bills and payments</p></div><p className="mt-4 text-xs text-slate-500">No transactions are sent until mapping is complete and controlled synchronization is enabled in the next phase.</p></section>
   </div>;
 }

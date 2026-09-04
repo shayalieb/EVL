@@ -60,6 +60,26 @@ export async function fetchQuickBooksCompany({ realmId, accessToken }) {
   return data.CompanyInfo || data.QueryResponse?.CompanyInfo?.[0] || {};
 }
 
+export async function queryQuickBooks({ realmId, accessToken, query }) {
+  const url = new URL(`${API_URL}/v3/company/${encodeURIComponent(realmId)}/query`);
+  url.searchParams.set('query', query);
+  url.searchParams.set('minorversion', '75');
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' } });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.Fault) throw new Error(data.Fault?.Error?.[0]?.Message || 'Unable to read QuickBooks accounting data.');
+  return data.QueryResponse || {};
+}
+
+export async function writeQuickBooks({ realmId, accessToken, entity, body, requestId }) {
+  const url = new URL(`${API_URL}/v3/company/${encodeURIComponent(realmId)}/${encodeURIComponent(entity)}`);
+  url.searchParams.set('minorversion', '75');
+  if (requestId) url.searchParams.set('requestid', String(requestId).slice(0, 50));
+  const response = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.Fault) throw new Error(data.Fault?.Error?.[0]?.Detail || data.Fault?.Error?.[0]?.Message || `Unable to create QuickBooks ${entity}.`);
+  return data;
+}
+
 export async function revokeQuickBooksToken(token, env = process.env) {
   const response = await fetch(REVOKE_URL, { method: 'POST', headers: { Authorization: `Basic ${Buffer.from(`${env.QUICKBOOKS_CLIENT_ID}:${env.QUICKBOOKS_CLIENT_SECRET}`).toString('base64')}`, Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
   if (!response.ok) throw new Error('QuickBooks token revocation failed.');
@@ -80,4 +100,11 @@ export function decryptedRefreshToken(connection) {
 
 export function decryptedAccessToken(connection) {
   return decryptSecret(connection.accessTokenEncrypted);
+}
+
+export async function validQuickBooksAccess(connection) {
+  if (connection.accessTokenExpiresAt.getTime() > Date.now() + 60_000) return { accessToken: decryptedAccessToken(connection), tokenData: null };
+  const oldRefreshToken = decryptedRefreshToken(connection);
+  const refreshed = await refreshQuickBooksTokens(oldRefreshToken);
+  return { accessToken: refreshed.access_token, tokenData: encryptedQuickBooksTokens({ ...refreshed, refresh_token: refreshed.refresh_token || oldRefreshToken }) };
 }

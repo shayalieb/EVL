@@ -180,10 +180,51 @@ model QuickBooksConnection {
   lastHealthCheckAt       DateTime?
   lastSuccessfulSyncAt    DateTime?
   lastError               String?  @db.Text
+  accountsSnapshot        Json     @default("[]")
+  classesSnapshot         Json     @default("[]")
+  locationsSnapshot       Json     @default("[]")
+  itemsSnapshot           Json     @default("[]")
+  accountingMappings      Json     @default("{}")
+  referenceDataRefreshedAt DateTime?
+  setupCompletedAt        DateTime?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
   @@index([status])
+}
+
+model QuickBooksEntityLink {
+  id               String   @id @default(cuid())
+  accountId        String
+  entityType       String   // customer | invoice
+  localId          String
+  quickBooksId     String?
+  quickBooksSyncToken String?
+  displayName      String?
+  status           String   @default("pending") // pending | synced | failed | needs_review
+  lastError        String?  @db.Text
+  lastSyncedAt     DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([accountId, entityType, localId])
+  @@unique([accountId, entityType, quickBooksId])
+  @@index([accountId, entityType, status])
+}
+
+model QuickBooksSyncLog {
+  id          String   @id @default(cuid())
+  accountId   String
+  entityType String
+  localId     String
+  action      String
+  status      String
+  message     String?  @db.Text
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([accountId, createdAt])
+  @@index([accountId, entityType, localId])
 }
 
 model Membership {
