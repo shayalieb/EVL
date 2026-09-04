@@ -34,3 +34,21 @@ export function quickBooksInvoicePayload({ invoice, customerId, serviceItemId, b
   }).filter((line) => line.Amount > 0);
   return { CustomerRef: { value: customerId }, DocNumber: invoice.number ? String(invoice.number) : undefined, TxnDate: isoDate(invoice.sentAt || invoice.createdAt), DueDate: isoDate(invoice.dueDate), PrivateNote: invoice.memo || undefined, Line: lines, ...(groupReference?.type === 'location' ? { DepartmentRef: { value: groupReference.id } } : {}), ...(booking?.eventName ? { CustomerMemo: { value: booking.eventName } } : {}) };
 }
+
+export function quickBooksPaymentPayload({ transaction, customerId, quickBooksInvoiceId }) {
+  const amount = Number((Math.abs(transaction.amountCents) / 100).toFixed(2));
+  return {
+    CustomerRef: { value: customerId },
+    TxnDate: isoDate(transaction.occurredAt),
+    TotalAmt: amount,
+    PaymentRefNum: transaction.reference || undefined,
+    PrivateNote: transaction.memo || transaction.description || undefined,
+    Line: [{ Amount: amount, LinkedTxn: [{ TxnId: quickBooksInvoiceId, TxnType: 'Invoice' }] }],
+  };
+}
+
+export function paymentSyncEligibility(transaction) {
+  if (!transaction?.invoiceId) return { eligible: false, reason: 'Payment is not linked to an invoice.' };
+  if (transaction.category !== 'client_payment' || transaction.amountCents <= 0 || transaction.reversalOfId) return { eligible: false, reason: 'Correction or reversal requires manual reconciliation.' };
+  return { eligible: true, reason: null };
+}
