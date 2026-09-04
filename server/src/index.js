@@ -12,6 +12,7 @@ import teamRouter from './routes/team.js';
 import accountDataRouter from './routes/accountData.js';
 import emailRouter from './routes/email.js';
 import emailThreadsRouter from './routes/emailThreads.js';
+import messagingRouter, { publicMessagingRouter } from './routes/messaging.js';
 import emailWebhooksRouter from './routes/emailWebhooks.js';
 import eventDocumentsRouter, { publicSongSheetsRouter } from './routes/eventDocuments.js';
 import bookingDocumentsRouter from './routes/bookingDocuments.js';
@@ -110,6 +111,9 @@ app.use(cors({
 // the exact raw request bytes, not a parsed/re-serialized body. Each raw()
 // call only applies to the app.use() it's passed to, so it's repeated per
 // webhook router rather than shared.
+// Twilio signs URL-encoded form fields rather than a raw JSON body, and must
+// be mounted before the catch-all raw webhook parsers consume the request.
+app.use('/api/webhooks', express.urlencoded({ extended: false, limit: '100kb' }), publicMessagingRouter);
 app.use('/api/webhooks', express.raw({ type: '*/*' }), emailWebhooksRouter);
 app.use('/api/webhooks', express.raw({ type: '*/*' }), stripeWebhooksRouter);
 // Separate endpoint/secret from stripeWebhooksRouter above — see
@@ -213,6 +217,7 @@ app.use('/api/team', teamRouter);
 app.use('/api/account-data', accountDataRouter);
 app.use('/api/agency-groups', agencyGroupsRouter);
 app.use('/api/email/threads', emailThreadsRouter);
+app.use('/api/messaging', messagingRouter);
 app.use('/api/email', emailRouter);
 app.use('/api/documents', eventDocumentsRouter);
 // Public/unauthenticated — a band member clicks this from an emailed Set

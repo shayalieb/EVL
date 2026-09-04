@@ -8,51 +8,53 @@ datasource db {
 }
 
 model User {
-  id                  String               @id @default(cuid())
-  firstName           String
-  lastName            String
-  email               String               @unique
-  phone               String?
-  passwordHash        String?
-  googleId            String?              @unique
+  id                        String                    @id @default(cuid())
+  firstName                 String
+  lastName                  String
+  email                     String                    @unique
+  phone                     String?
+  passwordHash              String?
+  googleId                  String?                   @unique
   // App operators, not signup-settable. isPlatformAdmin is grantable/revocable
   // by existing admins (server/src/routes/admin.js); isPlatformOwner is the
   // one admin who can never be revoked by anyone else — flipped manually,
   // never through any API.
-  isPlatformAdmin     Boolean              @default(false)
-  isPlatformOwner     Boolean              @default(false)
+  isPlatformAdmin           Boolean                   @default(false)
+  isPlatformOwner           Boolean                   @default(false)
   // Scoped platform-admin capabilities — { manageAccounts, manageAccountStatus,
   // manageSupport, manageAdmins }, all booleans. Only meaningful when
   // isPlatformAdmin is true. isPlatformOwner always bypasses this (see
   // requireAdminPermission in server/src/lib/membership.js).
-  adminPermissions    Json                 @default("{}")
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  membership          Membership?
-  passwordResetTokens PasswordResetToken[]
-  supportNotes        SupportNote[]
-  assignedThreads     SupportThread[]
-  disabledAccounts    Account[]            @relation("AccountDisabledBy")
-  approvedAccounts    Account[]            @relation("AccountApprovedBy")
-  reminders           Reminder[]
-  accountAdminNotes   AccountAdminNote[]
-  accountActivities   AccountActivity[]
-  financialTransactions FinancialTransaction[] @relation("FinancialTransactionCreator")
-  savedFinancialReports SavedFinancialReport[]
-  closedFinancialPeriods FinancialPeriod[] @relation("FinancialPeriodCloser")
+  adminPermissions          Json                      @default("{}")
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
+  membership                Membership?
+  passwordResetTokens       PasswordResetToken[]
+  supportNotes              SupportNote[]
+  assignedThreads           SupportThread[]
+  disabledAccounts          Account[]                 @relation("AccountDisabledBy")
+  approvedAccounts          Account[]                 @relation("AccountApprovedBy")
+  reminders                 Reminder[]
+  accountAdminNotes         AccountAdminNote[]
+  accountActivities         AccountActivity[]
+  financialTransactions     FinancialTransaction[]    @relation("FinancialTransactionCreator")
+  savedFinancialReports     SavedFinancialReport[]
+  closedFinancialPeriods    FinancialPeriod[]         @relation("FinancialPeriodCloser")
   financialPeriodActivities FinancialPeriodActivity[]
+  messagingProfile          MessagingProfile?         @relation(fields: [messagingProfileId], references: [id])
+  messagingProfileId        String?
 }
 
 model Account {
-  id                      String                   @id @default(cuid())
-  createdAt               DateTime                 @default(now())
-  disabledAt              DateTime? // set by a platform admin; blocks all account access when non-null
+  id                        String                     @id @default(cuid())
+  createdAt                 DateTime                   @default(now())
+  disabledAt                DateTime? // set by a platform admin; blocks all account access when non-null
   // Auditability for the disable action above — who disabled it, and why.
   // All three (disabledAt/disabledReason/disabledById) are cleared together
   // when the account is re-enabled.
-  disabledReason          String?                  @db.Text
-  disabledById            String?
-  disabledBy              User?                    @relation("AccountDisabledBy", fields: [disabledById], references: [id], onDelete: SetNull)
+  disabledReason            String?                    @db.Text
+  disabledById              String?
+  disabledBy                User?                      @relation("AccountDisabledBy", fields: [disabledById], references: [id], onDelete: SetNull)
   // Public self-signups (auth.js's POST /signup) require manual review
   // during the current probationary period — null blocks account access
   // the same way disabledAt does (see membership.js's attachMembership),
@@ -61,43 +63,43 @@ model Account {
   // account-creation path (admin-created accounts, admin invites, the
   // legacy pre-Account auto-provisioning path) sets this immediately —
   // they were never really "unreviewed" the way a cold self-signup is.
-  approvedAt              DateTime?
-  approvedById            String?
-  approvedBy              User?                    @relation("AccountApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-  memberships             Membership[]
-  emailThreads            EmailThread[]
-  eventDocuments          EventDocument[]
-  bookingDocuments        BookingDocument[]
-  contracts               Contract[]
-  proposalResponses       ProposalResponse[]
-  invoices                Invoice[]
-  inquiryLinks            InquiryLink[]
-  accountData             AccountData?
-  supportThreads          SupportThread[]
-  reminders               Reminder[]
-  emailDomain             EmailDomain?
-  stagePlots              StagePlot[]
-  floorPlans              FloorPlan[]
-  guests                  Guest[]
-  eventRsvpLinks          EventRsvpLink[]
-  contractorCalendarLinks ContractorCalendarLink[]
-  contractors             Contractor[]
+  approvedAt                DateTime?
+  approvedById              String?
+  approvedBy                User?                      @relation("AccountApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  memberships               Membership[]
+  emailThreads              EmailThread[]
+  eventDocuments            EventDocument[]
+  bookingDocuments          BookingDocument[]
+  contracts                 Contract[]
+  proposalResponses         ProposalResponse[]
+  invoices                  Invoice[]
+  inquiryLinks              InquiryLink[]
+  accountData               AccountData?
+  supportThreads            SupportThread[]
+  reminders                 Reminder[]
+  emailDomain               EmailDomain?
+  stagePlots                StagePlot[]
+  floorPlans                FloorPlan[]
+  guests                    Guest[]
+  eventRsvpLinks            EventRsvpLink[]
+  contractorCalendarLinks   ContractorCalendarLink[]
+  contractors               Contractor[]
   contractorPaymentRequests ContractorPaymentRequest[]
-  clients                 Client[]
-  venues                  Venue[]
-  offerings               Offering[]
-  contractorGroups        ContractorGroup[]
-  setListLibraryItems     SetListLibraryItem[]
-  stagePlotLibraryItems   StagePlotLibraryItem[]
-  bookings                Booking[]
-  events                  Event[]
-  adminNotes              AccountAdminNote[]
-  activities              AccountActivity[]
-  agencyGroups            AgencyGroup[]
-  financialTransactions   FinancialTransaction[]
-  savedFinancialReports   SavedFinancialReport[]
-  financialBudgets        FinancialBudget[]
-  financialPeriods        FinancialPeriod[]
+  clients                   Client[]
+  venues                    Venue[]
+  offerings                 Offering[]
+  contractorGroups          ContractorGroup[]
+  setListLibraryItems       SetListLibraryItem[]
+  stagePlotLibraryItems     StagePlotLibraryItem[]
+  bookings                  Booking[]
+  events                    Event[]
+  adminNotes                AccountAdminNote[]
+  activities                AccountActivity[]
+  agencyGroups              AgencyGroup[]
+  financialTransactions     FinancialTransaction[]
+  savedFinancialReports     SavedFinancialReport[]
+  financialBudgets          FinancialBudget[]
+  financialPeriods          FinancialPeriod[]
   financialPeriodActivities FinancialPeriodActivity[]
 
   // Stripe Connect (Express) — set once onboarding starts. The three
@@ -136,8 +138,8 @@ model Account {
   // platform's Stripe account, never created with a {stripeAccount} option.
   // See server/src/lib/plans.js for the tier table and
   // server/src/routes/subscriptionWebhooks.js for what keeps this in sync.
-  stripeCustomerId     String?   @unique
-  stripeSubscriptionId String?   @unique
+  stripeCustomerId     String?           @unique
+  stripeSubscriptionId String?           @unique
   // Mirrors Stripe's own subscription status verbatim ('trialing' |
   // 'active' | 'past_due' | 'canceled' | 'unpaid' | 'incomplete' |
   // 'incomplete_expired'). Null means this account has never started a
@@ -154,9 +156,10 @@ model Account {
   trialEndsAt          DateTime?
   // Acquisition context, captured when the account is created so platform
   // admins can distinguish public signups from manually-created accounts.
-  signupSource         String    @default("admin") // 'public' | 'admin'
+  signupSource         String            @default("admin") // 'public' | 'admin'
   signupPlan           String? // landing-page selection before checkout
   signupInterval       String? // 'month' | 'year'
+  MessagingProfile     MessagingProfile?
 }
 
 model Membership {
@@ -289,17 +292,17 @@ model EmailMessage {
   subject     String
   body        String @db.Text
 
-  templateId      String?
-  sentByUserId    String?
-  resendMessageId   String? @unique
+  templateId        String?
+  sentByUserId      String?
+  resendMessageId   String?   @unique
   provider          String?
-  providerMessageId String? @unique
-  deliveryStatus    String @default("sent") // queued | sent | delivered | failed | received
+  providerMessageId String?   @unique
+  deliveryStatus    String    @default("sent") // queued | sent | delivered | failed | received
   deliveredAt       DateTime?
   failedAt          DateTime?
   failureCode       String?
-  inReplyTo       String?
-  references      String?
+  inReplyTo         String?
+  references        String?
 
   readAt    DateTime? // inbound-only; null = unread
   createdAt DateTime  @default(now())
@@ -312,6 +315,44 @@ model EmailMessage {
 
   @@index([threadId, createdAt])
   @@index([channel, deliveryStatus])
+}
+
+// One account-owned business number for operational contractor messaging.
+// Provisioning is intentionally provider-neutral: Twilio identifiers live in
+// optional fields, while the rest of GigWorks only depends on this record.
+model MessagingProfile {
+  id        String  @id @default(cuid())
+  accountId String  @unique
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  status              String    @default("not_started") // not_started | requested | pending | active | suspended | rejected
+  provider            String    @default("twilio")
+  phoneNumber         String?   @unique
+  providerNumberSid   String?   @unique
+  messagingServiceSid String?
+  areaCodePreference  String?
+  businessName        String?
+  businessWebsite     String?
+  businessAddress     String?
+  businessCity        String?
+  businessRegion      String?
+  businessPostalCode  String?
+  businessCountry     String?   @default("US")
+  useCaseDescription  String?   @db.Text
+  consentAttestedAt   DateTime?
+  consentAttestedById String?
+  requestedAt         DateTime?
+  activatedAt         DateTime?
+  suspendedAt         DateTime?
+  monthlyMessageLimit Int?
+  currentPeriodStart  DateTime?
+  currentPeriodCount  Int       @default(0)
+  internalNote        String?   @db.Text
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  User                User[]
+
+  @@index([status, requestedAt])
 }
 
 // The team's shared contractors/clients/events/bookings/settings, as a
@@ -518,8 +559,8 @@ model Contract {
   recipientName  String?
   ownerEmail     String
 
-  clientTokenHash String? @unique
-  ownerTokenHash  String? @unique
+  clientTokenHash     String?   @unique
+  ownerTokenHash      String?   @unique
   clientLinkExpiresAt DateTime?
   ownerLinkExpiresAt  DateTime?
 
@@ -580,7 +621,7 @@ model ProposalResponse {
   recipientName  String?
   ownerEmail     String
 
-  tokenHash String? @unique
+  tokenHash String?   @unique
   expiresAt DateTime?
 
   respondedAt  DateTime?
@@ -754,35 +795,35 @@ model Invoice {
 // never edited or deleted; mistakes are corrected by a linked reversing row.
 // sourceType/sourceId makes external and workflow-driven writes idempotent.
 model FinancialTransaction {
-  id          String  @id @default(cuid())
-  accountId   String
-  account     Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  groupId     String?
-  group       AgencyGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  id        String       @id @default(cuid())
+  accountId String
+  account   Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  groupId   String?
+  group     AgencyGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
-  bookingId   String?
-  eventId     String?
-  invoiceId   String?
-  contractorId String?
-  clientId    String?
-  category    String
-  amountCents Int
-  currency    String   @default("USD")
-  description String
-  occurredAt  DateTime
-  sourceType  String
-  sourceId    String
+  bookingId     String?
+  eventId       String?
+  invoiceId     String?
+  contractorId  String?
+  clientId      String?
+  category      String
+  amountCents   Int
+  currency      String   @default("USD")
+  description   String
+  occurredAt    DateTime
+  sourceType    String
+  sourceId      String
   paymentMethod String?
-  reference   String?
-  memo        String?  @db.Text
-  metadata    Json     @default("{}")
+  reference     String?
+  memo          String?  @db.Text
+  metadata      Json     @default("{}")
 
-  reversalOfId String? @unique
+  reversalOfId String?               @unique
   reversalOf   FinancialTransaction? @relation("FinancialReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
   reversedBy   FinancialTransaction? @relation("FinancialReversal")
   createdById  String?
-  createdBy    User? @relation("FinancialTransactionCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt    DateTime @default(now())
+  createdBy    User?                 @relation("FinancialTransactionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime              @default(now())
 
   @@unique([accountId, sourceType, sourceId])
   @@index([accountId, occurredAt])
@@ -793,14 +834,14 @@ model FinancialTransaction {
 }
 
 model SavedFinancialReport {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   accountId String
-  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   userId    String
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
   reportTab String
-  filters   Json    @default("{}")
+  filters   Json     @default("{}")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -809,52 +850,52 @@ model SavedFinancialReport {
 }
 
 model FinancialBudget {
-  id                 String  @id @default(cuid())
+  id                 String       @id @default(cuid())
   accountId          String
-  account            Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account            Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
   groupId            String?
   group              AgencyGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  groupKey           String  @default("account")
+  groupKey           String       @default("account")
   month              String
-  revenueTargetCents Int     @default(0)
-  expenseBudgetCents Int     @default(0)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  revenueTargetCents Int          @default(0)
+  expenseBudgetCents Int          @default(0)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   @@unique([accountId, groupKey, month])
   @@index([accountId, month])
 }
 
 model FinancialPeriod {
-  id         String  @id @default(cuid())
+  id         String                    @id @default(cuid())
   accountId  String
-  account    Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account    Account                   @relation(fields: [accountId], references: [id], onDelete: Cascade)
   groupId    String?
-  group      AgencyGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  groupKey   String  @default("account")
+  group      AgencyGroup?              @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupKey   String                    @default("account")
   month      String
-  status     String  @default("closed")
-  closedAt   DateTime @default(now())
+  status     String                    @default("closed")
+  closedAt   DateTime                  @default(now())
   closedById String?
-  closedBy   User? @relation("FinancialPeriodCloser", fields: [closedById], references: [id], onDelete: SetNull)
+  closedBy   User?                     @relation("FinancialPeriodCloser", fields: [closedById], references: [id], onDelete: SetNull)
   activities FinancialPeriodActivity[]
-  updatedAt  DateTime @updatedAt
+  updatedAt  DateTime                  @updatedAt
 
   @@unique([accountId, groupKey, month])
   @@index([accountId, month])
 }
 
 model FinancialPeriodActivity {
-  id        String  @id @default(cuid())
+  id        String          @id @default(cuid())
   accountId String
-  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account   Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
   periodId  String
   period    FinancialPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
   actorId   String?
-  actor     User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actor     User?           @relation(fields: [actorId], references: [id], onDelete: SetNull)
   action    String
-  reason    String @db.Text
-  createdAt DateTime @default(now())
+  reason    String          @db.Text
+  createdAt DateTime        @default(now())
 
   @@index([accountId, createdAt])
   @@index([periodId, createdAt])
@@ -1118,21 +1159,21 @@ model Guest {
   account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
   eventId   String // opaque localStorage id, same non-FK pattern as EventDocument.eventId
 
-  name       String
+  name                  String
   // Nullable only for pre-enforcement legacy rows. Every create/update API
   // requires a valid normalized address, so new or edited contractors can
   // always participate safely in booking communications.
-  email      String?
-  phone      String?
-  smsConsentStatus      String @default("unknown") // unknown | opted_in | opted_out
+  email                 String?
+  phone                 String?
+  smsConsentStatus      String    @default("unknown") // unknown | opted_in | opted_out
   smsConsentedAt        DateTime?
   smsOptedOutAt         DateTime?
-  whatsappConsentStatus String @default("unknown") // unknown | opted_in | opted_out
+  whatsappConsentStatus String    @default("unknown") // unknown | opted_in | opted_out
   whatsappConsentedAt   DateTime?
   whatsappOptedOutAt    DateTime?
-  partySize  Int     @default(1)
-  rsvpStatus String  @default("invited") // 'invited' | 'confirmed' | 'declined'
-  notes      String? @db.Text
+  partySize             Int       @default(1)
+  rsvpStatus            String    @default("invited") // 'invited' | 'confirmed' | 'declined'
+  notes                 String?   @db.Text
 
   // 'rsvp_link' rows were created by a guest through the public link below;
   // 'manual' rows were entered directly by the planner. Purely informational.
@@ -1165,11 +1206,14 @@ model Contractor {
   accountId String
   account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
-  firstName  String
-  middleName String?
-  lastName   String
-  email      String?
-  phone      String?
+  firstName        String
+  middleName       String?
+  lastName         String
+  email            String?
+  phone            String?
+  smsConsentStatus String    @default("unknown") // unknown | opted_in | opted_out
+  smsConsentedAt   DateTime?
+  smsOptedOutAt    DateTime?
 
   contractorType1 String?
   contractorType2 String?
@@ -1179,8 +1223,8 @@ model Contractor {
   pricingTiers    Json    @default("[]")
   priceNotes      String? @db.Text
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
   paymentRequests ContractorPaymentRequest[]
 
   @@index([accountId])
@@ -1435,9 +1479,9 @@ model ClientPortalToken {
 // deliberately treats these as opaque 'YYYY-MM-DD' text to avoid a
 // UTC-shift bug that a real DATE/TIMESTAMP column would reintroduce.
 model Booking {
-  id        String  @id
+  id        String       @id
   accountId String
-  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account   Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
   groupId   String?
   group     AgencyGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
@@ -1500,9 +1544,9 @@ model Booking {
 // Guest.eventId, EventRsvpLink.eventId, Invoice.bookingId's own event chain,
 // and SetList storage — `id` has no @default for the same reason.
 model Event {
-  id        String  @id
+  id        String       @id
   accountId String
-  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account   Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
   groupId   String?
   group     AgencyGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
@@ -1540,8 +1584,8 @@ model Event {
   history            Json @default("[]")
   setLists           Json @default("[]")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
   contractorPaymentRequests ContractorPaymentRequest[]
 
   @@index([accountId])
@@ -1552,25 +1596,25 @@ model Event {
 }
 
 model ContractorPaymentRequest {
-  id           String     @id @default(cuid())
-  accountId    String
-  account      Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  eventId      String
-  event        Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  contractorId String
-  contractor   Contractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
-  assignmentId String
-  amountCents  Int
-  invoiceNumber String?
-  note         String?    @db.Text
-  status       String     @default("submitted") // submitted | approved | disputed | paid
-  submittedAt  DateTime   @default(now())
-  reviewedAt   DateTime?
+  id               String     @id @default(cuid())
+  accountId        String
+  account          Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  eventId          String
+  event            Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  contractorId     String
+  contractor       Contractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+  assignmentId     String
+  amountCents      Int
+  invoiceNumber    String?
+  note             String?    @db.Text
+  status           String     @default("submitted") // submitted | approved | disputed | paid
+  submittedAt      DateTime   @default(now())
+  reviewedAt       DateTime?
   reviewedByUserId String?
-  reviewNote   String?    @db.Text
-  paidAt       DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  reviewNote       String?    @db.Text
+  paidAt           DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 
   @@unique([eventId, contractorId])
   @@index([accountId, status, submittedAt])
@@ -1583,21 +1627,21 @@ model ContractorPaymentRequest {
 // grows. Branding is structured JSON so stationery can evolve without schema
 // churn (document layout, colors, footer, contact details, etc.).
 model AgencyGroup {
-  id          String   @id @default(cuid())
-  accountId   String
-  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  name        String
-  description String?  @db.Text
-  logo        String?  @db.Text
-  stationery  Json     @default("{}")
-  active      Boolean  @default(true)
-  bookings    Booking[]
-  events      Event[]
+  id                    String                 @id @default(cuid())
+  accountId             String
+  account               Account                @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name                  String
+  description           String?                @db.Text
+  logo                  String?                @db.Text
+  stationery            Json                   @default("{}")
+  active                Boolean                @default(true)
+  bookings              Booking[]
+  events                Event[]
   financialTransactions FinancialTransaction[]
-  financialBudgets FinancialBudget[]
-  financialPeriods FinancialPeriod[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  financialBudgets      FinancialBudget[]
+  financialPeriods      FinancialPeriod[]
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
 
   @@unique([accountId, name])
   @@index([accountId, active, name])
@@ -1663,18 +1707,18 @@ model ContractorCalendarLink {
 // why" record either way; splitting into two models would just be two
 // near-identical tables with no behavioral difference.
 model WaitlistEntry {
-  id              String   @id @default(cuid())
-  type            String // 'waitlist' | 'contact'
-  name            String
-  email           String
-  businessName    String?
-  message         String?  @db.Text
-  status          String   @default("new") // 'new' | 'contacted' | 'converted' | 'archived'
-  selectedPlan    String?
-  billingInterval String?
+  id                  String   @id @default(cuid())
+  type                String // 'waitlist' | 'contact'
+  name                String
+  email               String
+  businessName        String?
+  message             String?  @db.Text
+  status              String   @default("new") // 'new' | 'contacted' | 'converted' | 'archived'
+  selectedPlan        String?
+  billingInterval     String?
   requestedGroupCount Int?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   @@index([type, createdAt])
 }

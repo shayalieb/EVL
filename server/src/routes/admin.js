@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { prisma } from '../lib/prisma.js';
 import { normalizeValidEmail } from '../lib/emailAddress.js';
+import { normalizeE164, displayPhone } from '../lib/phoneNumber.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachUser, requirePlatformAdmin, requireAdminPermission, allPermissions } from '../lib/membership.js';
@@ -141,7 +142,7 @@ router.get('/accounts/:id/profile', asyncHandler(async (req, res) => {
     prisma.account.findUnique({
       where: { id: req.params.id },
       include: {
-        memberships: { include: { user: true }, orderBy: { createdAt: 'asc' } }, disabledBy: true, approvedBy: true, accountData: true,
+        memberships: { include: { user: true }, orderBy: { createdAt: 'asc' } }, disabledBy: true, approvedBy: true, accountData: true, messagingProfile: true,
         adminNotes: { include: { author: true }, orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }] },
         activities: { include: { actor: true }, orderBy: { createdAt: 'desc' }, take: 250 },
       },
@@ -168,8 +169,42 @@ router.get('/accounts/:id/profile', asyncHandler(async (req, res) => {
       supportSummary: Object.fromEntries(supportSummary.map((row) => [row.status, row._count._all])),
       notes: account.adminNotes.map((note) => ({ id: note.id, body: note.body, category: note.category, pinned: note.pinned, followUpAt: note.followUpAt, createdAt: note.createdAt, author: note.author ? { firstName: note.author.firstName, lastName: note.author.lastName } : null })),
       activities,
+      messaging: account.messagingProfile ? {
+        status: account.messagingProfile.status,
+        phoneNumber: account.messagingProfile.phoneNumber,
+        phoneDisplay: displayPhone(account.messagingProfile.phoneNumber),
+        areaCodePreference: account.messagingProfile.areaCodePreference,
+        businessName: account.messagingProfile.businessName,
+        requestedAt: account.messagingProfile.requestedAt,
+        activatedAt: account.messagingProfile.activatedAt,
+        monthlyMessageLimit: account.messagingProfile.monthlyMessageLimit,
+        currentPeriodCount: account.messagingProfile.currentPeriodCount,
+        internalNote: account.messagingProfile.internalNote,
+      } : { status: 'not_started' },
     },
   });
+}));
+
+// Provisioning remains an operator action for launch: GigWorks handles the
+// carrier/Twilio registration, then records the approved number here. This
+// keeps Twilio credentials and compliance complexity out of customer hands.
+router.patch('/accounts/:id/messaging', requireAdminPermission('manageAccountStatus'), asyncHandler(async (req, res) => {
+  const status = ['requested', 'pending', 'active', 'suspended', 'rejected'].includes(req.body?.status) ? req.body.status : null;
+  if (!status) return res.status(400).json({ error: 'Select a valid messaging status.' });
+  const phoneNumber = req.body?.phoneNumber ? normalizeE164(req.body.phoneNumber) : null;
+  if (status === 'active' && !phoneNumber) return res.status(400).json({ error: 'An active messaging account requires a valid dedicated phone number.' });
+  const monthlyMessageLimit = req.body?.monthlyMessageLimit === null || req.body?.monthlyMessageLimit === '' ? null : Number.parseInt(req.body?.monthlyMessageLimit, 10);
+  if (monthlyMessageLimit !== null && (!Number.isInteger(monthlyMessageLimit) || monthlyMessageLimit < 1 || monthlyMessageLimit > 1000000)) return res.status(400).json({ error: 'Message allowance must be between 1 and 1,000,000.' });
+  const existingAccount = await prisma.account.findUnique({ where: { id: req.params.id }, select: { id: true } });
+  if (!existingAccount) return res.status(404).json({ error: 'Account not found.' });
+  const now = new Date();
+  const common = { status, phoneNumber, providerNumberSid: String(req.body?.providerNumberSid || '').trim() || null, messagingServiceSid: String(req.body?.messagingServiceSid || '').trim() || null, monthlyMessageLimit, internalNote: String(req.body?.internalNote || '').trim().slice(0, 5000) || null, ...(status === 'active' ? { activatedAt: now, suspendedAt: null } : {}), ...(status === 'suspended' ? { suspendedAt: now } : {}) };
+  const profile = await prisma.$transaction(async (tx) => {
+    const updated = await tx.messagingProfile.upsert({ where: { accountId: req.params.id }, update: common, create: { accountId: req.params.id, ...common } });
+    await tx.accountActivity.create({ data: { accountId: req.params.id, actorUserId: req.user.id, type: 'sms_status_changed', summary: `Messaging status changed to ${status}`, metadata: { status, phoneNumber: phoneNumber ? displayPhone(phoneNumber) : null, monthlyMessageLimit } } });
+    return updated;
+  });
+  res.json({ messaging: { status: profile.status, phoneNumber: profile.phoneNumber, phoneDisplay: displayPhone(profile.phoneNumber), monthlyMessageLimit: profile.monthlyMessageLimit, currentPeriodCount: profile.currentPeriodCount } });
 }));
 
 router.patch('/accounts/:id/plan', requireAdminPermission('manageAccountStatus'), asyncHandler(async (req, res) => {

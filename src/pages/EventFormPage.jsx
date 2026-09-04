@@ -7,6 +7,7 @@ import ClientCombobox from '../components/ClientCombobox';
 import AcceptPaymentModal from '../components/AcceptPaymentModal';
 import EmailPreviewModal from '../components/EmailPreviewModal';
 import EmailThreadModal from '../components/EmailThreadModal';
+import { getMessagingProfile } from '../lib/messaging';
 import PrepEmailModal from '../components/PrepEmailModal';
 import GroupChipSelector from '../components/GroupChipSelector';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -253,6 +254,8 @@ export default function EventFormPage() {
   const [previewSending, setPreviewSending] = useState(false);
   const [threadSummaries, setThreadSummaries] = useState({});
   const [openThreadContractorId, setOpenThreadContractorId] = useState(null);
+  const [openThreadChannel, setOpenThreadChannel] = useState('email');
+  const [messagingProfile, setMessagingProfile] = useState(null);
   const [payingContractorId, setPayingContractorId] = useState(null); // contractorId currently open in the Pay Contractor popover, or null
   const [activeTab, setActiveTab] = useState('details');
   const [activeCategoryTab, setActiveCategoryTab] = useState('');
@@ -271,6 +274,10 @@ export default function EventFormPage() {
     ...form.secondShooters.map((shooter) => shooter.contractorId),
     ...contractorGroups.flatMap((group) => group.contractorIds || []),
   ]);
+
+  useEffect(() => {
+    getMessagingProfile().then(setMessagingProfile).catch(() => setMessagingProfile(null));
+  }, []);
 
   useEffect(() => {
     if (!pickerOpen) return;
@@ -1984,6 +1991,7 @@ export default function EventFormPage() {
                           inquiryStatuses={inquiryStatuses}
                           emailTemplates={emailTemplates}
                           threadSummary={threadSummaries[bk.contractorId]}
+                          messagingActive={messagingProfile?.status === 'active'}
                           onStatusChange={changeBookingStatus}
                           onTierChange={changeBookingTier}
                           onTimeChange={changeBookingTime}
@@ -1991,7 +1999,8 @@ export default function EventFormPage() {
                           onRemove={removeContractorFromEvent}
                           onRequestSend={handleRequestSend}
                           onOpenContractor={setEditingContractor}
-                          onOpenThread={setOpenThreadContractorId}
+                          onOpenThread={(contractorId) => { setOpenThreadChannel('email'); setOpenThreadContractorId(contractorId); }}
+                          onOpenSms={(contractorId) => { setOpenThreadChannel('sms'); setOpenThreadContractorId(contractorId); }}
                           onPayClick={setPayingContractorId}
                           onMarkUnpaid={markContractorUnpaid}
                           paymentRequest={event?.paymentRequests?.find((request) => request.contractorId === bk.contractorId)}
@@ -2856,6 +2865,9 @@ export default function EventFormPage() {
         eventId={form.id}
         contractorId={openThreadContractorId}
         contractorEmail={contractors.find((c) => c.id === openThreadContractorId)?.email}
+        contractorPhone={contractors.find((c) => c.id === openThreadContractorId)?.phone}
+        contractorSmsConsent={contractors.find((c) => c.id === openThreadContractorId)?.smsConsentStatus}
+        initialChannel={openThreadChannel}
         contractorLabel={(() => {
           const c = contractors.find((x) => x.id === openThreadContractorId);
           return c ? `${c.firstName} ${c.lastName}` : '';
@@ -2865,6 +2877,7 @@ export default function EventFormPage() {
         onOutreachSent={(kind) => {
           if (!openThreadContractorId) return;
           if (kind === 'email') advanceInquiryStatusIfTentative(openThreadContractorId, 'Emailed', '#eab308');
+          else if (kind === 'sms') advanceInquiryStatusIfTentative(openThreadContractorId, 'Texted', '#3b82f6');
           else advanceInquiryStatusIfTentative(openThreadContractorId, 'Called', '#eab308');
         }}
       />

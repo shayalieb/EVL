@@ -42,3 +42,22 @@ No deploy config files needed — Railway auto-detects Node via
 
 Point the frontend's `VITE_API_BASE` at the deployed URL (or
 `http://localhost:4000/api` for local dev).
+
+## Dedicated-number SMS
+
+Gigworks owns the Twilio connection; customers request a number from
+**Settings → Messaging** and never need a Twilio account. To activate SMS:
+
+1. Add `API_PUBLIC_URL`, `TWILIO_ACCOUNT_SID`, and `TWILIO_AUTH_TOKEN` to the
+   Railway service variables.
+2. Complete the customer's carrier registration in the Gigworks Twilio
+   account and purchase/assign its dedicated number.
+3. Configure that number's incoming-message webhook as
+   `https://<api-host>/api/webhooks/twilio/sms/inbound` using HTTP POST.
+4. In **Admin → Accounts → account profile → Messaging**, enter the E.164
+   number and optional Twilio Number/Messaging Service SIDs, set its monthly
+   allowance, and change the status to Active.
+
+Delivery callbacks are added automatically when Gigworks sends a message.
+Twilio webhook signatures are required and contractor STOP/START keywords
+update the account's consent record automatically.

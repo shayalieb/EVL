@@ -16,6 +16,12 @@ export function validateRuntimeConfig(env = process.env) {
     if (!isHttpsUrl(env.FRONTEND_URL)) errors.push('FRONTEND_URL must be a valid HTTPS URL in production.');
     if (!(env.EXTRA_CLIENT_ORIGINS || '').trim()) errors.push('EXTRA_CLIENT_ORIGINS must list at least one production frontend origin.');
     if (!(env.REDIS_URL || '').trim()) errors.push('REDIS_URL is required in production for shared rate limiting.');
+    const twilioConfigured = !!(env.TWILIO_ACCOUNT_SID || env.TWILIO_AUTH_TOKEN);
+    if (twilioConfigured) {
+      if (!(env.TWILIO_ACCOUNT_SID || '').trim()) errors.push('TWILIO_ACCOUNT_SID is required when SMS is configured.');
+      if (!(env.TWILIO_AUTH_TOKEN || '').trim()) errors.push('TWILIO_AUTH_TOKEN is required when SMS is configured.');
+      if (!isHttpsUrl(env.API_PUBLIC_URL)) errors.push('API_PUBLIC_URL must be a valid HTTPS URL when SMS is configured.');
+    }
     const storageProvider = (env.STORAGE_PROVIDER || 'supabase').trim().toLowerCase();
     const needsSupabase = storageProvider === 'supabase' || env.STORAGE_FALLBACK_SUPABASE === 'true';
     if (!['supabase', 'railway'].includes(storageProvider)) errors.push('STORAGE_PROVIDER must be supabase or railway.');
