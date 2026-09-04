@@ -19,8 +19,8 @@ export function isValidEmailAddress(value) {
 // it available and otherwise falls back to WhatsApp Web. Contractor phone
 // inputs are currently US-formatted, so an unqualified 10-digit number gets
 // the US country code. Explicit international numbers must include "+".
-export function buildWhatsAppClickToChatUrl({ phone, contractorName, eventName, eventDate } = {}) {
-  const rawPhone = String(phone || '').trim();
+export function buildWhatsAppClickToChatUrl({ recipientPhone, contractorName, eventName, eventDate } = {}) {
+  const rawPhone = String(recipientPhone || '').trim();
   const digits = rawPhone.replace(/\D/g, '');
   let internationalPhone = '';
   if (rawPhone.startsWith('+') && digits.length >= 8 && digits.length <= 15) internationalPhone = digits;
