@@ -258,19 +258,31 @@ export const STAGE_PLOT_ICON_LIST = [
     id: 'electric-guitar',
     label: 'Electric Guitar',
     category: 'Guitars',
-    svg: equipmentSvg('<path d="M20 58c-8 3-15-4-12-12 2-5 7-7 12-6-2-5 1-10 6-12 8-3 14 5 11 12-2 5-7 7-17 18Z"/><path d="M31 32 49 8l7 5-18 25M49 8l3-5 8 6-4 4M17 47l12 3M23 38l7 2M35 31l17-21M38 34l17-21" fill="none"/><circle cx="27" cy="43" r="3"/>'),
+    // Solid double-cutaway body (two "horns" cut into the upper bout, the
+    // shape a Strat/offset-style electric reads as) with visible bridge
+    // hardware and no soundhole — the two details that actually separate it
+    // from Acoustic/Bass at a glance rather than all three sharing one
+    // generic guitar-ish silhouette.
+    svg: svgFor('Guitars', '<ellipse cx="30" cy="44" rx="15" ry="14"/><circle cx="18" cy="30" r="8" fill="#ffffff"/><circle cx="40" cy="28" r="6.5" fill="#ffffff"/><rect x="27" y="6" width="6" height="30"/><rect x="24" y="48" width="12" height="4"/><line x1="21" y1="41" x2="39" y2="41"/><path d="M25,1 L38,5 L36,15 L25,12 Z"/><circle cx="34.5" cy="4.5" r="1.3" fill="#ffffff"/><circle cx="33" cy="7.5" r="1.3" fill="#ffffff"/><circle cx="31.5" cy="10.5" r="1.3" fill="#ffffff"/>'),
   },
   {
     id: 'acoustic-guitar',
     label: 'Acoustic Guitar',
     category: 'Guitars',
-    svg: equipmentSvg('<path d="M20 59C9 58 6 47 13 40c3-3 7-4 11-3-2-4-1-9 2-12 6-6 16-2 17 6 1 6-3 10-8 13-5 3-6 15-15 15Z"/><circle cx="29" cy="37" r="5"/><path d="M33 28 49 8l7 5-17 22M49 8l3-5 8 6-4 4M17 48l16-10M36 29l17-19M39 32l17-19" fill="none"/>'),
+    // Full hourglass body with a round soundhole and a straight, symmetric
+    // 3-and-3 headstock — the soundhole in particular is the single most
+    // recognizable "this is acoustic, not electric" cue on a real plot.
+    svg: svgFor('Guitars', '<path d="M32,18 C40,18 44,22 43,26 C41,31 36,31 37,35 C38,40 47,43 47,49 C47,56 42,62 32,62 C22,62 17,56 17,49 C17,43 26,40 27,35 C28,31 23,31 21,26 C20,22 24,18 32,18 Z"/><circle cx="32" cy="41" r="5.5" fill="#ffffff"/><rect x="29" y="4" width="6" height="16"/><rect x="21" y="0" width="22" height="7" rx="2"/><circle cx="25" cy="1.8" r="1.4" fill="#ffffff"/><circle cx="25" cy="5.2" r="1.4" fill="#ffffff"/><circle cx="32" cy="1.8" r="1.4" fill="#ffffff"/><circle cx="32" cy="5.2" r="1.4" fill="#ffffff"/><circle cx="39" cy="1.8" r="1.4" fill="#ffffff"/><circle cx="39" cy="5.2" r="1.4" fill="#ffffff"/>'),
   },
   {
     id: 'bass-guitar',
     label: 'Bass Guitar',
     category: 'Basses',
-    svg: equipmentSvg('<path d="M18 59C9 61 3 52 8 44c3-4 7-5 12-4-1-5 2-10 7-12 8-2 14 6 10 13-3 5-8 7-19 18Z"/><path d="M32 32 51 7l6 5-19 26M51 7l3-5 8 6-5 4M14 49l15 2M23 39l7 2M35 31 53 9M38 34l18-22" fill="none"/><circle cx="27" cy="44" r="2.5"/>'),
+    // A single cutaway (one horn, not two) plus a longer neck and only 4
+    // tuners — real differences from Electric Guitar above, not just a
+    // recolor: fewer strings means fewer tuning pegs, and a P/J-bass-style
+    // body is genuinely more lopsided than a symmetric double-cutaway.
+    svg: svgFor('Basses', '<ellipse cx="26" cy="50" rx="17" ry="13"/><circle cx="14" cy="36" r="9" fill="#ffffff"/><rect x="24" y="2" width="6" height="38"/><rect x="19" y="54" width="14" height="4"/><path d="M22,0 L36,0 L36,12 L22,12 Z"/><circle cx="26" cy="2.5" r="1.4" fill="#ffffff"/><circle cx="32" cy="2.5" r="1.4" fill="#ffffff"/><circle cx="26" cy="9" r="1.4" fill="#ffffff"/><circle cx="32" cy="9" r="1.4" fill="#ffffff"/>'),
   },
   {
     id: 'upright-bass',
