@@ -18,7 +18,7 @@ import { useState } from 'react';
 // enough that jumping straight to "Brass & Woodwind" beat scrolling past
 // everything before it. Defaults to "All", so nothing changes for anyone
 // who never touches it.
-export default function CanvasIconPalette({ icons, title, testIdPrefix, onIconTap, activeIconId }) {
+export default function CanvasIconPalette({ icons, title, testIdPrefix, onIconTap, activeIconId, creditNote }) {
   const categories = [...new Set(icons.map((i) => i.category))];
   const [activeCategory, setActiveCategory] = useState('All');
   const visibleCategories = activeCategory === 'All' ? categories : [activeCategory];
@@ -65,6 +65,7 @@ export default function CanvasIconPalette({ icons, title, testIdPrefix, onIconTa
           </div>
         ))}
       </div>
+      {creditNote && <p className="text-[9px] text-slate-300 mt-2 leading-snug">{creditNote}</p>}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { useUndoRedo } from '../lib/canvasEngine/history';
 import { createEmptyScene, deleteElement, deleteAnnotation, deleteStroke, addLayer, updateLayer } from '../lib/canvasEngine/sceneModel';
 import { scaleFromCalibration } from '../lib/canvasEngine/measurement';
 import { alignElementsCenter, distributeElements, centerElementsOnStage, autoAlignAll } from '../lib/canvasEngine/alignment';
-import { STAGE_PLOT_ICON_LIST, STAGE_PLOT_ICONS } from '../lib/canvasEngine/stagePlotIcons';
+import { STAGE_PLOT_ICON_LIST, STAGE_PLOT_ICONS, ICON_CREDITS } from '../lib/canvasEngine/stagePlotIcons';
 import CanvasIconPalette from './CanvasIconPalette';
 
 const AUTOSAVE_DELAY_MS = 2000;
@@ -505,6 +505,7 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
             testIdPrefix="stageplot-icon"
             onIconTap={handleIconTap}
             activeIconId={mode === 'place-icon' ? pendingIconId : null}
+            creditNote={ICON_CREDITS}
           />
 
           <div>

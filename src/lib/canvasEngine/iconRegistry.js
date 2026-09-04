@@ -17,6 +17,17 @@ export function icon(inner, { stroke = STROKE, fill = 'none' } = {}) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="${fill}" stroke="${stroke}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><style>*{vector-effect:non-scaling-stroke}</style>${inner}</svg>`;
 }
 
+// For illustrated instrument/gear icons adapted from real reference art
+// (game-icons.net, CC BY 3.0 — see ICON_CREDITS in stagePlotIcons.js)
+// instead of hand-authored primitives. These are single dense fill paths
+// with fine internal linework (strings, valves, tuning pegs) achieved via
+// negative-space holes in the path itself — the shared `icon()` wrapper's
+// heavy 2.5 stroke would turn that detail to mud, so this renders fill-only
+// at the source art's own viewBox instead of forcing it into 64x64.
+export function illustratedIcon(inner, { fill = ICON_FILL, viewBox = '0 0 512 512' } = {}) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" fill="${fill}" stroke="none">${inner}</svg>`;
+}
+
 // Builds a { id, label, category, svg } lookup map (keyed by id) from a flat
 // list — the shape both CanvasStage.jsx (rendering) and the icon palette
 // UI (drag source + thumbnail) consume.
