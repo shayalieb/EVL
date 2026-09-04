@@ -41,8 +41,6 @@ model User {
   savedFinancialReports     SavedFinancialReport[]
   closedFinancialPeriods    FinancialPeriod[]         @relation("FinancialPeriodCloser")
   financialPeriodActivities FinancialPeriodActivity[]
-  messagingProfile          MessagingProfile?         @relation(fields: [messagingProfileId], references: [id])
-  messagingProfileId        String?
 }
 
 model Account {
@@ -159,7 +157,7 @@ model Account {
   signupSource         String            @default("admin") // 'public' | 'admin'
   signupPlan           String? // landing-page selection before checkout
   signupInterval       String? // 'month' | 'year'
-  MessagingProfile     MessagingProfile?
+  messagingProfile     MessagingProfile?
 }
 
 model Membership {
@@ -350,7 +348,6 @@ model MessagingProfile {
   internalNote        String?   @db.Text
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
-  User                User[]
 
   @@index([status, requestedAt])
 }
