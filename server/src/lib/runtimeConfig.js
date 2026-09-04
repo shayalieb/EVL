@@ -16,6 +16,14 @@ export function validateRuntimeConfig(env = process.env) {
     if (!isHttpsUrl(env.FRONTEND_URL)) errors.push('FRONTEND_URL must be a valid HTTPS URL in production.');
     if (!(env.EXTRA_CLIENT_ORIGINS || '').trim()) errors.push('EXTRA_CLIENT_ORIGINS must list at least one production frontend origin.');
     if (!(env.REDIS_URL || '').trim()) errors.push('REDIS_URL is required in production for shared rate limiting.');
+    const quickBooksConfigured = !!(env.QUICKBOOKS_CLIENT_ID || env.QUICKBOOKS_CLIENT_SECRET || env.QUICKBOOKS_REDIRECT_URI || env.QUICKBOOKS_TOKEN_ENCRYPTION_KEY);
+    if (quickBooksConfigured) {
+      for (const key of ['QUICKBOOKS_CLIENT_ID', 'QUICKBOOKS_CLIENT_SECRET', 'QUICKBOOKS_REDIRECT_URI', 'QUICKBOOKS_TOKEN_ENCRYPTION_KEY']) {
+        if (!(env[key] || '').trim()) errors.push(`${key} is required when QuickBooks is configured.`);
+      }
+      if (env.QUICKBOOKS_REDIRECT_URI && !isHttpsUrl(env.QUICKBOOKS_REDIRECT_URI)) errors.push('QUICKBOOKS_REDIRECT_URI must be a valid HTTPS URL in production.');
+      if (env.QUICKBOOKS_TOKEN_ENCRYPTION_KEY && env.QUICKBOOKS_TOKEN_ENCRYPTION_KEY.length < 32) errors.push('QUICKBOOKS_TOKEN_ENCRYPTION_KEY must be at least 32 characters.');
+    }
     const twilioConfigured = !!(env.TWILIO_ACCOUNT_SID || env.TWILIO_AUTH_TOKEN);
     if (twilioConfigured) {
       if (!(env.TWILIO_ACCOUNT_SID || '').trim()) errors.push('TWILIO_ACCOUNT_SID is required when SMS is configured.');

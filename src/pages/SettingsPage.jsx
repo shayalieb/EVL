@@ -13,6 +13,7 @@ import BookingLinkTab from './settings/BookingLinkTab';
 import EmailDomainTab from './settings/EmailDomainTab';
 import ReminderRulesTab from './settings/ReminderRulesTab';
 import MessagingTab from './settings/MessagingTab';
+import IntegrationsTab from './settings/IntegrationsTab';
 import { resizeImageToDataUrl } from '../lib/resizeImage';
 import { formatPhoneNumber } from '../lib/format';
 import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
@@ -21,7 +22,7 @@ import { DOCUMENT_LAYOUTS, TEXT_SCALE_STEPS, DEFAULT_LAYOUT_ID, DEFAULT_TEXT_SCA
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 
-const TAB_IDS = ['user', 'business', 'fields', 'templates', 'users', 'plan', 'billing', 'bookingLink', 'emailDomain', 'messaging', 'reminderRules'];
+const TAB_IDS = ['user', 'business', 'fields', 'templates', 'users', 'plan', 'billing', 'bookingLink', 'emailDomain', 'messaging', 'integrations', 'reminderRules'];
 
 export default function SettingsPage() {
   const { role } = useAuth();
@@ -37,6 +38,7 @@ export default function SettingsPage() {
     ...(isAdminOrOwner ? [{ id: 'bookingLink', label: 'Booking Link' }] : []),
     ...(isAdminOrOwner ? [{ id: 'emailDomain', label: 'Email Domain' }] : []),
     ...(isAdminOrOwner ? [{ id: 'messaging', label: 'Messaging' }] : []),
+    ...(isAdminOrOwner ? [{ id: 'integrations', label: 'Integrations' }] : []),
     ...(isAdminOrOwner ? [{ id: 'reminderRules', label: 'Reminder Rules' }] : []),
   ];
   // Lets a redirect back into the app (e.g. the Stripe Customer Portal's
@@ -75,6 +77,7 @@ export default function SettingsPage() {
       {tab === 'bookingLink' && isAdminOrOwner && <BookingLinkTab />}
       {tab === 'emailDomain' && isAdminOrOwner && <EmailDomainTab />}
       {tab === 'messaging' && isAdminOrOwner && <MessagingTab />}
+      {tab === 'integrations' && isAdminOrOwner && <IntegrationsTab />}
       {tab === 'reminderRules' && isAdminOrOwner && <ReminderRulesTab />}
     </div>
   );
