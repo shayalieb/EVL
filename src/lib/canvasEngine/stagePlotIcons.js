@@ -184,7 +184,9 @@ export const STAGE_PLOT_ICON_LIST = [
     // The rock Drum Kit above doesn't cover orchestral percussion at all —
     // a kettle drum reads as a single large bowl (concentric circles) with
     // its tuning-pedal handle, nothing like a multi-drum kit's silhouette.
-    svg: svgFor('Percussion', '<circle cx="32" cy="34" r="20"/><circle cx="32" cy="34" r="14"/><line x1="32" y1="14" x2="32" y2="6" stroke-width="3"/>'),
+    // A white head (not same-color) plus rim tuning-rod ticks read as an
+    // actual drum surface rather than a flat ring outline.
+    svg: svgFor('Percussion', '<circle cx="32" cy="36" r="20"/><circle cx="32" cy="36" r="14" fill="#ffffff"/><line x1="32" y1="16" x2="32" y2="20"/><line x1="32" y1="52" x2="32" y2="56"/><line x1="12" y1="36" x2="16" y2="36"/><line x1="48" y1="36" x2="52" y2="36"/><line x1="32" y1="16" x2="32" y2="6" stroke-width="3"/><circle cx="32" cy="4" r="2.3"/>'),
   },
   {
     id: 'percussion',
@@ -196,25 +198,36 @@ export const STAGE_PLOT_ICON_LIST = [
     id: 'congas',
     label: 'Congas',
     category: 'Percussion',
-    svg: svgFor('Percussion', '<circle cx="20" cy="32" r="14"/><circle cx="46" cy="32" r="10"/>'),
+    // Traced tall tapered-barrel silhouettes (a real conga's shape), not
+    // two same-size circles — also the height/taper is what should read as
+    // "congas" versus Bongos' short, squat pair below, not just size.
+    svg: svgFor('Percussion', '<path d="M8,6 Q8,2 16,2 Q24,2 24,6 L21,52 Q21,60 16,60 Q11,60 11,52 Z"/><ellipse cx="16" cy="3" rx="9" ry="2.5" fill="#ffffff"/><path d="M30,10 Q30,5 40,5 Q50,5 50,10 L47,58 Q47,62 40,62 Q33,62 33,58 Z"/><ellipse cx="40" cy="6" rx="11" ry="3" fill="#ffffff"/>'),
   },
   {
     id: 'bongos',
     label: 'Bongos',
     category: 'Percussion',
-    svg: svgFor('Percussion', '<circle cx="20" cy="32" r="11"/><circle cx="42" cy="32" r="9"/>'),
+    // Short, stubby joined shells with a connecting block between them —
+    // real bongos are notably squat next to Congas' tall barrels, a
+    // proportion difference that reads even before any fine detail.
+    svg: svgFor('Percussion', '<rect x="24" y="34" width="8" height="10"/><path d="M6,26 Q6,20 16,20 Q26,20 26,26 L24,46 Q24,52 16,52 Q8,52 8,46 Z"/><ellipse cx="16" cy="21" rx="10" ry="3" fill="#ffffff"/><path d="M28,22 Q28,15 42,15 Q56,15 56,22 L53,48 Q53,55 42,55 Q31,55 31,48 Z"/><ellipse cx="42" cy="16" rx="14" ry="3.5" fill="#ffffff"/>'),
   },
   {
     id: 'cajon',
     label: 'Cajon',
     category: 'Percussion',
-    svg: svgFor('Percussion', '<rect x="16" y="12" width="32" height="40" rx="2"/><circle cx="32" cy="32" r="6"/>'),
+    // Top/bottom seam lines (the plate edges a real cajon box shows) plus
+    // a white sound port instead of same-color, so the port actually
+    // reads as an opening rather than a solid dot.
+    svg: svgFor('Percussion', '<rect x="16" y="10" width="32" height="44" rx="2"/><line x1="16" y1="18" x2="48" y2="18"/><line x1="16" y1="46" x2="48" y2="46"/><circle cx="32" cy="34" r="7" fill="#ffffff"/>'),
   },
   {
     id: 'tambourine',
     label: 'Tambourine',
     category: 'Percussion',
-    svg: svgFor('Percussion', '<circle cx="32" cy="32" r="18"/><circle cx="32" cy="14" r="2"/><circle cx="50" cy="32" r="2"/><circle cx="32" cy="50" r="2"/><circle cx="14" cy="32" r="2"/><circle cx="44.7" cy="19.3" r="2"/><circle cx="44.7" cy="44.7" r="2"/><circle cx="19.3" cy="44.7" r="2"/><circle cx="19.3" cy="19.3" r="2"/>'),
+    // White jingle dots (not same-color as the frame) so they read as
+    // metal zils set into the rim rather than decorative notches.
+    svg: svgFor('Percussion', '<circle cx="32" cy="32" r="18"/><circle cx="32" cy="32" r="12" fill="#ffffff"/><circle cx="32" cy="15.5" r="2" fill="#ffffff"/><circle cx="48.5" cy="32" r="2" fill="#ffffff"/><circle cx="32" cy="48.5" r="2" fill="#ffffff"/><circle cx="15.5" cy="32" r="2" fill="#ffffff"/><circle cx="43.7" cy="20.3" r="2" fill="#ffffff"/><circle cx="43.7" cy="43.7" r="2" fill="#ffffff"/><circle cx="20.3" cy="43.7" r="2" fill="#ffffff"/><circle cx="20.3" cy="20.3" r="2" fill="#ffffff"/>'),
   },
   {
     id: 'keyboard',
@@ -226,10 +239,11 @@ export const STAGE_PLOT_ICON_LIST = [
     id: 'grand-piano',
     label: 'Grand Piano',
     category: 'Keys',
-    // Concert grand's top-down "wing" silhouette — a genuinely different
-    // shape from the portable Keyboard above (a real gap for orchestra use,
-    // not just a size variant like Violin/Viola).
-    svg: svgFor('Keys', '<path d="M12 20 Q12 12 24 12 L46 12 Q56 16 56 28 L56 38 L28 52 L12 44 Z"/><rect x="14" y="38" width="18" height="8" rx="1"/>'),
+    // Concert grand's top-down "wing" silhouette — the curved bentside
+    // bulging out and tapering to a point at the tail is the one shape
+    // detail that makes a grand piano unmistakable from above, unlike the
+    // previous wedge which just read as a generic arrow.
+    svg: svgFor('Keys', '<path d="M8,20 Q30,6 62,28 Q40,42 8,44 Z"/><rect x="2" y="22" width="8" height="20" rx="1"/><line x1="4" y1="26" x2="4" y2="38" stroke-width="1"/><line x1="6.5" y1="26" x2="6.5" y2="38" stroke-width="1"/>'),
   },
   {
     id: 'synthesizer',
@@ -288,13 +302,19 @@ export const STAGE_PLOT_ICON_LIST = [
     id: 'upright-bass',
     label: 'Upright Bass',
     category: 'Basses',
-    svg: svgFor('Basses', '<circle cx="24" cy="34" r="9"/><circle cx="24" cy="50" r="12"/><rect x="21" y="4" width="6" height="32" rx="2"/><rect x="19" y="2" width="10" height="6" rx="1"/>'),
+    // A single traced hourglass body with a real waist pinch, not two
+    // separate circles touching — matches the fretted family's silhouette
+    // treatment above.
+    svg: svgFor('Basses', '<rect x="19" y="2" width="10" height="6" rx="1"/><rect x="21" y="4" width="6" height="32" rx="2"/><path d="M24,22 Q34,22 35,29 Q36,35 29,40 Q36,46 37,53 Q37,60 24,61 Q11,60 11,53 Q12,46 19,40 Q12,35 13,29 Q14,22 24,22 Z"/>'),
   },
   {
     id: 'violin',
     label: 'Violin',
     category: 'Strings',
-    svg: svgFor('Strings', '<circle cx="32" cy="34" r="7"/><circle cx="32" cy="48" r="8"/><rect x="29" y="14" width="6" height="22" rx="2"/><rect x="27" y="10" width="10" height="6" rx="1"/>'),
+    // A single hourglass body with a real C-bout waist plus f-holes, not
+    // two circles touching — the shape and the f-holes are what actually
+    // read as "violin family" rather than a generic small lute body.
+    svg: svgFor('Strings', '<rect x="27" y="10" width="10" height="6" rx="1"/><rect x="29" y="14" width="6" height="22" rx="2"/><path d="M32,27 Q38,27 39,32 Q40,37 35,40 Q40,44 40,49 Q40,56 32,56 Q24,56 24,49 Q24,44 29,40 Q24,37 25,32 Q26,27 32,27 Z"/><line x1="27" y1="37" x2="29" y2="43" stroke-width="1"/><line x1="37" y1="37" x2="35" y2="43" stroke-width="1"/>'),
   },
   {
     id: 'viola',
@@ -303,13 +323,13 @@ export const STAGE_PLOT_ICON_LIST = [
     // Same silhouette as Violin, sized up slightly — violin/viola read as
     // near-identical shapes in real stage-plot symbol sets too, distinguished
     // by size and label since visually they're the same instrument family.
-    svg: svgFor('Strings', '<circle cx="32" cy="33" r="7.5"/><circle cx="32" cy="48" r="9"/><rect x="29" y="12" width="6" height="24" rx="2"/><rect x="27" y="8" width="10" height="6" rx="1"/>'),
+    svg: svgFor('Strings', '<rect x="27" y="8" width="10" height="6" rx="1"/><rect x="29" y="12" width="6" height="24" rx="2"/><path d="M32,25 Q39,25 40,31 Q41,36 36,40 Q41,45 41,50 Q41,57 32,58 Q23,57 23,50 Q23,45 28,40 Q23,36 24,31 Q25,25 32,25 Z"/><line x1="27" y1="38" x2="29" y2="44" stroke-width="1"/><line x1="37" y1="38" x2="35" y2="44" stroke-width="1"/>'),
   },
   {
     id: 'cello',
     label: 'Cello',
     category: 'Strings',
-    svg: svgFor('Strings', '<circle cx="32" cy="30" r="8"/><circle cx="32" cy="46" r="11"/><rect x="29" y="6" width="6" height="26" rx="2"/><rect x="27" y="2" width="10" height="6" rx="1"/><line x1="32" y1="57" x2="32" y2="62"/>'),
+    svg: svgFor('Strings', '<rect x="27" y="2" width="10" height="6" rx="1"/><rect x="29" y="6" width="6" height="26" rx="2"/><path d="M32,20 Q40,20 41,27 Q42,33 36,38 Q42,44 43,51 Q43,59 32,61 Q21,59 21,51 Q22,44 28,38 Q22,33 23,27 Q24,20 32,20 Z"/><line x1="26" y1="36" x2="28" y2="42" stroke-width="1"/><line x1="38" y1="36" x2="36" y2="42" stroke-width="1"/><line x1="32" y1="61" x2="32" y2="64"/>'),
   },
   {
     id: 'harp',
@@ -321,15 +341,19 @@ export const STAGE_PLOT_ICON_LIST = [
     id: 'mandolin',
     label: 'Mandolin',
     category: 'Strings',
-    svg: svgFor('Strings', '<ellipse cx="30" cy="38" rx="11" ry="14"/><rect x="27" y="6" width="6" height="26" rx="2"/><rect x="25" y="2" width="10" height="6" rx="1"/>'),
+    // A soundhole (round-back mandolins have an oval or round port, not a
+    // guitar-style f-hole) is the missing detail that separates it from a
+    // plain oval-bodied lute at a glance.
+    svg: svgFor('Strings', '<rect x="25" y="2" width="10" height="6" rx="1"/><rect x="27" y="6" width="6" height="26" rx="2"/><ellipse cx="30" cy="38" rx="11" ry="14"/><ellipse cx="30" cy="38" rx="4" ry="5" fill="#ffffff"/>'),
   },
   {
     id: 'banjo',
     label: 'Banjo',
     category: 'Strings',
     // A round drum-head body (not a guitar's figure-8) is the one detail
-    // that actually reads as "banjo" at a glance.
-    svg: svgFor('Strings', '<circle cx="28" cy="42" r="14"/><rect x="25" y="6" width="6" height="30" rx="2"/><rect x="23" y="2" width="10" height="6" rx="1"/>'),
+    // that actually reads as "banjo" at a glance — the tension hoop and
+    // bracket hardware around the rim reinforce it further.
+    svg: svgFor('Strings', '<rect x="23" y="2" width="10" height="6" rx="1"/><rect x="25" y="6" width="6" height="30" rx="2"/><circle cx="28" cy="42" r="14"/><circle cx="28" cy="42" r="11" fill="#ffffff"/><circle cx="28" cy="28" r="1.5"/><circle cx="39.9" cy="35" r="1.5"/><circle cx="39.9" cy="49" r="1.5"/><circle cx="28" cy="56" r="1.5"/><circle cx="16.1" cy="49" r="1.5"/><circle cx="16.1" cy="35" r="1.5"/>'),
   },
   {
     id: 'ukulele',
@@ -337,7 +361,7 @@ export const STAGE_PLOT_ICON_LIST = [
     category: 'Strings',
     // Same figure-8 convention as Acoustic Guitar, sized down — reads as
     // "small guitar family" the same way Violin/Viola read as a size pair.
-    svg: svgFor('Strings', '<circle cx="24" cy="36" r="7"/><circle cx="24" cy="48" r="8"/><rect x="21" y="14" width="6" height="24" rx="2"/><rect x="19" y="10" width="10" height="6" rx="1"/>'),
+    svg: svgFor('Strings', '<rect x="19" y="10" width="10" height="6" rx="1"/><rect x="21" y="14" width="6" height="24" rx="2"/><path d="M24,29 Q30,29 31,34 Q32,38 27,42 Q32,46 32,50 Q32,56 24,57 Q16,56 16,50 Q16,46 21,42 Q16,38 17,34 Q18,29 24,29 Z"/>'),
   },
   {
     id: 'pedal-steel',
