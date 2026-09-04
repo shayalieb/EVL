@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { paymentSyncEligibility, quickBooksCustomerCandidate, quickBooksCustomerPayload, quickBooksInvoicePayload, quickBooksPaymentPayload } from '../src/lib/quickBooksSync.js';
+import { contractorBillEligibility, contractorBillLocalId, paymentSyncEligibility, quickBooksBillPayload, quickBooksCustomerCandidate, quickBooksCustomerPayload, quickBooksInvoicePayload, quickBooksPaymentPayload, quickBooksVendorCandidate, quickBooksVendorPayload } from '../src/lib/quickBooksSync.js';
 
 test('customer matching prioritizes exact email over name similarity', () => {
   const client = { firstName: 'Sam', lastName: 'Music', email: 'sam@example.com', phone: '212-555-0100' };
@@ -38,4 +38,31 @@ test('partial client payments link to the exported QuickBooks invoice', () => {
 test('corrections and reversals require deliberate manual reconciliation', () => {
   assert.equal(paymentSyncEligibility({ invoiceId: 'i', category: 'payment_adjustment', amountCents: -100 }).eligible, false);
   assert.equal(paymentSyncEligibility({ invoiceId: 'i', category: 'reversal', amountCents: -100, reversalOfId: 'old' }).eligible, false);
+});
+
+test('vendor matching prioritizes contractor email and preserves contact details', () => {
+  const contractor = { firstName: 'Jamie', middleName: 'R', lastName: 'Keys', email: 'jamie@example.com', phone: '646-555-0100' };
+  const candidate = quickBooksVendorCandidate(contractor, { Id: '12', DisplayName: 'Jamie Music', PrimaryEmailAddr: { Address: 'JAMIE@example.com' } });
+  const payload = quickBooksVendorPayload(contractor);
+  assert.equal(candidate.score, 100);
+  assert.equal(payload.DisplayName, 'Jamie Keys');
+  assert.equal(payload.MiddleName, 'R');
+  assert.equal(payload.PrimaryPhone.FreeFormNumber, '646-555-0100');
+});
+
+test('contractor bills require confirmation and a positive rate', () => {
+  const assignment = { id: 'assignment-1', contractorId: 'contractor-1' };
+  assert.equal(contractorBillEligibility({ assignment, inquiryStatus: { isConfirmed: true }, amount: 500 }).eligible, true);
+  assert.equal(contractorBillEligibility({ assignment, inquiryStatus: { label: 'Tentative' }, amount: 500 }).eligible, false);
+  assert.equal(contractorBillEligibility({ assignment, inquiryStatus: { isConfirmed: true }, amount: 0 }).eligible, false);
+  assert.equal(contractorBillLocalId('event-1', assignment), 'event-1:assignment-1');
+});
+
+test('contractor bill carries the gig, payable account, and agency tracking', () => {
+  const payload = quickBooksBillPayload({ event: { id: 'e1', name: 'Fall Gala', eventDate: '2026-10-01' }, assignment: { startTime: '18:00', endTime: '22:00', paymentDueDate: '2026-10-02' }, contractor: { firstName: 'Jamie', lastName: 'Keys' }, vendorId: '4', expenseAccountId: '5', accountsPayableId: '6', amount: 750, groupReference: { type: 'class', id: '7' } });
+  assert.equal(payload.VendorRef.value, '4');
+  assert.equal(payload.APAccountRef.value, '6');
+  assert.equal(payload.Line[0].Amount, 750);
+  assert.match(payload.Line[0].Description, /Fall Gala/);
+  assert.equal(payload.Line[0].AccountBasedExpenseLineDetail.ClassRef.value, '7');
 });

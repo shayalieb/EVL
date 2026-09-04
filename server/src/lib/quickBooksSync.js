@@ -24,6 +24,57 @@ export function quickBooksCustomerPayload(client) {
   };
 }
 
+export function quickBooksVendorCandidate(contractor, vendor) {
+  const contractorName = normalized(`${contractor.firstName} ${contractor.lastName}`);
+  const vendorName = normalized(vendor.DisplayName || `${vendor.GivenName || ''} ${vendor.FamilyName || ''}`);
+  const emailExact = !!contractor.email && normalized(contractor.email) === normalized(vendor.PrimaryEmailAddr?.Address);
+  const phoneExact = !!contractor.phone && digits(contractor.phone) === digits(vendor.PrimaryPhone?.FreeFormNumber);
+  const nameExact = !!contractorName && contractorName === vendorName;
+  const nameSimilar = !!contractorName && !!vendorName && (contractorName.includes(vendorName) || vendorName.includes(contractorName));
+  const score = emailExact ? 100 : phoneExact ? 95 : nameExact ? 85 : nameSimilar ? 60 : 0;
+  return { id: String(vendor.Id), displayName: vendor.DisplayName || vendorName, email: vendor.PrimaryEmailAddr?.Address || null, phone: vendor.PrimaryPhone?.FreeFormNumber || null, score, reasons: { emailExact, phoneExact, nameExact, nameSimilar } };
+}
+
+export function quickBooksVendorPayload(contractor) {
+  const displayName = `${contractor.firstName || ''} ${contractor.lastName || ''}`.trim();
+  return {
+    DisplayName: displayName,
+    GivenName: contractor.firstName || undefined,
+    MiddleName: contractor.middleName || undefined,
+    FamilyName: contractor.lastName || undefined,
+    PrimaryEmailAddr: contractor.email ? { Address: contractor.email } : undefined,
+    PrimaryPhone: contractor.phone ? { FreeFormNumber: contractor.phone } : undefined,
+  };
+}
+
+export function contractorBillEligibility({ assignment, inquiryStatus, amount }) {
+  const label = String(inquiryStatus?.label || '').toLowerCase();
+  const confirmed = inquiryStatus?.isConfirmed === true || /confirm|booked|accepted/.test(label);
+  if (!confirmed) return { eligible: false, reason: 'Contractor is not confirmed for this gig.' };
+  if (!Number.isFinite(amount) || amount <= 0) return { eligible: false, reason: 'Add a valid contractor rate before creating the bill.' };
+  if (!assignment?.contractorId) return { eligible: false, reason: 'This assignment has no contractor.' };
+  return { eligible: true, reason: null };
+}
+
+export function contractorBillLocalId(eventId, assignment) {
+  return `${eventId}:${assignment.id || assignment.contractorId}`;
+}
+
+export function quickBooksBillPayload({ event, assignment, contractor, vendorId, expenseAccountId, accountsPayableId, amount, groupReference }) {
+  const schedule = [assignment.startTime, assignment.endTime].filter(Boolean).join('–');
+  const description = [`${contractor.firstName || ''} ${contractor.lastName || ''}`.trim(), event.name || 'Gig', schedule].filter(Boolean).join(' — ');
+  const expenseDetail = { AccountRef: { value: expenseAccountId }, ...(groupReference?.type === 'class' ? { ClassRef: { value: groupReference.id } } : {}) };
+  return {
+    VendorRef: { value: vendorId },
+    TxnDate: isoDate(event.eventDate || event.createdAt),
+    DueDate: isoDate(assignment.paymentDueDate || event.eventDate),
+    APAccountRef: accountsPayableId ? { value: accountsPayableId } : undefined,
+    PrivateNote: `GigWorks contractor assignment: ${event.name || event.id}`,
+    Line: [{ Amount: Number(Number(amount).toFixed(2)), Description: description, DetailType: 'AccountBasedExpenseLineDetail', AccountBasedExpenseLineDetail: expenseDetail }],
+    ...(groupReference?.type === 'location' ? { DepartmentRef: { value: groupReference.id } } : {}),
+  };
+}
+
 function isoDate(value) { return value ? new Date(value).toISOString().slice(0, 10) : undefined; }
 
 export function quickBooksInvoicePayload({ invoice, customerId, serviceItemId, booking, groupReference }) {

@@ -5,7 +5,8 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { queryQuickBooks, validQuickBooksAccess, writeQuickBooks } from '../lib/quickBooks.js';
 import { quickBooksSetupReadiness } from '../lib/quickBooksMappings.js';
-import { paymentSyncEligibility, quickBooksCustomerCandidate, quickBooksCustomerPayload, quickBooksInvoicePayload, quickBooksPaymentPayload } from '../lib/quickBooksSync.js';
+import { contractorAssignmentCost } from '../lib/financialReports.js';
+import { contractorBillEligibility, contractorBillLocalId, paymentSyncEligibility, quickBooksBillPayload, quickBooksCustomerCandidate, quickBooksCustomerPayload, quickBooksInvoicePayload, quickBooksPaymentPayload, quickBooksVendorCandidate, quickBooksVendorPayload } from '../lib/quickBooksSync.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -37,6 +38,17 @@ async function allQuickBooksCustomers(connection, accessToken) {
     if (page.length < 1000) break;
   }
   return { customers, truncated: customers.length === 5000 };
+}
+
+async function allQuickBooksVendors(connection, accessToken) {
+  const vendors = [];
+  for (let start = 1; start <= 5000; start += 1000) {
+    const response = await queryQuickBooks({ realmId: connection.realmId, accessToken, query: `select * from Vendor startposition ${start} maxresults 1000` });
+    const page = response.Vendor || [];
+    vendors.push(...page);
+    if (page.length < 1000) break;
+  }
+  return { vendors, truncated: vendors.length === 5000 };
 }
 
 function logSync(data) { return prisma.quickBooksSyncLog.create({ data }); }
@@ -122,6 +134,144 @@ router.post('/customers/:clientId/create', asyncHandler(async (req, res) => {
     await prisma.quickBooksEntityLink.update({ where: { id: link.id }, data: { status: 'failed', lastError: String(error.message).slice(0, 500) } });
     await logSync({ accountId, entityType: 'customer', localId: client.id, action: 'created', status: 'failed', message: String(error.message).slice(0, 500), createdById: req.session.userId });
     res.status(502).json({ error: 'QuickBooks could not create this customer. Review possible matches and try again.' });
+  }
+}));
+
+router.get('/vendors/preview', asyncHandler(async (req, res) => {
+  if (!requireFinancialPermission(req, res)) return;
+  const accountId = req.membership.accountId;
+  const [contractors, links] = await Promise.all([
+    prisma.contractor.findMany({ where: { accountId }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }], take: 500 }),
+    prisma.quickBooksEntityLink.findMany({ where: { accountId, entityType: 'vendor' } }),
+  ]);
+  const linkById = new Map(links.map((link) => [link.localId, link]));
+  res.json({ rows: contractors.map((contractor) => {
+    const link = linkById.get(contractor.id);
+    return { id: contractor.id, name: `${contractor.firstName} ${contractor.lastName}`.trim(), email: contractor.email, phone: contractor.phone, contractorType: contractor.contractorType1, syncStatus: link?.status === 'synced' ? 'synced' : link?.status === 'failed' ? 'failed' : 'needs_vendor', error: link?.lastError || null, quickBooksId: link?.quickBooksId || null };
+  }), truncated: contractors.length === 500 });
+}));
+
+router.get('/vendors/:contractorId/matches', asyncHandler(async (req, res) => {
+  if (!requireFinancialPermission(req, res)) return;
+  const accountId = req.membership.accountId;
+  const contractor = await prisma.contractor.findFirst({ where: { id: req.params.contractorId, accountId } });
+  if (!contractor) return res.status(404).json({ error: 'Contractor not found.' });
+  const { connection, accessToken } = await connectionContext(accountId);
+  const { vendors, truncated } = await allQuickBooksVendors(connection, accessToken);
+  const candidates = vendors.map((vendor) => quickBooksVendorCandidate(contractor, vendor)).filter((candidate) => candidate.score >= 60).sort((a, b) => b.score - a.score).slice(0, 8);
+  res.json({ contractor: { id: contractor.id, name: `${contractor.firstName} ${contractor.lastName}`.trim(), email: contractor.email, phone: contractor.phone }, candidates, searchTruncated: truncated });
+}));
+
+router.post('/vendors/:contractorId/link', asyncHandler(async (req, res) => {
+  if (!requireFinancialPermission(req, res)) return;
+  const accountId = req.membership.accountId;
+  const contractor = await prisma.contractor.findFirst({ where: { id: req.params.contractorId, accountId } });
+  if (!contractor) return res.status(404).json({ error: 'Contractor not found.' });
+  const quickBooksId = String(req.body?.quickBooksId || '');
+  if (!/^\d+$/.test(quickBooksId)) return res.status(400).json({ error: 'Choose a valid QuickBooks vendor.' });
+  const { connection, accessToken } = await connectionContext(accountId);
+  const response = await queryQuickBooks({ realmId: connection.realmId, accessToken, query: `select * from Vendor where Id = '${quickBooksId}' maxresults 1` });
+  const vendor = response.Vendor?.[0];
+  if (!vendor) return res.status(404).json({ error: 'QuickBooks vendor not found.' });
+  const used = await prisma.quickBooksEntityLink.findFirst({ where: { accountId, entityType: 'vendor', quickBooksId, NOT: { localId: contractor.id } } });
+  if (used) return res.status(409).json({ error: 'That QuickBooks vendor is already matched to another GigWorks contractor.' });
+  const link = await prisma.quickBooksEntityLink.upsert({ where: { accountId_entityType_localId: { accountId, entityType: 'vendor', localId: contractor.id } }, update: { quickBooksId, quickBooksSyncToken: vendor.SyncToken || null, displayName: vendor.DisplayName || null, status: 'synced', lastError: null, lastSyncedAt: new Date() }, create: { accountId, entityType: 'vendor', localId: contractor.id, quickBooksId, quickBooksSyncToken: vendor.SyncToken || null, displayName: vendor.DisplayName || null, status: 'synced', lastSyncedAt: new Date() } });
+  await logSync({ accountId, entityType: 'vendor', localId: contractor.id, action: 'linked', status: 'success', message: `Linked to ${vendor.DisplayName || 'QuickBooks vendor'}`, createdById: req.session.userId });
+  res.json({ link });
+}));
+
+router.post('/vendors/:contractorId/create', asyncHandler(async (req, res) => {
+  if (!requireFinancialPermission(req, res)) return;
+  const accountId = req.membership.accountId;
+  const contractor = await prisma.contractor.findFirst({ where: { id: req.params.contractorId, accountId } });
+  if (!contractor) return res.status(404).json({ error: 'Contractor not found.' });
+  const existing = await prisma.quickBooksEntityLink.findUnique({ where: { accountId_entityType_localId: { accountId, entityType: 'vendor', localId: contractor.id } } });
+  if (existing?.status === 'synced') return res.json({ link: existing });
+  const link = existing || await prisma.quickBooksEntityLink.create({ data: { accountId, entityType: 'vendor', localId: contractor.id, displayName: `${contractor.firstName} ${contractor.lastName}`.trim(), status: 'pending' } });
+  const { connection, accessToken } = await connectionContext(accountId);
+  try {
+    const result = await writeQuickBooks({ realmId: connection.realmId, accessToken, entity: 'vendor', body: quickBooksVendorPayload(contractor), requestId: link.id });
+    const vendor = result.Vendor;
+    const updated = await prisma.quickBooksEntityLink.update({ where: { id: link.id }, data: { quickBooksId: String(vendor.Id), quickBooksSyncToken: vendor.SyncToken || null, displayName: vendor.DisplayName || null, status: 'synced', lastError: null, lastSyncedAt: new Date() } });
+    await logSync({ accountId, entityType: 'vendor', localId: contractor.id, action: 'created', status: 'success', message: `Created ${vendor.DisplayName}`, createdById: req.session.userId });
+    res.status(201).json({ link: updated });
+  } catch (error) {
+    await prisma.quickBooksEntityLink.update({ where: { id: link.id }, data: { status: 'failed', lastError: String(error.message).slice(0, 500) } });
+    await logSync({ accountId, entityType: 'vendor', localId: contractor.id, action: 'created', status: 'failed', message: String(error.message).slice(0, 500), createdById: req.session.userId });
+    res.status(502).json({ error: 'QuickBooks could not create this vendor. Review possible matches and try again.' });
+  }
+}));
+
+async function contractorBillContext(accountId) {
+  const [events, contractors, accountData] = await Promise.all([
+    prisma.event.findMany({ where: { accountId, deletedAt: null }, select: { id: true, name: true, eventDate: true, createdAt: true, groupId: true, contractorBookings: true }, orderBy: [{ eventDate: 'desc' }, { updatedAt: 'desc' }], take: 250 }),
+    prisma.contractor.findMany({ where: { accountId } }),
+    prisma.accountData.findUnique({ where: { accountId }, select: { data: true } }),
+  ]);
+  return { events, contractorById: new Map(contractors.map((item) => [item.id, item])), statusById: new Map((accountData?.data?.inquiryStatuses || []).map((item) => [item.id, item])) };
+}
+
+router.get('/bills/preview', asyncHandler(async (req, res) => {
+  if (!requireFinancialPermission(req, res)) return;
+  const accountId = req.membership.accountId;
+  const { events, contractorById, statusById } = await contractorBillContext(accountId);
+  const localIds = events.flatMap((event) => (event.contractorBookings || []).map((assignment) => contractorBillLocalId(event.id, assignment)));
+  const contractorIds = [...new Set(events.flatMap((event) => (event.contractorBookings || []).map((assignment) => assignment.contractorId).filter(Boolean)))];
+  const links = await prisma.quickBooksEntityLink.findMany({ where: { accountId, OR: [{ entityType: 'bill', localId: { in: localIds } }, { entityType: 'vendor', localId: { in: contractorIds } }] } });
+  const linkByKey = new Map(links.map((link) => [`${link.entityType}:${link.localId}`, link]));
+  const rows = [];
+  for (const event of events) for (const assignment of event.contractorBookings || []) {
+    const contractor = contractorById.get(assignment.contractorId);
+    const amount = contractorAssignmentCost(assignment, contractor);
+    const eligibility = contractorBillEligibility({ assignment, inquiryStatus: statusById.get(assignment.inquiryStatusId), amount });
+    const localId = contractorBillLocalId(event.id, assignment);
+    const vendorLink = linkByKey.get(`vendor:${assignment.contractorId}`);
+    const billLink = linkByKey.get(`bill:${localId}`);
+    const syncStatus = billLink?.status === 'synced' ? 'synced' : billLink?.status === 'failed' ? 'failed' : !eligibility.eligible ? (amount === null || amount <= 0 ? 'missing_rate' : 'not_confirmed') : vendorLink?.status !== 'synced' ? 'needs_vendor' : 'ready';
+    rows.push({ localId, eventId: event.id, assignmentId: assignment.id || assignment.contractorId, eventName: event.name || 'Untitled event', eventDate: event.eventDate, contractorId: assignment.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Unknown contractor', amount, paymentStatus: assignment.paymentStatus || 'not_paid', dueDate: assignment.paymentDueDate || event.eventDate || null, syncStatus, reason: billLink?.lastError || eligibility.reason, quickBooksId: billLink?.quickBooksId || null });
+  }
+  res.json({ rows, truncated: events.length === 250 });
+}));
+
+router.post('/bills/:eventId/:assignmentId/sync', asyncHandler(async (req, res) => {
+  if (!requireFinancialPermission(req, res)) return;
+  const accountId = req.membership.accountId;
+  const [event, accountData] = await Promise.all([
+    prisma.event.findFirst({ where: { id: req.params.eventId, accountId, deletedAt: null } }),
+    prisma.accountData.findUnique({ where: { accountId }, select: { data: true } }),
+  ]);
+  if (!event) return res.status(404).json({ error: 'Event not found.' });
+  const assignment = (event.contractorBookings || []).find((item) => (item.id || item.contractorId) === req.params.assignmentId);
+  if (!assignment) return res.status(404).json({ error: 'Contractor assignment not found.' });
+  const contractor = await prisma.contractor.findFirst({ where: { id: assignment.contractorId, accountId } });
+  if (!contractor) return res.status(409).json({ error: 'This assignment needs a contractor.' });
+  const inquiryStatus = (accountData?.data?.inquiryStatuses || []).find((item) => item.id === assignment.inquiryStatusId);
+  const amount = contractorAssignmentCost(assignment, contractor);
+  const eligibility = contractorBillEligibility({ assignment, inquiryStatus, amount });
+  if (!eligibility.eligible) return res.status(409).json({ error: eligibility.reason });
+  const localId = contractorBillLocalId(event.id, assignment);
+  const [vendorLink, existing] = await Promise.all([
+    prisma.quickBooksEntityLink.findUnique({ where: { accountId_entityType_localId: { accountId, entityType: 'vendor', localId: contractor.id } } }),
+    prisma.quickBooksEntityLink.findUnique({ where: { accountId_entityType_localId: { accountId, entityType: 'bill', localId } } }),
+  ]);
+  if (vendorLink?.status !== 'synced') return res.status(409).json({ error: 'Match or create the QuickBooks vendor first.' });
+  if (existing?.status === 'synced') return res.json({ link: existing });
+  const link = existing || await prisma.quickBooksEntityLink.create({ data: { accountId, entityType: 'bill', localId, displayName: `${contractor.firstName} ${contractor.lastName} — ${event.name || 'Gig'}`, status: 'pending' } });
+  const { connection, accessToken } = await connectionContext(accountId);
+  const mappings = connection.accountingMappings || {};
+  const groupId = mappings.groupMappings?.[event.groupId];
+  const groupReference = event.groupId && groupId && mappings.agencyTrackingMode !== 'none' ? { type: mappings.agencyTrackingMode, id: groupId } : null;
+  const body = quickBooksBillPayload({ event, assignment, contractor, vendorId: vendorLink.quickBooksId, expenseAccountId: mappings.contractorExpenseAccountId, accountsPayableId: mappings.accountsPayableId, amount, groupReference });
+  try {
+    const result = await writeQuickBooks({ realmId: connection.realmId, accessToken, entity: 'bill', body, requestId: link.id });
+    const bill = result.Bill;
+    const updated = await prisma.quickBooksEntityLink.update({ where: { id: link.id }, data: { quickBooksId: String(bill.Id), quickBooksSyncToken: bill.SyncToken || null, status: 'synced', lastError: null, lastSyncedAt: new Date() } });
+    await Promise.all([logSync({ accountId, entityType: 'bill', localId, action: 'created', status: 'success', message: `QuickBooks bill ${bill.DocNumber || bill.Id}`, createdById: req.session.userId }), prisma.quickBooksConnection.update({ where: { id: connection.id }, data: { lastSuccessfulSyncAt: new Date() } })]);
+    res.status(201).json({ link: updated });
+  } catch (error) {
+    await prisma.quickBooksEntityLink.update({ where: { id: link.id }, data: { status: 'failed', lastError: String(error.message).slice(0, 500) } });
+    await logSync({ accountId, entityType: 'bill', localId, action: 'created', status: 'failed', message: String(error.message).slice(0, 500), createdById: req.session.userId });
+    res.status(502).json({ error: 'QuickBooks could not create this bill. No duplicate will be created when you retry.' });
   }
 }));
 
