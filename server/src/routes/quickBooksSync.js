@@ -6,7 +6,7 @@ import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { queryQuickBooks, validQuickBooksAccess, writeQuickBooks } from '../lib/quickBooks.js';
 import { quickBooksSetupReadiness } from '../lib/quickBooksMappings.js';
 import { contractorAssignmentCost } from '../lib/financialReports.js';
-import { contractorBillEligibility, contractorBillLocalId, paymentSyncEligibility, quickBooksBillPayload, quickBooksCustomerCandidate, quickBooksCustomerPayload, quickBooksInvoicePayload, quickBooksPaymentPayload, quickBooksVendorCandidate, quickBooksVendorPayload } from '../lib/quickBooksSync.js';
+import { contractorBillEligibility, contractorBillLocalId, contractorPaymentSyncEligibility, paymentSyncEligibility, quickBooksBillPaymentPayload, quickBooksBillPayload, quickBooksCustomerCandidate, quickBooksCustomerPayload, quickBooksInvoicePayload, quickBooksPaymentPayload, quickBooksVendorCandidate, quickBooksVendorPayload } from '../lib/quickBooksSync.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -273,6 +273,99 @@ router.post('/bills/:eventId/:assignmentId/sync', asyncHandler(async (req, res) 
     await logSync({ accountId, entityType: 'bill', localId, action: 'created', status: 'failed', message: String(error.message).slice(0, 500), createdById: req.session.userId });
     res.status(502).json({ error: 'QuickBooks could not create this bill. No duplicate will be created when you retry.' });
   }
+}));
+
+router.get('/contractor-payments/preview', asyncHandler(async (req, res) => {
+  if (!requireFinancialPermission(req, res)) return;
+  const accountId = req.membership.accountId;
+  const transactions = await prisma.financialTransaction.findMany({ where: { accountId, contractorId: { not: null }, category: { in: ['contractor_payment', 'payment_adjustment', 'reversal'] } }, include: { reversedBy: { select: { id: true } } }, orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }], take: 200 });
+  const eventIds = [...new Set(transactions.map((item) => item.eventId).filter(Boolean))];
+  const contractorIds = [...new Set(transactions.map((item) => item.contractorId).filter(Boolean))];
+  const billLocalIds = transactions.filter((item) => item.eventId && item.metadata?.contractorBookingId).map((item) => `${item.eventId}:${item.metadata.contractorBookingId}`);
+  const [events, contractors, links, connection] = await Promise.all([
+    prisma.event.findMany({ where: { accountId, id: { in: eventIds } }, select: { id: true, name: true, eventDate: true } }),
+    prisma.contractor.findMany({ where: { accountId, id: { in: contractorIds } }, select: { id: true, firstName: true, lastName: true } }),
+    prisma.quickBooksEntityLink.findMany({ where: { accountId, OR: [{ entityType: 'bill', localId: { in: billLocalIds } }, { entityType: 'vendor', localId: { in: contractorIds } }, { entityType: 'bill_payment', localId: { in: transactions.map((item) => item.id) } }] } }),
+    prisma.quickBooksConnection.findUnique({ where: { accountId }, select: { accountingMappings: true, accountsSnapshot: true } }),
+  ]);
+  const eventById = new Map(events.map((item) => [item.id, item]));
+  const contractorById = new Map(contractors.map((item) => [item.id, item]));
+  const linkByKey = new Map(links.map((item) => [`${item.entityType}:${item.localId}`, item]));
+  const paymentAccountId = connection?.accountingMappings?.contractorPaymentAccountId || '';
+  res.json({ paymentAccountConfigured: !!paymentAccountId, rows: transactions.map((transaction) => {
+    const assignmentId = transaction.metadata?.contractorBookingId;
+    const billLocalId = transaction.eventId && assignmentId ? `${transaction.eventId}:${assignmentId}` : null;
+    const billLink = billLocalId ? linkByKey.get(`bill:${billLocalId}`) : null;
+    const vendorLink = linkByKey.get(`vendor:${transaction.contractorId}`);
+    const paymentLink = linkByKey.get(`bill_payment:${transaction.id}`);
+    const eligibility = contractorPaymentSyncEligibility(transaction);
+    const syncStatus = paymentLink?.status === 'synced' ? 'synced' : paymentLink?.status === 'manually_reconciled' ? 'manually_reconciled' : paymentLink?.status === 'needs_review' ? 'mismatch' : paymentLink?.status === 'failed' ? 'failed' : !eligibility.eligible ? 'manual_review' : billLink?.status !== 'synced' ? 'needs_bill' : vendorLink?.status !== 'synced' ? 'needs_vendor' : !paymentAccountId ? 'needs_account' : 'ready';
+    const contractor = contractorById.get(transaction.contractorId);
+    return { id: transaction.id, eventId: transaction.eventId, eventName: eventById.get(transaction.eventId)?.name || 'Untitled event', eventDate: eventById.get(transaction.eventId)?.eventDate || null, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor', amount: Math.abs(transaction.amountCents) / 100, occurredAt: transaction.occurredAt, paymentMethod: transaction.paymentMethod, reference: transaction.reference, syncStatus, reason: paymentLink?.lastError || eligibility.reason, quickBooksId: paymentLink?.quickBooksId || null };
+  }) });
+}));
+
+router.post('/contractor-payments/:transactionId/sync', asyncHandler(async (req, res) => {
+  if (!requireFinancialPermission(req, res)) return;
+  const accountId = req.membership.accountId;
+  const transaction = await prisma.financialTransaction.findFirst({ where: { id: req.params.transactionId, accountId }, include: { reversedBy: { select: { id: true } } } });
+  if (!transaction) return res.status(404).json({ error: 'Contractor payment not found.' });
+  const eligibility = contractorPaymentSyncEligibility(transaction);
+  if (!eligibility.eligible) return res.status(409).json({ error: eligibility.reason });
+  const billLocalId = `${transaction.eventId}:${transaction.metadata.contractorBookingId}`;
+  const [billLink, vendorLink, existing] = await Promise.all([
+    prisma.quickBooksEntityLink.findUnique({ where: { accountId_entityType_localId: { accountId, entityType: 'bill', localId: billLocalId } } }),
+    prisma.quickBooksEntityLink.findUnique({ where: { accountId_entityType_localId: { accountId, entityType: 'vendor', localId: transaction.contractorId } } }),
+    prisma.quickBooksEntityLink.findUnique({ where: { accountId_entityType_localId: { accountId, entityType: 'bill_payment', localId: transaction.id } } }),
+  ]);
+  if (billLink?.status !== 'synced' || vendorLink?.status !== 'synced') return res.status(409).json({ error: 'Synchronize the related vendor and contractor bill first.' });
+  if (existing?.status === 'synced') return res.json({ link: existing });
+  const link = existing || await prisma.quickBooksEntityLink.create({ data: { accountId, entityType: 'bill_payment', localId: transaction.id, displayName: transaction.description, status: 'pending' } });
+  const { connection, accessToken } = await connectionContext(accountId);
+  const paymentAccountId = connection.accountingMappings?.contractorPaymentAccountId;
+  const paymentAccount = (connection.accountsSnapshot || []).find((item) => item.id === paymentAccountId);
+  if (!paymentAccount || !['Bank', 'Credit Card'].includes(paymentAccount.type)) return res.status(409).json({ error: 'Choose the QuickBooks contractor payment account in Accounting setup first.' });
+  try {
+    const result = await writeQuickBooks({ realmId: connection.realmId, accessToken, entity: 'billpayment', body: quickBooksBillPaymentPayload({ transaction, vendorId: vendorLink.quickBooksId, quickBooksBillId: billLink.quickBooksId, paymentAccountId, paymentAccountType: paymentAccount.type }), requestId: link.id });
+    const payment = result.BillPayment;
+    const updated = await prisma.quickBooksEntityLink.update({ where: { id: link.id }, data: { quickBooksId: String(payment.Id), quickBooksSyncToken: payment.SyncToken || null, status: 'synced', lastError: null, lastSyncedAt: new Date() } });
+    await Promise.all([logSync({ accountId, entityType: 'bill_payment', localId: transaction.id, action: 'created', status: 'success', message: `QuickBooks bill payment ${payment.Id}`, createdById: req.session.userId }), prisma.quickBooksConnection.update({ where: { id: connection.id }, data: { lastSuccessfulSyncAt: new Date() } })]);
+    res.status(201).json({ link: updated });
+  } catch (error) {
+    await prisma.quickBooksEntityLink.update({ where: { id: link.id }, data: { status: 'failed', lastError: String(error.message).slice(0, 500) } });
+    await logSync({ accountId, entityType: 'bill_payment', localId: transaction.id, action: 'created', status: 'failed', message: String(error.message).slice(0, 500), createdById: req.session.userId });
+    res.status(502).json({ error: 'QuickBooks could not create this contractor payment. No duplicate will be created when you retry.' });
+  }
+}));
+
+router.post('/contractor-payments/:transactionId/manual', asyncHandler(async (req, res) => {
+  if (!requireFinancialPermission(req, res)) return;
+  const accountId = req.membership.accountId;
+  const transaction = await prisma.financialTransaction.findFirst({ where: { id: req.params.transactionId, accountId, contractorId: { not: null } } });
+  if (!transaction) return res.status(404).json({ error: 'Contractor payment adjustment not found.' });
+  const note = String(req.body?.note || '').trim().slice(0, 500);
+  if (!note) return res.status(400).json({ error: 'Add a note describing how this was handled in QuickBooks.' });
+  const link = await prisma.quickBooksEntityLink.upsert({ where: { accountId_entityType_localId: { accountId, entityType: 'bill_payment', localId: transaction.id } }, update: { status: 'manually_reconciled', lastError: note, lastSyncedAt: new Date() }, create: { accountId, entityType: 'bill_payment', localId: transaction.id, displayName: transaction.description, status: 'manually_reconciled', lastError: note, lastSyncedAt: new Date() } });
+  await logSync({ accountId, entityType: 'bill_payment', localId: transaction.id, action: 'manual_reconciliation', status: 'success', message: note, createdById: req.session.userId });
+  res.json({ link });
+}));
+
+router.post('/contractor-payments/:transactionId/reconcile', asyncHandler(async (req, res) => {
+  if (!requireFinancialPermission(req, res)) return;
+  const accountId = req.membership.accountId;
+  const [transaction, link] = await Promise.all([
+    prisma.financialTransaction.findFirst({ where: { id: req.params.transactionId, accountId } }),
+    prisma.quickBooksEntityLink.findUnique({ where: { accountId_entityType_localId: { accountId, entityType: 'bill_payment', localId: req.params.transactionId } } }),
+  ]);
+  if (!transaction || !link?.quickBooksId) return res.status(404).json({ error: 'Synchronized contractor payment not found.' });
+  const { connection, accessToken } = await connectionContext(accountId);
+  const response = await queryQuickBooks({ realmId: connection.realmId, accessToken, query: `select * from BillPayment where Id = '${link.quickBooksId}' maxresults 1` });
+  const payment = response.BillPayment?.[0];
+  const expected = Math.abs(transaction.amountCents) / 100;
+  const matches = !!payment && Math.abs(Number(payment.TotalAmt || 0) - expected) < 0.005;
+  const updated = await prisma.quickBooksEntityLink.update({ where: { id: link.id }, data: { status: matches ? 'synced' : 'needs_review', lastError: matches ? null : payment ? `QuickBooks amount is ${Number(payment.TotalAmt || 0).toFixed(2)}; GigWorks expects ${expected.toFixed(2)}.` : 'Bill payment no longer exists in QuickBooks.', lastSyncedAt: new Date(), ...(payment?.SyncToken ? { quickBooksSyncToken: payment.SyncToken } : {}) } });
+  await logSync({ accountId, entityType: 'bill_payment', localId: transaction.id, action: 'reconciled', status: matches ? 'success' : 'needs_review', message: updated.lastError, createdById: req.session.userId });
+  res.status(matches ? 200 : 409).json({ link: updated, matches });
 }));
 
 router.post('/invoices/:invoiceId/sync', asyncHandler(async (req, res) => {

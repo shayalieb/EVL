@@ -75,6 +75,22 @@ export async function syncQuickBooksBill(eventId, assignmentId) {
   return apiFetch(`/integrations/quickbooks/sync/bills/${encodeURIComponent(eventId)}/${encodeURIComponent(assignmentId)}/sync`, { method: 'POST' });
 }
 
+export async function getQuickBooksContractorPaymentPreview() {
+  return apiFetch('/integrations/quickbooks/sync/contractor-payments/preview');
+}
+
+export async function syncQuickBooksContractorPayment(transactionId) {
+  return apiFetch(`/integrations/quickbooks/sync/contractor-payments/${encodeURIComponent(transactionId)}/sync`, { method: 'POST' });
+}
+
+export async function manuallyReconcileQuickBooksContractorPayment(transactionId, note) {
+  return apiFetch(`/integrations/quickbooks/sync/contractor-payments/${encodeURIComponent(transactionId)}/manual`, { method: 'POST', body: JSON.stringify({ note }) });
+}
+
+export async function reconcileQuickBooksContractorPayment(transactionId) {
+  return apiFetch(`/integrations/quickbooks/sync/contractor-payments/${encodeURIComponent(transactionId)}/reconcile`, { method: 'POST' });
+}
+
 export async function syncQuickBooksInvoice(invoiceId) {
   return apiFetch(`/integrations/quickbooks/sync/invoices/${encodeURIComponent(invoiceId)}/sync`, { method: 'POST' });
 }

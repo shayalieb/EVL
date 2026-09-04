@@ -38,6 +38,7 @@ export function suggestedQuickBooksMappings(accounts, items = []) {
     accountsReceivableId: find(ALLOWED_TYPES.accountsReceivableId, ['accounts receivable'])?.id || '',
     accountsPayableId: find(ALLOWED_TYPES.accountsPayableId, ['accounts payable'])?.id || '',
     serviceItemId: list(items).find((item) => item.active !== false && ALLOWED_TYPES.serviceItemId.includes(item.type))?.id || '',
+    contractorPaymentAccountId: '',
     agencyTrackingMode: 'none',
     categoryMappings: {},
     groupMappings: {},
@@ -63,6 +64,10 @@ export function validateQuickBooksMappings(input, accounts, classes = [], locati
     if (!account || !ALLOWED_TYPES.otherExpenseAccountId.includes(account.type)) errors.push(`Choose a valid expense account for ${category.replaceAll('_', ' ')}.`);
     mappings.categoryMappings[category] = id;
   }
+  const contractorPaymentAccountId = String(input?.contractorPaymentAccountId || '');
+  const paymentAccount = accountById.get(contractorPaymentAccountId);
+  if (contractorPaymentAccountId && (!paymentAccount || !['Bank', 'Credit Card'].includes(paymentAccount.type))) errors.push('Contractor payment account must be a QuickBooks bank or credit-card account.');
+  mappings.contractorPaymentAccountId = contractorPaymentAccountId;
   if (mappings.agencyTrackingMode === 'class' && !list(classes).length) errors.push('No active QuickBooks classes are available.');
   if (mappings.agencyTrackingMode === 'location' && !list(locations).length) errors.push('No active QuickBooks locations are available.');
   if (mappings.agencyTrackingMode !== 'none') {

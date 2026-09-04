@@ -75,6 +75,27 @@ export function quickBooksBillPayload({ event, assignment, contractor, vendorId,
   };
 }
 
+export function contractorPaymentSyncEligibility(transaction) {
+  if (transaction?.category !== 'contractor_payment' || transaction.amountCents >= 0 || transaction.reversalOfId || transaction.reversedBy) return { eligible: false, reason: 'Correction or reversal requires manual reconciliation.' };
+  if (!transaction.eventId || !transaction.contractorId || !transaction.metadata?.contractorBookingId) return { eligible: false, reason: 'Payment is not linked to a specific contractor assignment.' };
+  return { eligible: true, reason: null };
+}
+
+export function quickBooksBillPaymentPayload({ transaction, vendorId, quickBooksBillId, paymentAccountId, paymentAccountType }) {
+  const amount = Number((Math.abs(transaction.amountCents) / 100).toFixed(2));
+  const creditCard = paymentAccountType === 'Credit Card';
+  return {
+    VendorRef: { value: vendorId },
+    PayType: creditCard ? 'CreditCard' : 'Check',
+    TotalAmt: amount,
+    TxnDate: isoDate(transaction.occurredAt),
+    DocNumber: transaction.reference || undefined,
+    PrivateNote: transaction.memo || transaction.description || undefined,
+    Line: [{ Amount: amount, LinkedTxn: [{ TxnId: quickBooksBillId, TxnType: 'Bill' }] }],
+    ...(creditCard ? { CreditCardPayment: { CCAccountRef: { value: paymentAccountId } } } : { CheckPayment: { BankAccountRef: { value: paymentAccountId } } }),
+  };
+}
+
 function isoDate(value) { return value ? new Date(value).toISOString().slice(0, 10) : undefined; }
 
 export function quickBooksInvoicePayload({ invoice, customerId, serviceItemId, booking, groupReference }) {

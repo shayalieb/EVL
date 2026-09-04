@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { contractorBillEligibility, contractorBillLocalId, paymentSyncEligibility, quickBooksBillPayload, quickBooksCustomerCandidate, quickBooksCustomerPayload, quickBooksInvoicePayload, quickBooksPaymentPayload, quickBooksVendorCandidate, quickBooksVendorPayload } from '../src/lib/quickBooksSync.js';
+import { contractorBillEligibility, contractorBillLocalId, contractorPaymentSyncEligibility, paymentSyncEligibility, quickBooksBillPaymentPayload, quickBooksBillPayload, quickBooksCustomerCandidate, quickBooksCustomerPayload, quickBooksInvoicePayload, quickBooksPaymentPayload, quickBooksVendorCandidate, quickBooksVendorPayload } from '../src/lib/quickBooksSync.js';
 
 test('customer matching prioritizes exact email over name similarity', () => {
   const client = { firstName: 'Sam', lastName: 'Music', email: 'sam@example.com', phone: '212-555-0100' };
@@ -65,4 +65,18 @@ test('contractor bill carries the gig, payable account, and agency tracking', ()
   assert.equal(payload.Line[0].Amount, 750);
   assert.match(payload.Line[0].Description, /Fall Gala/);
   assert.equal(payload.Line[0].AccountBasedExpenseLineDetail.ClassRef.value, '7');
+});
+
+test('contractor payments require an assignment and create a linked bill payment', () => {
+  const transaction = { category: 'contractor_payment', amountCents: -72500, eventId: 'e1', contractorId: 'c1', occurredAt: '2026-10-02', reference: 'ACH-42', metadata: { contractorBookingId: 'a1' } };
+  assert.equal(contractorPaymentSyncEligibility(transaction).eligible, true);
+  const payload = quickBooksBillPaymentPayload({ transaction, vendorId: '2', quickBooksBillId: '3', paymentAccountId: '4', paymentAccountType: 'Bank' });
+  assert.equal(payload.PayType, 'Check');
+  assert.equal(payload.TotalAmt, 725);
+  assert.equal(payload.Line[0].LinkedTxn[0].TxnId, '3');
+  assert.equal(payload.CheckPayment.BankAccountRef.value, '4');
+});
+
+test('contractor payment corrections stay in manual review', () => {
+  assert.equal(contractorPaymentSyncEligibility({ category: 'payment_adjustment', amountCents: 100, eventId: 'e1', contractorId: 'c1', metadata: { contractorBookingId: 'a1' } }).eligible, false);
 });
