@@ -53,6 +53,27 @@ async function allQuickBooksVendors(connection, accessToken) {
 
 function logSync(data) { return prisma.quickBooksSyncLog.create({ data }); }
 
+router.get('/activity', asyncHandler(async (req, res) => {
+  if (!requireFinancialPermission(req, res)) return;
+  const accountId = req.membership.accountId;
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(100, Math.max(10, Number(req.query.pageSize) || 25));
+  const status = String(req.query.status || 'all');
+  const entityType = String(req.query.entityType || 'all');
+  const allowedStatuses = new Set(['all', 'success', 'failed', 'needs_review']);
+  const allowedEntityTypes = new Set(['all', 'customer', 'invoice', 'payment', 'vendor', 'bill', 'bill_payment']);
+  if (!allowedStatuses.has(status) || !allowedEntityTypes.has(entityType)) return res.status(400).json({ error: 'Choose valid QuickBooks activity filters.' });
+  const where = { accountId, ...(status !== 'all' ? { status } : {}), ...(entityType !== 'all' ? { entityType } : {}) };
+  const [logs, total, counts] = await Promise.all([
+    prisma.quickBooksSyncLog.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: (page - 1) * pageSize, take: pageSize }),
+    prisma.quickBooksSyncLog.count({ where }),
+    prisma.quickBooksSyncLog.groupBy({ by: ['status'], where: { accountId }, _count: { _all: true } }),
+  ]);
+  const links = await prisma.quickBooksEntityLink.findMany({ where: { accountId, OR: logs.map((log) => ({ entityType: log.entityType, localId: log.localId })) }, select: { entityType: true, localId: true, displayName: true, quickBooksId: true, status: true } });
+  const linkByKey = new Map(links.map((link) => [`${link.entityType}:${link.localId}`, link]));
+  res.json({ rows: logs.map((log) => ({ ...log, entity: linkByKey.get(`${log.entityType}:${log.localId}`) || null })), total, page, pageSize, pageCount: Math.max(1, Math.ceil(total / pageSize)), counts: Object.fromEntries(counts.map((item) => [item.status, item._count._all])) });
+}));
+
 router.get('/preview', asyncHandler(async (req, res) => {
   if (!requireFinancialPermission(req, res)) return;
   const accountId = req.membership.accountId;

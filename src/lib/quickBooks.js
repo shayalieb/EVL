@@ -39,6 +39,10 @@ export async function getQuickBooksSyncPreview() {
   return apiFetch('/integrations/quickbooks/sync/preview');
 }
 
+export async function getQuickBooksActivity({ page = 1, status = 'all', entityType = 'all' } = {}) {
+  return apiFetch(`/integrations/quickbooks/sync/activity?page=${page}&pageSize=25&status=${encodeURIComponent(status)}&entityType=${encodeURIComponent(entityType)}`);
+}
+
 export async function findQuickBooksCustomerMatches(clientId) {
   return apiFetch(`/integrations/quickbooks/sync/customers/${encodeURIComponent(clientId)}/matches`);
 }
