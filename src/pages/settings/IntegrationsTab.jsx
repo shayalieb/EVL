@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useToast } from '../../components/ui/Toast';
 import QuickBooksBulkSync from '../../components/settings/QuickBooksBulkSync';
 import QuickBooksReconciliationPanel from '../../components/settings/QuickBooksReconciliationPanel';
+import QuickBooksLaunchReadiness from '../../components/settings/QuickBooksLaunchReadiness';
 import { beginQuickBooksConnection, checkQuickBooksConnection, createQuickBooksCustomer, createQuickBooksVendor, disconnectQuickBooks, findQuickBooksCustomerMatches, findQuickBooksVendorMatches, getQuickBooksActivity, getQuickBooksBillPreview, getQuickBooksContractorPaymentPreview, getQuickBooksPaymentPreview, getQuickBooksSetup, getQuickBooksStatus, getQuickBooksSyncPreview, getQuickBooksVendorPreview, linkQuickBooksCustomer, linkQuickBooksVendor, manuallyReconcileQuickBooksContractorPayment, manuallyReconcileQuickBooksPayment, reconcileQuickBooksContractorPayment, reconcileQuickBooksPayment, refreshQuickBooksReferenceData, saveQuickBooksMappings, syncQuickBooksBill, syncQuickBooksContractorPayment, syncQuickBooksInvoice, syncQuickBooksPayment } from '../../lib/quickBooks';
 
 const mappingFields = [
@@ -282,6 +283,7 @@ export default function IntegrationsTab() {
     {connected && setup?.readiness?.ready && <ContractorPaymentReview />}
     {connected && setup?.readiness?.ready && <QuickBooksActivityCenter />}
     {connected && setup?.readiness?.ready && <QuickBooksReconciliationPanel connection={connection} setConnection={setConnection} />}
+    {connected && <QuickBooksLaunchReadiness />}
     <section className="rounded-xl border border-slate-200 bg-slate-50 p-5"><h3 className="font-bold text-slate-800">QuickBooks workflow ready</h3><div className="mt-3 grid gap-3 text-sm text-slate-600 sm:grid-cols-2"><p>✓ Clients and QuickBooks customers</p><p>✓ Invoices and client payments</p><p>✓ Contractors and vendors</p><p>✓ Contractor bills and payments</p></div><p className="mt-4 text-xs text-slate-500">Every accounting record remains review-based and duplicate-safe.</p></section>
   </div>;
 }

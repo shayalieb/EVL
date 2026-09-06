@@ -5,6 +5,10 @@ export async function getQuickBooksStatus() {
   return data.connection;
 }
 
+export async function getQuickBooksLaunchReadiness() {
+  return apiFetch('/integrations/quickbooks/launch-readiness');
+}
+
 export async function beginQuickBooksConnection() {
   const data = await apiFetch('/integrations/quickbooks/connect-url', { method: 'POST' });
   return data.url;

@@ -6,6 +6,7 @@ import { attachMembership, effectivePermissions, requireRole } from '../lib/memb
 import { createQuickBooksState, decryptedRefreshToken, encryptedQuickBooksTokens, exchangeQuickBooksCode, fetchQuickBooksCompany, queryQuickBooks, quickBooksAuthorizationUrl, quickBooksConfigured, revokeQuickBooksToken, validQuickBooksAccess, verifyQuickBooksState } from '../lib/quickBooks.js';
 import { normalizeQuickBooksItem, normalizeQuickBooksReference, quickBooksSetupReadiness, suggestedQuickBooksMappings, validateQuickBooksMappings } from '../lib/quickBooksMappings.js';
 import { reconcileQuickBooksConnection } from '../lib/quickBooksReconciliation.js';
+import { quickBooksEnvironment, quickBooksLaunchReadiness } from '../lib/quickBooksLaunchReadiness.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership), requireRole('owner', 'admin'));
@@ -34,6 +35,7 @@ function statusJson(connection) {
     reconciliationFrequencyHours: connection?.reconciliationFrequencyHours || 24,
     lastReconciliationAt: connection?.lastReconciliationAt || null,
     lastReconciliationStatus: connection?.lastReconciliationStatus || null,
+    environment: quickBooksEnvironment(),
   };
 }
 
@@ -64,6 +66,20 @@ async function fetchReferenceData(connection, accessToken) {
 router.get('/status', asyncHandler(async (req, res) => {
   const connection = await prisma.quickBooksConnection.findUnique({ where: { accountId: req.membership.accountId } });
   res.json({ connection: statusJson(connection) });
+}));
+
+router.get('/launch-readiness', asyncHandler(async (req, res) => {
+  if (!requireSettingsPermission(req, res)) return;
+  const accountId = req.membership.accountId;
+  const [connection, groups, synced, issueCount] = await Promise.all([
+    prisma.quickBooksConnection.findUnique({ where: { accountId } }),
+    accountAgencyGroups(accountId),
+    prisma.quickBooksEntityLink.groupBy({ by: ['entityType'], where: { accountId, status: 'synced' }, _count: { _all: true } }),
+    prisma.quickBooksEntityLink.count({ where: { accountId, status: { in: ['failed', 'needs_review'] } } }),
+  ]);
+  const syncedCounts = Object.fromEntries(synced.map((item) => [item.entityType, item._count._all]));
+  const readiness = quickBooksLaunchReadiness({ configured: quickBooksConfigured(), connection, setupReady: quickBooksSetupReadiness(connection, groups).ready, syncedCounts, issueCount, environment: quickBooksEnvironment() });
+  res.json({ readiness, issueCount, syncedCounts });
 }));
 
 router.post('/health', asyncHandler(async (req, res) => {
