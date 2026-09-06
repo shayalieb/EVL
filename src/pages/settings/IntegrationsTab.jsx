@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useToast } from '../../components/ui/Toast';
+import QuickBooksBulkSync from '../../components/settings/QuickBooksBulkSync';
 import { beginQuickBooksConnection, checkQuickBooksConnection, createQuickBooksCustomer, createQuickBooksVendor, disconnectQuickBooks, findQuickBooksCustomerMatches, findQuickBooksVendorMatches, getQuickBooksActivity, getQuickBooksBillPreview, getQuickBooksContractorPaymentPreview, getQuickBooksPaymentPreview, getQuickBooksSetup, getQuickBooksStatus, getQuickBooksSyncPreview, getQuickBooksVendorPreview, linkQuickBooksCustomer, linkQuickBooksVendor, manuallyReconcileQuickBooksContractorPayment, manuallyReconcileQuickBooksPayment, reconcileQuickBooksContractorPayment, reconcileQuickBooksPayment, refreshQuickBooksReferenceData, saveQuickBooksMappings, syncQuickBooksBill, syncQuickBooksContractorPayment, syncQuickBooksInvoice, syncQuickBooksPayment } from '../../lib/quickBooks';
 
 const mappingFields = [
@@ -272,6 +273,7 @@ export default function IntegrationsTab() {
       {connected ? <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4"><p className="font-semibold text-slate-800">{connection.companyName || 'QuickBooks company'}</p><p className="mt-1 text-xs text-slate-500">Connected securely. Accounting synchronization will be enabled in the next integration phase.</p><div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={checkConnection} disabled={working} className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">{working ? 'Checking…' : 'Check connection'}</button><button type="button" onClick={disconnect} disabled={working} className="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50">Disconnect</button></div></div> : <div className="mt-5"><button type="button" onClick={connect} disabled={working || !connection?.configured} className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">{working ? 'Opening QuickBooks…' : connection?.status === 'needs_reauthorization' ? 'Reconnect QuickBooks' : 'Connect QuickBooks'}</button>{!connection?.configured && <p className="mt-2 text-xs text-amber-700">QuickBooks connection will become available after the Intuit production credentials are configured.</p>}</div>}
     </section>
     {connected && (setupLoading ? <p className="text-sm text-slate-400">Loading accounting setup…</p> : setup && <AccountingSetup setup={setup} setSetup={setSetup} />)}
+    {connected && setup?.readiness?.ready && <QuickBooksBulkSync />}
     {connected && setup?.readiness?.ready && <InvoiceSyncReview />}
     {connected && setup?.readiness?.ready && <PaymentSyncReview />}
     {connected && setup?.readiness?.ready && <VendorSyncReview />}
