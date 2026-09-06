@@ -142,7 +142,7 @@ router.get('/accounts/:id/profile', asyncHandler(async (req, res) => {
     prisma.account.findUnique({
       where: { id: req.params.id },
       include: {
-        memberships: { include: { user: true }, orderBy: { createdAt: 'asc' } }, disabledBy: true, approvedBy: true, accountData: true, messagingProfile: true,
+        memberships: { include: { user: true }, orderBy: { createdAt: 'asc' } }, disabledBy: true, approvedBy: true, accountData: true, messagingProfile: true, quickBooksConnection: true,
         adminNotes: { include: { author: true }, orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }] },
         activities: { include: { actor: true }, orderBy: { createdAt: 'desc' }, take: 250 },
       },
@@ -181,8 +181,22 @@ router.get('/accounts/:id/profile', asyncHandler(async (req, res) => {
         currentPeriodCount: account.messagingProfile.currentPeriodCount,
         internalNote: account.messagingProfile.internalNote,
       } : { status: 'not_started' },
+      quickBooks: { accessEnabled: account.quickBooksAccessEnabled, accessEnabledAt: account.quickBooksAccessEnabledAt, connected: account.quickBooksConnection?.status === 'active', companyName: account.quickBooksConnection?.companyName || null, lastHealthCheckAt: account.quickBooksConnection?.lastHealthCheckAt || null, lastSuccessfulSyncAt: account.quickBooksConnection?.lastSuccessfulSyncAt || null, lastReconciliationStatus: account.quickBooksConnection?.lastReconciliationStatus || null },
     },
   });
+}));
+
+router.patch('/accounts/:id/quickbooks-access', requireAdminPermission('manageAccountStatus'), asyncHandler(async (req, res) => {
+  const enabled = req.body?.enabled === true;
+  const existing = await prisma.account.findUnique({ where: { id: req.params.id }, select: { id: true, quickBooksAccessEnabled: true } });
+  if (!existing) return res.status(404).json({ error: 'Account not found.' });
+  const now = new Date();
+  const account = await prisma.$transaction(async (tx) => {
+    const updated = await tx.account.update({ where: { id: req.params.id }, data: { quickBooksAccessEnabled: enabled, quickBooksAccessEnabledAt: enabled ? now : null } });
+    await tx.accountActivity.create({ data: { accountId: req.params.id, actorUserId: req.user.id, type: 'quickbooks_access_changed', summary: `QuickBooks access ${enabled ? 'enabled' : 'disabled'}`, metadata: { enabled, previous: existing.quickBooksAccessEnabled } } });
+    return updated;
+  });
+  res.json({ quickBooks: { accessEnabled: account.quickBooksAccessEnabled, accessEnabledAt: account.quickBooksAccessEnabledAt } });
 }));
 
 // Provisioning remains an operator action for launch: GigWorks handles the

@@ -19,11 +19,12 @@ function requireSettingsPermission(req, res) {
   return true;
 }
 
-function statusJson(connection) {
+function statusJson(connection, accessEnabled = true) {
   return {
+    accessEnabled,
     configured: quickBooksConfigured(),
-    connected: !!connection && connection.status === 'active',
-    status: connection?.status || 'not_connected',
+    connected: accessEnabled && !!connection && connection.status === 'active',
+    status: !accessEnabled ? 'access_disabled' : connection?.status || 'not_connected',
     companyName: connection?.companyName || null,
     country: connection?.country || null,
     realmId: connection?.realmId || null,
@@ -64,8 +65,14 @@ async function fetchReferenceData(connection, accessToken) {
 }
 
 router.get('/status', asyncHandler(async (req, res) => {
-  const connection = await prisma.quickBooksConnection.findUnique({ where: { accountId: req.membership.accountId } });
-  res.json({ connection: statusJson(connection) });
+  const [connection, account] = await Promise.all([prisma.quickBooksConnection.findUnique({ where: { accountId: req.membership.accountId } }), prisma.account.findUnique({ where: { id: req.membership.accountId }, select: { quickBooksAccessEnabled: true } })]);
+  res.json({ connection: statusJson(connection, account?.quickBooksAccessEnabled === true) });
+}));
+
+router.use(asyncHandler(async (req, res, next) => {
+  const account = await prisma.account.findUnique({ where: { id: req.membership.accountId }, select: { quickBooksAccessEnabled: true } });
+  if (!account?.quickBooksAccessEnabled) return res.status(403).json({ error: 'QuickBooks access has not been enabled for this account.' });
+  next();
 }));
 
 router.get('/launch-readiness', asyncHandler(async (req, res) => {

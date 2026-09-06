@@ -159,6 +159,8 @@ model Account {
   signupInterval       String? // 'month' | 'year'
   messagingProfile     MessagingProfile?
   quickBooksConnection QuickBooksConnection?
+  quickBooksAccessEnabled Boolean @default(false)
+  quickBooksAccessEnabledAt DateTime?
 }
 
 // One QuickBooks Online company connection per GigWorks account. OAuth

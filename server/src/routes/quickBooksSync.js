@@ -10,6 +10,11 @@ import { contractorBillEligibility, contractorBillLocalId, contractorPaymentSync
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
+router.use(asyncHandler(async (req, res, next) => {
+  const account = await prisma.account.findUnique({ where: { id: req.membership.accountId }, select: { quickBooksAccessEnabled: true } });
+  if (!account?.quickBooksAccessEnabled) return res.status(403).json({ error: 'QuickBooks access has not been enabled for this account.' });
+  next();
+}));
 
 function requireFinancialPermission(req, res) {
   const permissions = effectivePermissions(req.membership);
