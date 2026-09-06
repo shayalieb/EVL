@@ -5,6 +5,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions, requireRole } from '../lib/membership.js';
 import { createQuickBooksState, decryptedRefreshToken, encryptedQuickBooksTokens, exchangeQuickBooksCode, fetchQuickBooksCompany, queryQuickBooks, quickBooksAuthorizationUrl, quickBooksConfigured, revokeQuickBooksToken, validQuickBooksAccess, verifyQuickBooksState } from '../lib/quickBooks.js';
 import { normalizeQuickBooksItem, normalizeQuickBooksReference, quickBooksSetupReadiness, suggestedQuickBooksMappings, validateQuickBooksMappings } from '../lib/quickBooksMappings.js';
+import { reconcileQuickBooksConnection } from '../lib/quickBooksReconciliation.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership), requireRole('owner', 'admin'));
@@ -29,6 +30,10 @@ function statusJson(connection) {
     lastHealthCheckAt: connection?.lastHealthCheckAt || null,
     lastSuccessfulSyncAt: connection?.lastSuccessfulSyncAt || null,
     lastError: connection?.lastError || null,
+    reconciliationEnabled: connection?.reconciliationEnabled || false,
+    reconciliationFrequencyHours: connection?.reconciliationFrequencyHours || 24,
+    lastReconciliationAt: connection?.lastReconciliationAt || null,
+    lastReconciliationStatus: connection?.lastReconciliationStatus || null,
   };
 }
 
@@ -73,6 +78,30 @@ router.post('/health', asyncHandler(async (req, res) => {
   } catch (error) {
     const updated = await prisma.quickBooksConnection.update({ where: { id: connection.id }, data: { status: 'needs_reauthorization', lastHealthCheckAt: new Date(), lastError: String(error?.message || 'Connection check failed.').slice(0, 500) } });
     res.status(409).json({ error: 'QuickBooks needs to be reconnected.', connection: statusJson(updated) });
+  }
+}));
+
+router.put('/reconciliation-settings', asyncHandler(async (req, res) => {
+  if (!requireSettingsPermission(req, res)) return;
+  const frequency = Number(req.body?.frequencyHours);
+  if (![6, 12, 24, 168].includes(frequency)) return res.status(400).json({ error: 'Choose a valid reconciliation frequency.' });
+  const connection = await prisma.quickBooksConnection.findUnique({ where: { accountId: req.membership.accountId } });
+  if (!connection) return res.status(404).json({ error: 'QuickBooks is not connected.' });
+  const updated = await prisma.quickBooksConnection.update({ where: { id: connection.id }, data: { reconciliationEnabled: req.body?.enabled === true, reconciliationFrequencyHours: frequency } });
+  res.json({ connection: statusJson(updated) });
+}));
+
+router.post('/reconcile', asyncHandler(async (req, res) => {
+  if (!requireSettingsPermission(req, res)) return;
+  const connection = await prisma.quickBooksConnection.findUnique({ where: { accountId: req.membership.accountId } });
+  if (!connection || connection.status !== 'active') return res.status(409).json({ error: 'Connect QuickBooks before reconciling.' });
+  try {
+    const result = await reconcileQuickBooksConnection(connection);
+    const updated = await prisma.quickBooksConnection.findUnique({ where: { id: connection.id } });
+    res.json({ result, connection: statusJson(updated) });
+  } catch (error) {
+    await prisma.quickBooksConnection.update({ where: { id: connection.id }, data: { lastReconciliationAt: new Date(), lastReconciliationStatus: 'failed', lastError: String(error.message).slice(0, 500) } });
+    res.status(502).json({ error: 'QuickBooks reconciliation could not finish. No accounting records were changed.' });
   }
 }));
 

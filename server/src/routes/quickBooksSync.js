@@ -102,7 +102,7 @@ router.get('/preview', asyncHandler(async (req, res) => {
     const customerLink = client ? linkByKey.get(`customer:${client.id}`) : null;
     const invoiceLink = linkByKey.get(`invoice:${invoice.id}`);
     const eligible = ['sent', 'partial', 'paid'].includes(invoice.status);
-    const status = invoiceLink?.status === 'synced' ? 'synced' : invoiceLink?.status === 'failed' ? 'failed' : !eligible ? 'not_eligible' : !client ? 'missing_client' : customerLink?.status !== 'synced' ? 'needs_customer' : readiness.ready ? 'ready' : 'setup_required';
+    const status = invoiceLink?.status === 'synced' ? 'synced' : invoiceLink?.status === 'needs_review' ? 'mismatch' : invoiceLink?.status === 'failed' ? 'failed' : !eligible ? 'not_eligible' : !client ? 'missing_client' : customerLink?.status !== 'synced' ? 'needs_customer' : readiness.ready ? 'ready' : 'setup_required';
     return { id: invoice.id, number: invoice.number, bookingName: booking?.eventName || 'Untitled booking', client: client ? { id: client.id, name: `${client.firstName} ${client.lastName}`.trim(), email: client.email } : null, total: (invoice.snapshot?.lineItems || []).reduce((sum, item) => sum + (item.type === 'perUnit' ? (Number(item.unitCount) || 0) * (Number(item.ratePerUnit) || 0) : Number(item.amount) || 0), 0), invoiceStatus: invoice.status, syncStatus: status, error: invoiceLink?.lastError || null, quickBooksId: invoiceLink?.quickBooksId || null };
   }) });
 }));
@@ -248,7 +248,7 @@ router.get('/bills/preview', asyncHandler(async (req, res) => {
     const localId = contractorBillLocalId(event.id, assignment);
     const vendorLink = linkByKey.get(`vendor:${assignment.contractorId}`);
     const billLink = linkByKey.get(`bill:${localId}`);
-    const syncStatus = billLink?.status === 'synced' ? 'synced' : billLink?.status === 'failed' ? 'failed' : !eligibility.eligible ? (amount === null || amount <= 0 ? 'missing_rate' : 'not_confirmed') : vendorLink?.status !== 'synced' ? 'needs_vendor' : 'ready';
+    const syncStatus = billLink?.status === 'synced' ? 'synced' : billLink?.status === 'needs_review' ? 'mismatch' : billLink?.status === 'failed' ? 'failed' : !eligibility.eligible ? (amount === null || amount <= 0 ? 'missing_rate' : 'not_confirmed') : vendorLink?.status !== 'synced' ? 'needs_vendor' : 'ready';
     rows.push({ localId, eventId: event.id, assignmentId: assignment.id || assignment.contractorId, eventName: event.name || 'Untitled event', eventDate: event.eventDate, contractorId: assignment.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Unknown contractor', amount, paymentStatus: assignment.paymentStatus || 'not_paid', dueDate: assignment.paymentDueDate || event.eventDate || null, syncStatus, reason: billLink?.lastError || eligibility.reason, quickBooksId: billLink?.quickBooksId || null });
   }
   res.json({ rows, truncated: events.length === 250 });

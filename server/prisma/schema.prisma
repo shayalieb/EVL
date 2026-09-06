@@ -187,6 +187,10 @@ model QuickBooksConnection {
   accountingMappings      Json     @default("{}")
   referenceDataRefreshedAt DateTime?
   setupCompletedAt        DateTime?
+  reconciliationEnabled  Boolean  @default(false)
+  reconciliationFrequencyHours Int @default(24)
+  lastReconciliationAt    DateTime?
+  lastReconciliationStatus String?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 

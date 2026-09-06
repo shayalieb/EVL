@@ -54,6 +54,7 @@ import { startReminderScheduler } from './lib/reminderScheduler.js';
 import { startReminderRuleEngine } from './lib/reminderRuleEngine.js';
 import { startDeletedRecordPurger } from './lib/deletedRecordPurger.js';
 import { startInquiryLinkPurger } from './lib/inquiryLinkPurger.js';
+import { startQuickBooksReconciliationScheduler } from './lib/quickBooksReconciliation.js';
 import { ensureCsrfCookie } from './lib/csrf.js';
 import { asyncHandler } from './lib/asyncHandler.js';
 import { validateRuntimeConfig } from './lib/runtimeConfig.js';
@@ -327,6 +328,7 @@ export function startServer() {
       startReminderRuleEngine(),
       startDeletedRecordPurger(),
       startInquiryLinkPurger(),
+      startQuickBooksReconciliationScheduler(),
     );
   });
   server.once('error', (err) => {

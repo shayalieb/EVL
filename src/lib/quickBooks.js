@@ -20,6 +20,15 @@ export async function checkQuickBooksConnection() {
   return data.connection;
 }
 
+export async function saveQuickBooksReconciliationSettings(enabled, frequencyHours) {
+  const data = await apiFetch('/integrations/quickbooks/reconciliation-settings', { method: 'PUT', body: JSON.stringify({ enabled, frequencyHours }) });
+  return data.connection;
+}
+
+export async function runQuickBooksReconciliation() {
+  return apiFetch('/integrations/quickbooks/reconcile', { method: 'POST' });
+}
+
 export async function getQuickBooksSetup() {
   const data = await apiFetch('/integrations/quickbooks/setup');
   return data.setup;
