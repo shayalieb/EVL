@@ -158,7 +158,7 @@ router.get('/accounts/:id/profile', asyncHandler(async (req, res) => {
     prisma.account.findUnique({
       where: { id: req.params.id },
       include: {
-        memberships: { include: { user: true }, orderBy: { createdAt: 'asc' } }, disabledBy: true, approvedBy: true, accountData: true, messagingProfile: true, quickBooksConnection: true,
+        memberships: { include: { user: true }, orderBy: { createdAt: 'asc' } }, disabledBy: true, approvedBy: true, accountData: true, messagingProfile: true, quickBooksConnection: true, quickBooksPilot: { include: { owner: true } },
         adminNotes: { include: { author: true }, orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }] },
         activities: { include: { actor: true }, orderBy: { createdAt: 'desc' }, take: 250 },
       },
@@ -205,6 +205,7 @@ router.get('/accounts/:id/profile', asyncHandler(async (req, res) => {
         issueCounts: Object.fromEntries(quickBooksIssueCounts.map((row) => [row.status, row._count._all])),
         recentIssues: quickBooksRecentIssues,
         health: quickBooksPilotHealth({ accessEnabled: account.quickBooksAccessEnabled, connectionStatus: account.quickBooksConnection?.status, issueCount: quickBooksIssueCounts.reduce((total, row) => total + row._count._all, 0), lastSuccessfulSyncAt: account.quickBooksConnection?.lastSuccessfulSyncAt }),
+        pilot: account.quickBooksPilot ? { status: account.quickBooksPilot.status, supportStatus: account.quickBooksPilot.supportStatus, owner: account.quickBooksPilot.owner ? { id: account.quickBooksPilot.owner.id, firstName: account.quickBooksPilot.owner.firstName, lastName: account.quickBooksPilot.owner.lastName } : null, reviewedAt: account.quickBooksPilot.reviewedAt, approvedAt: account.quickBooksPilot.approvedAt, nextFollowUpAt: account.quickBooksPilot.nextFollowUpAt, feedback: account.quickBooksPilot.feedback || '' } : { status: 'onboarding', supportStatus: 'open', owner: null, reviewedAt: null, approvedAt: null, nextFollowUpAt: null, feedback: '' },
       },
     },
   });
@@ -221,6 +222,27 @@ router.patch('/accounts/:id/quickbooks-access', requireAdminPermission('manageAc
     return updated;
   });
   res.json({ quickBooks: { accessEnabled: account.quickBooksAccessEnabled, accessEnabledAt: account.quickBooksAccessEnabledAt } });
+}));
+
+router.patch('/accounts/:id/quickbooks-pilot', requireAdminPermission('manageAccountStatus'), asyncHandler(async (req, res) => {
+  const account = await prisma.account.findUnique({ where: { id: req.params.id }, select: { id: true, quickBooksAccessEnabled: true } });
+  if (!account) return res.status(404).json({ error: 'Account not found.' });
+  if (!account.quickBooksAccessEnabled) return res.status(409).json({ error: 'Enable QuickBooks pilot access before managing the pilot workflow.' });
+  const status = ['onboarding', 'active', 'paused', 'graduated', 'offboarded'].includes(req.body?.status) ? req.body.status : null;
+  const supportStatus = ['open', 'waiting_customer', 'resolved'].includes(req.body?.supportStatus) ? req.body.supportStatus : null;
+  if (!status || !supportStatus) return res.status(400).json({ error: 'Choose valid pilot and support statuses.' });
+  const feedback = String(req.body?.feedback || '').trim().slice(0, 10000) || null;
+  const nextFollowUpAt = req.body?.nextFollowUpAt ? new Date(req.body.nextFollowUpAt) : null;
+  if (nextFollowUpAt && Number.isNaN(nextFollowUpAt.getTime())) return res.status(400).json({ error: 'Choose a valid follow-up date.' });
+  const existing = await prisma.quickBooksPilot.findUnique({ where: { accountId: req.params.id } });
+  const now = new Date();
+  const data = { status, supportStatus, feedback, nextFollowUpAt, ownerUserId: req.body?.assignedToMe === true ? req.user.id : req.body?.assignedToMe === false ? null : existing?.ownerUserId || null, reviewedAt: req.body?.reviewed === true ? existing?.reviewedAt || now : req.body?.reviewed === false ? null : existing?.reviewedAt || null, approvedAt: req.body?.approved === true ? existing?.approvedAt || now : req.body?.approved === false ? null : existing?.approvedAt || null };
+  const pilot = await prisma.$transaction(async (tx) => {
+    const updated = await tx.quickBooksPilot.upsert({ where: { accountId: req.params.id }, update: data, create: { accountId: req.params.id, ...data }, include: { owner: true } });
+    await tx.accountActivity.create({ data: { accountId: req.params.id, actorUserId: req.user.id, type: 'quickbooks_pilot_updated', summary: `QuickBooks pilot updated: ${status}`, metadata: { status, supportStatus, reviewed: !!updated.reviewedAt, approved: !!updated.approvedAt, assigned: !!updated.ownerUserId } } });
+    return updated;
+  });
+  res.json({ pilot: { status: pilot.status, supportStatus: pilot.supportStatus, owner: pilot.owner ? { id: pilot.owner.id, firstName: pilot.owner.firstName, lastName: pilot.owner.lastName } : null, reviewedAt: pilot.reviewedAt, approvedAt: pilot.approvedAt, nextFollowUpAt: pilot.nextFollowUpAt, feedback: pilot.feedback || '' } });
 }));
 
 // Provisioning remains an operator action for launch: GigWorks handles the

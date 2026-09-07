@@ -37,6 +37,7 @@ model User {
   reminders                 Reminder[]
   accountAdminNotes         AccountAdminNote[]
   accountActivities         AccountActivity[]
+  ownedQuickBooksPilots     QuickBooksPilot[]         @relation("QuickBooksPilotOwner")
   financialTransactions     FinancialTransaction[]    @relation("FinancialTransactionCreator")
   savedFinancialReports     SavedFinancialReport[]
   closedFinancialPeriods    FinancialPeriod[]         @relation("FinancialPeriodCloser")
@@ -159,8 +160,32 @@ model Account {
   signupInterval       String? // 'month' | 'year'
   messagingProfile     MessagingProfile?
   quickBooksConnection QuickBooksConnection?
+  quickBooksPilot      QuickBooksPilot?
   quickBooksAccessEnabled Boolean @default(false)
   quickBooksAccessEnabledAt DateTime?
+}
+
+// Platform-admin workflow for controlled QuickBooks pilots. Accounting data
+// remains in the connection/link/log tables; this record only stores rollout
+// ownership, customer feedback, and manual approval milestones.
+model QuickBooksPilot {
+  id             String   @id @default(cuid())
+  accountId      String   @unique
+  account        Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  status         String   @default("onboarding") // onboarding | active | paused | graduated | offboarded
+  supportStatus  String   @default("open") // open | waiting_customer | resolved
+  ownerUserId    String?
+  owner          User?    @relation("QuickBooksPilotOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  reviewedAt     DateTime?
+  approvedAt     DateTime?
+  nextFollowUpAt DateTime?
+  feedback       String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([status, supportStatus])
+  @@index([ownerUserId])
+  @@index([nextFollowUpAt])
 }
 
 // One QuickBooks Online company connection per GigWorks account. OAuth
