@@ -62,6 +62,29 @@ const TOOLS = [
       required: ['clientId'],
     },
   },
+  {
+    name: 'find_contractor',
+    description: "Search the account's contractors by name, email, phone, or type/role.",
+    input_schema: {
+      type: 'object',
+      properties: { query: { type: 'string', description: 'Name, email, phone, or contractor type/role fragment to search for.' } },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'get_contractor_summary',
+    description: "Get one contractor's contact info, pricing, and upcoming assigned events.",
+    input_schema: {
+      type: 'object',
+      properties: { contractorId: { type: 'string' } },
+      required: ['contractorId'],
+    },
+  },
+  {
+    name: 'get_pending_contractor_payments',
+    description: 'List contractor payment requests awaiting review (submitted, not yet approved/paid/disputed).',
+    input_schema: { type: 'object', properties: {} },
+  },
 ];
 
 // ---- Terminal tools: navigation and proposed writes ----
@@ -244,6 +267,69 @@ async function runTool(name, input, accountId) {
         })(),
       })),
     };
+  }
+
+  if (name === 'find_contractor') {
+    const q = String(input?.query || '').trim();
+    if (!q) return [];
+    // Contractor has no precomputed nameNormalized column (unlike Client),
+    // so a "First Last" query needs its own explicit two-field match — a
+    // single-field contains on either firstName or lastName alone never
+    // matches a combined full-name search (same bug find_client had
+    // before it got a nameNormalized fallback).
+    const parts = q.split(/\s+/).filter(Boolean);
+    const matches = await prisma.contractor.findMany({
+      where: {
+        accountId,
+        OR: [
+          ...['firstName', 'lastName', 'email', 'phone', 'contractorType1', 'contractorType2'].map((field) => ({ [field]: { contains: q, mode: 'insensitive' } })),
+          ...(parts.length > 1 ? [{ AND: [{ firstName: { contains: parts[0], mode: 'insensitive' } }, { lastName: { contains: parts.slice(1).join(' '), mode: 'insensitive' } }] }] : []),
+        ],
+      },
+      select: { id: true, firstName: true, lastName: true, email: true, phone: true, contractorType1: true, contractorType2: true },
+      take: 10,
+    });
+    return matches.map((c) => ({ id: c.id, name: `${c.firstName} ${c.lastName}`.trim(), email: c.email, phone: c.phone, type: c.contractorType1, role: c.contractorType2 }));
+  }
+
+  if (name === 'get_contractor_summary') {
+    const contractorId = String(input?.contractorId || '');
+    const contractor = await prisma.contractor.findFirst({ where: { id: contractorId, accountId } });
+    if (!contractor) return { error: 'Contractor not found.' };
+    // No direct relation from Event to a contractor — contractorBookings is
+    // a Json array on Event (same pattern dashboard.js's aggregation
+    // already uses), so membership has to be checked in-memory rather than
+    // filtered in the query itself.
+    const events = await prisma.event.findMany({
+      where: { accountId, deletedAt: null },
+      select: { id: true, name: true, eventDate: true, eventStatus: true, contractorBookings: true },
+      orderBy: { eventDate: 'desc' },
+      take: 200,
+    });
+    const assigned = events
+      .filter((e) => (e.contractorBookings || []).some((b) => b.contractorId === contractorId))
+      .slice(0, 10)
+      .map((e) => ({ eventName: e.name, eventDate: e.eventDate, status: e.eventStatus }));
+    return {
+      name: `${contractor.firstName} ${contractor.lastName}`.trim(),
+      email: contractor.email,
+      phone: contractor.phone,
+      type: contractor.contractorType1,
+      role: contractor.contractorType2,
+      pricingTiers: contractor.pricingTiers,
+      priceNotes: contractor.priceNotes || null,
+      assignedEvents: assigned,
+    };
+  }
+
+  if (name === 'get_pending_contractor_payments') {
+    const rows = await prisma.contractorPaymentRequest.findMany({
+      where: { accountId, status: 'submitted' },
+      select: { amountCents: true, invoiceNumber: true, submittedAt: true, contractor: { select: { firstName: true, lastName: true } }, event: { select: { name: true } } },
+      orderBy: { submittedAt: 'asc' },
+      take: 25,
+    });
+    return rows.map((r) => ({ contractor: `${r.contractor.firstName} ${r.contractor.lastName}`.trim(), event: r.event.name, amount: r.amountCents / 100, invoiceNumber: r.invoiceNumber, submittedAt: r.submittedAt }));
   }
 
   return { error: `Unknown tool: ${name}` };

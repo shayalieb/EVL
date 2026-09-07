@@ -77,7 +77,7 @@ export default function AssistantModal({ open, onClose }) {
       <div className="space-y-4">
         {messages.length === 0 && (
           <div data-testid="assistant-empty-banner" className="text-sm text-slate-400 text-center py-6">
-            Ask about your schedule, open proposals, overdue invoices, or a specific client — or ask it to create a reminder, add a client, or update a booking.
+            Ask about your schedule, open proposals, overdue invoices, a client, or a contractor — or ask it to create a reminder, add a client, or update a booking.
           </div>
         )}
 
