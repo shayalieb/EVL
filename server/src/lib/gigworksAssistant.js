@@ -1,6 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { prisma } from './prisma.js';
 import { getAnthropicClient } from './anthropic.js';
 import { invoiceTotal } from '../routes/invoices.js';
+import { createWithPreservedId } from './idPreservingCreate.js';
+import { normalizeValidEmail } from './emailAddress.js';
 
 // General-reasoning model — unlike emailReplyClassifier.js's bounded 3-way
 // classification, these answers touch real scheduling and pricing
@@ -61,6 +64,101 @@ const TOOLS = [
   },
 ];
 
+// ---- Terminal tools: navigation and proposed writes ----
+// Calling one of these stops the loop immediately instead of feeding back a
+// tool_result — navigate_to just resolves to a link (nothing changes),
+// and every propose_* tool returns a structured, not-yet-applied action for
+// the user to review and confirm in the UI. Nothing under this file writes
+// to the database on its own; see the *Action functions below, which only
+// run from POST /assistant/confirm-action after explicit user confirmation.
+const TERMINAL_TOOLS = new Set(['navigate_to', 'propose_create_reminder', 'propose_add_client', 'propose_create_booking', 'propose_update_booking']);
+
+// The one real safety boundary for booking edits — the model's schema
+// literally has no properties for deletedAt, venue, schedule, proposal,
+// history, depositAmount, or anything else bookings.js's PATCH would
+// otherwise accept. Re-enforced again in updateBookingAction below.
+const BOOKING_UPDATE_FIELDS = {
+  bookingStatus: { type: 'string', description: "e.g. 'inquiry', 'tentative', 'confirmed', 'cancelled' — match whatever values this account already uses." },
+  notes: { type: 'string' },
+  eventDate: { type: 'string', description: 'YYYY-MM-DD. Setting this is how you reschedule a booking.' },
+  nextFollowUpDate: { type: 'string', description: 'YYYY-MM-DD.' },
+  priority: { type: 'string' },
+};
+
+const WRITE_TOOLS = [
+  {
+    name: 'navigate_to',
+    description: "Give the user a link to jump straight to a record they asked about. Not a write — nothing changes.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        recordType: { type: 'string', enum: ['booking', 'client', 'event', 'contractor'] },
+        recordId: { type: 'string' },
+        label: { type: 'string', description: 'Short human-readable name for the link, e.g. "Rivera Wedding Reception".' },
+      },
+      required: ['recordType', 'recordId', 'label'],
+    },
+  },
+  {
+    name: 'propose_create_reminder',
+    description: 'Propose creating a reminder. This does not create it — the user must confirm first.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        note: { type: 'string' },
+        remindAt: { type: 'string', description: 'ISO date/time.' },
+        relatedType: { type: 'string', enum: ['client', 'contractor', 'event', 'booking'] },
+        relatedId: { type: 'string' },
+        relatedName: { type: 'string' },
+      },
+      required: ['note', 'remindAt'],
+    },
+  },
+  {
+    name: 'propose_add_client',
+    description: 'Propose adding a new client. This does not create it — the user must confirm first, and will be shown any similar existing clients to avoid duplicates.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        firstName: { type: 'string' },
+        lastName: { type: 'string' },
+        email: { type: 'string' },
+        phone: { type: 'string' },
+      },
+      required: ['firstName', 'lastName', 'email'],
+    },
+  },
+  {
+    name: 'propose_create_booking',
+    description: 'Propose creating a new booking for an existing client. This does not create it — the user must confirm first. clientId must come from find_client or a just-confirmed add_client — never invent one.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        eventName: { type: 'string' },
+        clientId: { type: 'string' },
+        eventDate: { type: 'string', description: 'YYYY-MM-DD.' },
+        eventType: { type: 'string' },
+        notes: { type: 'string' },
+      },
+      required: ['eventName', 'clientId'],
+    },
+  },
+  {
+    name: 'propose_update_booking',
+    description: "Propose changing fields on an existing booking, including rescheduling (set eventDate). This does not apply the change — the user must confirm first. bookingId must be the actual `id` value from a read tool's result (get_upcoming_schedule, find_client, get_client_summary) — never a name or guess. Call a read tool first if you don't already have the real id.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        bookingId: { type: 'string' },
+        fields: { type: 'object', properties: BOOKING_UPDATE_FIELDS, additionalProperties: false },
+      },
+      required: ['bookingId', 'fields'],
+    },
+  },
+];
+
+const ALL_TOOLS = [...TOOLS, ...WRITE_TOOLS];
+
 async function runTool(name, input, accountId) {
   const today = new Date().toISOString().slice(0, 10);
   const nowISO = new Date().toISOString();
@@ -78,7 +176,7 @@ async function runTool(name, input, accountId) {
     });
     const clients = await prisma.client.findMany({ where: { id: { in: bookings.map((b) => b.clientId).filter(Boolean) } }, select: { id: true, firstName: true, lastName: true } });
     const clientById = new Map(clients.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()]));
-    return bookings.map((b) => ({ eventName: b.eventName, eventDate: b.eventDate, eventType: b.eventType, status: b.bookingStatus, client: clientById.get(b.clientId) || null }));
+    return bookings.map((b) => ({ id: b.id, eventName: b.eventName, eventDate: b.eventDate, eventType: b.eventType, status: b.bookingStatus, client: clientById.get(b.clientId) || null }));
   }
 
   if (name === 'get_open_proposals') {
@@ -134,6 +232,7 @@ async function runTool(name, input, accountId) {
       phone: client.phone,
       notes: client.notes || null,
       bookings: bookings.map((b) => ({
+        id: b.id,
         eventName: b.eventName,
         eventDate: b.eventDate,
         status: b.bookingStatus,
@@ -150,7 +249,94 @@ async function runTool(name, input, accountId) {
   return { error: `Unknown tool: ${name}` };
 }
 
-const SYSTEM_PROMPT = "You are the GigWorks Assistant, helping an event/gig business owner manage their bookings. Answer using only the tools provided — never guess at schedule, proposal, invoice, or client data. Keep answers short and concrete (dates, names, amounts), not generic advice. If a tool returns nothing relevant, say so plainly rather than speculating.";
+// Same dedup lookup clients.js's GET /matches/inquiry already exposes to the
+// inquiry-review flow (ReviewInquiryModal.jsx) — reused here so a
+// proposed add_client surfaces likely-duplicate clients the same way,
+// before the user ever confirms.
+async function findClientCandidates(accountId, { firstName, lastName, email, phone }) {
+  const emailNorm = String(email || '').trim().toLowerCase() || null;
+  const phoneNorm = String(phone || '').replace(/\D/g, '') || null;
+  const nameNorm = `${String(firstName || '').trim()} ${String(lastName || '').trim()}`.trim().toLowerCase() || null;
+  if (!emailNorm && !phoneNorm && !nameNorm) return [];
+  const rows = await prisma.$queryRaw`
+    SELECT "id", "firstName", "lastName", "email", "phone",
+      CASE WHEN ${emailNorm}::text IS NOT NULL AND "emailNormalized" = ${emailNorm} THEN 1 ELSE 0 END AS "emailExact",
+      CASE WHEN ${phoneNorm}::text IS NOT NULL AND "phoneNormalized" = ${phoneNorm} THEN 1 ELSE 0 END AS "phoneExact",
+      CASE WHEN ${nameNorm}::text IS NOT NULL THEN similarity("nameNormalized", ${nameNorm}) ELSE 0 END AS "nameScore"
+    FROM "Client"
+    WHERE "accountId" = ${accountId}
+      AND (
+        (${emailNorm}::text IS NOT NULL AND "emailNormalized" = ${emailNorm}) OR
+        (${phoneNorm}::text IS NOT NULL AND "phoneNormalized" = ${phoneNorm}) OR
+        (${nameNorm}::text IS NOT NULL AND "nameNormalized" % ${nameNorm})
+      )
+    ORDER BY "emailExact" DESC, "phoneExact" DESC, "nameScore" DESC, "updatedAt" DESC
+    LIMIT 5
+  `;
+  return rows.map((c) => ({ id: c.id, firstName: c.firstName, lastName: c.lastName, email: c.email, phone: c.phone }));
+}
+
+// A bare "YYYY-MM-DD" string parses as UTC midnight — formatting that with
+// toLocaleDateString in a server timezone behind UTC rolls it back a day
+// (e.g. "2026-09-14" showing as "Sep 13"). Force UTC in the formatter so a
+// date-only value always displays as the date it actually says, regardless
+// of server timezone; full ISO timestamps (with a time component) still
+// format correctly since they carry real UTC-relative meaning.
+function fmtDate(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(String(value));
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', ...(dateOnly ? { timeZone: 'UTC' } : {}) });
+}
+
+// Turns a terminal tool call into the structured, not-yet-applied action the
+// frontend shows for confirmation. Read-only itself (candidate lookups,
+// booking name lookups for a friendly description) — never writes.
+async function buildPendingAction(accountId, name, input) {
+  if (name === 'propose_create_reminder') {
+    return {
+      type: 'create_reminder',
+      description: `Create a reminder: "${input.note}" on ${fmtDate(input.remindAt)}`,
+      fields: { note: input.note, remindAt: input.remindAt, relatedType: input.relatedType || null, relatedId: input.relatedId || null, relatedName: input.relatedName || null },
+    };
+  }
+  if (name === 'propose_add_client') {
+    const candidates = await findClientCandidates(accountId, input);
+    return {
+      type: 'add_client',
+      description: `Add a new client: ${input.firstName} ${input.lastName} (${input.email})`,
+      fields: { firstName: input.firstName, lastName: input.lastName, email: input.email, phone: input.phone || null },
+      candidates,
+    };
+  }
+  if (name === 'propose_create_booking') {
+    const client = await prisma.client.findFirst({ where: { id: input.clientId, accountId }, select: { firstName: true, lastName: true } });
+    return {
+      type: 'create_booking',
+      description: `Create a new booking: ${input.eventName}${client ? ` for ${client.firstName} ${client.lastName}` : ''}${input.eventDate ? ` on ${fmtDate(input.eventDate)}` : ''}`,
+      fields: { eventName: input.eventName, clientId: input.clientId, eventDate: input.eventDate || null, eventType: input.eventType || null, notes: input.notes || null },
+    };
+  }
+  if (name === 'propose_update_booking') {
+    const booking = await prisma.booking.findFirst({ where: { id: input.bookingId, accountId }, select: { eventName: true } });
+    const changeSummary = Object.entries(input.fields || {}).map(([k, v]) => `${k}: ${k.toLowerCase().includes('date') ? fmtDate(v) : v}`).join(', ');
+    return {
+      type: 'update_booking',
+      description: `Update ${booking?.eventName || 'this booking'} — ${changeSummary}`,
+      fields: { bookingId: input.bookingId, fields: input.fields || {} },
+    };
+  }
+  return null;
+}
+
+// Today's date is computed fresh per call, not baked into the constant —
+// otherwise "next Monday"/"in two weeks" would resolve against whatever
+// day the process happened to start on.
+function systemPrompt() {
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  return `You are the GigWorks Assistant, helping an event/gig business owner manage their bookings. Today is ${today} — use this to resolve relative dates like "next Monday" or "in two weeks" yourself rather than asking the user to do the math. Answer using only the tools provided — never guess at schedule, proposal, invoice, or client data. Keep answers short and concrete (dates, names, amounts), not generic advice. If a tool returns nothing relevant, say so plainly rather than speculating. You can propose creating/updating records, but you can never apply those changes yourself — the user always confirms in the UI first. Only propose one action at a time, as the last thing you do in a turn.`;
+}
 
 export async function answerAssistantQuestion(accountId, question, history = []) {
   const anthropic = getAnthropicClient();
@@ -164,15 +350,28 @@ export async function answerAssistantQuestion(accountId, question, history = [])
     const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 1024,
-      system: SYSTEM_PROMPT,
-      ...(useTools ? { tools: TOOLS } : {}),
+      system: systemPrompt(),
+      ...(useTools ? { tools: ALL_TOOLS } : {}),
       messages,
     });
 
     const toolUses = response.content.filter((b) => b.type === 'tool_use');
+    const text = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
+
     if (toolUses.length === 0 || !useTools) {
-      const text = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
-      return text || "I wasn't able to find an answer for that.";
+      return { answer: text || "I wasn't able to find an answer for that.", pendingAction: null, link: null };
+    }
+
+    const terminalUse = toolUses.find((b) => TERMINAL_TOOLS.has(b.name));
+    if (terminalUse) {
+      if (terminalUse.name === 'navigate_to') {
+        return {
+          answer: text || `Here's the link:`,
+          pendingAction: null,
+          link: { recordType: terminalUse.input.recordType, recordId: terminalUse.input.recordId, label: terminalUse.input.label },
+        };
+      }
+      return { answer: text || null, pendingAction: await buildPendingAction(accountId, terminalUse.name, terminalUse.input), link: null };
     }
 
     messages.push({ role: 'assistant', content: response.content });
@@ -184,7 +383,96 @@ export async function answerAssistantQuestion(accountId, question, history = [])
     messages.push({ role: 'user', content: toolResults });
   }
 
-  return "I wasn't able to find an answer for that.";
+  return { answer: "I wasn't able to find an answer for that.", pendingAction: null, link: null };
+}
+
+// ---- Confirmed write actions (only ever called after explicit user
+// confirmation, from POST /assistant/confirm-action — never from the tool
+// loop above) ----
+
+export async function createReminderAction(accountId, userId, fields) {
+  const { note, remindAt, relatedType, relatedId, relatedName } = fields || {};
+  if (!note?.trim()) throw new Error('note is required.');
+  if (!remindAt || Number.isNaN(new Date(remindAt).getTime())) throw new Error('remindAt is required.');
+  return prisma.reminder.create({
+    data: {
+      accountId,
+      createdByUserId: userId,
+      note: note.trim(),
+      remindAt: new Date(remindAt),
+      relatedType: relatedType || null,
+      relatedId: relatedId || null,
+      relatedName: relatedName || null,
+    },
+  });
+}
+
+export async function addClientAction(accountId, fields) {
+  const { firstName, lastName, phone, useExistingClientId } = fields || {};
+  if (useExistingClientId) {
+    const existing = await prisma.client.findFirst({ where: { id: useExistingClientId, accountId } });
+    if (!existing) throw new Error('Selected client not found.');
+    return existing;
+  }
+  const normalizedEmail = normalizeValidEmail(fields?.email);
+  if (!firstName?.trim() || !lastName?.trim() || !normalizedEmail) throw new Error('First name, last name, and a valid email address are required.');
+  const emailNormalized = normalizedEmail.toLowerCase();
+  const phoneNormalized = String(phone || '').replace(/\D/g, '') || null;
+  const nameNormalized = `${firstName.trim()} ${lastName.trim()}`.trim().toLowerCase();
+  return createWithPreservedId(prisma.client, {
+    id: randomUUID(),
+    accountId,
+    firstName: firstName.trim(),
+    lastName: lastName.trim(),
+    email: normalizedEmail,
+    phone: phone?.trim() || null,
+    emailNormalized,
+    phoneNormalized,
+    nameNormalized,
+  }, accountId);
+}
+
+export async function createBookingAction(accountId, fields) {
+  const { eventName, clientId, eventDate, eventType, notes } = fields || {};
+  if (!eventName?.trim()) throw new Error('eventName is required.');
+  if (!clientId) throw new Error('clientId is required.');
+  const client = await prisma.client.findFirst({ where: { id: clientId, accountId } });
+  if (!client) throw new Error('Client not found.');
+  return createWithPreservedId(prisma.booking, {
+    id: randomUUID(),
+    accountId,
+    eventName: eventName.trim(),
+    clientId,
+    eventDate: eventDate || null,
+    eventType: eventType || null,
+    notes: notes || null,
+    venue: {},
+    schedule: [],
+    activityLog: [{ id: randomUUID(), date: new Date().toISOString(), text: 'Created via GigWorks Assistant' }],
+    history: [],
+  }, accountId);
+}
+
+export async function updateBookingAction(accountId, fields) {
+  const { bookingId, fields: patch } = fields || {};
+  const existing = await prisma.booking.findFirst({ where: { id: bookingId, accountId } });
+  if (!existing) throw new Error('Booking not found.');
+
+  // Re-enforced here, not just in the tool schema — a hand-crafted confirm
+  // request can't smuggle in a field the assistant was never allowed to see.
+  const data = {};
+  const changeParts = [];
+  for (const key of Object.keys(BOOKING_UPDATE_FIELDS)) {
+    if (patch?.[key] === undefined) continue;
+    data[key] = patch[key];
+    changeParts.push(`${key} → ${patch[key]}`);
+  }
+  if (Object.keys(data).length === 0) throw new Error('No valid fields to update.');
+
+  const activityEntry = { id: randomUUID(), date: new Date().toISOString(), text: `Updated via GigWorks Assistant: ${changeParts.join(', ')}` };
+  data.activityLog = [activityEntry, ...(Array.isArray(existing.activityLog) ? existing.activityLog : [])];
+
+  return prisma.booking.update({ where: { id: existing.id }, data });
 }
 
 // ---- Structured proposal drafting (single forced tool-call) ----

@@ -3,7 +3,14 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createRateLimiter } from '../lib/rateLimiter.js';
-import { answerAssistantQuestion, draftProposalFromInquiry } from '../lib/gigworksAssistant.js';
+import {
+  answerAssistantQuestion,
+  draftProposalFromInquiry,
+  createReminderAction,
+  addClientAction,
+  createBookingAction,
+  updateBookingAction,
+} from '../lib/gigworksAssistant.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -31,11 +38,37 @@ router.post('/ask', assistantLimiter, asyncHandler(async (req, res) => {
   const { question, history } = req.body || {};
   if (!question?.trim()) return res.status(400).json({ error: 'A question is required.' });
   try {
-    const answer = await answerAssistantQuestion(req.membership.accountId, question.trim(), Array.isArray(history) ? history : []);
-    res.json({ answer });
+    const result = await answerAssistantQuestion(req.membership.accountId, question.trim(), Array.isArray(history) ? history : []);
+    res.json(result);
   } catch (err) {
     console.error('GigWorks Assistant /ask failed:', err);
     res.status(502).json({ error: err.message || 'The assistant is unavailable right now.' });
+  }
+}));
+
+// Every action type re-checks permissions from scratch here — never trusts
+// that a client-echoed pendingAction payload is safe just because it
+// originated from a prior /ask response.
+const ACTION_HANDLERS = {
+  create_reminder: { handler: (req, fields) => createReminderAction(req.membership.accountId, req.session.userId, fields) },
+  add_client: { handler: (req, fields) => addClientAction(req.membership.accountId, fields), requirePermission: 'manageClients' },
+  create_booking: { handler: (req, fields) => createBookingAction(req.membership.accountId, fields), requirePermission: 'manageBookings' },
+  update_booking: { handler: (req, fields) => updateBookingAction(req.membership.accountId, fields), requirePermission: 'manageBookings' },
+};
+
+router.post('/confirm-action', assistantLimiter, asyncHandler(async (req, res) => {
+  const { type, fields } = req.body || {};
+  const action = ACTION_HANDLERS[type];
+  if (!action) return res.status(400).json({ error: 'Unknown action type.' });
+  if (action.requirePermission && !effectivePermissions(req.membership)[action.requirePermission]) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
+  try {
+    const result = await action.handler(req, fields);
+    res.status(201).json({ type, result });
+  } catch (err) {
+    console.error(`GigWorks Assistant /confirm-action (${type}) failed:`, err);
+    res.status(400).json({ error: err.message || 'Failed to complete that action.' });
   }
 }));
 
