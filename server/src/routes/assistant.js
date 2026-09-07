@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
@@ -48,16 +49,18 @@ router.post('/ask', assistantLimiter, asyncHandler(async (req, res) => {
 
 // Every action type re-checks permissions from scratch here — never trusts
 // that a client-echoed pendingAction payload is safe just because it
-// originated from a prior /ask response.
+// originated from a prior /ask response. `targetType` matches
+// Reminder.relatedType's vocabulary — used to build a "View" link the same
+// way relatedRecordPath already does for reminders.
 const ACTION_HANDLERS = {
-  create_reminder: { handler: (req, fields) => createReminderAction(req.membership.accountId, req.session.userId, fields) },
-  add_client: { handler: (req, fields) => addClientAction(req.membership.accountId, fields), requirePermission: 'manageClients' },
-  create_booking: { handler: (req, fields) => createBookingAction(req.membership.accountId, fields), requirePermission: 'manageBookings' },
-  update_booking: { handler: (req, fields) => updateBookingAction(req.membership.accountId, fields), requirePermission: 'manageBookings' },
+  create_reminder: { handler: (req, fields) => createReminderAction(req.membership.accountId, req.session.userId, fields), targetType: null },
+  add_client: { handler: (req, fields) => addClientAction(req.membership.accountId, fields), requirePermission: 'manageClients', targetType: 'client' },
+  create_booking: { handler: (req, fields) => createBookingAction(req.membership.accountId, fields), requirePermission: 'manageBookings', targetType: 'booking' },
+  update_booking: { handler: (req, fields) => updateBookingAction(req.membership.accountId, fields), requirePermission: 'manageBookings', targetType: 'booking' },
 };
 
 router.post('/confirm-action', assistantLimiter, asyncHandler(async (req, res) => {
-  const { type, fields } = req.body || {};
+  const { type, fields, description } = req.body || {};
   const action = ACTION_HANDLERS[type];
   if (!action) return res.status(400).json({ error: 'Unknown action type.' });
   if (action.requirePermission && !effectivePermissions(req.membership)[action.requirePermission]) {
@@ -65,11 +68,32 @@ router.post('/confirm-action', assistantLimiter, asyncHandler(async (req, res) =
   }
   try {
     const result = await action.handler(req, fields);
+    // Best-effort — logging the action for the Activity view should never
+    // block or fail the write itself, which has already succeeded by now.
+    prisma.assistantAction.create({
+      data: {
+        accountId: req.membership.accountId,
+        userId: req.session.userId,
+        type,
+        description: description || type,
+        targetType: action.targetType,
+        targetId: action.targetType ? result?.id || null : null,
+      },
+    }).catch((err) => console.error('Failed to log assistant action:', err));
     res.status(201).json({ type, result });
   } catch (err) {
     console.error(`GigWorks Assistant /confirm-action (${type}) failed:`, err);
     res.status(400).json({ error: err.message || 'Failed to complete that action.' });
   }
+}));
+
+router.get('/activity', asyncHandler(async (req, res) => {
+  const actions = await prisma.assistantAction.findMany({
+    where: { accountId: req.membership.accountId },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+  });
+  res.json({ actions });
 }));
 
 router.post('/draft-proposal', assistantLimiter, asyncHandler(async (req, res) => {

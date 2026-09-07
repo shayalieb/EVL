@@ -16,12 +16,23 @@ export async function askAssistant(question, history = []) {
 // `type` matches a pendingAction's `type`; `fields` should be exactly (or a
 // user-edited version of) that pendingAction's `fields` — the server
 // re-validates and re-checks permissions regardless of what's sent.
-export async function confirmAssistantAction(type, fields) {
+// `description` is passed through purely for the Activity log display (see
+// listAssistantActivity below) — cosmetic only, every actual field is
+// re-validated server-side regardless of what description accompanies it.
+export async function confirmAssistantAction(type, fields, description) {
   const data = await apiFetch('/assistant/confirm-action', {
     method: 'POST',
-    body: JSON.stringify({ type, fields }),
+    body: JSON.stringify({ type, fields, description }),
   });
   return data.result;
+}
+
+// The audit trail of confirmed writes the assistant has made for this
+// account — not a conversation transcript, just what actually changed,
+// most recent first.
+export async function listAssistantActivity() {
+  const data = await apiFetch('/assistant/activity');
+  return data.actions;
 }
 
 // Returns { title, hours, offerings, lineItems, summary } — offerings are
