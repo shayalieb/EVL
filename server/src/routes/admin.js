@@ -15,7 +15,7 @@ import { DEFAULT_WEBSITE_CONFIG, getWebsiteAdminConfig, normalizeWebsiteConfig }
 import { getStripeClient } from '../lib/stripe.js';
 import { priceIdFor } from '../lib/plans.js';
 import { resolveLinkExpiration } from '../lib/linkExpiration.js';
-import { quickBooksPilotHealth, QUICKBOOKS_PILOT_TEST_STEPS, updateQuickBooksPilotTestResults } from '../lib/quickBooksPilot.js';
+import { quickBooksPilotGraduationReadiness, quickBooksPilotHealth, QUICKBOOKS_PILOT_TEST_STEPS, updateQuickBooksPilotTestResults } from '../lib/quickBooksPilot.js';
 
 const router = Router();
 const REVIEW_LINK_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -175,6 +175,8 @@ router.get('/accounts/:id/profile', asyncHandler(async (req, res) => {
   if (account.disabledAt && !recordedTypes.has('account_disabled')) baseline.push({ id: `disabled-${account.id}`, type: 'account_disabled', summary: 'Account disabled', metadata: { reason: account.disabledReason }, createdAt: account.disabledAt, actor: account.disabledBy ? { firstName: account.disabledBy.firstName, lastName: account.disabledBy.lastName } : null });
   const activities = [...account.activities.map((activity) => ({ id: activity.id, type: activity.type, summary: activity.summary, metadata: activity.metadata, createdAt: activity.createdAt, actor: activityActor(activity) })), ...baseline].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const businessInfo = account.accountData?.data?.businessInfo || {};
+  const quickBooksIssueCount = quickBooksIssueCounts.reduce((total, row) => total + row._count._all, 0);
+  const quickBooksGraduation = quickBooksPilotGraduationReadiness({ pilot: account.quickBooksPilot, hasPassedTest: account.quickBooksPilot?.testRuns.some((run) => run.status === 'passed'), issueCount: quickBooksIssueCount });
   res.json({
     profile: {
       id: account.id, createdAt: account.createdAt, approvedAt: account.approvedAt, disabledAt: account.disabledAt, disabledReason: account.disabledReason,
@@ -201,11 +203,11 @@ router.get('/accounts/:id/profile', asyncHandler(async (req, res) => {
       } : { status: 'not_started' },
       quickBooks: {
         accessEnabled: account.quickBooksAccessEnabled, accessEnabledAt: account.quickBooksAccessEnabledAt, connected: account.quickBooksConnection?.status === 'active', connectionStatus: account.quickBooksConnection?.status || null, companyName: account.quickBooksConnection?.companyName || null, lastHealthCheckAt: account.quickBooksConnection?.lastHealthCheckAt || null, lastSuccessfulSyncAt: account.quickBooksConnection?.lastSuccessfulSyncAt || null, lastReconciliationStatus: account.quickBooksConnection?.lastReconciliationStatus || null, lastError: account.quickBooksConnection?.lastError || null,
-        issueCount: quickBooksIssueCounts.reduce((total, row) => total + row._count._all, 0),
+        issueCount: quickBooksIssueCount,
         issueCounts: Object.fromEntries(quickBooksIssueCounts.map((row) => [row.status, row._count._all])),
         recentIssues: quickBooksRecentIssues,
-        health: quickBooksPilotHealth({ accessEnabled: account.quickBooksAccessEnabled, connectionStatus: account.quickBooksConnection?.status, issueCount: quickBooksIssueCounts.reduce((total, row) => total + row._count._all, 0), lastSuccessfulSyncAt: account.quickBooksConnection?.lastSuccessfulSyncAt }),
-        pilot: account.quickBooksPilot ? { status: account.quickBooksPilot.status, supportStatus: account.quickBooksPilot.supportStatus, owner: account.quickBooksPilot.owner ? { id: account.quickBooksPilot.owner.id, firstName: account.quickBooksPilot.owner.firstName, lastName: account.quickBooksPilot.owner.lastName } : null, reviewedAt: account.quickBooksPilot.reviewedAt, approvedAt: account.quickBooksPilot.approvedAt, nextFollowUpAt: account.quickBooksPilot.nextFollowUpAt, feedback: account.quickBooksPilot.feedback || '', testRuns: account.quickBooksPilot.testRuns.map((run) => ({ id: run.id, status: run.status, results: run.results, startedAt: run.startedAt, completedAt: run.completedAt, testedBy: run.testedBy ? { firstName: run.testedBy.firstName, lastName: run.testedBy.lastName } : null })) } : { status: 'onboarding', supportStatus: 'open', owner: null, reviewedAt: null, approvedAt: null, nextFollowUpAt: null, feedback: '', testRuns: [] },
+        health: quickBooksPilotHealth({ accessEnabled: account.quickBooksAccessEnabled, connectionStatus: account.quickBooksConnection?.status, issueCount: quickBooksIssueCount, lastSuccessfulSyncAt: account.quickBooksConnection?.lastSuccessfulSyncAt }),
+        pilot: account.quickBooksPilot ? { status: account.quickBooksPilot.status, supportStatus: account.quickBooksPilot.supportStatus, owner: account.quickBooksPilot.owner ? { id: account.quickBooksPilot.owner.id, firstName: account.quickBooksPilot.owner.firstName, lastName: account.quickBooksPilot.owner.lastName } : null, reviewedAt: account.quickBooksPilot.reviewedAt, approvedAt: account.quickBooksPilot.approvedAt, onboardingCompletedAt: account.quickBooksPilot.onboardingCompletedAt, documentationSharedAt: account.quickBooksPilot.documentationSharedAt, firstCycleCompletedAt: account.quickBooksPilot.firstCycleCompletedAt, secondCycleCompletedAt: account.quickBooksPilot.secondCycleCompletedAt, nextFollowUpAt: account.quickBooksPilot.nextFollowUpAt, feedback: account.quickBooksPilot.feedback || '', graduation: quickBooksGraduation, testRuns: account.quickBooksPilot.testRuns.map((run) => ({ id: run.id, status: run.status, results: run.results, startedAt: run.startedAt, completedAt: run.completedAt, testedBy: run.testedBy ? { firstName: run.testedBy.firstName, lastName: run.testedBy.lastName } : null })) } : { status: 'onboarding', supportStatus: 'open', owner: null, reviewedAt: null, approvedAt: null, onboardingCompletedAt: null, documentationSharedAt: null, firstCycleCompletedAt: null, secondCycleCompletedAt: null, nextFollowUpAt: null, feedback: '', graduation: quickBooksGraduation, testRuns: [] },
       },
     },
   });
@@ -234,15 +236,22 @@ router.patch('/accounts/:id/quickbooks-pilot', requireAdminPermission('manageAcc
   const feedback = String(req.body?.feedback || '').trim().slice(0, 10000) || null;
   const nextFollowUpAt = req.body?.nextFollowUpAt ? new Date(req.body.nextFollowUpAt) : null;
   if (nextFollowUpAt && Number.isNaN(nextFollowUpAt.getTime())) return res.status(400).json({ error: 'Choose a valid follow-up date.' });
-  const existing = await prisma.quickBooksPilot.findUnique({ where: { accountId: req.params.id } });
+  const [existing, issueCount] = await Promise.all([
+    prisma.quickBooksPilot.findUnique({ where: { accountId: req.params.id }, include: { testRuns: { where: { status: 'passed' }, select: { id: true }, take: 1 } } }),
+    prisma.quickBooksEntityLink.count({ where: { accountId: req.params.id, status: { in: ['failed', 'needs_review'] } } }),
+  ]);
   const now = new Date();
-  const data = { status, supportStatus, feedback, nextFollowUpAt, ownerUserId: req.body?.assignedToMe === true ? req.user.id : req.body?.assignedToMe === false ? null : existing?.ownerUserId || null, reviewedAt: req.body?.reviewed === true ? existing?.reviewedAt || now : req.body?.reviewed === false ? null : existing?.reviewedAt || null, approvedAt: req.body?.approved === true ? existing?.approvedAt || now : req.body?.approved === false ? null : existing?.approvedAt || null };
+  const milestone = (input, previous) => input === true ? previous || now : input === false ? null : previous || null;
+  const data = { status, supportStatus, feedback, nextFollowUpAt, ownerUserId: req.body?.assignedToMe === true ? req.user.id : req.body?.assignedToMe === false ? null : existing?.ownerUserId || null, reviewedAt: milestone(req.body?.reviewed, existing?.reviewedAt), onboardingCompletedAt: milestone(req.body?.onboardingCompleted, existing?.onboardingCompletedAt), documentationSharedAt: milestone(req.body?.documentationShared, existing?.documentationSharedAt), firstCycleCompletedAt: milestone(req.body?.firstCycleCompleted, existing?.firstCycleCompletedAt), secondCycleCompletedAt: milestone(req.body?.secondCycleCompleted, existing?.secondCycleCompletedAt) };
+  const graduation = quickBooksPilotGraduationReadiness({ pilot: data, hasPassedTest: !!existing?.testRuns?.length, issueCount });
+  if ((req.body?.approved === true || status === 'graduated') && !graduation.ready) return res.status(409).json({ error: 'Complete every graduation requirement before approving this pilot.', graduation });
+  data.approvedAt = req.body?.approved === true ? existing?.approvedAt || now : req.body?.approved === false ? null : existing?.approvedAt || null;
   const pilot = await prisma.$transaction(async (tx) => {
     const updated = await tx.quickBooksPilot.upsert({ where: { accountId: req.params.id }, update: data, create: { accountId: req.params.id, ...data }, include: { owner: true } });
     await tx.accountActivity.create({ data: { accountId: req.params.id, actorUserId: req.user.id, type: 'quickbooks_pilot_updated', summary: `QuickBooks pilot updated: ${status}`, metadata: { status, supportStatus, reviewed: !!updated.reviewedAt, approved: !!updated.approvedAt, assigned: !!updated.ownerUserId } } });
     return updated;
   });
-  res.json({ pilot: { status: pilot.status, supportStatus: pilot.supportStatus, owner: pilot.owner ? { id: pilot.owner.id, firstName: pilot.owner.firstName, lastName: pilot.owner.lastName } : null, reviewedAt: pilot.reviewedAt, approvedAt: pilot.approvedAt, nextFollowUpAt: pilot.nextFollowUpAt, feedback: pilot.feedback || '' } });
+  res.json({ pilot: { status: pilot.status, supportStatus: pilot.supportStatus, owner: pilot.owner ? { id: pilot.owner.id, firstName: pilot.owner.firstName, lastName: pilot.owner.lastName } : null, reviewedAt: pilot.reviewedAt, approvedAt: pilot.approvedAt, onboardingCompletedAt: pilot.onboardingCompletedAt, documentationSharedAt: pilot.documentationSharedAt, firstCycleCompletedAt: pilot.firstCycleCompletedAt, secondCycleCompletedAt: pilot.secondCycleCompletedAt, nextFollowUpAt: pilot.nextFollowUpAt, feedback: pilot.feedback || '', graduation } });
 }));
 
 router.post('/accounts/:id/quickbooks-pilot-tests', requireAdminPermission('manageAccountStatus'), asyncHandler(async (req, res) => {

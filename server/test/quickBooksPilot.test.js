@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { quickBooksPilotHealth, updateQuickBooksPilotTestResults } from '../src/lib/quickBooksPilot.js';
+import { quickBooksPilotGraduationReadiness, quickBooksPilotHealth, updateQuickBooksPilotTestResults } from '../src/lib/quickBooksPilot.js';
 
 test('pilot health distinguishes rollout and connection states', () => {
   assert.equal(quickBooksPilotHealth({ accessEnabled: false }), 'not_enabled');
@@ -25,6 +25,13 @@ test('pilot test runs fail safely when any completed step failed', () => {
   }
   assert.equal(update.complete, true);
   assert.equal(update.status, 'failed');
+});
+
+test('pilot graduation requires onboarding, documentation, a passed test, two cycles, and no issues', () => {
+  const completePilot = { onboardingCompletedAt: new Date(), documentationSharedAt: new Date(), firstCycleCompletedAt: new Date(), secondCycleCompletedAt: new Date() };
+  assert.equal(quickBooksPilotGraduationReadiness({ pilot: completePilot, hasPassedTest: true, issueCount: 0 }).ready, true);
+  assert.equal(quickBooksPilotGraduationReadiness({ pilot: completePilot, hasPassedTest: true, issueCount: 1 }).ready, false);
+  assert.equal(quickBooksPilotGraduationReadiness({ pilot: { ...completePilot, secondCycleCompletedAt: null }, hasPassedTest: true }).ready, false);
 });
 
 test('pilot health raises unresolved sync issues above successful history', () => {

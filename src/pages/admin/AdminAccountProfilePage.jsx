@@ -104,12 +104,16 @@ export default function AdminAccountProfilePage() {
 function AdminQuickBooksPilotPanel({ quickBooks, onSave }) {
   const { accountId } = useParams();
   const pilot = quickBooks?.pilot || {};
-  const [form, setForm] = useState({ status: pilot.status || 'onboarding', supportStatus: pilot.supportStatus || 'open', feedback: pilot.feedback || '', nextFollowUpAt: pilot.nextFollowUpAt ? new Date(pilot.nextFollowUpAt).toISOString().slice(0, 16) : '', assignedToMe: undefined, reviewed: !!pilot.reviewedAt, approved: !!pilot.approvedAt });
+  const [form, setForm] = useState({ status: pilot.status || 'onboarding', supportStatus: pilot.supportStatus || 'open', feedback: pilot.feedback || '', nextFollowUpAt: pilot.nextFollowUpAt ? new Date(pilot.nextFollowUpAt).toISOString().slice(0, 16) : '', assignedToMe: undefined, reviewed: !!pilot.reviewedAt, approved: !!pilot.approvedAt, onboardingCompleted: !!pilot.onboardingCompletedAt, documentationShared: !!pilot.documentationSharedAt, firstCycleCompleted: !!pilot.firstCycleCompletedAt, secondCycleCompleted: !!pilot.secondCycleCompletedAt });
   const [savingPilot, setSavingPilot] = useState(false);
   const milestones = [
     ['Pilot access enabled', !!quickBooks?.accessEnabled, quickBooks?.accessEnabledAt],
     ['QuickBooks connected', !!quickBooks?.connected, quickBooks?.lastHealthCheckAt],
     ['First successful sync', !!quickBooks?.lastSuccessfulSyncAt, quickBooks?.lastSuccessfulSyncAt],
+    [<label key="onboarding" className="flex items-center gap-2"><input type="checkbox" checked={form.onboardingCompleted} onChange={(event) => setForm((current) => ({ ...current, onboardingCompleted: event.target.checked }))} />Customer onboarding completed</label>, !!pilot.onboardingCompletedAt, pilot.onboardingCompletedAt],
+    [<label key="documentation" className="flex items-center gap-2"><input type="checkbox" checked={form.documentationShared} onChange={(event) => setForm((current) => ({ ...current, documentationShared: event.target.checked }))} />Support guide shared</label>, !!pilot.documentationSharedAt, pilot.documentationSharedAt],
+    [<label key="cycle-one" className="flex items-center gap-2"><input type="checkbox" checked={form.firstCycleCompleted} onChange={(event) => setForm((current) => ({ ...current, firstCycleCompleted: event.target.checked }))} />First accounting cycle monitored</label>, !!pilot.firstCycleCompletedAt, pilot.firstCycleCompletedAt],
+    [<label key="cycle-two" className="flex items-center gap-2"><input type="checkbox" checked={form.secondCycleCompleted} onChange={(event) => setForm((current) => ({ ...current, secondCycleCompleted: event.target.checked }))} />Second accounting cycle monitored</label>, !!pilot.secondCycleCompletedAt, pilot.secondCycleCompletedAt],
     ['Pilot reviewed', !!pilot.reviewedAt, pilot.reviewedAt],
     ['Approved to graduate', !!pilot.approvedAt, pilot.approvedAt],
   ];

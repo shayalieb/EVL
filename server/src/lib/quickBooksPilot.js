@@ -17,3 +17,15 @@ export function updateQuickBooksPilotTestResults(existing, step, result, evidenc
   const complete = values.every((value) => value !== 'pending');
   return { results, status: complete ? (values.includes('failed') ? 'failed' : 'passed') : 'in_progress', complete };
 }
+
+export function quickBooksPilotGraduationReadiness({ pilot, hasPassedTest = false, issueCount = 0 }) {
+  const checks = [
+    { id: 'onboarding', label: 'Customer onboarding completed', complete: !!pilot?.onboardingCompletedAt },
+    { id: 'documentation', label: 'Support guide shared', complete: !!pilot?.documentationSharedAt },
+    { id: 'test', label: 'Controlled pilot test passed', complete: hasPassedTest },
+    { id: 'cycle-one', label: 'First accounting cycle monitored', complete: !!pilot?.firstCycleCompletedAt },
+    { id: 'cycle-two', label: 'Second accounting cycle monitored', complete: !!pilot?.secondCycleCompletedAt },
+    { id: 'issues', label: 'No unresolved sync issues', complete: issueCount === 0 },
+  ];
+  return { ready: checks.every((check) => check.complete), completed: checks.filter((check) => check.complete).length, total: checks.length, checks };
+}

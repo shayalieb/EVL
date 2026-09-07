@@ -179,6 +179,10 @@ model QuickBooksPilot {
   owner          User?    @relation("QuickBooksPilotOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   reviewedAt     DateTime?
   approvedAt     DateTime?
+  onboardingCompletedAt DateTime?
+  documentationSharedAt DateTime?
+  firstCycleCompletedAt  DateTime?
+  secondCycleCompletedAt DateTime?
   nextFollowUpAt DateTime?
   feedback       String?  @db.Text
   testRuns       QuickBooksPilotTestRun[]
