@@ -15,7 +15,7 @@ import { DEFAULT_WEBSITE_CONFIG, getWebsiteAdminConfig, normalizeWebsiteConfig }
 import { getStripeClient } from '../lib/stripe.js';
 import { priceIdFor } from '../lib/plans.js';
 import { resolveLinkExpiration } from '../lib/linkExpiration.js';
-import { quickBooksPilotHealth } from '../lib/quickBooksPilot.js';
+import { quickBooksPilotHealth, QUICKBOOKS_PILOT_TEST_STEPS, updateQuickBooksPilotTestResults } from '../lib/quickBooksPilot.js';
 
 const router = Router();
 const REVIEW_LINK_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -158,7 +158,7 @@ router.get('/accounts/:id/profile', asyncHandler(async (req, res) => {
     prisma.account.findUnique({
       where: { id: req.params.id },
       include: {
-        memberships: { include: { user: true }, orderBy: { createdAt: 'asc' } }, disabledBy: true, approvedBy: true, accountData: true, messagingProfile: true, quickBooksConnection: true, quickBooksPilot: { include: { owner: true } },
+        memberships: { include: { user: true }, orderBy: { createdAt: 'asc' } }, disabledBy: true, approvedBy: true, accountData: true, messagingProfile: true, quickBooksConnection: true, quickBooksPilot: { include: { owner: true, testRuns: { include: { testedBy: true }, orderBy: { startedAt: 'desc' }, take: 10 } } },
         adminNotes: { include: { author: true }, orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }] },
         activities: { include: { actor: true }, orderBy: { createdAt: 'desc' }, take: 250 },
       },
@@ -205,7 +205,7 @@ router.get('/accounts/:id/profile', asyncHandler(async (req, res) => {
         issueCounts: Object.fromEntries(quickBooksIssueCounts.map((row) => [row.status, row._count._all])),
         recentIssues: quickBooksRecentIssues,
         health: quickBooksPilotHealth({ accessEnabled: account.quickBooksAccessEnabled, connectionStatus: account.quickBooksConnection?.status, issueCount: quickBooksIssueCounts.reduce((total, row) => total + row._count._all, 0), lastSuccessfulSyncAt: account.quickBooksConnection?.lastSuccessfulSyncAt }),
-        pilot: account.quickBooksPilot ? { status: account.quickBooksPilot.status, supportStatus: account.quickBooksPilot.supportStatus, owner: account.quickBooksPilot.owner ? { id: account.quickBooksPilot.owner.id, firstName: account.quickBooksPilot.owner.firstName, lastName: account.quickBooksPilot.owner.lastName } : null, reviewedAt: account.quickBooksPilot.reviewedAt, approvedAt: account.quickBooksPilot.approvedAt, nextFollowUpAt: account.quickBooksPilot.nextFollowUpAt, feedback: account.quickBooksPilot.feedback || '' } : { status: 'onboarding', supportStatus: 'open', owner: null, reviewedAt: null, approvedAt: null, nextFollowUpAt: null, feedback: '' },
+        pilot: account.quickBooksPilot ? { status: account.quickBooksPilot.status, supportStatus: account.quickBooksPilot.supportStatus, owner: account.quickBooksPilot.owner ? { id: account.quickBooksPilot.owner.id, firstName: account.quickBooksPilot.owner.firstName, lastName: account.quickBooksPilot.owner.lastName } : null, reviewedAt: account.quickBooksPilot.reviewedAt, approvedAt: account.quickBooksPilot.approvedAt, nextFollowUpAt: account.quickBooksPilot.nextFollowUpAt, feedback: account.quickBooksPilot.feedback || '', testRuns: account.quickBooksPilot.testRuns.map((run) => ({ id: run.id, status: run.status, results: run.results, startedAt: run.startedAt, completedAt: run.completedAt, testedBy: run.testedBy ? { firstName: run.testedBy.firstName, lastName: run.testedBy.lastName } : null })) } : { status: 'onboarding', supportStatus: 'open', owner: null, reviewedAt: null, approvedAt: null, nextFollowUpAt: null, feedback: '', testRuns: [] },
       },
     },
   });
@@ -243,6 +243,34 @@ router.patch('/accounts/:id/quickbooks-pilot', requireAdminPermission('manageAcc
     return updated;
   });
   res.json({ pilot: { status: pilot.status, supportStatus: pilot.supportStatus, owner: pilot.owner ? { id: pilot.owner.id, firstName: pilot.owner.firstName, lastName: pilot.owner.lastName } : null, reviewedAt: pilot.reviewedAt, approvedAt: pilot.approvedAt, nextFollowUpAt: pilot.nextFollowUpAt, feedback: pilot.feedback || '' } });
+}));
+
+router.post('/accounts/:id/quickbooks-pilot-tests', requireAdminPermission('manageAccountStatus'), asyncHandler(async (req, res) => {
+  const account = await prisma.account.findUnique({ where: { id: req.params.id }, select: { id: true, quickBooksAccessEnabled: true } });
+  if (!account) return res.status(404).json({ error: 'Account not found.' });
+  if (!account.quickBooksAccessEnabled) return res.status(409).json({ error: 'Enable QuickBooks pilot access before starting a test run.' });
+  const run = await prisma.$transaction(async (tx) => {
+    const pilot = await tx.quickBooksPilot.upsert({ where: { accountId: account.id }, update: {}, create: { accountId: account.id, ownerUserId: req.user.id } });
+    const created = await tx.quickBooksPilotTestRun.create({ data: { pilotId: pilot.id, testedById: req.user.id, results: Object.fromEntries(QUICKBOOKS_PILOT_TEST_STEPS.map((step) => [step, { result: 'pending', evidence: '' }])) }, include: { testedBy: true } });
+    await tx.accountActivity.create({ data: { accountId: account.id, actorUserId: req.user.id, type: 'quickbooks_pilot_test_started', summary: 'QuickBooks controlled pilot test started', metadata: { runId: created.id } } });
+    return created;
+  });
+  res.status(201).json({ run: { id: run.id, status: run.status, results: run.results, startedAt: run.startedAt, completedAt: run.completedAt, testedBy: { firstName: run.testedBy.firstName, lastName: run.testedBy.lastName } } });
+}));
+
+router.patch('/accounts/:id/quickbooks-pilot-tests/:runId', requireAdminPermission('manageAccountStatus'), asyncHandler(async (req, res) => {
+  const run = await prisma.quickBooksPilotTestRun.findFirst({ where: { id: req.params.runId, pilot: { accountId: req.params.id } }, include: { testedBy: true } });
+  if (!run) return res.status(404).json({ error: 'Pilot test run not found.' });
+  let update;
+  try { update = updateQuickBooksPilotTestResults(run.results, req.body?.step, req.body?.result, req.body?.evidence); }
+  catch (error) { return res.status(400).json({ error: error.message }); }
+  const completedAt = update.complete ? run.completedAt || new Date() : null;
+  const saved = await prisma.$transaction(async (tx) => {
+    const updated = await tx.quickBooksPilotTestRun.update({ where: { id: run.id }, data: { results: update.results, status: update.status, completedAt }, include: { testedBy: true } });
+    if (update.complete && !run.completedAt) await tx.accountActivity.create({ data: { accountId: req.params.id, actorUserId: req.user.id, type: 'quickbooks_pilot_test_completed', summary: `QuickBooks controlled pilot test ${update.status}`, metadata: { runId: run.id, status: update.status } } });
+    return updated;
+  });
+  res.json({ run: { id: saved.id, status: saved.status, results: saved.results, startedAt: saved.startedAt, completedAt: saved.completedAt, testedBy: saved.testedBy ? { firstName: saved.testedBy.firstName, lastName: saved.testedBy.lastName } : null } });
 }));
 
 // Provisioning remains an operator action for launch: GigWorks handles the

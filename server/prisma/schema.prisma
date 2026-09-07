@@ -38,6 +38,7 @@ model User {
   accountAdminNotes         AccountAdminNote[]
   accountActivities         AccountActivity[]
   ownedQuickBooksPilots     QuickBooksPilot[]         @relation("QuickBooksPilotOwner")
+  quickBooksPilotTestRuns  QuickBooksPilotTestRun[]  @relation("QuickBooksPilotTester")
   financialTransactions     FinancialTransaction[]    @relation("FinancialTransactionCreator")
   savedFinancialReports     SavedFinancialReport[]
   closedFinancialPeriods    FinancialPeriod[]         @relation("FinancialPeriodCloser")
@@ -180,12 +181,29 @@ model QuickBooksPilot {
   approvedAt     DateTime?
   nextFollowUpAt DateTime?
   feedback       String?  @db.Text
+  testRuns       QuickBooksPilotTestRun[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   @@index([status, supportStatus])
   @@index([ownerUserId])
   @@index([nextFollowUpAt])
+}
+
+model QuickBooksPilotTestRun {
+  id           String   @id @default(cuid())
+  pilotId      String
+  pilot        QuickBooksPilot @relation(fields: [pilotId], references: [id], onDelete: Cascade)
+  testedById   String?
+  testedBy     User?    @relation("QuickBooksPilotTester", fields: [testedById], references: [id], onDelete: SetNull)
+  status       String   @default("in_progress") // in_progress | passed | failed
+  results      Json     @default("{}")
+  startedAt    DateTime @default(now())
+  completedAt  DateTime?
+  updatedAt    DateTime @updatedAt
+
+  @@index([pilotId, startedAt])
+  @@index([status, startedAt])
 }
 
 // One QuickBooks Online company connection per GigWorks account. OAuth
