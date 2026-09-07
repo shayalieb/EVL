@@ -3,6 +3,11 @@ import { prisma } from './prisma.js';
 import { getAnthropicClient } from './anthropic.js';
 import { invoiceTotal } from '../routes/invoices.js';
 import { createWithPreservedId } from './idPreservingCreate.js';
+// Pure data, zero imports — reused directly rather than duplicated, so the
+// Assistant's training/getting-started answers never drift from what
+// HelpPage.jsx actually shows (a duplicated copy would silently go stale
+// the next time someone edits an article).
+import { HELP_ARTICLES_FLAT } from '../../../src/lib/helpArticles.js';
 import { normalizeValidEmail } from './emailAddress.js';
 
 // General-reasoning model — unlike emailReplyClassifier.js's bounded 3-way
@@ -19,6 +24,25 @@ function computeOfferingTotal(offering) {
   if (!offering) return 0;
   if (offering.type === 'perUnit') return (Number(offering.unitCount) || 0) * (Number(offering.ratePerUnit) || 0);
   return Number(offering.amount) || 0;
+}
+
+// Turns one help article's block content (see helpArticles.js's own
+// comment for the block shapes) into plain text so the model can quote
+// real steps back to the user instead of guessing at them. Images have no
+// useful text form and are dropped.
+function flattenArticleText(article) {
+  return (article.blocks || [])
+    .map((b) => {
+      if (b.type === 'steps') return (b.items || []).map((item, i) => `${i + 1}. ${item}`).join('\n');
+      if (b.type === 'list') return (b.items || []).map((item) => `- ${item}`).join('\n');
+      if (b.type === 'h') return `### ${b.text}`;
+      if (b.type === 'tip') return `Tip: ${b.text}`;
+      if (b.type === 'note') return `Note: ${b.text}`;
+      if (b.type === 'image') return null;
+      return b.text || null;
+    })
+    .filter(Boolean)
+    .join('\n');
 }
 
 // ---- Read-only tools for the Q&A loop ----
@@ -85,6 +109,15 @@ const TOOLS = [
     description: 'List contractor payment requests awaiting review (submitted, not yet approved/paid/disputed).',
     input_schema: { type: 'object', properties: {} },
   },
+  {
+    name: 'find_help_article',
+    description: "Search the in-app Help Center (training/getting-started articles) for real, accurate answers to 'how do I...' questions — use this instead of guessing at UI steps, then use navigate_to (recordType 'help') to point the user at the article.",
+    input_schema: {
+      type: 'object',
+      properties: { query: { type: 'string', description: "What the user wants help with, e.g. 'connect Stripe' or 'stage plot editor'." } },
+      required: ['query'],
+    },
+  },
 ];
 
 // ---- Terminal tools: navigation and proposed writes ----
@@ -111,13 +144,13 @@ const BOOKING_UPDATE_FIELDS = {
 const WRITE_TOOLS = [
   {
     name: 'navigate_to',
-    description: "Give the user a link to jump straight to a record they asked about. Not a write — nothing changes.",
+    description: "Give the user a link to jump straight to a record, or a Help Center article, they asked about. Not a write — nothing changes. For 'help', recordId must be a real article id from find_help_article's results, not a guess.",
     input_schema: {
       type: 'object',
       properties: {
-        recordType: { type: 'string', enum: ['booking', 'client', 'event', 'contractor'] },
+        recordType: { type: 'string', enum: ['booking', 'client', 'event', 'contractor', 'help'] },
         recordId: { type: 'string' },
-        label: { type: 'string', description: 'Short human-readable name for the link, e.g. "Rivera Wedding Reception".' },
+        label: { type: 'string', description: 'Short human-readable name for the link, e.g. "Rivera Wedding Reception" or the article title.' },
       },
       required: ['recordType', 'recordId', 'label'],
     },
@@ -332,6 +365,28 @@ async function runTool(name, input, accountId) {
     return rows.map((r) => ({ contractor: `${r.contractor.firstName} ${r.contractor.lastName}`.trim(), event: r.event.name, amount: r.amountCents / 100, invoiceNumber: r.invoiceNumber, submittedAt: r.submittedAt }));
   }
 
+  if (name === 'find_help_article') {
+    const q = String(input?.query || '').trim().toLowerCase();
+    if (!q) return [];
+    const words = q.split(/\s+/).filter((w) => w.length > 2);
+    const matches = HELP_ARTICLES_FLAT
+      .map((article) => {
+        const text = [article.title, article.summary, article.categoryTitle, flattenArticleText(article)].join(' ').toLowerCase();
+        const score = words.reduce((sum, w) => sum + (text.includes(w) ? 1 : 0), 0) + (text.includes(q) ? 5 : 0);
+        return { article, score };
+      })
+      .filter((r) => r.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+    return matches.map(({ article }) => ({
+      id: article.id,
+      title: article.title,
+      category: article.categoryTitle,
+      summary: article.summary,
+      content: flattenArticleText(article),
+    }));
+  }
+
   return { error: `Unknown tool: ${name}` };
 }
 
@@ -421,7 +476,7 @@ async function buildPendingAction(accountId, name, input) {
 // day the process happened to start on.
 function systemPrompt() {
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-  return `You are the GigWorks Assistant, helping an event/gig business owner manage their bookings. Today is ${today} — use this to resolve relative dates like "next Monday" or "in two weeks" yourself rather than asking the user to do the math. Answer using only the tools provided — never guess at schedule, proposal, invoice, or client data. Keep answers short and concrete (dates, names, amounts), not generic advice. If a tool returns nothing relevant, say so plainly rather than speculating. You can propose creating/updating records, but you can never apply those changes yourself — the user always confirms in the UI first. Only propose one action at a time, as the last thing you do in a turn.`;
+  return `You are the GigWorks Assistant, helping an event/gig business owner manage their bookings. Today is ${today} — use this to resolve relative dates like "next Monday" or "in two weeks" yourself rather than asking the user to do the math. Answer using only the tools provided — never guess at schedule, proposal, invoice, or client data. Keep answers short and concrete (dates, names, amounts), not generic advice. If a tool returns nothing relevant, say so plainly rather than speculating. You can propose creating/updating records, but you can never apply those changes yourself — the user always confirms in the UI first. Only propose one action at a time, as the last thing you do in a turn. For "how do I..." or training/getting-started questions, call find_help_article first and base your instructions on its actual content — never invent UI steps — then call navigate_to (recordType 'help') with that article's real id so the user can open the full article.`;
 }
 
 export async function answerAssistantQuestion(accountId, question, history = []) {

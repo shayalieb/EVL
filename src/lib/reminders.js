@@ -22,6 +22,11 @@ export function relatedRecordPath(reminder) {
     case 'contractor': return `/contractors?open=${reminder.relatedId}`;
     case 'event': return `/events/${reminder.relatedId}`;
     case 'booking': return `/bookings/${reminder.relatedId}`;
+    // Not an actual reminder-linkable type in practice (reminders point at
+    // business records, not help content) — added here anyway since this
+    // is the app's one shared "type+id → path" resolver, and the GigWorks
+    // Assistant's navigate_to tool reuses it for Help Center links too.
+    case 'help': return `/help?article=${reminder.relatedId}`;
     default: return null;
   }
 }
