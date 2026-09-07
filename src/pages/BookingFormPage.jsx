@@ -47,6 +47,7 @@ import LinkExpirationPicker from '../components/LinkExpirationPicker';
 import { emptyLinkExpiration, serializeLinkExpiration, formatLinkExpiration } from '../lib/linkExpiration';
 import { useAgencyBranding } from '../lib/useAgencyBranding';
 import { mergedProposalLog } from '../lib/proposalLog';
+import { draftProposal } from '../lib/assistant';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -532,6 +533,9 @@ export default function BookingFormPage() {
   const [proposalResponse, setProposalResponse] = useState(null);
   const [proposalHistory, setProposalHistory] = useState([]);
   const [proposalLinkExpiration, setProposalLinkExpiration] = useState(() => emptyLinkExpiration('14_days'));
+  const [assistantDraftOpen, setAssistantDraftOpen] = useState(false);
+  const [assistantInquiryText, setAssistantInquiryText] = useState('');
+  const [draftingProposal, setDraftingProposal] = useState(false);
   const [contractRecipientEmail, setContractRecipientEmail] = useState('');
   const [contractRecipientName, setContractRecipientName] = useState('');
   const [contractHours, setContractHours] = useState('');
@@ -1062,6 +1066,32 @@ export default function BookingFormPage() {
     const proposal = { hours: '', lineItems: [], sections: currentUser.proposalTemplate?.sections || [], offerings: [], sentAt: null, sentTo: null, log: [] };
     update('proposal', proposal);
     if (booking) enqueueBookingUpdate(booking.id, { proposal });
+  }
+
+  // Merges into the existing proposal state rather than replacing it —
+  // appends the assistant's suggested offerings/line items onto whatever's
+  // already there, and only fills hours if it wasn't set yet. The
+  // assistant only ever proposes a draft; nothing here sends anything.
+  async function handleDraftWithAssistant() {
+    const trimmed = assistantInquiryText.trim();
+    if (!trimmed || draftingProposal) return;
+    setDraftingProposal(true);
+    try {
+      const draft = await draftProposal(booking?.id, trimmed);
+      update('proposal', {
+        ...form.proposal,
+        hours: form.proposal.hours || (draft.hours != null ? String(draft.hours) : form.proposal.hours),
+        offerings: [...(form.proposal.offerings || []), ...draft.offerings.map((o) => ({ ...o, id: crypto.randomUUID() }))],
+        lineItems: [...(form.proposal.lineItems || []), ...draft.lineItems.map((li) => ({ id: crypto.randomUUID(), name: li.name, amount: li.amount }))],
+      });
+      setAssistantDraftOpen(false);
+      setAssistantInquiryText('');
+      showToast(draft.summary || 'Draft added to the proposal below.');
+    } catch (err) {
+      showToast(err.message || 'The assistant is unavailable right now.', 'error');
+    } finally {
+      setDraftingProposal(false);
+    }
   }
 
   async function handleDownloadProposal() {
@@ -2284,6 +2314,52 @@ export default function BookingFormPage() {
                     <div className="text-lg font-bold text-slate-800">Event Proposal</div>
                     <div className="text-xs text-slate-400">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
                   </div>
+                </div>
+
+                <div className="mb-6">
+                  {!assistantDraftOpen ? (
+                    <button
+                      type="button"
+                      onClick={() => setAssistantDraftOpen(true)}
+                      data-testid="booking-form-draft-with-assistant-button"
+                      className="px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50"
+                    >
+                      ✨ Draft with Assistant
+                    </button>
+                  ) : (
+                    <div className="rounded-lg border border-indigo-200 bg-indigo-50/50 p-3">
+                      <label className={labelClass}>Paste or describe what the client wants</label>
+                      <textarea
+                        rows={3}
+                        placeholder="e.g. Looking for a 4-piece band for a 4-hour wedding reception in June, need uplighting too."
+                        value={assistantInquiryText}
+                        onChange={(e) => setAssistantInquiryText(e.target.value)}
+                        data-testid="booking-form-assistant-inquiry-textarea"
+                        className={inputClass}
+                      />
+                      <div className="flex gap-2 mt-2">
+                        <button
+                          type="button"
+                          onClick={handleDraftWithAssistant}
+                          disabled={draftingProposal || !assistantInquiryText.trim()}
+                          data-testid="booking-form-assistant-draft-confirm-button"
+                          className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
+                        >
+                          {draftingProposal && <span className="w-3 h-3 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
+                          Draft It
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setAssistantDraftOpen(false); setAssistantInquiryText(''); }}
+                          data-testid="booking-form-assistant-draft-cancel-button"
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-500 hover:bg-slate-100"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      <p className="mt-1.5 text-[11px] text-slate-400">Adds suggested pricing from your catalog below — review before sending, nothing is sent automatically.</p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">

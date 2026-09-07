@@ -9,7 +9,7 @@ let client = null;
 export function getAnthropicClient() {
   if (client) return client;
   if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error('AI reply classification is not configured yet (ANTHROPIC_API_KEY is missing).');
+    throw new Error('AI features are not configured yet (ANTHROPIC_API_KEY is missing).');
   }
   client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   return client;

@@ -3,8 +3,9 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAgencyGroup } from '../context/AgencyGroupContext';
 import Logo from '../components/ui/Logo';
-import { BellIcon } from '../components/ui/icons';
+import { BellIcon, SparkleIcon } from '../components/ui/icons';
 import { fetchReminders, completeReminder, relatedRecordPath } from '../lib/reminders';
+import AssistantModal from '../components/AssistantModal';
 
 const NAV_GROUPS = [
   {
@@ -46,6 +47,7 @@ export default function AppLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [reminders, setReminders] = useState([]);
   const [bellOpen, setBellOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -79,6 +81,7 @@ export default function AppLayout() {
       setMenuOpen(false);
       setBellOpen(false);
       setMobileNavOpen(false);
+      setAssistantOpen(false);
     }
     document.addEventListener('keydown', closeMenus);
     return () => document.removeEventListener('keydown', closeMenus);
@@ -157,6 +160,17 @@ export default function AppLayout() {
         </div>
 
         <div className="flex items-center gap-2">
+        {currentUser?.permissions?.manageBookings && (
+          <button
+            type="button"
+            onClick={() => setAssistantOpen(true)}
+            data-testid="assistant-open-button"
+            className="min-w-11 min-h-11 p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            aria-label="GigWorks Assistant"
+          >
+            <SparkleIcon className="w-5 h-5" />
+          </button>
+        )}
         <div className="relative">
           <button
             type="button"
@@ -342,6 +356,7 @@ export default function AppLayout() {
           <Outlet />
         </main>
       </div>
+      <AssistantModal open={assistantOpen} onClose={() => setAssistantOpen(false)} />
     </div>
   );
 }

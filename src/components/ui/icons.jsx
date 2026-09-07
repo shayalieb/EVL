@@ -24,3 +24,4 @@ export function StarIcon(props) { return <IconWrap {...props}><path d="M12 3.5l2
 export function ShieldIcon(props) { return <IconWrap {...props}><path d="M12 3l7 3v5.5c0 4.6-3 8.4-7 9.5-4-1.1-7-4.9-7-9.5V6Z" /><path d="M9 12l2 2 4-4" /></IconWrap>; }
 export function ChartIcon(props) { return <IconWrap {...props}><path d="M4 20V10M10 20V4M16 20v-7M4 20h16" /></IconWrap>; }
 export function BoltIcon(props) { return <IconWrap {...props}><path d="M13 3 5 13h5l-1 8 8-10h-5l1-8Z" /></IconWrap>; }
+export function SparkleIcon(props) { return <IconWrap {...props}><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" /><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z" /></IconWrap>; }
