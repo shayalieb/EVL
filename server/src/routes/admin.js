@@ -15,6 +15,7 @@ import { DEFAULT_WEBSITE_CONFIG, getWebsiteAdminConfig, normalizeWebsiteConfig }
 import { getStripeClient } from '../lib/stripe.js';
 import { priceIdFor } from '../lib/plans.js';
 import { resolveLinkExpiration } from '../lib/linkExpiration.js';
+import { quickBooksPilotHealth } from '../lib/quickBooksPilot.js';
 
 const router = Router();
 const REVIEW_LINK_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -102,15 +103,22 @@ async function fetchDataSummaries() {
 }
 
 router.get('/accounts', asyncHandler(async (req, res) => {
-  const [accounts, dataSummaries] = await Promise.all([
+  const [accounts, dataSummaries, quickBooksConnections, quickBooksIssueCounts] = await Promise.all([
     prisma.account.findMany({
       include: { memberships: { include: { user: true } }, disabledBy: true, approvedBy: true },
       orderBy: { createdAt: 'desc' },
     }),
     fetchDataSummaries(),
+    prisma.quickBooksConnection.findMany({ select: { accountId: true, status: true, companyName: true, lastSuccessfulSyncAt: true, lastHealthCheckAt: true, lastError: true } }),
+    prisma.quickBooksEntityLink.groupBy({ by: ['accountId'], where: { status: { in: ['failed', 'needs_review'] } }, _count: { _all: true } }),
   ]);
+  const connectionsByAccount = new Map(quickBooksConnections.map((connection) => [connection.accountId, connection]));
+  const issuesByAccount = new Map(quickBooksIssueCounts.map((row) => [row.accountId, row._count._all]));
   res.json({
-    accounts: accounts.map((a) => ({
+    accounts: accounts.map((a) => {
+      const connection = connectionsByAccount.get(a.id);
+      const issueCount = issuesByAccount.get(a.id) || 0;
+      return ({
       id: a.id,
       createdAt: a.createdAt,
       disabledAt: a.disabledAt,
@@ -129,7 +137,15 @@ router.get('/accounts', asyncHandler(async (req, res) => {
       owner: ownerOf(a),
       memberCount: a.memberships.length,
       dataSummary: dataSummaries.get(a.id) || emptyDataSummary,
-    })),
+      quickBooks: {
+        accessEnabled: a.quickBooksAccessEnabled,
+        companyName: connection?.companyName || null,
+        connectionStatus: connection?.status || null,
+        issueCount,
+        lastSuccessfulSyncAt: connection?.lastSuccessfulSyncAt || null,
+        health: quickBooksPilotHealth({ accessEnabled: a.quickBooksAccessEnabled, connectionStatus: connection?.status, issueCount, lastSuccessfulSyncAt: connection?.lastSuccessfulSyncAt }),
+      },
+    }); }),
   });
 }));
 
@@ -138,7 +154,7 @@ function activityActor(activity) {
 }
 
 router.get('/accounts/:id/profile', asyncHandler(async (req, res) => {
-  const [account, dataSummary, supportSummary] = await Promise.all([
+  const [account, dataSummary, supportSummary, quickBooksIssueCounts, quickBooksRecentIssues] = await Promise.all([
     prisma.account.findUnique({
       where: { id: req.params.id },
       include: {
@@ -149,6 +165,8 @@ router.get('/accounts/:id/profile', asyncHandler(async (req, res) => {
     }),
     fetchDataSummaries(),
     prisma.supportThread.groupBy({ by: ['status'], where: { accountId: req.params.id }, _count: { _all: true } }),
+    prisma.quickBooksEntityLink.groupBy({ by: ['status'], where: { accountId: req.params.id, status: { in: ['failed', 'needs_review'] } }, _count: { _all: true } }),
+    prisma.quickBooksEntityLink.findMany({ where: { accountId: req.params.id, status: { in: ['failed', 'needs_review'] } }, select: { id: true, entityType: true, localId: true, displayName: true, status: true, lastError: true, updatedAt: true }, orderBy: { updatedAt: 'desc' }, take: 25 }),
   ]);
   if (!account) return res.status(404).json({ error: 'Account not found.' });
   const recordedTypes = new Set(account.activities.map((activity) => activity.type));
@@ -181,7 +199,13 @@ router.get('/accounts/:id/profile', asyncHandler(async (req, res) => {
         currentPeriodCount: account.messagingProfile.currentPeriodCount,
         internalNote: account.messagingProfile.internalNote,
       } : { status: 'not_started' },
-      quickBooks: { accessEnabled: account.quickBooksAccessEnabled, accessEnabledAt: account.quickBooksAccessEnabledAt, connected: account.quickBooksConnection?.status === 'active', companyName: account.quickBooksConnection?.companyName || null, lastHealthCheckAt: account.quickBooksConnection?.lastHealthCheckAt || null, lastSuccessfulSyncAt: account.quickBooksConnection?.lastSuccessfulSyncAt || null, lastReconciliationStatus: account.quickBooksConnection?.lastReconciliationStatus || null },
+      quickBooks: {
+        accessEnabled: account.quickBooksAccessEnabled, accessEnabledAt: account.quickBooksAccessEnabledAt, connected: account.quickBooksConnection?.status === 'active', connectionStatus: account.quickBooksConnection?.status || null, companyName: account.quickBooksConnection?.companyName || null, lastHealthCheckAt: account.quickBooksConnection?.lastHealthCheckAt || null, lastSuccessfulSyncAt: account.quickBooksConnection?.lastSuccessfulSyncAt || null, lastReconciliationStatus: account.quickBooksConnection?.lastReconciliationStatus || null, lastError: account.quickBooksConnection?.lastError || null,
+        issueCount: quickBooksIssueCounts.reduce((total, row) => total + row._count._all, 0),
+        issueCounts: Object.fromEntries(quickBooksIssueCounts.map((row) => [row.status, row._count._all])),
+        recentIssues: quickBooksRecentIssues,
+        health: quickBooksPilotHealth({ accessEnabled: account.quickBooksAccessEnabled, connectionStatus: account.quickBooksConnection?.status, issueCount: quickBooksIssueCounts.reduce((total, row) => total + row._count._all, 0), lastSuccessfulSyncAt: account.quickBooksConnection?.lastSuccessfulSyncAt }),
+      },
     },
   });
 }));

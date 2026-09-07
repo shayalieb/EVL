@@ -45,6 +45,7 @@ export default function AdminAccountsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [teamSizeFilter, setTeamSizeFilter] = useState('');
+  const [quickBooksFilter, setQuickBooksFilter] = useState('');
 
   function load() {
     apiFetch('/admin/accounts')
@@ -127,12 +128,17 @@ export default function AdminAccountsPage() {
     return 'large';
   }
 
-  const hasFilters = !!(search || statusFilter || teamSizeFilter);
+  const hasFilters = !!(search || statusFilter || teamSizeFilter || quickBooksFilter);
   const filteredAccounts = (accounts || []).filter((a) => {
     if (statusFilter && accountStatus(a) !== statusFilter) return false;
     if (teamSizeFilter && teamSizeBucket(a) !== teamSizeFilter) return false;
+    if (quickBooksFilter === 'pilot' && !a.quickBooks?.accessEnabled) return false;
+    if (quickBooksFilter === 'attention' && !['connection_issue', 'needs_attention'].includes(a.quickBooks?.health)) return false;
+    if (quickBooksFilter === 'healthy' && a.quickBooks?.health !== 'healthy') return false;
     return matchesSearch(search, [a.owner?.firstName, a.owner?.lastName, a.owner?.email]);
   });
+  const quickBooksPilotAccounts = (accounts || []).filter((a) => a.quickBooks?.accessEnabled);
+  const quickBooksAttention = quickBooksPilotAccounts.filter((a) => ['connection_issue', 'needs_attention'].includes(a.quickBooks?.health));
   // Called unconditionally (before the loading/error early returns below) —
   // React Hooks can't be called conditionally.
   const { page, setPage, pageCount, pageItems: pagedAccounts, pageSize, totalItems } = usePagination(filteredAccounts);
@@ -153,6 +159,12 @@ export default function AdminAccountsPage() {
           + New Account
         </button>
       </div>
+
+      <section className="grid gap-3 sm:grid-cols-3" aria-label="QuickBooks pilot status">
+        <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-indigo-600">QuickBooks pilots</p><p className="mt-1 text-2xl font-bold text-slate-800">{quickBooksPilotAccounts.length}</p><p className="text-xs text-slate-500">Accounts with pilot access</p></div>
+        <div className={`rounded-xl border p-4 ${quickBooksAttention.length ? 'border-amber-200 bg-amber-50' : 'border-emerald-100 bg-emerald-50'}`}><p className={`text-xs font-bold uppercase tracking-wide ${quickBooksAttention.length ? 'text-amber-700' : 'text-emerald-700'}`}>Needs attention</p><p className="mt-1 text-2xl font-bold text-slate-800">{quickBooksAttention.length}</p><p className="text-xs text-slate-500">Connection or sync issues</p></div>
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Healthy</p><p className="mt-1 text-2xl font-bold text-slate-800">{quickBooksPilotAccounts.filter((a) => a.quickBooks?.health === 'healthy').length}</p><p className="text-xs text-slate-500">Successfully syncing</p></div>
+      </section>
 
       <div className="flex items-center gap-2 flex-wrap">
         <SearchInput value={search} onChange={setSearch} placeholder="Search by owner name or email…" className="w-72" testId="admin-accounts-search-input" />
@@ -179,10 +191,21 @@ export default function AdminAccountsPage() {
           ]}
           testId="admin-accounts-team-size-filter"
         />
+        <FilterSelect
+          value={quickBooksFilter}
+          onChange={setQuickBooksFilter}
+          allLabel="All QuickBooks States"
+          options={[
+            { value: 'pilot', label: 'Pilot Accounts' },
+            { value: 'attention', label: 'Needs Attention' },
+            { value: 'healthy', label: 'Healthy' },
+          ]}
+          testId="admin-accounts-quickbooks-filter"
+        />
         {hasFilters && (
           <button
             type="button"
-            onClick={() => { setSearch(''); setStatusFilter(''); setTeamSizeFilter(''); }}
+            onClick={() => { setSearch(''); setStatusFilter(''); setTeamSizeFilter(''); setQuickBooksFilter(''); }}
             data-testid="admin-accounts-clear-filters-button"
             className="text-sm font-semibold text-slate-500 hover:text-slate-700"
           >
@@ -202,6 +225,7 @@ export default function AdminAccountsPage() {
               <th className="hidden lg:table-cell px-4 py-3">Signup</th>
               <th className="hidden sm:table-cell px-4 py-3">Vertical</th>
               <th className="hidden md:table-cell px-4 py-3">Created</th>
+              <th className="hidden lg:table-cell px-4 py-3">QuickBooks</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
@@ -209,7 +233,7 @@ export default function AdminAccountsPage() {
           <tbody>
             {filteredAccounts.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={9} className="px-4 py-10 text-center text-slate-400">
                   {accounts.length === 0 ? 'No accounts yet.' : 'No accounts match your search or filters.'}
                 </td>
               </tr>
@@ -248,6 +272,9 @@ export default function AdminAccountsPage() {
                   {a.allVerticalsEnabled && <div className="text-indigo-600 font-semibold mt-0.5">+ all verticals</div>}
                 </td>
                 <td className="hidden md:table-cell px-4 py-3 text-slate-500 text-xs">{new Date(a.createdAt).toLocaleDateString()}</td>
+                <td className="hidden lg:table-cell px-4 py-3 text-xs">
+                  {!a.quickBooks?.accessEnabled ? <span className="text-slate-400">Not enabled</span> : a.quickBooks.health === 'healthy' ? <div><span className="font-semibold text-emerald-700">Healthy</span><div className="mt-0.5 text-slate-400">{a.quickBooks.companyName}</div></div> : ['connection_issue', 'needs_attention'].includes(a.quickBooks.health) ? <div><span className="font-semibold text-amber-700">Needs attention</span><div className="mt-0.5 text-slate-400">{a.quickBooks.issueCount || 0} sync issue{a.quickBooks.issueCount === 1 ? '' : 's'}</div></div> : <span className="font-semibold text-indigo-600">Awaiting setup</span>}
+                </td>
                 <td className="px-4 py-3">
                   {a.disabledAt ? (
                     <div>
