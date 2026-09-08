@@ -20,6 +20,7 @@ export function relatedRecordPath(reminder) {
   switch (reminder.relatedType) {
     case 'client': return `/clients?open=${reminder.relatedId}`;
     case 'contractor': return `/contractors?open=${reminder.relatedId}`;
+    case 'venue': return `/venues?open=${reminder.relatedId}`;
     case 'event': return `/events/${reminder.relatedId}`;
     case 'booking': return `/bookings/${reminder.relatedId}`;
     // Not an actual reminder-linkable type in practice (reminders point at

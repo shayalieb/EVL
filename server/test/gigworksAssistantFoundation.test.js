@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assistantToolNamesForPermissions, eventAttentionIssues, financialSnapshot, findHelpArticles } from '../src/lib/gigworksAssistant.js';
+import { assistantToolNamesForPermissions, eventAttentionIssues, financialSnapshot, findHelpArticles, updateClientAction, updateEventAction } from '../src/lib/gigworksAssistant.js';
 import { fallbackTrainingAnswer } from '../src/routes/assistant.js';
 import { ASSISTANT_GUIDES } from '../../src/lib/assistantGuides.js';
 import { HELP_ARTICLES_FLAT } from '../../src/lib/helpArticles.js';
@@ -31,6 +31,44 @@ test('operational coverage follows each matching module permission', () => {
   assert.equal(tools.includes('find_venue'), true);
   assert.equal(tools.includes('get_offerings_summary'), true);
   assert.equal(tools.includes('get_financial_snapshot'), false);
+  assert.equal(tools.includes('propose_update_client'), false);
+  assert.equal(tools.includes('propose_add_contractor'), false);
+  assert.equal(tools.includes('propose_add_venue'), true);
+  assert.equal(tools.includes('propose_update_event'), true);
+});
+
+test('final-phase write tools follow their own module permissions', () => {
+  const clientTools = assistantToolNamesForPermissions({ manageClients: true });
+  const contractorTools = assistantToolNamesForPermissions({ manageContractors: true });
+  assert.equal(clientTools.includes('propose_update_client'), true);
+  assert.equal(clientTools.includes('propose_update_contractor'), false);
+  assert.equal(contractorTools.includes('propose_add_contractor'), true);
+  assert.equal(contractorTools.includes('propose_update_contractor'), true);
+  assert.equal(contractorTools.includes('propose_update_event'), false);
+});
+
+test('client updates reject stale proposals before writing', async () => {
+  let wrote = false;
+  const db = { client: {
+    findFirst: async () => ({ id: 'client-1', accountId: 'account-1', firstName: 'Jamie', lastName: 'Lee', updatedAt: new Date('2026-09-08T12:00:00Z') }),
+    update: async () => { wrote = true; },
+  } };
+  await assert.rejects(() => updateClientAction('account-1', { clientId: 'client-1', expectedUpdatedAt: '2026-09-07T12:00:00.000Z', fields: { phone: '555-1111' } }, db), /changed after/);
+  assert.equal(wrote, false);
+});
+
+test('event updates allow safe fields and discard privileged fields', async () => {
+  let savedData;
+  const db = { event: {
+    findFirst: async () => ({ id: 'event-1', accountId: 'account-1', name: 'Gala', history: [], updatedAt: new Date('2026-09-08T12:00:00Z') }),
+    update: async ({ data }) => { savedData = data; return { id: 'event-1', ...data }; },
+  } };
+  await updateEventAction('account-1', { eventId: 'event-1', expectedUpdatedAt: '2026-09-08T12:00:00.000Z', fields: { startTime: '18:30', eventNote: 'Bring music stands', contractorBookings: [{ paymentStatus: 'paid' }], deletedAt: new Date() } }, db);
+  assert.equal(savedData.startTime, '18:30');
+  assert.equal(savedData.eventNote, 'Bring music stands');
+  assert.equal(savedData.contractorBookings, undefined);
+  assert.equal(savedData.deletedAt, undefined);
+  assert.equal(savedData.history.length, 1);
 });
 
 test('event attention explains missing operational setup in plain language', () => {

@@ -9,8 +9,13 @@ import {
   draftProposalFromInquiry,
   createReminderAction,
   addClientAction,
+  updateClientAction,
+  addContractorAction,
+  updateContractorAction,
+  addVenueAction,
   createBookingAction,
   updateBookingAction,
+  updateEventAction,
   findHelpArticles,
 } from '../lib/gigworksAssistant.js';
 
@@ -141,8 +146,13 @@ router.delete('/messages', asyncHandler(async (req, res) => {
 const ACTION_HANDLERS = {
   create_reminder: { handler: (req, fields, db) => createReminderAction(req.membership.accountId, req.session.userId, fields, db), targetType: null },
   add_client: { handler: (req, fields, db) => addClientAction(req.membership.accountId, fields, db), requirePermission: 'manageClients', targetType: 'client' },
+  update_client: { handler: (req, fields, db) => updateClientAction(req.membership.accountId, fields, db), requirePermission: 'manageClients', targetType: 'client' },
+  add_contractor: { handler: (req, fields, db) => addContractorAction(req.membership.accountId, fields, db), requirePermission: 'manageContractors', targetType: 'contractor' },
+  update_contractor: { handler: (req, fields, db) => updateContractorAction(req.membership.accountId, fields, db), requirePermission: 'manageContractors', targetType: 'contractor' },
+  add_venue: { handler: (req, fields, db) => addVenueAction(req.membership.accountId, fields, db), requirePermission: 'manageVenues', targetType: 'venue' },
   create_booking: { handler: (req, fields, db) => createBookingAction(req.membership.accountId, fields, db), requirePermission: 'manageBookings', targetType: 'booking' },
   update_booking: { handler: (req, fields, db) => updateBookingAction(req.membership.accountId, fields, db), requirePermission: 'manageBookings', targetType: 'booking' },
+  update_event: { handler: (req, fields, db) => updateEventAction(req.membership.accountId, fields, db), requirePermission: 'manageEvents', targetType: 'event' },
 };
 
 router.post('/confirm-action', assistantLimiter, asyncHandler(async (req, res) => {

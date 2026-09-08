@@ -37,8 +37,13 @@ const TOOL_PERMISSIONS = {
   find_venue: 'manageVenues',
   get_offerings_summary: 'manageOfferings',
   propose_add_client: 'manageClients',
+  propose_update_client: 'manageClients',
+  propose_add_contractor: 'manageContractors',
+  propose_update_contractor: 'manageContractors',
+  propose_add_venue: 'manageVenues',
   propose_create_booking: 'manageBookings',
   propose_update_booking: 'manageBookings',
+  propose_update_event: 'manageEvents',
 };
 
 function computeOfferingTotal(offering) {
@@ -214,7 +219,7 @@ const TOOLS = [
 // the user to review and confirm in the UI. Nothing under this file writes
 // to the database on its own; see the *Action functions below, which only
 // run from POST /assistant/confirm-action after explicit user confirmation.
-const TERMINAL_TOOLS = new Set(['navigate_to', 'propose_create_reminder', 'propose_add_client', 'propose_create_booking', 'propose_update_booking']);
+const TERMINAL_TOOLS = new Set(['navigate_to', 'propose_create_reminder', 'propose_add_client', 'propose_update_client', 'propose_add_contractor', 'propose_update_contractor', 'propose_add_venue', 'propose_create_booking', 'propose_update_booking', 'propose_update_event']);
 
 // The one real safety boundary for booking edits — the model's schema
 // literally has no properties for deletedAt, venue, schedule, proposal,
@@ -228,6 +233,10 @@ const BOOKING_UPDATE_FIELDS = {
   priority: { type: 'string' },
 };
 
+const CLIENT_UPDATE_FIELDS = { firstName: { type: 'string' }, lastName: { type: 'string' }, email: { type: 'string' }, phone: { type: 'string' }, notes: { type: 'string' } };
+const CONTRACTOR_UPDATE_FIELDS = { firstName: { type: 'string' }, lastName: { type: 'string' }, email: { type: 'string' }, phone: { type: 'string' }, contractorType1: { type: 'string' }, contractorType2: { type: 'string' }, priceNotes: { type: 'string' } };
+const EVENT_UPDATE_FIELDS = { name: { type: 'string' }, eventDate: { type: 'string', description: 'YYYY-MM-DD.' }, eventStatus: { type: 'string' }, contactEmail: { type: 'string' }, contactPhone: { type: 'string' }, startTime: { type: 'string', description: '24-hour HH:mm.' }, endTime: { type: 'string', description: '24-hour HH:mm.' }, eventNote: { type: 'string' }, prepNotes: { type: 'string' } };
+
 const WRITE_TOOLS = [
   {
     name: 'navigate_to',
@@ -235,7 +244,7 @@ const WRITE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        recordType: { type: 'string', enum: ['booking', 'client', 'event', 'contractor', 'help'] },
+        recordType: { type: 'string', enum: ['booking', 'client', 'event', 'contractor', 'venue', 'help'] },
         recordId: { type: 'string' },
         label: { type: 'string', description: 'Short human-readable name for the link, e.g. "Rivera Wedding Reception" or the article title.' },
       },
@@ -272,6 +281,26 @@ const WRITE_TOOLS = [
     },
   },
   {
+    name: 'propose_update_client',
+    description: 'Propose updating safe contact or note fields on an existing client. Requires confirmation.',
+    input_schema: { type: 'object', properties: { clientId: { type: 'string' }, fields: { type: 'object', properties: CLIENT_UPDATE_FIELDS, additionalProperties: false } }, required: ['clientId', 'fields'] },
+  },
+  {
+    name: 'propose_add_contractor',
+    description: 'Propose adding a contractor to the account roster. Requires confirmation and a valid email.',
+    input_schema: { type: 'object', properties: { firstName: { type: 'string' }, lastName: { type: 'string' }, email: { type: 'string' }, phone: { type: 'string' }, contractorType1: { type: 'string' }, contractorType2: { type: 'string' } }, required: ['firstName', 'lastName', 'email'] },
+  },
+  {
+    name: 'propose_update_contractor',
+    description: 'Propose updating safe contact, role, or pricing-note fields on an existing contractor. Requires confirmation.',
+    input_schema: { type: 'object', properties: { contractorId: { type: 'string' }, fields: { type: 'object', properties: CONTRACTOR_UPDATE_FIELDS, additionalProperties: false } }, required: ['contractorId', 'fields'] },
+  },
+  {
+    name: 'propose_add_venue',
+    description: 'Propose adding a saved venue. Requires confirmation.',
+    input_schema: { type: 'object', properties: { name: { type: 'string' }, address1: { type: 'string' }, address2: { type: 'string' }, city: { type: 'string' }, state: { type: 'string' }, zip: { type: 'string' }, contactName: { type: 'string' }, contactPhone: { type: 'string' }, contactEmail: { type: 'string' }, loadInInfo: { type: 'string' } }, required: ['name'] },
+  },
+  {
     name: 'propose_create_booking',
     description: 'Propose creating a new booking for an existing client. This does not create it — the user must confirm first. clientId must come from find_client or a just-confirmed add_client — never invent one.',
     input_schema: {
@@ -297,6 +326,11 @@ const WRITE_TOOLS = [
       },
       required: ['bookingId', 'fields'],
     },
+  },
+  {
+    name: 'propose_update_event',
+    description: 'Propose updating safe event identity, schedule, contact, status, or note fields. Cannot alter staffing, payments, or delete an event. Requires confirmation.',
+    input_schema: { type: 'object', properties: { eventId: { type: 'string' }, fields: { type: 'object', properties: EVENT_UPDATE_FIELDS, additionalProperties: false } }, required: ['eventId', 'fields'] },
   },
 ];
 
@@ -613,6 +647,10 @@ function fmtDate(value) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', ...(dateOnly ? { timeZone: 'UTC' } : {}) });
 }
 
+function describeChanges(fields) {
+  return Object.entries(fields || {}).map(([key, value]) => `${key}: ${key.toLowerCase().includes('date') ? fmtDate(value) : value}`).join(', ') || 'no changes';
+}
+
 // Turns a terminal tool call into the structured, not-yet-applied action the
 // frontend shows for confirmation. Read-only itself (candidate lookups,
 // booking name lookups for a friendly description) — never writes.
@@ -633,6 +671,22 @@ async function buildPendingAction(accountId, name, input) {
       candidates,
     };
   }
+  if (name === 'propose_update_client') {
+    const client = await prisma.client.findFirst({ where: { id: input.clientId, accountId }, select: { firstName: true, lastName: true, updatedAt: true } });
+    if (!client) throw new Error('Client not found.');
+    return { type: 'update_client', description: `Update ${client.firstName} ${client.lastName} — ${describeChanges(input.fields)}`, fields: { clientId: input.clientId, fields: input.fields || {}, expectedUpdatedAt: client.updatedAt.toISOString() } };
+  }
+  if (name === 'propose_add_contractor') {
+    return { type: 'add_contractor', description: `Add contractor: ${input.firstName} ${input.lastName} (${input.email})`, fields: { firstName: input.firstName, lastName: input.lastName, email: input.email, phone: input.phone || null, contractorType1: input.contractorType1 || null, contractorType2: input.contractorType2 || null } };
+  }
+  if (name === 'propose_update_contractor') {
+    const contractor = await prisma.contractor.findFirst({ where: { id: input.contractorId, accountId }, select: { firstName: true, lastName: true, updatedAt: true } });
+    if (!contractor) throw new Error('Contractor not found.');
+    return { type: 'update_contractor', description: `Update ${contractor.firstName} ${contractor.lastName} — ${describeChanges(input.fields)}`, fields: { contractorId: input.contractorId, fields: input.fields || {}, expectedUpdatedAt: contractor.updatedAt.toISOString() } };
+  }
+  if (name === 'propose_add_venue') {
+    return { type: 'add_venue', description: `Add venue: ${input.name}${input.city ? ` in ${input.city}${input.state ? `, ${input.state}` : ''}` : ''}`, fields: Object.fromEntries(Object.entries(input).map(([key, value]) => [key, value || null])) };
+  }
   if (name === 'propose_create_booking') {
     const client = await prisma.client.findFirst({ where: { id: input.clientId, accountId }, select: { firstName: true, lastName: true } });
     return {
@@ -649,6 +703,11 @@ async function buildPendingAction(accountId, name, input) {
       description: `Update ${booking?.eventName || 'this booking'} — ${changeSummary}`,
       fields: { bookingId: input.bookingId, fields: input.fields || {}, expectedUpdatedAt: booking?.updatedAt?.toISOString() || null },
     };
+  }
+  if (name === 'propose_update_event') {
+    const event = await prisma.event.findFirst({ where: { id: input.eventId, accountId }, select: { name: true, updatedAt: true } });
+    if (!event) throw new Error('Event not found.');
+    return { type: 'update_event', description: `Update ${event.name || 'this event'} — ${describeChanges(input.fields)}`, fields: { eventId: input.eventId, fields: input.fields || {}, expectedUpdatedAt: event.updatedAt.toISOString() } };
   }
   return null;
 }
@@ -757,6 +816,77 @@ export async function addClientAction(accountId, fields, db = prisma) {
   }, accountId);
 }
 
+function safeText(value, max = 1000) {
+  if (value === null) return null;
+  return String(value ?? '').trim().slice(0, max) || null;
+}
+
+function assertFresh(existing, expectedUpdatedAt, label) {
+  if (expectedUpdatedAt && existing.updatedAt.toISOString() !== expectedUpdatedAt) throw new Error(`This ${label} changed after the Assistant prepared the update. Ask the Assistant to review it again.`);
+}
+
+export async function updateClientAction(accountId, fields, db = prisma) {
+  const existing = await db.client.findFirst({ where: { id: fields?.clientId, accountId } });
+  if (!existing) throw new Error('Client not found.');
+  assertFresh(existing, fields?.expectedUpdatedAt, 'client');
+  const patch = fields?.fields || {};
+  const data = {};
+  for (const key of Object.keys(CLIENT_UPDATE_FIELDS)) if (patch[key] !== undefined) data[key] = safeText(patch[key], key === 'notes' ? 5000 : 250);
+  if (patch.firstName !== undefined && !data.firstName) throw new Error('First name is required.');
+  if (patch.lastName !== undefined && !data.lastName) throw new Error('Last name is required.');
+  if (patch.email !== undefined) {
+    data.email = normalizeValidEmail(patch.email);
+    if (!data.email) throw new Error('A valid client email address is required.');
+  }
+  if (!Object.keys(data).length) throw new Error('No valid fields to update.');
+  const firstName = data.firstName ?? existing.firstName;
+  const lastName = data.lastName ?? existing.lastName;
+  data.nameNormalized = `${firstName} ${lastName}`.trim().toLowerCase();
+  if (data.email !== undefined) data.emailNormalized = data.email.toLowerCase();
+  if (data.phone !== undefined) data.phoneNormalized = String(data.phone || '').replace(/\D/g, '') || null;
+  return db.client.update({ where: { id: existing.id }, data });
+}
+
+export async function addContractorAction(accountId, fields, db = prisma) {
+  const normalizedEmail = normalizeValidEmail(fields?.email);
+  if (!safeText(fields?.firstName, 150) || !safeText(fields?.lastName, 150) || !normalizedEmail) throw new Error('First name, last name, and a valid email address are required.');
+  const duplicate = await db.contractor.findFirst({ where: { accountId, email: { equals: normalizedEmail, mode: 'insensitive' } }, select: { id: true } });
+  if (duplicate) throw new Error('A contractor with this email already exists. Open that contractor instead.');
+  return createWithPreservedId(db.contractor, { id: randomUUID(), accountId, firstName: safeText(fields.firstName, 150), lastName: safeText(fields.lastName, 150), email: normalizedEmail, phone: safeText(fields.phone, 60), contractorType1: safeText(fields.contractorType1, 150), contractorType2: safeText(fields.contractorType2, 150), pricingTiers: [] }, accountId);
+}
+
+export async function updateContractorAction(accountId, fields, db = prisma) {
+  const existing = await db.contractor.findFirst({ where: { id: fields?.contractorId, accountId } });
+  if (!existing) throw new Error('Contractor not found.');
+  assertFresh(existing, fields?.expectedUpdatedAt, 'contractor');
+  const patch = fields?.fields || {};
+  const data = {};
+  for (const key of Object.keys(CONTRACTOR_UPDATE_FIELDS)) if (patch[key] !== undefined) data[key] = safeText(patch[key], key === 'priceNotes' ? 5000 : 250);
+  if (patch.firstName !== undefined && !data.firstName) throw new Error('First name is required.');
+  if (patch.lastName !== undefined && !data.lastName) throw new Error('Last name is required.');
+  if (patch.email !== undefined) {
+    data.email = normalizeValidEmail(patch.email);
+    if (!data.email) throw new Error('A valid contractor email address is required.');
+    const duplicate = await db.contractor.findFirst({ where: { accountId, id: { not: existing.id }, email: { equals: data.email, mode: 'insensitive' } }, select: { id: true } });
+    if (duplicate) throw new Error('Another contractor already uses this email address.');
+  }
+  if (!Object.keys(data).length) throw new Error('No valid fields to update.');
+  return db.contractor.update({ where: { id: existing.id }, data });
+}
+
+export async function addVenueAction(accountId, fields, db = prisma) {
+  const name = safeText(fields?.name, 250);
+  if (!name) throw new Error('Venue name is required.');
+  const address1 = safeText(fields?.address1, 250);
+  const duplicate = await db.venue.findFirst({ where: { accountId, name: { equals: name, mode: 'insensitive' }, ...(address1 ? { address1: { equals: address1, mode: 'insensitive' } } : {}) }, select: { id: true } });
+  if (duplicate) throw new Error('This venue already appears to exist. Open the saved venue instead.');
+  const data = { id: randomUUID(), accountId, name };
+  for (const key of ['address1', 'address2', 'city', 'state', 'zip', 'contactName', 'contactPhone', 'contactEmail', 'loadInInfo']) if (fields?.[key] !== undefined) data[key] = safeText(fields[key], key === 'loadInInfo' ? 5000 : 250);
+  if (data.contactEmail && !normalizeValidEmail(data.contactEmail)) throw new Error('Venue contact email must be valid.');
+  if (data.contactEmail) data.contactEmail = normalizeValidEmail(data.contactEmail);
+  return createWithPreservedId(db.venue, data, accountId);
+}
+
 export async function createBookingAction(accountId, fields, db = prisma) {
   const { eventName, clientId, eventDate, eventType, notes } = fields || {};
   if (!eventName?.trim()) throw new Error('eventName is required.');
@@ -799,6 +929,26 @@ export async function updateBookingAction(accountId, fields, db = prisma) {
   data.activityLog = [activityEntry, ...(Array.isArray(existing.activityLog) ? existing.activityLog : [])];
 
   return db.booking.update({ where: { id: existing.id }, data });
+}
+
+export async function updateEventAction(accountId, fields, db = prisma) {
+  const existing = await db.event.findFirst({ where: { id: fields?.eventId, accountId } });
+  if (!existing) throw new Error('Event not found.');
+  assertFresh(existing, fields?.expectedUpdatedAt, 'event');
+  const patch = fields?.fields || {};
+  const data = {};
+  for (const key of Object.keys(EVENT_UPDATE_FIELDS)) if (patch[key] !== undefined) data[key] = safeText(patch[key], ['eventNote', 'prepNotes'].includes(key) ? 10000 : 250);
+  if (patch.name !== undefined && !data.name) throw new Error('Event name is required.');
+  if (data.eventDate && !/^\d{4}-\d{2}-\d{2}$/.test(data.eventDate)) throw new Error('Event date must use YYYY-MM-DD.');
+  for (const key of ['startTime', 'endTime']) if (data[key] && !/^([01]\d|2[0-3]):[0-5]\d$/.test(data[key])) throw new Error(`${key} must use 24-hour HH:mm.`);
+  if (patch.contactEmail !== undefined) {
+    data.contactEmail = normalizeValidEmail(patch.contactEmail);
+    if (!data.contactEmail) throw new Error('A valid event contact email is required.');
+  }
+  if (!Object.keys(data).length) throw new Error('No valid fields to update.');
+  const historyEntry = { id: randomUUID(), date: new Date().toISOString(), text: `Updated via GigWorks Assistant: ${describeChanges(data)}` };
+  data.history = [historyEntry, ...(Array.isArray(existing.history) ? existing.history : [])];
+  return db.event.update({ where: { id: existing.id }, data });
 }
 
 // ---- Structured proposal drafting (single forced tool-call) ----
