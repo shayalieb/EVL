@@ -21,37 +21,40 @@ export function buildNdaText({ signerName, entityName, governingLaw, contactEmai
 
 This Non-Disclosure Agreement ("Agreement") is entered into between ${entityName} ("Company") and ${signerName} ("Design Partner") in connection with the Design Partner's early access to Company's GigWorks software (the "Program").
 
-## 1. Confidential Information
+## 1. Program Access
+In exchange for the Design Partner's participation in the Program and the real-world feedback provided as part of it, Company will provide the Design Partner free access to GigWorks for two (2) years from the date this Agreement is signed below, conditioned on the Design Partner remaining an active participant in good standing and providing good-faith, real-world feedback throughout that period. Company will notify the Design Partner at least 30 days before this free-access period ends. Access to GigWorks does not end automatically when it does — the Design Partner may choose a paid subscription plan at that point to continue using GigWorks without interruption.
+
+## 2. Confidential Information
 "Confidential Information" means any non-public information disclosed by either party in connection with the Program, including but not limited to: unreleased features, source code, technical designs, business plans, pricing, roadmaps, user data made visible during testing, and any materials marked or reasonably understood to be confidential.
 
-## 2. Obligations
+## 3. Obligations
 The receiving party will use Confidential Information solely to participate in the Program and provide feedback to Company, will not disclose it to any third party, and will protect it using at least the same care it uses for its own confidential information, and no less than reasonable care.
 
-## 3. Exclusions
+## 4. Exclusions
 Confidential Information does not include information that: is or becomes publicly available through no fault of the receiving party; was already known to the receiving party without an obligation of confidentiality; is independently developed without use of the other party's Confidential Information; or must be disclosed by law or court order, provided the disclosing party is given prompt notice where legally permitted.
 
-## 4. Term
+## 5. Term
 The confidentiality obligations in this Agreement remain in effect for two (2) years from the date this Agreement is signed below, regardless of whether the Design Partner's participation in the Program ends sooner.
 
-## 5. Feedback
+## 6. Feedback
 Any feedback, suggestions, or ideas the Design Partner provides about the Program may be used by Company for any purpose, including improving GigWorks, without payment or attribution obligation to the Design Partner.
 
-## 6. No Warranty
+## 7. No Warranty
 Access provided under the Program is offered "as is," without warranty of any kind, for the purpose of evaluation and feedback.
 
-## 7. Return of Materials
+## 8. Return of Materials
 Upon Company's request or the end of the Design Partner's participation in the Program, the Design Partner will return or destroy all materials containing Company's Confidential Information in its possession.
 
-## 8. Governing Law
+## 9. Governing Law
 This Agreement is governed by the laws of ${governingLaw}, without regard to conflict-of-law principles.
 
-## 9. Severability
+## 10. Severability
 If any provision of this Agreement is found unenforceable, that provision will be limited or eliminated to the minimum extent necessary, and the remaining provisions will remain in full force and effect.
 
-## 10. Electronic Signature Consent
+## 11. Electronic Signature Consent
 ${ESIGN_CONSENT_TEXT}
 
-## 11. Contact
+## 12. Contact
 Questions about this Agreement may be directed to ${contactEmail}.`;
 }
 

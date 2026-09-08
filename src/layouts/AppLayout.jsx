@@ -43,6 +43,7 @@ export default function AppLayout() {
   const { currentUser, logout, sizeWarning } = useAuth();
   const { groups: agencyGroups, isAgency, loading: groupsLoading, selectedGroupId, selectedGroup, setSelectedGroupId, pathFor } = useAgencyGroup();
   const [sizeWarningDismissed, setSizeWarningDismissed] = useState(false);
+  const [designPartnerNoticeDismissed, setDesignPartnerNoticeDismissed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [reminders, setReminders] = useState([]);
@@ -122,6 +123,15 @@ export default function AppLayout() {
   }
 
   const initials = `${currentUser?.firstName?.[0] || ''}${currentUser?.lastName?.[0] || ''}`.toUpperCase();
+  // Client-side mirror of designPartnerExpiryScheduler.js's 30-day email —
+  // this banner is just a visibility nudge for whoever's already logged in
+  // during that window, not the actual notification mechanism. Stops
+  // showing once freeAccessExpiresAt has actually passed, since at that
+  // point ProtectedArea (App.jsx) redirects to PendingApprovalPage instead
+  // of ever reaching AppLayout at all.
+  const freeAccessExpiresAt = currentUser?.freeAccessExpiresAt ? new Date(currentUser.freeAccessExpiresAt) : null;
+  const daysUntilFreeAccessExpires = freeAccessExpiresAt ? Math.ceil((freeAccessExpiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)) : null;
+  const showDesignPartnerNotice = daysUntilFreeAccessExpires !== null && daysUntilFreeAccessExpires > 0 && daysUntilFreeAccessExpires <= 30;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -349,6 +359,23 @@ export default function AppLayout() {
                 onClick={() => setSizeWarningDismissed(true)}
                 data-testid="account-size-warning-dismiss-button"
                 className="shrink-0 text-amber-600 hover:text-amber-800 font-semibold"
+                aria-label="Dismiss"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+          {showDesignPartnerNotice && !designPartnerNoticeDismissed && (
+            <div data-testid="design-partner-expiry-banner" className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
+              <span>
+                Your free design partner access ends in {daysUntilFreeAccessExpires} day{daysUntilFreeAccessExpires === 1 ? '' : 's'} ({freeAccessExpiresAt.toLocaleDateString()}).{' '}
+                <Link to={pathFor('/settings')} className="font-semibold underline hover:no-underline">Choose a plan</Link> to keep going without interruption.
+              </span>
+              <button
+                type="button"
+                onClick={() => setDesignPartnerNoticeDismissed(true)}
+                data-testid="design-partner-expiry-dismiss-button"
+                className="shrink-0 text-indigo-600 hover:text-indigo-800 font-semibold"
                 aria-label="Dismiss"
               >
                 ✕

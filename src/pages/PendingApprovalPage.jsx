@@ -53,15 +53,23 @@ export default function PendingApprovalPage() {
   }
 
   const reactivating = currentUser?.subscriptionBlocked;
+  // A design partner's free-access grant (see the NDA's "Program Access"
+  // section) ending is the same subscriptionBlocked state as any lapsed
+  // subscription, just with different framing — they were never billed in
+  // the first place, so "your subscription needs attention" would be
+  // confusing/wrong copy for this specific case.
+  const designPartnerExpired = reactivating && currentUser?.isDesignPartner;
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-16">
       <div className="max-w-4xl mx-auto text-center space-y-3 mb-10">
         <h1 className="text-2xl font-bold text-slate-800">
-          {reactivating ? 'Your subscription needs attention' : 'Choose your plan'}
+          {designPartnerExpired ? 'Your free design partner access has ended' : reactivating ? 'Your subscription needs attention' : 'Choose your plan'}
         </h1>
         <p className="text-sm text-slate-500 max-w-md mx-auto">
-          {reactivating
+          {designPartnerExpired
+            ? 'Your 2 years of free access as a GigWorks design partner has ended — thank you for the feedback along the way. Pick a plan below to keep going.'
+            : reactivating
             ? "Your GigWorks subscription is no longer active. Pick a plan below to pick up right where you left off."
             : `Start a ${status?.trialDays ?? 14}-day free trial — no charge until it ends, cancel anytime.`}
         </p>

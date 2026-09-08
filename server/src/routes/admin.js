@@ -194,6 +194,7 @@ router.get('/accounts/:id/profile', asyncHandler(async (req, res) => {
       id: account.id, createdAt: account.createdAt, approvedAt: account.approvedAt, disabledAt: account.disabledAt, disabledReason: account.disabledReason,
       vertical: account.vertical, allVerticalsEnabled: account.allVerticalsEnabled, signupSource: account.signupSource, signupPlan: account.signupPlan, signupInterval: account.signupInterval,
       isDesignPartner: account.isDesignPartner, agreementsRequiredAt: account.agreementsRequiredAt, agreementsSignedAt: account.agreementsSignedAt,
+      freeAccessExpiresAt: account.freeAccessExpiresAt, designPartnerExpiryNotifiedAt: account.designPartnerExpiryNotifiedAt,
       designPartnerAgreements: account.designPartnerAgreements.map((agreement) => ({ id: agreement.id, type: agreement.type, documentText: agreement.documentText, signedAt: agreement.signedAt, signatureName: agreement.signatureName, signatureImage: agreement.signatureImage, expiresAt: agreement.expiresAt })),
       planTier: account.planTier, billingInterval: account.billingInterval, subscriptionStatus: account.subscriptionStatus, trialEndsAt: account.trialEndsAt,
       stripeConnected: !!account.stripeAccountId, stripeChargesEnabled: account.stripeChargesEnabled, stripePayoutsEnabled: account.stripePayoutsEnabled,

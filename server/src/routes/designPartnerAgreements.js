@@ -38,15 +38,21 @@ router.post('/sign', asyncHandler(async (req, res) => {
     if (!agreements.length) return { error: { status: 404, message: 'No agreements found for this account.' } };
 
     const signedAt = new Date();
+    let freeAccessExpiresAt = null;
     const updated = await Promise.all(agreements.map((agreement) => {
       const expiresAt = new Date(signedAt);
       expiresAt.setFullYear(expiresAt.getFullYear() + agreement.termYears);
+      // Both documents share the same signedAt/termYears, so this is the
+      // same value regardless of which row it's read from — see the NDA's
+      // "Program Access" section (designPartnerAgreements.js) for the
+      // free-access grant this backs. Not a separate "2 years" constant.
+      freeAccessExpiresAt = expiresAt;
       return tx.designPartnerAgreement.update({
         where: { id: agreement.id },
         data: { signedAt, signatureName: signatureName.trim(), signatureImage, expiresAt },
       });
     }));
-    await tx.account.update({ where: { id: accountId }, data: { agreementsSignedAt: signedAt } });
+    await tx.account.update({ where: { id: accountId }, data: { agreementsSignedAt: signedAt, freeAccessExpiresAt } });
     return { agreements: updated };
   });
   if (result.error) return res.status(result.error.status).json({ error: result.error.message });

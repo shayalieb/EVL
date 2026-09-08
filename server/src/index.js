@@ -53,6 +53,7 @@ import quickBooksRouter from './routes/quickBooks.js';
 import quickBooksSyncRouter from './routes/quickBooksSync.js';
 import portalRouter from './routes/portal.js';
 import { startReminderScheduler } from './lib/reminderScheduler.js';
+import { startDesignPartnerExpiryScheduler } from './lib/designPartnerExpiryScheduler.js';
 import { startReminderRuleEngine } from './lib/reminderRuleEngine.js';
 import { startDeletedRecordPurger } from './lib/deletedRecordPurger.js';
 import { startInquiryLinkPurger } from './lib/inquiryLinkPurger.js';
@@ -329,6 +330,7 @@ export function startServer() {
     console.log(`Server listening on ${port}`);
     stopBackgroundJobs.push(
       startReminderScheduler(),
+      startDesignPartnerExpiryScheduler(),
       startReminderRuleEngine(),
       startDeletedRecordPurger(),
       startInquiryLinkPurger(),

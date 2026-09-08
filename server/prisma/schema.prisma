@@ -180,6 +180,18 @@ model Account {
   agreementsRequiredAt DateTime?
   agreementsSignedAt   DateTime?
   designPartnerAgreements DesignPartnerAgreement[]
+  // Free-access benefit granted by signing (see the NDA's "Program Access"
+  // section, built at signing time in designPartnerAgreements.js's /sign
+  // route from the agreement rows' own computed expiresAt — not a
+  // separately-tracked "2 years" constant). This is a BILLING concern, not
+  // the access-to-the-app-at-all gate above: isSubscriptionBlocked()
+  // treats a passed freeAccessExpiresAt with no subscriptionStatus chosen
+  // yet the same as any other lapsed-billing account (PendingApprovalPage's
+  // plan picker), never a hard lockout, and never trips again once a plan
+  // is chosen. designPartnerExpiryNotifiedAt is a one-time-send marker for
+  // the 30-day-advance-notice email (designPartnerExpiryScheduler.js).
+  freeAccessExpiresAt         DateTime?
+  designPartnerExpiryNotifiedAt DateTime?
 }
 
 // One row per legal document (NDA, non-compete) a design partner account

@@ -80,7 +80,16 @@ export async function getMembershipWithAccount(userId) {
 const BLOCKING_SUBSCRIPTION_STATUSES = ['canceled', 'unpaid', 'incomplete_expired'];
 
 export function isSubscriptionBlocked(account) {
-  return !!account.subscriptionStatus && BLOCKING_SUBSCRIPTION_STATUSES.includes(account.subscriptionStatus);
+  if (!!account.subscriptionStatus && BLOCKING_SUBSCRIPTION_STATUSES.includes(account.subscriptionStatus)) return true;
+  // Design partner free-access grant (see the NDA's "Program Access"
+  // section, designPartnerAgreements.js) ending — treated exactly like any
+  // other lapsed-billing account (same PendingApprovalPage plan picker),
+  // never a hard lockout. !subscriptionStatus means no plan has been
+  // chosen yet; the moment one is (any status at all, not just "active"),
+  // this stops tripping for good — it never re-blocks a design partner
+  // who's already paying.
+  if (account.freeAccessExpiresAt && new Date(account.freeAccessExpiresAt) <= new Date() && !account.subscriptionStatus) return true;
+  return false;
 }
 
 export function serializeMembership(membership) {
@@ -90,6 +99,7 @@ export function serializeMembership(membership) {
       vertical: null, allVerticalsEnabled: false, activeVerticals: [],
       accountApproved: false,
       agreementsRequired: false, agreementsSigned: false,
+      isDesignPartner: false, freeAccessExpiresAt: null,
       subscriptionStatus: null, planTier: null, seatLimit: null, agencyGroupLimit: null, trialEndsAt: null, subscriptionBlocked: false,
     };
   }
@@ -111,6 +121,11 @@ export function serializeMembership(membership) {
     // before it starts fetching account data, not after every fetch 403s.
     agreementsRequired: !!membership.account.agreementsRequiredAt,
     agreementsSigned: !!membership.account.agreementsSignedAt,
+    // Design partner display tag + free-access-until date, for the
+    // PendingApprovalPage.jsx copy variant and AppLayout.jsx's 30-day
+    // notice banner — see isSubscriptionBlocked above for the actual gate.
+    isDesignPartner: membership.account.isDesignPartner,
+    freeAccessExpiresAt: membership.account.freeAccessExpiresAt,
     // GigWorks' own subscription (see lib/plans.js) — the frontend gate
     // (App.jsx) and the Plan settings tab both need these.
     subscriptionStatus: membership.account.subscriptionStatus,

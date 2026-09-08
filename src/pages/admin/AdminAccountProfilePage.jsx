@@ -95,6 +95,12 @@ export default function AdminAccountProfilePage() {
         <section className="rounded-xl border border-slate-200 bg-white p-5">
           <h3 className="font-bold text-slate-800">Design Partner Agreements</h3>
           <p className="text-sm text-slate-500 mt-1">{profile.agreementsSignedAt ? `Both agreements signed ${new Date(profile.agreementsSignedAt).toLocaleDateString()}.` : 'Waiting on the account holder to sign both agreements.'}</p>
+          {profile.freeAccessExpiresAt && (
+            <p className="text-sm text-slate-500 mt-1">
+              Free access {new Date(profile.freeAccessExpiresAt) <= new Date() ? 'ended' : 'until'} {new Date(profile.freeAccessExpiresAt).toLocaleDateString()}
+              {profile.designPartnerExpiryNotifiedAt && ` · 30-day notice sent ${new Date(profile.designPartnerExpiryNotifiedAt).toLocaleDateString()}`}
+            </p>
+          )}
           <div className="mt-4 divide-y divide-slate-100 border border-slate-200 rounded-lg">
             {profile.designPartnerAgreements.map((agreement) => (
               <div key={agreement.id} data-testid="admin-account-agreement-row" className="flex items-center justify-between gap-3 px-4 py-3">

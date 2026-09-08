@@ -383,6 +383,11 @@ export function AuthProvider({ children }) {
         // — same reasoning as accountApproved above.
         agreementsRequired: serverUser.agreementsRequired,
         agreementsSigned: serverUser.agreementsSigned,
+        // Design partner display tag + free-access-until date (PendingApprovalPage.jsx's
+        // copy variant, AppLayout.jsx's 30-day notice banner) — the actual
+        // billing gate is subscriptionBlocked below, computed server-side.
+        isDesignPartner: serverUser.isDesignPartner,
+        freeAccessExpiresAt: serverUser.freeAccessExpiresAt,
         // GigWorks' own subscription (lib/subscription.js) — the
         // pending-approval/plan-picker gate and the Plan settings tab both
         // need these.
