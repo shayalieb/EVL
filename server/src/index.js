@@ -136,6 +136,10 @@ app.use('/api/webhooks', express.raw({ type: '*/*' }), subscriptionWebhooksRoute
 // warning, which deliberately assumes that limit for its own math.
 app.use('/api/email/threads', express.json({ limit: '20mb' }));
 app.use('/api/email', express.json({ limit: '20mb' }));
+// Stage-plot saves carry a freshly rendered thumbnail plus an optional,
+// aggressively compressed venue-plan background in the scene JSON.
+app.use('/api/stage-plots', express.json({ limit: '5mb' }));
+app.use('/api/stage-plot-library', express.json({ limit: '5mb' }));
 
 app.use(express.json());
 

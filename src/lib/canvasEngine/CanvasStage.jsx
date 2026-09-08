@@ -2,8 +2,9 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
 import { Stage, Layer, Rect, Text, Line, Arrow, Group, Image as KonvaImage, Transformer, Circle } from 'react-konva';
 import { gridLinePositions, snapPointToGrid } from './measurement';
 import { computeDragSnap, SNAP_THRESHOLD_PX } from './alignment';
-import { useSvgImage, preloadIconRegistry } from './useSvgImage';
+import { useSvgImage, useCanvasImage, preloadIconRegistry } from './useSvgImage';
 import { stagePlotNotesToPlainText } from '../stagePlotNotes';
+import { stagePixelGeometry } from './stageGeometry';
 
 // Exported for alignment.js's autoAlignAll — its row/cluster-gap thresholds
 // scale off this same fixed icon footprint, so it reads sensibly against
@@ -123,13 +124,13 @@ function LinearIconGraphic({ linearKind, width, isSelected }) {
 // labeled box for anything unregistered (e.g. the internal canvas-engine
 // demo page's placeholder icon set), so this component works whether or
 // not a real icon set is wired up.
-function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSelect, onEdit, onDragStart, onDragEnd, dragBoundFunc, shapeRef }) {
+function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSelect, onEdit, onDragStart, onDragEnd, dragBoundFunc, shapeRef, unitScale }) {
   const isLinear = !!icon?.linearKind;
   // Older scenes stored size as Group scale factors. New edits store actual
   // dimensions so an icon is rendered at its final resolution instead of
   // stretching a fixed 56px bitmap (which made SVG strokes look heavier).
-  const renderedWidth = isLinear ? null : Math.max(20, element.width || ICON_SIZE * (element.scaleX || 1));
-  const renderedHeight = isLinear ? null : Math.max(20, element.height || ICON_SIZE * (element.scaleY || 1));
+  const renderedWidth = isLinear ? null : Math.max(20, element.realWidth ? element.realWidth * unitScale : element.width || ICON_SIZE * (element.scaleX || 1));
+  const renderedHeight = isLinear ? null : Math.max(20, element.realDepth ? element.realDepth * unitScale : element.height || ICON_SIZE * (element.scaleY || 1));
   const image = useSvgImage(icon?.svg, renderedWidth, renderedHeight);
   // Icon, label, and number badge all live inside one draggable/transformable
   // Group instead of as separate top-level siblings — Konva moves/transforms
@@ -387,6 +388,7 @@ const CanvasStage = forwardRef(function CanvasStage({
   const [calibrationPoints, setCalibrationPoints] = useState(null);
   const [calibrationDistance, setCalibrationDistance] = useState('');
   const [isPanning, setIsPanning] = useState(false);
+  const backgroundImage = useCanvasImage(scene.backgroundPlan?.dataUrl);
 
   // Decode every registered icon once up front rather than lazily on first
   // placement — without this, the *first* time any given icon type is
@@ -593,7 +595,21 @@ const CanvasStage = forwardRef(function CanvasStage({
     setStagePos({ x: width / 2 - centerX * newZoom, y: height / 2 - centerY * newZoom });
   }
 
-  useImperativeHandle(ref, () => ({ fitToContent: handleFitToContent }));
+  function handleFitToStage() {
+    const stage = stagePixelGeometry(scene);
+    const padding = 34;
+    const nextZoom = Math.max(MIN_ZOOM, Math.min(1, Math.min(
+      (width - padding * 2) / Math.max(stage.widthPx, 1),
+      (height - padding * 2) / Math.max(stage.depthPx, 1),
+    )));
+    setZoom(nextZoom);
+    setStagePos({
+      x: width / 2 - (stage.x + stage.widthPx / 2) * nextZoom,
+      y: height / 2 - (stage.y + stage.depthPx / 2) * nextZoom,
+    });
+  }
+
+  useImperativeHandle(ref, () => ({ fitToContent: handleFitToContent, fitToStage: handleFitToStage }));
 
   // Scene coordinates from a point already in Konva's own pointer-position
   // space (container-relative CSS pixels, pre-pan/zoom) — used for every
@@ -837,6 +853,17 @@ const CanvasStage = forwardRef(function CanvasStage({
   }
 
   const grid = showGrid ? gridLinePositions(width * 3, height * 3, scene.scalePxPerUnit, scene.gridSpacing) : { vertical: [], horizontal: [] };
+  const stageGeometry = stagePixelGeometry(scene);
+  const stageGrid = stageGeometry.showGrid ? gridLinePositions(stageGeometry.widthPx, stageGeometry.depthPx, scene.scalePxPerUnit, scene.gridSpacing) : { vertical: [], horizontal: [] };
+  const safeInsetPx = Math.min(stageGeometry.widthPx / 3, stageGeometry.depthPx / 3, Math.max(0, stageGeometry.safeArea * stageGeometry.scale));
+  const oppositeEdge = { top: 'bottom', bottom: 'top', left: 'right', right: 'left' }[stageGeometry.audienceEdge];
+  const sideLabels = { top: '', bottom: '', left: '', right: '' };
+  sideLabels[stageGeometry.audienceEdge] = 'AUDIENCE / DOWNSTAGE';
+  sideLabels[oppositeEdge] = 'UPSTAGE';
+  if (stageGeometry.audienceEdge === 'bottom') { sideLabels.left = 'STAGE RIGHT'; sideLabels.right = 'STAGE LEFT'; }
+  if (stageGeometry.audienceEdge === 'top') { sideLabels.left = 'STAGE LEFT'; sideLabels.right = 'STAGE RIGHT'; }
+  if (stageGeometry.audienceEdge === 'left') { sideLabels.top = 'STAGE RIGHT'; sideLabels.bottom = 'STAGE LEFT'; }
+  if (stageGeometry.audienceEdge === 'right') { sideLabels.top = 'STAGE LEFT'; sideLabels.bottom = 'STAGE RIGHT'; }
   const visibleLayerIds = new Set(scene.layers.filter((l) => l.visible).map((l) => l.id));
   const editingAnnotation = editingAnnotationId ? scene.annotations.find((a) => a.id === editingAnnotationId) : null;
   const selectedElement = selectedElementId ? scene.elements.find((e) => e.id === selectedElementId) : null;
@@ -891,6 +918,50 @@ const CanvasStage = forwardRef(function CanvasStage({
           {grid.horizontal.map((y) => (
             <Line key={`h${y}`} points={[0, y, width * 3, y]} stroke="#f1f5f9" strokeWidth={1} />
           ))}
+        </Layer>
+
+
+        <Layer listening={false}>
+          <Rect
+            x={stageGeometry.x}
+            y={stageGeometry.y}
+            width={stageGeometry.widthPx}
+            height={stageGeometry.depthPx}
+            fill="#f8fafc"
+            stroke="#334155"
+            strokeWidth={2 / zoom}
+            cornerRadius={stageGeometry.shape === 'rounded' ? 22 : 0}
+          />
+          {stageGeometry.shape === 'thrust' && (
+            <Rect
+              x={stageGeometry.audienceEdge === 'left' ? stageGeometry.x - stageGeometry.widthPx * 0.12 : stageGeometry.audienceEdge === 'right' ? stageGeometry.x + stageGeometry.widthPx : stageGeometry.x + stageGeometry.widthPx * 0.35}
+              y={stageGeometry.audienceEdge === 'top' ? stageGeometry.y - stageGeometry.depthPx * 0.18 : stageGeometry.audienceEdge === 'bottom' ? stageGeometry.y + stageGeometry.depthPx : stageGeometry.y + stageGeometry.depthPx * 0.35}
+              width={stageGeometry.audienceEdge === 'left' || stageGeometry.audienceEdge === 'right' ? stageGeometry.widthPx * 0.12 : stageGeometry.widthPx * 0.3}
+              height={stageGeometry.audienceEdge === 'top' || stageGeometry.audienceEdge === 'bottom' ? stageGeometry.depthPx * 0.18 : stageGeometry.depthPx * 0.3}
+              fill="#f8fafc"
+              stroke="#334155"
+              strokeWidth={2 / zoom}
+            />
+          )}
+          {backgroundImage && (
+            <KonvaImage image={backgroundImage} x={stageGeometry.x} y={stageGeometry.y} width={stageGeometry.widthPx} height={stageGeometry.depthPx} opacity={scene.backgroundPlan?.opacity || 0.3} />
+          )}
+          {stageGrid.vertical.map((gridX) => <Line key={`sv${gridX}`} points={[stageGeometry.x + gridX, stageGeometry.y, stageGeometry.x + gridX, stageGeometry.y + stageGeometry.depthPx]} stroke="#cbd5e1" strokeWidth={0.75 / zoom} />)}
+          {stageGrid.horizontal.map((gridY) => <Line key={`sh${gridY}`} points={[stageGeometry.x, stageGeometry.y + gridY, stageGeometry.x + stageGeometry.widthPx, stageGeometry.y + gridY]} stroke="#cbd5e1" strokeWidth={0.75 / zoom} />)}
+          {(scene.zones || []).map((zone) => (
+            <Group key={zone.id}>
+              <Rect x={stageGeometry.x + zone.x * stageGeometry.scale} y={stageGeometry.y + zone.y * stageGeometry.scale} width={zone.width * stageGeometry.scale} height={zone.depth * stageGeometry.scale} fill={zone.color || '#c7d2fe'} opacity={0.28} stroke="#6366f1" strokeWidth={1 / zoom} dash={[5 / zoom, 4 / zoom]} />
+              <Text x={stageGeometry.x + zone.x * stageGeometry.scale + 4} y={stageGeometry.y + zone.y * stageGeometry.scale + 4} text={zone.name || 'Zone'} fontSize={11 / zoom} fill="#4338ca" />
+            </Group>
+          ))}
+          {stageGeometry.showCenterLine && <Line points={[stageGeometry.x + stageGeometry.widthPx / 2, stageGeometry.y, stageGeometry.x + stageGeometry.widthPx / 2, stageGeometry.y + stageGeometry.depthPx]} stroke="#64748b" strokeWidth={1 / zoom} dash={[8 / zoom, 5 / zoom]} />}
+          {!cleanRender && stageGeometry.showSafeArea && safeInsetPx > 0 && <Rect x={stageGeometry.x + safeInsetPx} y={stageGeometry.y + safeInsetPx} width={stageGeometry.widthPx - safeInsetPx * 2} height={stageGeometry.depthPx - safeInsetPx * 2} stroke="#f59e0b" strokeWidth={1 / zoom} dash={[6 / zoom, 4 / zoom]} />}
+          <Text x={stageGeometry.x} y={stageGeometry.y - 31 / zoom} width={stageGeometry.widthPx} text={`${stageGeometry.width} ${scene.unit} WIDE`} align="center" fontSize={11 / zoom} fontStyle="bold" fill="#475569" />
+          <Text x={stageGeometry.x - 70 / zoom} y={stageGeometry.y + stageGeometry.depthPx / 2 - 6 / zoom} width={64 / zoom} text={`${stageGeometry.depth} ${scene.unit}\nDEEP`} align="right" fontSize={10 / zoom} fontStyle="bold" fill="#475569" />
+          <Text x={stageGeometry.x} y={stageGeometry.y + 6 / zoom} width={stageGeometry.widthPx} text={sideLabels.top} align="center" fontSize={10 / zoom} fontStyle="bold" fill="#0f172a" />
+          <Text x={stageGeometry.x} y={stageGeometry.y + stageGeometry.depthPx - 18 / zoom} width={stageGeometry.widthPx} text={sideLabels.bottom} align="center" fontSize={10 / zoom} fontStyle="bold" fill="#0f172a" />
+          <Text x={stageGeometry.x + 5 / zoom} y={stageGeometry.y + stageGeometry.depthPx / 2 - 5 / zoom} text={sideLabels.left} fontSize={9 / zoom} fontStyle="bold" fill="#64748b" />
+          <Text x={stageGeometry.x + stageGeometry.widthPx - 95 / zoom} y={stageGeometry.y + stageGeometry.depthPx / 2 - 5 / zoom} width={90 / zoom} align="right" text={sideLabels.right} fontSize={9 / zoom} fontStyle="bold" fill="#64748b" />
         </Layer>
 
         <Layer>
@@ -965,6 +1036,7 @@ const CanvasStage = forwardRef(function CanvasStage({
                 }));
               }}
               shapeRef={(node) => { if (node) shapeRefs.current[el.id] = node; else delete shapeRefs.current[el.id]; }}
+              unitScale={scene.scalePxPerUnit}
             />
           ))}
 
@@ -1073,7 +1145,10 @@ const CanvasStage = forwardRef(function CanvasStage({
               onMutate((s) => ({
                 ...s,
                 elements: s.elements.map((e) => (e.id === selectedElementId
-                  ? { ...e, x: node.x(), y: node.y(), rotation: node.rotation(), width: nextWidth, height: nextHeight, scaleX: 1, scaleY: 1 }
+                  ? {
+                    ...e, x: node.x(), y: node.y(), rotation: node.rotation(), width: nextWidth, height: nextHeight, scaleX: 1, scaleY: 1,
+                    ...(e.iconId === 'riser' ? { realWidth: nextWidth / scene.scalePxPerUnit, realDepth: nextHeight / scene.scalePxPerUnit } : {}),
+                  }
                   : e)),
               }));
             }}

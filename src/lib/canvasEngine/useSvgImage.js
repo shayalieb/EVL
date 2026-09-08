@@ -64,3 +64,17 @@ export function preloadIconRegistry(iconRegistry) {
     if (entry?.svg) decode(entry.svg);
   }
 }
+
+export function useCanvasImage(src) {
+  const [image, setImage] = useState(null);
+  useEffect(() => {
+    if (!src) { setImage(null); return undefined; }
+    let cancelled = false;
+    const img = new window.Image();
+    img.onload = () => { if (!cancelled) setImage(img); };
+    img.onerror = () => { if (!cancelled) setImage(null); };
+    img.src = src;
+    return () => { cancelled = true; };
+  }, [src]);
+  return image;
+}

@@ -41,6 +41,12 @@ export function createEmptyScene({ unit = 'ft', paperSize = 'letter', scalePxPer
     unit,
     scalePxPerUnit,
     gridSpacing,
+    stage: {
+      width: 40, depth: 24, x: 48, y: 58, shape: 'rectangle', audienceEdge: 'bottom',
+      showGrid: true, showCenterLine: true, showSafeArea: true, safeArea: 2,
+    },
+    zones: [],
+    backgroundPlan: null,
     layers: [{ id: DEFAULT_LAYER_ID, name: 'Layer 1', visible: true, locked: false }],
     elements: [],
     strokes: [],

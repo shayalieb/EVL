@@ -6,6 +6,8 @@ import { scaleFromCalibration } from '../lib/canvasEngine/measurement';
 import { alignElementsCenter, distributeElements, centerElementsOnStage, autoAlignAll } from '../lib/canvasEngine/alignment';
 import { STAGE_PLOT_ICON_LIST, STAGE_PLOT_ICONS, ICON_CREDITS } from '../lib/canvasEngine/stagePlotIcons';
 import CanvasIconPalette from './CanvasIconPalette';
+import StageDefinitionPanel from './StageDefinitionPanel';
+import { stagePixelGeometry } from '../lib/canvasEngine/stageGeometry';
 
 const AUTOSAVE_DELAY_MS = 2000;
 const MIN_STAGE_WIDTH = 420;
@@ -249,7 +251,8 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
   function handleAlign(action) {
     const ids = multiSelectedIds.size > 0 ? [...multiSelectedIds] : selectedElementId ? [selectedElementId] : [];
     if (!ids.length) return;
-    const stageCenter = { x: stageWidth / 2, y: STAGE_HEIGHT / 2 };
+    const stage = stagePixelGeometry(scene);
+    const stageCenter = { x: stage.x + stage.widthPx / 2, y: stage.y + stage.depthPx / 2 };
     apply((s) => ({
       ...s,
       elements: action === 'align-center' ? alignElementsCenter(s.elements, ids, 'x')
@@ -294,6 +297,23 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
     const ids = multiSelectedIds.size > 0 ? multiSelectedIds : new Set(selectedElementId ? [selectedElementId] : []);
     if (!ids.size) return;
     apply((s) => ({ ...s, elements: s.elements.map((element) => (ids.has(element.id) ? { ...element, rotation } : element)) }));
+  }
+
+  function resizeSelectedRiser(axis, rawUnits) {
+    if (!selectedElementId) return;
+    const units = Math.max(0.25, Number(rawUnits) || 1);
+    apply((s) => ({
+      ...s,
+      elements: s.elements.map((element) => (element.id === selectedElementId
+        ? {
+          ...element,
+          [axis === 'width' ? 'realWidth' : 'realDepth']: units,
+          [axis === 'width' ? 'width' : 'height']: units * s.scalePxPerUnit,
+          scaleX: 1,
+          scaleY: 1,
+        }
+        : element)),
+    }));
   }
 
   // Clones whichever selection is active (multi, or the single selected
@@ -446,6 +466,7 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
         >
           Center All
         </button>
+        <button type="button" onClick={() => canvasApiRef.current?.fitToStage()} data-testid="stageplot-fit-stage-button" title="Fit the defined stage in view" className={toolbarButtonClass}>Fit Stage</button>
         <button
           type="button"
           onClick={handleAutoAlignAll}
@@ -555,6 +576,13 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
         </span>
       </div>
 
+      <details className="mb-3 rounded-lg border border-slate-200 bg-slate-50" data-testid="stageplot-setup-details">
+        <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-slate-700">Stage setup, dimensions and venue plan</summary>
+        <div className="border-t border-slate-200 p-3 max-w-3xl">
+          <StageDefinitionPanel scene={scene} onChange={apply} />
+        </div>
+      </details>
+
       <div className="flex gap-4 w-full min-w-0">
         <div className="w-44 shrink-0 space-y-4">
           <CanvasIconPalette
@@ -595,6 +623,16 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
                 data-testid="stageplot-selected-size-input"
                 className="w-full px-2 py-1 rounded border border-slate-300 text-sm"
               />
+              {scene.elements.find((e) => e.id === selectedElementId)?.iconId === 'riser' && (
+                <div className="grid grid-cols-2 gap-1.5 mt-2">
+                  <label className="text-[11px] text-slate-400">Riser width ({scene.unit})
+                    <input type="number" min="0.25" step="0.25" value={scene.elements.find((e) => e.id === selectedElementId)?.realWidth || Math.round(((scene.elements.find((e) => e.id === selectedElementId)?.width || ICON_SIZE) / scene.scalePxPerUnit) * 100) / 100} onChange={(e) => resizeSelectedRiser('width', e.target.value)} className="w-full px-2 py-1 rounded border border-slate-300 text-sm" data-testid="stageplot-riser-width-input" />
+                  </label>
+                  <label className="text-[11px] text-slate-400">Riser depth ({scene.unit})
+                    <input type="number" min="0.25" step="0.25" value={scene.elements.find((e) => e.id === selectedElementId)?.realDepth || Math.round(((scene.elements.find((e) => e.id === selectedElementId)?.height || ICON_SIZE) / scene.scalePxPerUnit) * 100) / 100} onChange={(e) => resizeSelectedRiser('depth', e.target.value)} className="w-full px-2 py-1 rounded border border-slate-300 text-sm" data-testid="stageplot-riser-depth-input" />
+                  </label>
+                </div>
+              )}
               <button type="button" onClick={resetSelectedSize} data-testid="stageplot-reset-size-button" className="mt-1.5 text-xs font-semibold text-indigo-600">
                 Reset size
               </button>
