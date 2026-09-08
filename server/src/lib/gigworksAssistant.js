@@ -3,11 +3,12 @@ import { prisma } from './prisma.js';
 import { getAnthropicClient } from './anthropic.js';
 import { invoiceTotal } from '../routes/invoices.js';
 import { createWithPreservedId } from './idPreservingCreate.js';
-// Pure data, zero imports — reused directly rather than duplicated, so the
-// Assistant's training/getting-started answers never drift from what
-// HelpPage.jsx actually shows (a duplicated copy would silently go stale
-// the next time someone edits an article).
-import { HELP_ARTICLES_FLAT } from '../../../src/lib/helpArticles.js';
+// A synced copy, not the real src/lib/helpArticles.js — a plain relative
+// import reaching outside server/ crashed production on boot the one time
+// this was tried, because Railway's EVL service builds with server/ as its
+// root directory and nothing outside it exists in that build. See this
+// local copy's own header comment for the sync obligation that creates.
+import { HELP_ARTICLES_FLAT } from './helpArticles.js';
 import { normalizeValidEmail } from './emailAddress.js';
 
 // General-reasoning model — unlike emailReplyClassifier.js's bounded 3-way
