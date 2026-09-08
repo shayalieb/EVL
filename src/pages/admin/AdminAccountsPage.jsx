@@ -42,6 +42,7 @@ export default function AdminAccountsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [disableTarget, setDisableTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [resendingId, setResendingId] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [teamSizeFilter, setTeamSizeFilter] = useState('');
@@ -94,6 +95,18 @@ export default function AdminAccountsPage() {
       showToast('Business type updated');
     } catch (err) {
       showToast(err.message, 'error');
+    }
+  }
+
+  async function handleResendInvite(account) {
+    setResendingId(account.id);
+    try {
+      await apiFetch(`/admin/accounts/${account.id}/resend-invite`, { method: 'POST' });
+      showToast(`Invite resent to ${account.owner?.email}`);
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setResendingId(null);
     }
   }
 
@@ -296,6 +309,17 @@ export default function AdminAccountsPage() {
                 </td>
                 <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
                   <Link to={`/admin/accounts/${a.id}`} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">Profile</Link>
+                  {a.owner && !a.owner.hasPassword && (
+                    <button
+                      type="button"
+                      onClick={() => handleResendInvite(a)}
+                      disabled={resendingId === a.id}
+                      data-testid="admin-account-row-resend-invite-button"
+                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 disabled:opacity-50"
+                    >
+                      {resendingId === a.id ? 'Sending…' : 'Resend Invite'}
+                    </button>
+                  )}
                   {canManageStatus && (
                     <>
                       {!a.approvedAt && !a.disabledAt && (

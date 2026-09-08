@@ -393,7 +393,58 @@ function clampToCallerPermissions(req, input) {
   return sanitized;
 }
 
-async function createInvitedUser({ firstName, lastName, email, expiration, requireAgreements = false }, { grantAdmin = false, permissions, approvedById } = {}) {
+// Shared by the initial invite (createInvitedUser below) and the
+// "Resend invite" action — same token-issuing logic either way, since a
+// resend is really just "do the invite-link part again" for a user that
+// already exists. Revokes any outstanding invite tokens for this user
+// first so an old, previously-emailed link can't still work after a fresh
+// one is issued — same reasoning as /auth/reset-password's own cleanup on
+// successful use, just proactive here instead of after the fact.
+async function issueInviteToken(userId, purpose, expiration) {
+  await prisma.passwordResetToken.updateMany({
+    where: { userId, purpose, revokedAt: null, usedAt: null },
+    data: { revokedAt: new Date() },
+  });
+  const token = generateToken();
+  const resolvedExpiration = resolveLinkExpiration(expiration, { defaultPreset: '7_days' });
+  if (resolvedExpiration.error) throw Object.assign(new Error(resolvedExpiration.error), { status: 400 });
+  await prisma.passwordResetToken.create({
+    data: { userId, tokenHash: hashToken(token), purpose, expiresAt: resolvedExpiration.expiresAt },
+  });
+  return {
+    setupUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${token}&invite=1`,
+    expirationCopy: resolvedExpiration.expiresAt
+      ? `This link expires ${resolvedExpiration.expiresAt.toLocaleString()}.`
+      : 'This invitation does not expire unless an administrator revokes or replaces it.',
+  };
+}
+
+// One template, three tones (design partner / admin / plain team invite) —
+// a real button instead of a raw link, matching every other transactional
+// email in this app (buildActionEmailHtml, mailer.js).
+async function sendInviteEmail({ to, inviterName, grantAdmin, requireAgreements, setupUrl, expirationCopy }) {
+  const subject = requireAgreements
+    ? "You're invited to be a GigWorks design partner"
+    : grantAdmin
+    ? "You've been invited to GigWorks as an admin"
+    : "You've been invited to GigWorks";
+  const bodyHtml = requireAgreements
+    ? `<p>${escapeHtml(inviterName)} is inviting you to be a test user and design partner for GigWorks — band and orchestra management software for entertainment agencies and bandleaders.</p><p>As a design partner, you'll get free access while you help shape the product with real-world feedback. Set up your account below to get started.</p><p style="color:#94a3b8;">${escapeHtml(expirationCopy)}</p>`
+    : `<p>${escapeHtml(inviterName)} has ${grantAdmin ? 'invited you to GigWorks with admin access' : 'created a GigWorks account for you'}. Set up your account below to get started.</p><p style="color:#94a3b8;">${escapeHtml(expirationCopy)}</p>`;
+  await sendMail({
+    from: buildFromHeader(),
+    to,
+    subject,
+    html: buildActionEmailHtml({
+      heading: requireAgreements ? "You're invited to be a design partner" : "You're invited to GigWorks",
+      bodyHtml,
+      buttonText: 'Set Up Your Account',
+      buttonUrl: setupUrl,
+    }),
+  });
+}
+
+async function createInvitedUser({ firstName, lastName, email, expiration, requireAgreements = false }, { grantAdmin = false, permissions, approvedById, inviterName = 'A GigWorks admin' } = {}) {
   const normalizedEmail = normalizeValidEmail(email);
   if (!normalizedEmail) throw Object.assign(new Error('A valid email address is required.'), { status: 400 });
 
@@ -449,24 +500,10 @@ async function createInvitedUser({ firstName, lastName, email, expiration, requi
     throw err;
   }
 
-  const token = generateToken();
-  const resolvedExpiration = resolveLinkExpiration(expiration, { defaultPreset: '7_days' });
-  if (resolvedExpiration.error) throw Object.assign(new Error(resolvedExpiration.error), { status: 400 });
   const purpose = grantAdmin ? 'platform_admin_invite' : 'account_invite';
-  await prisma.passwordResetToken.create({
-    data: { userId: user.id, tokenHash: hashToken(token), purpose, expiresAt: resolvedExpiration.expiresAt },
-  });
-  const setupUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${token}&invite=1`;
-  const expirationCopy = resolvedExpiration.expiresAt
-    ? `This link expires ${resolvedExpiration.expiresAt.toLocaleString()}.`
-    : 'This invitation does not expire unless an administrator revokes or replaces it.';
+  const { setupUrl, expirationCopy } = await issueInviteToken(user.id, purpose, expiration);
   try {
-    await sendMail({
-      from: buildFromHeader(),
-      to: normalizedEmail,
-      subject: grantAdmin ? "You've been invited to GigWorks as an admin" : "You've been invited to GigWorks",
-      html: `<p>An account has been created for you${grantAdmin ? ' with admin access' : ''}. Click below to set your password and get started. ${expirationCopy}</p><p><a href="${setupUrl}">${setupUrl}</a></p>`,
-    });
+    await sendInviteEmail({ to: normalizedEmail, inviterName, grantAdmin, requireAgreements, setupUrl, expirationCopy });
   } catch {
     // best effort — the account still exists even if the invite email fails to send
   }
@@ -480,12 +517,42 @@ router.post('/accounts', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'First name, last name, and a valid email address are required.' });
   }
   try {
-    await createInvitedUser({ firstName, lastName, email, expiration, requireAgreements: !!requireAgreements }, { approvedById: req.user.id });
+    await createInvitedUser({ firstName, lastName, email, expiration, requireAgreements: !!requireAgreements }, { approvedById: req.user.id, inviterName: `${req.user.firstName} ${req.user.lastName}`.trim() });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     throw err;
   }
   res.status(201).json({ ok: true });
+}));
+
+// For an account still sitting in "Invited" status (owner has never set a
+// password) — issues a fresh token/link and re-sends the same invite email
+// createInvitedUser above sends, using this account's own already-decided
+// isDesignPartner/isPlatformAdmin state rather than letting the caller
+// re-specify them (those aren't things a resend should be able to change).
+router.post('/accounts/:id/resend-invite', asyncHandler(async (req, res) => {
+  const account = await prisma.account.findUnique({
+    where: { id: req.params.id },
+    include: { memberships: { where: { role: 'owner' }, include: { user: true } } },
+  });
+  if (!account) return res.status(404).json({ error: 'Account not found.' });
+  const owner = account.memberships[0]?.user;
+  if (!owner) return res.status(404).json({ error: 'This account has no owner to invite.' });
+  if (owner.passwordHash) return res.status(400).json({ error: 'This invite has already been used — the account owner has already set a password.' });
+
+  const grantAdmin = owner.isPlatformAdmin;
+  const purpose = grantAdmin ? 'platform_admin_invite' : 'account_invite';
+  const { setupUrl, expirationCopy } = await issueInviteToken(owner.id, purpose, req.body?.expiration);
+  await sendInviteEmail({
+    to: owner.email,
+    inviterName: `${req.user.firstName} ${req.user.lastName}`.trim(),
+    grantAdmin,
+    requireAgreements: account.isDesignPartner,
+    setupUrl,
+    expirationCopy,
+  });
+  await prisma.accountActivity.create({ data: { accountId: account.id, actorUserId: req.user.id, type: 'invite_resent', summary: 'Invite email resent by platform admin', metadata: {} } });
+  res.json({ ok: true });
 }));
 
 // Disabling/enabling is a materially more consequential action than plain
@@ -1020,7 +1087,7 @@ router.post('/platform-admins/invite', asyncHandler(async (req, res) => {
   }
   let user;
   try {
-    user = await createInvitedUser({ firstName, lastName, email, expiration }, { grantAdmin: true, permissions: clampToCallerPermissions(req, permissions), approvedById: req.user.id });
+    user = await createInvitedUser({ firstName, lastName, email, expiration }, { grantAdmin: true, permissions: clampToCallerPermissions(req, permissions), approvedById: req.user.id, inviterName: `${req.user.firstName} ${req.user.lastName}`.trim() });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     throw err;
