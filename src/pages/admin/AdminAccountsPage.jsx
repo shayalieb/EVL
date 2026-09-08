@@ -147,7 +147,7 @@ export default function AdminAccountsPage() {
   if (!accounts) return <div className="text-sm text-slate-400">Loading…</div>;
 
   return (
-    <div className="max-w-6xl space-y-4">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-slate-800">Accounts</h2>
         <button

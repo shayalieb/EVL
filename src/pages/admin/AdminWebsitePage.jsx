@@ -174,7 +174,7 @@ export default function AdminWebsitePage() {
   if (!config) return <div className="text-sm text-slate-400">Loading…</div>;
 
   return (
-    <form onSubmit={save} className="max-w-6xl space-y-5">
+    <form onSubmit={save} className="space-y-5">
       <div className="flex items-center justify-between gap-4"><div><h2 className="text-2xl font-bold text-slate-800">Website</h2><p className="text-sm text-slate-500 mt-1">Edit and publish every section of the public landing page.</p></div><div className="flex gap-2"><button type="button" onClick={openHistory} className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50">History</button><button type="button" onClick={() => setPreviewOpen(true)} className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50">Preview</button><button disabled={saving} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold disabled:opacity-50">{saving ? 'Publishing…' : 'Publish changes'}</button></div></div>
 
       <Modal open={historyOpen} onClose={() => setHistoryOpen(false)} title="Version history" widthClass="max-w-lg">

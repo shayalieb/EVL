@@ -49,7 +49,7 @@ export default function AdminWaitlistPage() {
   if (!entries) return <div className="text-sm text-slate-400">Loading…</div>;
 
   return (
-    <div className="max-w-6xl space-y-4">
+    <div className="space-y-4">
       <div>
         <h2 className="text-2xl font-bold text-slate-800">Waitlist</h2>
         <p className="text-sm text-slate-500 mt-1">People who requested access before public signup opened.</p>

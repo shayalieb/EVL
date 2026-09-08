@@ -131,7 +131,7 @@ export default function AdminSupportPage() {
   const active = threads.find((t) => t.id === activeId);
 
   return (
-    <div className="max-w-5xl">
+    <div>
       <h2 className="text-2xl font-bold text-slate-800 mb-4">Support</h2>
       <div className="flex items-center gap-2 flex-wrap mb-4">
         <SearchInput value={search} onChange={setSearch} placeholder="Search threads…" className="w-64" testId="admin-support-search-input" />
