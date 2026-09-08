@@ -7,9 +7,19 @@ import { requireVertical } from '../lib/verticals.js';
 import { uploadFile, getSignedDownloadUrl } from '../lib/fileStorage.js';
 import { withSerializableTransaction } from '../lib/serializableTransaction.js';
 import { decodeStagePlotThumbnail, deleteStagePlotThumbnailIfUnused } from '../lib/stagePlotThumbnails.js';
+import { createRateLimiter } from '../lib/rateLimiter.js';
+import { parseStagePlotEquipmentPrompt } from '../lib/stagePlotItemParser.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership), requireVertical('band_orchestra'));
+
+// Per-account, not per-IP — same reasoning as assistant.js's assistantLimiter.
+const stagePlotAiLimiter = createRateLimiter('stage-plot-ai', {
+  windowMs: 60 * 1000,
+  limit: 12,
+  keyGenerator: (req) => req.membership.accountId,
+  message: { error: 'Too many requests — please wait a moment and try again.' },
+});
 
 function serializePlot(plot) {
   return {
@@ -172,6 +182,100 @@ router.post('/:eventId/apply-library/:libraryItemId', asyncHandler(async (req, r
     include: { pages: true, channels: true, backlineItems: true },
   });
   res.json({ stagePlot: serializePlot(merged) });
+}));
+
+// AI-assisted row proposal — see server/src/lib/stagePlotItemParser.js and
+// stagePlotEquipmentReference.js for why this is split into a parse step
+// (one forced tool call, no DB writes) and a separate confirm step below.
+// Nothing is added to the stage plot until the user confirms.
+router.post('/:eventId/ai-items', stagePlotAiLimiter, asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
+  const plot = await loadOwnedPlot(req.membership.accountId, req.params.eventId);
+  if (!plot) return res.status(404).json({ error: 'Stage plot not found.' });
+  const prompt = req.body?.prompt?.trim();
+  if (!prompt) return res.status(400).json({ error: 'A description is required.' });
+
+  let items;
+  try {
+    items = await parseStagePlotEquipmentPrompt({ prompt });
+  } catch (err) {
+    console.error('Stage plot AI item parsing failed:', err);
+    return res.status(502).json({ error: 'The AI assistant is unavailable right now.' });
+  }
+  if (!items.length) {
+    return res.status(422).json({ error: 'Couldn\'t understand that request — try describing specific equipment, e.g. "8pc drum mics".' });
+  }
+
+  const withIds = items.map((item, i) => ({ tempId: `ai_item_${i}`, ...item }));
+  const description = `Add ${withIds.length} item${withIds.length === 1 ? '' : 's'} from: "${prompt}"`;
+  res.json({ pendingAction: { type: 'add_stage_plot_items', description, fields: { items: withIds } } });
+}));
+
+// Confirm — re-validates every item from scratch (never trusts the
+// client-echoed payload from the propose step above, same discipline as
+// gigworksAssistant.js's *Action functions), then creates everything in one
+// transaction. Channel numbering follows the same "seed once, increment in
+// memory" pattern as apply-library above, not the single-add route's
+// per-row retry loop, since that loop isn't safe/efficient called N times
+// in a row for a bulk add.
+router.post('/:eventId/ai-items/confirm', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
+  const { accountId } = req.membership;
+  const { eventId } = req.params;
+  const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
+
+  const channelInputs = [];
+  const backlineInputs = [];
+  for (const raw of rawItems) {
+    if (raw?.listType === 'channel') {
+      const source = typeof raw.source === 'string' ? raw.source.trim().slice(0, 200) : '';
+      if (!source) continue;
+      channelInputs.push({ source, phantomPower: !!raw.phantomPower, powerNeeded: !!raw.powerNeeded });
+    } else if (raw?.listType === 'backline') {
+      const item = typeof raw.item === 'string' ? raw.item.trim().slice(0, 200) : '';
+      if (!item) continue;
+      const quantity = Number.isFinite(Number(raw.quantity)) && Number(raw.quantity) > 0 ? Math.trunc(Number(raw.quantity)) : 1;
+      backlineInputs.push({ item, quantity: Math.min(quantity, 999) });
+    }
+  }
+  if (!channelInputs.length && !backlineInputs.length) {
+    return res.status(400).json({ error: 'No valid items to add.' });
+  }
+
+  const result = await withSerializableTransaction(prisma, async (tx) => {
+    const plot = await tx.stagePlot.findUnique({
+      where: { accountId_eventId: { accountId, eventId } },
+      include: { channels: true },
+    });
+    if (!plot) return { error: 'event' };
+
+    let nextChannelNumber = plot.channels.reduce((max, c) => Math.max(max, c.channelNumber), 0) + 1;
+    const channelCreates = channelInputs.map((input) => ({
+      stagePlotId: plot.id,
+      channelNumber: nextChannelNumber++,
+      source: input.source,
+      phantomPower: input.phantomPower,
+      powerNeeded: input.powerNeeded,
+    }));
+    const backlineCreates = backlineInputs.map((input) => ({
+      stagePlotId: plot.id,
+      item: input.item,
+      quantity: input.quantity,
+    }));
+
+    const [channels, backlineItems] = await Promise.all([
+      Promise.all(channelCreates.map((data) => tx.stagePlotChannel.create({ data }))),
+      Promise.all(backlineCreates.map((data) => tx.stagePlotBacklineItem.create({ data }))),
+    ]);
+    return { channels, backlineItems };
+  });
+  if (result.error === 'event') return res.status(404).json({ error: 'Stage plot not found.' });
+
+  res.status(201).json({ channels: result.channels, backlineItems: result.backlineItems });
 }));
 
 // Autosave — debounced client-side (see StagePlotEditorPage.jsx), writes

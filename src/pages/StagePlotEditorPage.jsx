@@ -6,13 +6,15 @@ import {
   getOrCreateStagePlot, addStagePlotPage, deleteStagePlotPage, saveStagePlotPage,
   updateStagePlotChannel, addStagePlotChannel, deleteStagePlotChannel, reorderStagePlotChannels,
   addStagePlotBacklineItem, updateStagePlotBacklineItem, deleteStagePlotBacklineItem,
-  applyStagePlotLibraryItem,
+  applyStagePlotLibraryItem, proposeStagePlotAiItems, confirmStagePlotAiItems,
 } from '../lib/stagePlots';
 import { generateStagePlotPdf } from '../lib/stagePlotPdf';
 import { getThreadSummaries } from '../lib/email/threads';
 import StagePlotPageEditor from '../components/StagePlotPageEditor';
 import StagePlotChannelList from '../components/StagePlotChannelList';
 import StagePlotBacklineList from '../components/StagePlotBacklineList';
+import StagePlotAiPromptBar from '../components/StagePlotAiPromptBar';
+import StagePlotProposalCard from '../components/StagePlotProposalCard';
 import StagePlotEmailModal from '../components/StagePlotEmailModal';
 import EmailThreadModal from '../components/EmailThreadModal';
 import Modal from '../components/ui/Modal';
@@ -60,6 +62,9 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   const [applyingLibraryId, setApplyingLibraryId] = useState(null);
   const [libraryImportMode, setLibraryImportMode] = useState('append');
   const [libraryImportInclude, setLibraryImportInclude] = useState({ pages: true, channels: true, backlineItems: true });
+  const [aiProposal, setAiProposal] = useState(null);
+  const [aiProposing, setAiProposing] = useState(false);
+  const [aiConfirming, setAiConfirming] = useState(false);
   const pageEditorRef = useRef(null);
 
   useContractorHydration([
@@ -221,6 +226,38 @@ export default function StagePlotEditorPage({ onClose } = {}) {
     }
   }
 
+  // Proposes rows for the production/backline lists from a natural-language
+  // request — see server/src/lib/stagePlotItemParser.js. Nothing is added
+  // to the plot until handleAiConfirm runs.
+  async function handleAiPropose(prompt) {
+    setAiProposing(true);
+    try {
+      setAiProposal(await proposeStagePlotAiItems(eventId, prompt));
+    } catch (err) {
+      showToast(err.message || "Couldn't understand that request", 'error');
+    } finally {
+      setAiProposing(false);
+    }
+  }
+
+  async function handleAiConfirm(items) {
+    setAiConfirming(true);
+    try {
+      const { channels, backlineItems } = await confirmStagePlotAiItems(eventId, items);
+      setPlot((prev) => ({
+        ...prev,
+        channels: [...prev.channels, ...(channels || [])],
+        backlineItems: [...prev.backlineItems, ...(backlineItems || [])],
+      }));
+      showToast(`Added ${(channels?.length || 0) + (backlineItems?.length || 0)} item${(channels?.length || 0) + (backlineItems?.length || 0) === 1 ? '' : 's'}`);
+      setAiProposal(null);
+    } catch (err) {
+      showToast(err.message || 'Failed to add items', 'error');
+    } finally {
+      setAiConfirming(false);
+    }
+  }
+
   if (loadError) return <div data-testid="stageplot-load-error" className="p-6 text-sm text-red-600">{loadError}</div>;
   if (!plot) return <div className="p-6 text-sm text-slate-500">Loading…</div>;
 
@@ -367,6 +404,17 @@ export default function StagePlotEditorPage({ onClose } = {}) {
           />
         )}
         <div className="w-full lg:w-4/5 mx-auto mt-6">
+          <div className="mb-4 space-y-2">
+            <StagePlotAiPromptBar onSubmit={handleAiPropose} loading={aiProposing} />
+            {aiProposal && (
+              <StagePlotProposalCard
+                pendingAction={aiProposal}
+                onConfirm={handleAiConfirm}
+                onDismiss={() => setAiProposal(null)}
+                confirming={aiConfirming}
+              />
+            )}
+          </div>
           <StagePlotChannelList
             api={channelApi}
             channels={plot.channels}

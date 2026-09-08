@@ -91,6 +91,25 @@ export async function applyStagePlotLibraryItem(eventId, libraryItemId, options 
   return data.stagePlot;
 }
 
+// AI-assisted row proposal — parses a natural-language request (e.g. "Add
+// 8pc drum mics") into proposed production-list/backline-list rows. Returns
+// the pendingAction unmodified; nothing is added until confirmStagePlotAiItems
+// is called with the (possibly user-trimmed) items.
+export async function proposeStagePlotAiItems(eventId, prompt) {
+  const data = await apiFetch(`/stage-plots/${encodeURIComponent(eventId)}/ai-items`, {
+    method: 'POST',
+    body: JSON.stringify({ prompt }),
+  });
+  return data.pendingAction;
+}
+
+export async function confirmStagePlotAiItems(eventId, items) {
+  return apiFetch(`/stage-plots/${encodeURIComponent(eventId)}/ai-items/confirm`, {
+    method: 'POST',
+    body: JSON.stringify({ items }),
+  });
+}
+
 // Not apiFetch — this redirects (302) to a signed Supabase Storage URL,
 // which fetch()'s default redirect:'follow' resolves transparently into
 // the actual PNG bytes. Used by stagePlotPdf.js to pull each page's
