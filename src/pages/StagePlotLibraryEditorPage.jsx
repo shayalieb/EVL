@@ -9,6 +9,7 @@ import {
 import StagePlotPageEditor from '../components/StagePlotPageEditor';
 import StagePlotChannelList from '../components/StagePlotChannelList';
 import StagePlotBacklineList from '../components/StagePlotBacklineList';
+import StagePlotReadiness from '../components/StagePlotReadiness';
 import { useToast } from '../components/ui/Toast';
 
 const inputClass = 'px-2 py-1 rounded-lg border border-slate-300 text-lg font-bold text-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -226,6 +227,10 @@ export default function StagePlotLibraryEditorPage() {
           />
         )}
         <div className="w-full lg:w-4/5 mx-auto mt-6">
+          <div className="mb-4">
+            <StagePlotReadiness plot={item} onSelectElement={setSelectedElementId} />
+          </div>
+          <div id="stageplot-production-list" className="scroll-mt-4">
           <StagePlotChannelList
             api={channelApi}
             channels={item.channels}
@@ -234,6 +239,7 @@ export default function StagePlotLibraryEditorPage() {
             selectedElement={selectedElement}
             onSelectElement={setSelectedElementId}
           />
+          </div>
           <StagePlotBacklineList
             api={backlineApi}
             items={item.backlineItems}

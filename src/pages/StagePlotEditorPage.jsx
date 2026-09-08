@@ -16,6 +16,7 @@ import StagePlotBacklineList from '../components/StagePlotBacklineList';
 import StagePlotAiPromptBar from '../components/StagePlotAiPromptBar';
 import StagePlotProposalCard from '../components/StagePlotProposalCard';
 import StagePlotSuggestionBanner from '../components/StagePlotSuggestionBanner';
+import StagePlotReadiness from '../components/StagePlotReadiness';
 import StagePlotEmailModal from '../components/StagePlotEmailModal';
 import EmailThreadModal from '../components/EmailThreadModal';
 import Modal from '../components/ui/Modal';
@@ -457,6 +458,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
         )}
         <div className="w-full lg:w-4/5 mx-auto mt-6">
           <div className="mb-4 space-y-2">
+            <StagePlotReadiness plot={plot} onSelectElement={setSelectedElementId} />
             {plot.channels.length === 0 && plot.backlineItems.length === 0 &&
               (plot.suggestions || []).filter((s) => !dismissedSuggestionTypes.has(s.type)).map((suggestion) => (
                 <StagePlotSuggestionBanner
@@ -477,6 +479,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
               />
             )}
           </div>
+          <div id="stageplot-production-list" className="scroll-mt-4">
           <StagePlotChannelList
             api={channelApi}
             channels={plot.channels}
@@ -485,6 +488,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
             selectedElement={selectedElement}
             onSelectElement={setSelectedElementId}
           />
+          </div>
           <StagePlotBacklineList
             api={backlineApi}
             items={plot.backlineItems}
