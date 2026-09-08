@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assistantToolNamesForPermissions, findHelpArticles } from '../src/lib/gigworksAssistant.js';
+import { assistantToolNamesForPermissions, eventAttentionIssues, financialSnapshot, findHelpArticles } from '../src/lib/gigworksAssistant.js';
 import { fallbackTrainingAnswer } from '../src/routes/assistant.js';
 import { ASSISTANT_GUIDES } from '../../src/lib/assistantGuides.js';
 import { HELP_ARTICLES_FLAT } from '../../src/lib/helpArticles.js';
@@ -19,6 +19,37 @@ test('assistant tools follow the matching module permission', () => {
   assert.equal(tools.includes('get_pending_contractor_payments'), true);
   assert.equal(tools.includes('find_client'), false);
   assert.equal(tools.includes('propose_create_booking'), false);
+  assert.equal(tools.includes('get_financial_snapshot'), true);
+  assert.equal(tools.includes('get_events_needing_attention'), false);
+  assert.equal(tools.includes('get_due_reminders'), true);
+});
+
+test('operational coverage follows each matching module permission', () => {
+  const tools = assistantToolNamesForPermissions({ manageBookings: true, manageEvents: true, manageVenues: true, manageOfferings: true });
+  assert.equal(tools.includes('search_bookings'), true);
+  assert.equal(tools.includes('get_events_needing_attention'), true);
+  assert.equal(tools.includes('find_venue'), true);
+  assert.equal(tools.includes('get_offerings_summary'), true);
+  assert.equal(tools.includes('get_financial_snapshot'), false);
+});
+
+test('event attention explains missing operational setup in plain language', () => {
+  const issues = eventAttentionIssues({ contractorBookings: [], noOutsideContractorsNeeded: false, contactEmail: '', venue: {} });
+  assert.deepEqual(issues, ['No contractors added', 'Client contact email missing', 'Venue missing']);
+  assert.deepEqual(eventAttentionIssues({ contractorBookings: [], noOutsideContractorsNeeded: true, contactEmail: 'client@example.com', venue: { name: 'Main Hall' } }), []);
+});
+
+test('financial snapshot separates receivables, requests, and recent cash', () => {
+  const result = financialSnapshot({
+    now: new Date('2026-09-08T12:00:00Z'),
+    invoices: [{ snapshot: { lineItems: [{ amount: 1000 }] }, paidAmount: 250, dueDate: new Date('2026-09-01T12:00:00Z') }],
+    requests: [{ amountCents: 12500 }],
+    transactions: [{ amountCents: 50000 }, { amountCents: -20000 }],
+  });
+  assert.equal(result.outstandingClientBalance, 750);
+  assert.equal(result.overdueClientBalance, 750);
+  assert.equal(result.submittedContractorRequests, 125);
+  assert.deepEqual(result.last30Days, { cashIn: 500, cashOut: 200, netCash: 300 });
 });
 
 test('local training search works without calling an AI provider', () => {
