@@ -1,15 +1,15 @@
 import { apiFetch } from '../context/AuthContext';
 
-// `history` is a flat array of { role: 'user'|'assistant', content: string }
-// prior turns — kept client-side only for now (see AssistantModal.jsx),
-// not persisted server-side. Returns { answer, pendingAction, link } —
+// Conversation history now lives server-side (see getAssistantMessages/
+// clearAssistantMessages below) — the server loads recent turns itself,
+// nothing to send here. Returns { answer, pendingAction, link } —
 // pendingAction/link are null unless the assistant proposed a write or a
 // navigation shortcut; nothing is applied until confirmAssistantAction is
 // called separately, with the user's explicit confirmation.
-export async function askAssistant(question, history = []) {
+export async function askAssistant(question) {
   return apiFetch('/assistant/ask', {
     method: 'POST',
-    body: JSON.stringify({ question, history }),
+    body: JSON.stringify({ question }),
   });
 }
 
@@ -33,6 +33,20 @@ export async function confirmAssistantAction(type, fields, description) {
 export async function listAssistantActivity() {
   const data = await apiFetch('/assistant/activity');
   return data.actions;
+}
+
+// This user's own chat with the assistant — oldest first, capped to the
+// last 7 days server-side. Distinct from listAssistantActivity above:
+// this is the actual conversation text, private to the person who asked.
+export async function getAssistantMessages() {
+  const data = await apiFetch('/assistant/messages');
+  return data.messages;
+}
+
+// Wipes this user's entire persisted chat (not just the 7-day window) —
+// only ever their own, never a teammate's.
+export async function clearAssistantMessages() {
+  return apiFetch('/assistant/messages', { method: 'DELETE' });
 }
 
 // Returns { title, hours, offerings, lineItems, summary } — offerings are

@@ -78,6 +78,7 @@ model Account {
   supportThreads            SupportThread[]
   reminders                 Reminder[]
   assistantActions          AssistantAction[]
+  assistantMessages         AssistantMessage[]
   emailDomain               EmailDomain?
   stagePlots                StagePlot[]
   floorPlans                FloorPlan[]
@@ -1115,6 +1116,31 @@ model AssistantAction {
   createdAt DateTime @default(now())
 
   @@index([accountId, createdAt])
+}
+
+// One row per chat turn in the GigWorks Assistant, kept for 7 days so a
+// closed/reloaded chat can pick back up rather than starting cold every
+// time — separate from AssistantAction above, which is a permanent audit
+// trail of confirmed writes, not conversation text. userId is required
+// (unlike AssistantAction's opaque optional one) since a chat is
+// inherently one person's own conversation, not an account-wide log —
+// each user only ever sees and clears their own history. No cron job for
+// the 7-day expiry: read queries only ever return the last 7 days, and
+// server/src/routes/assistant.js opportunistically deletes older rows for
+// a user each time they send a new message, so the table doesn't grow
+// unboundedly for anyone actively using the assistant.
+model AssistantMessage {
+  id        String  @id @default(cuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  userId    String
+
+  role    String // 'user' | 'assistant'
+  content String @db.Text
+
+  createdAt DateTime @default(now())
+
+  @@index([accountId, userId, createdAt])
 }
 
 // A business's own sending domain, self-service configured in Settings —
