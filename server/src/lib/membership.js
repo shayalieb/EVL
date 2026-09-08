@@ -89,6 +89,7 @@ export function serializeMembership(membership) {
       accountId: null, role: null, permissions: emptyPermissions(),
       vertical: null, allVerticalsEnabled: false, activeVerticals: [],
       accountApproved: false,
+      agreementsRequired: false, agreementsSigned: false,
       subscriptionStatus: null, planTier: null, seatLimit: null, agencyGroupLimit: null, trialEndsAt: null, subscriptionBlocked: false,
     };
   }
@@ -105,6 +106,11 @@ export function serializeMembership(membership) {
     // know this *before* it starts fetching account data, not after every
     // fetch fails.
     accountApproved: !!membership.account.approvedAt,
+    // Drives the client-side design-partner-agreements gate (App.jsx), same
+    // reasoning as accountApproved above — checked here so the client knows
+    // before it starts fetching account data, not after every fetch 403s.
+    agreementsRequired: !!membership.account.agreementsRequiredAt,
+    agreementsSigned: !!membership.account.agreementsSignedAt,
     // GigWorks' own subscription (see lib/plans.js) — the frontend gate
     // (App.jsx) and the Plan settings tab both need these.
     subscriptionStatus: membership.account.subscriptionStatus,
@@ -131,6 +137,13 @@ export async function attachMembership(req, res, next) {
   // state, but this is the real enforcement boundary regardless.
   if (!membership.account.approvedAt) {
     return res.status(403).json({ error: 'This account is pending approval.' });
+  }
+  // Design partner / test user program (server/src/lib/designPartnerAgreements.js)
+  // — same defense-in-depth reasoning as approvedAt above. The client gates
+  // on agreementsRequired/agreementsSigned (see serializeMembership) and
+  // shows SignAgreementsPage.jsx instead of ever reaching a data route here.
+  if (membership.account.agreementsRequiredAt && !membership.account.agreementsSignedAt) {
+    return res.status(403).json({ error: 'Design partner agreements must be signed before you can access this account.' });
   }
   // A subscription that lapsed *after* being active — distinct from the
   // approvedAt check above ("never set up billing" vs. "billing lapsed").

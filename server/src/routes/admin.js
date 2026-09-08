@@ -17,6 +17,7 @@ import { priceIdFor } from '../lib/plans.js';
 import { resolveLinkExpiration } from '../lib/linkExpiration.js';
 import { quickBooksPilotGraduationReadiness, quickBooksPilotHealth, QUICKBOOKS_PILOT_TEST_STEPS, updateQuickBooksPilotTestResults } from '../lib/quickBooksPilot.js';
 import { backfillEmailAiClassification } from '../lib/emailAiBackfill.js';
+import { buildAgreementDocuments } from '../lib/designPartnerAgreements.js';
 
 const router = Router();
 const REVIEW_LINK_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -169,6 +170,7 @@ router.get('/accounts/:id/profile', asyncHandler(async (req, res) => {
       where: { id: req.params.id },
       include: {
         memberships: { include: { user: true }, orderBy: { createdAt: 'asc' } }, disabledBy: true, approvedBy: true, accountData: true, messagingProfile: true, quickBooksConnection: true, quickBooksPilot: { include: { owner: true, testRuns: { include: { testedBy: true }, orderBy: { startedAt: 'desc' }, take: 10 } } },
+        designPartnerAgreements: true,
         adminNotes: { include: { author: true }, orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }] },
         activities: { include: { actor: true }, orderBy: { createdAt: 'desc' }, take: 250 },
       },
@@ -191,6 +193,8 @@ router.get('/accounts/:id/profile', asyncHandler(async (req, res) => {
     profile: {
       id: account.id, createdAt: account.createdAt, approvedAt: account.approvedAt, disabledAt: account.disabledAt, disabledReason: account.disabledReason,
       vertical: account.vertical, allVerticalsEnabled: account.allVerticalsEnabled, signupSource: account.signupSource, signupPlan: account.signupPlan, signupInterval: account.signupInterval,
+      isDesignPartner: account.isDesignPartner, agreementsRequiredAt: account.agreementsRequiredAt, agreementsSignedAt: account.agreementsSignedAt,
+      designPartnerAgreements: account.designPartnerAgreements.map((agreement) => ({ id: agreement.id, type: agreement.type, documentText: agreement.documentText, signedAt: agreement.signedAt, signatureName: agreement.signatureName, signatureImage: agreement.signatureImage, expiresAt: agreement.expiresAt })),
       planTier: account.planTier, billingInterval: account.billingInterval, subscriptionStatus: account.subscriptionStatus, trialEndsAt: account.trialEndsAt,
       stripeConnected: !!account.stripeAccountId, stripeChargesEnabled: account.stripeChargesEnabled, stripePayoutsEnabled: account.stripePayoutsEnabled,
       business: { name: businessInfo.name || '', email: businessInfo.email || '', phone: businessInfo.phone || '', address: businessInfo.address || '' },
@@ -388,9 +392,14 @@ function clampToCallerPermissions(req, input) {
   return sanitized;
 }
 
-async function createInvitedUser({ firstName, lastName, email, expiration }, { grantAdmin = false, permissions, approvedById } = {}) {
+async function createInvitedUser({ firstName, lastName, email, expiration, requireAgreements = false }, { grantAdmin = false, permissions, approvedById } = {}) {
   const normalizedEmail = normalizeValidEmail(email);
   if (!normalizedEmail) throw Object.assign(new Error('A valid email address is required.'), { status: 400 });
+
+  // Fetched outside the transaction below — this is a read against the
+  // shared website config, not something that needs to be transactionally
+  // consistent with the account/user creation itself.
+  const legal = requireAgreements ? (await getWebsiteAdminConfig()).legal : null;
 
   let user;
   try {
@@ -408,11 +417,28 @@ async function createInvitedUser({ firstName, lastName, email, expiration }, { g
       // approvedAt set immediately — an admin created this account directly,
       // so it was never really "unreviewed" the way a cold public self-signup
       // is (see schema.prisma's Account.approvedAt).
-      const account = await tx.account.create({ data: { approvedAt: new Date(), approvedById } });
+      const account = await tx.account.create({
+        data: {
+          approvedAt: new Date(),
+          approvedById,
+          ...(requireAgreements ? { isDesignPartner: true, agreementsRequiredAt: new Date() } : {}),
+        },
+      });
       await tx.membership.create({
         data: { userId: newUser.id, accountId: account.id, role: 'owner', permissions: allPermissions() },
       });
-      await tx.accountActivity.create({ data: { accountId: account.id, actorUserId: approvedById || null, type: 'account_created', summary: 'Account created by platform admin', metadata: { source: 'admin' } } });
+      // Design partner program (server/src/lib/designPartnerAgreements.js) —
+      // frozen at creation time since the signer's name is already known
+      // here; membership.js's attachMembership blocks all account-scoped
+      // access until both rows below are signed (see SignAgreementsPage.jsx).
+      if (requireAgreements) {
+        const signerName = `${firstName.trim()} ${lastName.trim()}`;
+        const documents = buildAgreementDocuments({ signerName, entityName: legal.entityName, governingLaw: legal.governingLaw, contactEmail: legal.contactEmail });
+        await tx.designPartnerAgreement.createMany({
+          data: documents.map((doc) => ({ accountId: account.id, type: doc.type, documentText: doc.documentText })),
+        });
+      }
+      await tx.accountActivity.create({ data: { accountId: account.id, actorUserId: approvedById || null, type: 'account_created', summary: requireAgreements ? 'Account created by platform admin (design partner)' : 'Account created by platform admin', metadata: { source: 'admin', designPartner: requireAgreements } } });
       return newUser;
     });
   } catch (err) {
@@ -448,12 +474,12 @@ async function createInvitedUser({ firstName, lastName, email, expiration }, { g
 }
 
 router.post('/accounts', asyncHandler(async (req, res) => {
-  const { firstName, lastName, email, expiration } = req.body || {};
+  const { firstName, lastName, email, expiration, requireAgreements } = req.body || {};
   if (!firstName?.trim() || !lastName?.trim() || !normalizeValidEmail(email)) {
     return res.status(400).json({ error: 'First name, last name, and a valid email address are required.' });
   }
   try {
-    await createInvitedUser({ firstName, lastName, email, expiration }, { approvedById: req.user.id });
+    await createInvitedUser({ firstName, lastName, email, expiration, requireAgreements: !!requireAgreements }, { approvedById: req.user.id });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     throw err;

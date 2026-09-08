@@ -23,6 +23,7 @@ const AppLayout = lazy(() => import('./layouts/AppLayout'));
 const HomePage = lazy(() => import('./pages/HomePage'));
 const NoAccountAccessPage = lazy(() => import('./pages/NoAccountAccessPage'));
 const PendingApprovalPage = lazy(() => import('./pages/PendingApprovalPage'));
+const SignAgreementsPage = lazy(() => import('./pages/SignAgreementsPage'));
 const ContractorsPage = lazy(() => import('./pages/ContractorsPage'));
 const ClientsPage = lazy(() => import('./pages/ClientsPage'));
 const VenuesPage = lazy(() => import('./pages/VenuesPage'));
@@ -72,6 +73,10 @@ function ProtectedArea() {
     return <Navigate to="/auth" replace />;
   }
   if (!currentUser.accountId) return <NoAccountAccessPage />;
+  // Design partner program (server/src/lib/designPartnerAgreements.js) —
+  // same reasoning as the approved/billing gate below, checked first since
+  // an admin-created design-partner account is always already approved.
+  if (currentUser.agreementsRequired && !currentUser.agreementsSigned) return <SignAgreementsPage />;
   // Gated here, before DataProvider ever mounts — a pending (or billing-
   // locked) account can log in fine (auth.js's /login and /me don't run
   // through attachMembership), so without this every DataContext fetch

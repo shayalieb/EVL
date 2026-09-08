@@ -168,6 +168,46 @@ model Account {
   quickBooksPilot      QuickBooksPilot?
   quickBooksAccessEnabled Boolean @default(false)
   quickBooksAccessEnabledAt DateTime?
+
+  // Design partner / test user program (server/src/lib/designPartnerAgreements.js).
+  // isDesignPartner is just a display tag; agreementsRequiredAt/SignedAt is
+  // the actual access gate, checked in membership.js's attachMembership
+  // alongside approvedAt — a design partner account can't reach any
+  // account-scoped route until agreementsSignedAt is set. Never auto-clears
+  // access after the agreements' own term (see DesignPartnerAgreement.expiresAt)
+  // elapses — that's a stated contractual duration, not a login expiry.
+  isDesignPartner      Boolean                   @default(false)
+  agreementsRequiredAt DateTime?
+  agreementsSignedAt   DateTime?
+  designPartnerAgreements DesignPartnerAgreement[]
+}
+
+// One row per legal document (NDA, non-compete) a design partner account
+// must sign before getting real access — see membership.js's
+// attachMembership and src/pages/SignAgreementsPage.jsx. documentText is
+// frozen at creation time (the signer's name is already known from the
+// invite form), so a later edit to the template text never retroactively
+// changes what someone already agreed to. termYears is the obligation's
+// stated duration; expiresAt is computed from it at signing time purely
+// for admin display — it does not gate access.
+model DesignPartnerAgreement {
+  id        String  @id @default(cuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  type         String // 'nda' | 'non_compete'
+  documentText String @db.Text
+  termYears    Int    @default(2)
+
+  signedAt      DateTime?
+  signatureName String?
+  signatureImage String? @db.Text
+  expiresAt     DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([accountId, type])
+  @@index([accountId])
 }
 
 // Platform-admin workflow for controlled QuickBooks pilots. Accounting data

@@ -440,7 +440,7 @@ function DisableAccountModal({ account, onClose, onDisabled }) {
 }
 
 function NewAccountModal({ open, onClose, onCreated }) {
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: '' });
+  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', requireAgreements: false });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const { showToast } = useToast();
@@ -448,7 +448,7 @@ function NewAccountModal({ open, onClose, onCreated }) {
 
   useEffect(() => {
     if (open) {
-      setForm({ firstName: '', lastName: '', email: '' });
+      setForm({ firstName: '', lastName: '', email: '', requireAgreements: false });
       setError('');
       setExpiration(emptyLinkExpiration('7_days'));
     }
@@ -499,6 +499,20 @@ function NewAccountModal({ open, onClose, onCreated }) {
         </div>
 
         <LinkExpirationPicker value={expiration} onChange={setExpiration} label="Invitation expiration" testId="admin-accounts-invite-expiration" />
+
+        <label className="flex items-start gap-2 text-sm text-slate-700 rounded-lg border border-slate-200 px-3 py-2.5">
+          <input
+            type="checkbox"
+            checked={form.requireAgreements}
+            onChange={(e) => update('requireAgreements', e.target.checked)}
+            data-testid="admin-accounts-new-account-require-agreements-checkbox"
+            className="mt-0.5"
+          />
+          <span>
+            Require Design Partner Agreements (NDA + Non-Compete)
+            <span className="block text-xs text-slate-400 mt-0.5">Tags this as a design partner account — they'll have to e-sign both agreements before they can use GigWorks.</span>
+          </span>
+        </label>
 
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} data-testid="admin-accounts-new-account-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>

@@ -20,7 +20,7 @@ export const API_BASE = import.meta.env.VITE_API_BASE;
 // everywhere the pending-approval-style hydrate skip already happens, so a
 // billing lockout gets the same tolerant treatment.
 function needsHydrateSkip(user) {
-  return !user.accountApproved || !!user.subscriptionBlocked;
+  return !user.accountApproved || !!user.subscriptionBlocked || (user.agreementsRequired && !user.agreementsSigned);
 }
 const AuthContext = createContext(null);
 
@@ -379,6 +379,10 @@ export function AuthProvider({ children }) {
         allVerticalsEnabled: serverUser.allVerticalsEnabled,
         activeVerticals: serverUser.activeVerticals,
         accountApproved: serverUser.accountApproved,
+        // Design partner program (server/src/lib/designPartnerAgreements.js)
+        // — same reasoning as accountApproved above.
+        agreementsRequired: serverUser.agreementsRequired,
+        agreementsSigned: serverUser.agreementsSigned,
         // GigWorks' own subscription (lib/subscription.js) — the
         // pending-approval/plan-picker gate and the Plan settings tab both
         // need these.
@@ -529,6 +533,20 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  // Called by SignAgreementsPage.jsx once the sign-agreements API call
+  // succeeds — `user` is the freshly re-fetched /auth/me shape with
+  // agreementsSigned now true. Same hydrate-skip branch signIn/signUp use:
+  // by this point every other hydrate-skip condition should already be
+  // clear for a design partner account, so this is what actually lets
+  // ProtectedArea proceed into the real app without a full page reload.
+  const completeAgreementSigning = useCallback(async (user) => {
+    if (needsHydrateSkip(user)) {
+      setServerUser(user);
+    } else {
+      await hydrate(user);
+    }
+  }, [hydrate]);
+
   const clearAuthError = useCallback(() => setAuthError(''), []);
 
   const value = {
@@ -545,6 +563,7 @@ export function AuthProvider({ children }) {
     changePassword,
     requestPasswordReset,
     resetPassword,
+    completeAgreementSigning,
     sizeWarning,
   };
 
