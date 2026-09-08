@@ -81,6 +81,7 @@ model Account {
   assistantMessages         AssistantMessage[]
   emailDomain               EmailDomain?
   stagePlots                StagePlot[]
+  stagePlotEquipmentUsages  StagePlotEquipmentUsage[]
   floorPlans                FloorPlan[]
   guests                    Guest[]
   eventRsvpLinks            EventRsvpLink[]
@@ -1192,10 +1193,11 @@ model StagePlot {
   account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
   eventId   String
 
-  name          String                  @default("Stage Plot")
-  pages         StagePlotPage[]
-  channels      StagePlotChannel[]
-  backlineItems StagePlotBacklineItem[]
+  name           String                    @default("Stage Plot")
+  pages          StagePlotPage[]
+  channels       StagePlotChannel[]
+  backlineItems  StagePlotBacklineItem[]
+  equipmentUsage StagePlotEquipmentUsage[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1275,6 +1277,32 @@ model StagePlotBacklineItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([stagePlotId])
+}
+
+// A log of equipment types this account has actually confirmed via the
+// AI-assisted add flow (server/src/lib/stagePlotItemParser.js +
+// stagePlotEquipmentReference.js) — one row per distinct equipment type
+// kept in a given stage plot, not per individual channel/backline row.
+// Deliberately only logged for recognized types coming out of that flow
+// (never for manually-typed rows or the 'unmapped' fallback) — a clean,
+// explicit signal rather than trying to reverse-engineer intent from
+// free-text channel names. Powers getEquipmentSuggestions() in
+// server/src/lib/stagePlotEquipmentUsage.js: "you've added this to N of
+// your last M stage plots — add it here too?" on a fresh, empty plot.
+model StagePlotEquipmentUsage {
+  id          String    @id @default(cuid())
+  accountId   String
+  account     Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  stagePlotId String
+  stagePlot   StagePlot @relation(fields: [stagePlotId], references: [id], onDelete: Cascade)
+
+  type  String // reference-table key, e.g. 'drum_kit' — see KNOWN_EQUIPMENT_TYPES
+  count Int
+
+  createdAt DateTime @default(now())
+
+  @@index([accountId, createdAt])
   @@index([stagePlotId])
 }
 

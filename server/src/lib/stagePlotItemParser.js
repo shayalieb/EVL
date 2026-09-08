@@ -82,11 +82,16 @@ export async function parseStagePlotEquipmentPrompt({ prompt }) {
 
     const expanded = type !== 'unknown' ? expandEquipmentRequest({ type, count }) : null;
     if (expanded) {
+      // equipmentType/equipmentCount ride along only to let the confirm
+      // route log usage (server/src/lib/stagePlotEquipmentUsage.js) for
+      // whichever of these rows the user actually keeps — stripped back out
+      // before any StagePlotChannel/StagePlotBacklineItem is created, since
+      // those models have no such columns.
       for (const channel of expanded.channels) {
-        proposed.push({ listType: 'channel', source: channel.source, phantomPower: channel.phantomPower, powerNeeded: channel.powerNeeded });
+        proposed.push({ listType: 'channel', source: channel.source, phantomPower: channel.phantomPower, powerNeeded: channel.powerNeeded, equipmentType: type, equipmentCount: count });
       }
       for (const item of expanded.backlineItems) {
-        proposed.push({ listType: 'backline', item: item.item, quantity: item.quantity || 1 });
+        proposed.push({ listType: 'backline', item: item.item, quantity: item.quantity || 1, equipmentType: type, equipmentCount: count });
       }
       continue;
     }

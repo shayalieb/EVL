@@ -9,6 +9,8 @@ import { withSerializableTransaction } from '../lib/serializableTransaction.js';
 import { decodeStagePlotThumbnail, deleteStagePlotThumbnailIfUnused } from '../lib/stagePlotThumbnails.js';
 import { createRateLimiter } from '../lib/rateLimiter.js';
 import { parseStagePlotEquipmentPrompt } from '../lib/stagePlotItemParser.js';
+import { KNOWN_EQUIPMENT_TYPES, equipmentSuggestionLabel, equipmentSuggestionPrompt } from '../lib/stagePlotEquipmentReference.js';
+import { logEquipmentUsage, getEquipmentSuggestions } from '../lib/stagePlotEquipmentUsage.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership), requireVertical('band_orchestra'));
@@ -54,7 +56,17 @@ export async function getOrCreatePlot(accountId, eventId, database = prisma) {
 router.get('/:eventId', asyncHandler(async (req, res) => {
   const plot = await getOrCreatePlot(req.membership.accountId, req.params.eventId);
   if (!plot) return res.status(404).json({ error: 'Event not found.' });
-  res.json({ stagePlot: serializePlot(plot) });
+  // A cold-start nudge, not a persistent nag — only computed (and only
+  // meaningful) while this plot has nothing on it yet. See
+  // stagePlotEquipmentUsage.js for how "you usually add this" is decided.
+  const rawSuggestions = plot.channels.length === 0 && plot.backlineItems.length === 0
+    ? await getEquipmentSuggestions(req.membership.accountId)
+    : [];
+  // Frontend just displays `label` and re-submits `prompt` through the same
+  // AI prompt bar it already has — it never needs its own copy of the
+  // reference table's wording.
+  const suggestions = rawSuggestions.map((s) => ({ ...s, label: equipmentSuggestionLabel(s.type, s.count), prompt: equipmentSuggestionPrompt(s.type, s.count) }));
+  res.json({ stagePlot: serializePlot(plot), suggestions });
 }));
 
 async function loadOwnedPlot(accountId, eventId) {
@@ -228,18 +240,26 @@ router.post('/:eventId/ai-items/confirm', asyncHandler(async (req, res) => {
   const { eventId } = req.params;
   const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
 
+  // equipmentType/equipmentCount only ever ride along to log usage below
+  // (server/src/lib/stagePlotEquipmentUsage.js) — never written to
+  // StagePlotChannel/StagePlotBacklineItem, which have no such columns.
+  // Re-validated against the known-types list here too, same "never trust
+  // the client echo" discipline as everything else — a hand-crafted
+  // confirm request can't log a made-up equipment type.
   const channelInputs = [];
   const backlineInputs = [];
   for (const raw of rawItems) {
+    const equipmentType = KNOWN_EQUIPMENT_TYPES.includes(raw?.equipmentType) ? raw.equipmentType : null;
+    const equipmentCount = Number.isInteger(raw?.equipmentCount) ? raw.equipmentCount : null;
     if (raw?.listType === 'channel') {
       const source = typeof raw.source === 'string' ? raw.source.trim().slice(0, 200) : '';
       if (!source) continue;
-      channelInputs.push({ source, phantomPower: !!raw.phantomPower, powerNeeded: !!raw.powerNeeded });
+      channelInputs.push({ source, phantomPower: !!raw.phantomPower, powerNeeded: !!raw.powerNeeded, equipmentType, equipmentCount });
     } else if (raw?.listType === 'backline') {
       const item = typeof raw.item === 'string' ? raw.item.trim().slice(0, 200) : '';
       if (!item) continue;
       const quantity = Number.isFinite(Number(raw.quantity)) && Number(raw.quantity) > 0 ? Math.trunc(Number(raw.quantity)) : 1;
-      backlineInputs.push({ item, quantity: Math.min(quantity, 999) });
+      backlineInputs.push({ item, quantity: Math.min(quantity, 999), equipmentType, equipmentCount });
     }
   }
   if (!channelInputs.length && !backlineInputs.length) {
@@ -271,9 +291,14 @@ router.post('/:eventId/ai-items/confirm', asyncHandler(async (req, res) => {
       Promise.all(channelCreates.map((data) => tx.stagePlotChannel.create({ data }))),
       Promise.all(backlineCreates.map((data) => tx.stagePlotBacklineItem.create({ data }))),
     ]);
-    return { channels, backlineItems };
+    return { plotId: plot.id, channels, backlineItems };
   });
   if (result.error === 'event') return res.status(404).json({ error: 'Stage plot not found.' });
+
+  // Best-effort — logging usage for future suggestions should never block
+  // or fail a write that already succeeded.
+  logEquipmentUsage({ accountId, stagePlotId: result.plotId, confirmedItems: [...channelInputs, ...backlineInputs] })
+    .catch((err) => console.error('Failed to log stage plot equipment usage:', err));
 
   res.status(201).json({ channels: result.channels, backlineItems: result.backlineItems });
 }));

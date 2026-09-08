@@ -39,6 +39,13 @@ const EQUIPMENT_TYPES = {
       const channels = drumKitChannels(count);
       return channels ? { channels, backlineItems: [] } : null;
     },
+    // `label` is the human-readable phrase used in suggestion copy ("You've
+    // added {label} to..."); `prompt` is the exact natural-language string
+    // synthesized when a suggestion is accepted — it round-trips through
+    // the same parser as manual input (see stagePlotItemParser.js), so
+    // suggestion copy and the actual add-flow can never drift apart.
+    label: (count) => `a ${count}pc drum mic plan`.replace('a 8pc', 'an 8pc'),
+    prompt: (count) => `Add ${count}pc drum mics`,
   },
 };
 
@@ -48,6 +55,8 @@ const EQUIPMENT_TYPES = {
 // type covers rather than just its key name.
 export const KNOWN_EQUIPMENT_TYPES = Object.keys(EQUIPMENT_TYPES);
 export function equipmentTypeDescription(type) { return EQUIPMENT_TYPES[type]?.description; }
+export function equipmentSuggestionLabel(type, count) { return EQUIPMENT_TYPES[type]?.label(count); }
+export function equipmentSuggestionPrompt(type, count) { return EQUIPMENT_TYPES[type]?.prompt(count); }
 
 // Returns { channels, backlineItems } or null if `type` is unknown or
 // `count` is out of the type's supported range — callers should fall back

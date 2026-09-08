@@ -1,8 +1,12 @@
 import { apiFetch } from '../context/AuthContext';
 
+// `suggestions` (see stagePlotEquipmentUsage.js) is only ever populated
+// when this plot is currently empty — a cold-start nudge based on what
+// this account has actually confirmed on its recent stage plots, not
+// present once a plot has real content.
 export async function getOrCreateStagePlot(eventId) {
   const data = await apiFetch(`/stage-plots/${encodeURIComponent(eventId)}`);
-  return data.stagePlot;
+  return { ...data.stagePlot, suggestions: data.suggestions || [] };
 }
 
 export async function saveStagePlotPage(eventId, pageId, { scene, name, thumbnailBase64, expectedUpdatedAt } = {}) {

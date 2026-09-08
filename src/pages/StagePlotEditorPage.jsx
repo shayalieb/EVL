@@ -15,6 +15,7 @@ import StagePlotChannelList from '../components/StagePlotChannelList';
 import StagePlotBacklineList from '../components/StagePlotBacklineList';
 import StagePlotAiPromptBar from '../components/StagePlotAiPromptBar';
 import StagePlotProposalCard from '../components/StagePlotProposalCard';
+import StagePlotSuggestionBanner from '../components/StagePlotSuggestionBanner';
 import StagePlotEmailModal from '../components/StagePlotEmailModal';
 import EmailThreadModal from '../components/EmailThreadModal';
 import Modal from '../components/ui/Modal';
@@ -65,6 +66,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   const [aiProposal, setAiProposal] = useState(null);
   const [aiProposing, setAiProposing] = useState(false);
   const [aiConfirming, setAiConfirming] = useState(false);
+  const [dismissedSuggestionTypes, setDismissedSuggestionTypes] = useState(() => new Set());
   const pageEditorRef = useRef(null);
 
   useContractorHydration([
@@ -240,6 +242,17 @@ export default function StagePlotEditorPage({ onClose } = {}) {
     }
   }
 
+  // Accepting a suggestion just re-submits its own synthesized prompt
+  // through the exact same propose flow above — it still shows the normal
+  // proposal card for confirmation, no shortcut around review.
+  function handleAcceptSuggestion(suggestion) {
+    handleAiPropose(suggestion.prompt);
+  }
+
+  function handleDismissSuggestion(type) {
+    setDismissedSuggestionTypes((prev) => new Set(prev).add(type));
+  }
+
   async function handleAiConfirm(items) {
     setAiConfirming(true);
     try {
@@ -405,6 +418,16 @@ export default function StagePlotEditorPage({ onClose } = {}) {
         )}
         <div className="w-full lg:w-4/5 mx-auto mt-6">
           <div className="mb-4 space-y-2">
+            {plot.channels.length === 0 && plot.backlineItems.length === 0 &&
+              (plot.suggestions || []).filter((s) => !dismissedSuggestionTypes.has(s.type)).map((suggestion) => (
+                <StagePlotSuggestionBanner
+                  key={suggestion.type}
+                  suggestion={suggestion}
+                  onAccept={() => handleAcceptSuggestion(suggestion)}
+                  onDismiss={() => handleDismissSuggestion(suggestion.type)}
+                  loading={aiProposing}
+                />
+              ))}
             <StagePlotAiPromptBar onSubmit={handleAiPropose} loading={aiProposing} />
             {aiProposal && (
               <StagePlotProposalCard
