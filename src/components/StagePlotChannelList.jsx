@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { stagePlotNotesToPlainText } from '../lib/stagePlotNotes';
 import { useToast } from './ui/Toast';
 
@@ -51,6 +51,7 @@ export default function StagePlotChannelList({ api, channels, onChannelsChange, 
   const dragIndex = useRef(null);
   const saveSequence = useRef(new Map());
   const [dragOverIndex, setDragOverIndex] = useState(null);
+  const [advancedAudio, setAdvancedAudio] = useState(false);
   const isLinked = (elementId) => channels.some((c) => c.elementId === elementId);
 
   async function handleAdd() {
@@ -129,6 +130,14 @@ export default function StagePlotChannelList({ api, channels, onChannelsChange, 
         <div className="flex items-center gap-3">
           <button
             type="button"
+            onClick={() => setAdvancedAudio((value) => !value)}
+            aria-pressed={advancedAudio}
+            className={`rounded-full border px-3 py-1 text-xs font-semibold ${advancedAudio ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-600'}`}
+          >
+            Advanced audio {advancedAudio ? 'on' : 'off'}
+          </button>
+          <button
+            type="button"
             onClick={handleAddForSelected}
             disabled={!selectedElementId || isLinked(selectedElementId)}
             data-testid="stageplot-add-channel-for-selected-button"
@@ -161,8 +170,8 @@ export default function StagePlotChannelList({ api, channels, onChannelsChange, 
               </tr>
             )}
             {channels.map((channel, index) => (
+              <Fragment key={channel.id}>
               <tr
-                key={channel.id}
                 draggable
                 onDragStart={() => { dragIndex.current = index; }}
                 onDragOver={(e) => { e.preventDefault(); setDragOverIndex(index); }}
@@ -250,10 +259,57 @@ export default function StagePlotChannelList({ api, channels, onChannelsChange, 
                   </div>
                 </td>
               </tr>
+              {advancedAudio && (
+                <tr className="border-t border-slate-100 bg-slate-50/70" data-testid="stageplot-channel-advanced-row">
+                  <td colSpan={8} className="px-4 py-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="font-semibold text-slate-600">Advanced audio — Channel {channel.channelNumber}</div>
+                      <span className="text-[11px] text-slate-400">Optional; leave blank when the venue may choose</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
+                      <AdvancedSelect label="Input" value={channel.inputType} onChange={(inputType) => handleFieldChange(channel, { inputType })} options={[['', 'Not specified'], ['mic', 'Microphone'], ['di', 'DI box'], ['line', 'Line input'], ['playback', 'Playback'], ['wireless', 'Wireless'], ['other', 'Other']]} />
+                      <AdvancedInput label="Preferred mic / DI" value={channel.preferredDevice} placeholder="e.g. SM58, Radial JDI" onSave={(preferredDevice) => handleFieldChange(channel, { preferredDevice })} />
+                      <AdvancedInput label="Acceptable substitute" value={channel.substituteDevice} placeholder="e.g. equivalent dynamic" onSave={(substituteDevice) => handleFieldChange(channel, { substituteDevice })} />
+                      <AdvancedSelect label="Stand" value={channel.standType} onChange={(standType) => handleFieldChange(channel, { standType })} options={[['', 'Not specified'], ['straight', 'Straight'], ['boom', 'Boom'], ['short-boom', 'Short boom'], ['clip', 'Clip / mount'], ['none', 'None']]} />
+                      <AdvancedSelect label="Connector" value={channel.connectionType} onChange={(connectionType) => handleFieldChange(channel, { connectionType })} options={[['', 'Not specified'], ['xlr', 'XLR'], ['trs', '¼-inch TRS'], ['ts', '¼-inch TS'], ['usb', 'USB'], ['ethernet', 'Network / Ethernet'], ['other', 'Other']]} />
+                      <AdvancedSelect label="Format" value={channel.channelFormat || 'mono'} onChange={(channelFormat) => handleFieldChange(channel, { channelFormat })} options={[['mono', 'Mono'], ['stereo-left', 'Stereo left'], ['stereo-right', 'Stereo right'], ['stereo-pair', 'Stereo pair']]} />
+                      <AdvancedInput label="Stagebox" value={channel.stageboxName} placeholder="e.g. SL box A" onSave={(stageboxName) => handleFieldChange(channel, { stageboxName })} />
+                      <AdvancedInput label="Stagebox input" value={channel.stageboxInput} placeholder="e.g. A-12" onSave={(stageboxInput) => handleFieldChange(channel, { stageboxInput })} />
+                      <AdvancedSelect label="Provided by" value={channel.providedBy} onChange={(providedBy) => handleFieldChange(channel, { providedBy })} options={[['', 'Not decided'], ['artist', 'Artist'], ['venue', 'Venue'], ['rental', 'Rental company']]} />
+                      <AdvancedInput label="Monitor mix" value={channel.monitorMix} placeholder="e.g. Mix 3 — wedge" onSave={(monitorMix) => handleFieldChange(channel, { monitorMix })} />
+                      <AdvancedInput label="Power" value={channel.powerDetails} placeholder="e.g. 2× 120V stage left" onSave={(powerDetails) => handleFieldChange(channel, { powerDetails })} />
+                      <AdvancedInput label="Cable" value={channel.cableDetails} placeholder="e.g. 25 ft XLR" onSave={(cableDetails) => handleFieldChange(channel, { cableDetails })} />
+                    </div>
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             ))}
           </tbody>
         </table>
       </div>
     </div>
+  );
+}
+
+function AdvancedInput({ label, value, placeholder, onSave }) {
+  const [draft, setDraft] = useState(value || '');
+  useEffect(() => setDraft(value || ''), [value]);
+  return (
+    <label className="block text-[11px] font-semibold text-slate-500">
+      {label}
+      <input value={draft} placeholder={placeholder} onChange={(event) => setDraft(event.target.value)} onBlur={() => { if (draft !== (value || '')) onSave(draft); }} className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-normal text-slate-700 focus:border-indigo-400 focus:outline-none" />
+    </label>
+  );
+}
+
+function AdvancedSelect({ label, value, options, onChange }) {
+  return (
+    <label className="block text-[11px] font-semibold text-slate-500">
+      {label}
+      <select value={value || ''} onChange={(event) => onChange(event.target.value)} className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-normal text-slate-700 focus:border-indigo-400 focus:outline-none">
+        {options.map(([optionValue, optionLabel]) => <option key={optionValue} value={optionValue}>{optionLabel}</option>)}
+      </select>
+    </label>
   );
 }

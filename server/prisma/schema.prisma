@@ -1319,6 +1319,18 @@ model StagePlotChannel {
   powerNeeded   Boolean @default(false) // AC power at this position
   monitorNotes  String? @db.Text
   elementId     String?
+  inputType     String?
+  preferredDevice String?
+  substituteDevice String?
+  standType     String?
+  connectionType String?
+  channelFormat String @default("mono")
+  stageboxName  String?
+  stageboxInput String?
+  providedBy    String?
+  monitorMix    String?
+  powerDetails  String?
+  cableDetails  String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1689,6 +1701,18 @@ model StagePlotLibraryChannel {
   powerNeeded   Boolean @default(false)
   monitorNotes  String? @db.Text
   elementId     String?
+  inputType     String?
+  preferredDevice String?
+  substituteDevice String?
+  standType     String?
+  connectionType String?
+  channelFormat String @default("mono")
+  stageboxName  String?
+  stageboxInput String?
+  providedBy    String?
+  monitorMix    String?
+  powerDetails  String?
+  cableDetails  String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -11,6 +11,7 @@ import { createRateLimiter } from '../lib/rateLimiter.js';
 import { parseStagePlotEquipmentPrompt } from '../lib/stagePlotItemParser.js';
 import { KNOWN_EQUIPMENT_TYPES, equipmentSuggestionLabel, equipmentSuggestionPrompt } from '../lib/stagePlotEquipmentReference.js';
 import { logEquipmentUsage, getEquipmentSuggestions } from '../lib/stagePlotEquipmentUsage.js';
+import { stagePlotAudioData } from '../lib/stagePlotAudio.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership), requireVertical('band_orchestra'));
@@ -169,6 +170,7 @@ router.post('/:eventId/apply-library/:libraryItemId', asyncHandler(async (req, r
     powerNeeded: channel.powerNeeded,
     monitorNotes: channel.monitorNotes,
     elementId: elementIdMap.get(channel.elementId) || null,
+    ...stagePlotAudioData(channel),
   }));
 
     const backlineCreates = (include.backlineItems ? libraryItem.backlineItems : []).map((item) => ({
@@ -449,6 +451,7 @@ router.post('/:eventId/channels', asyncHandler(async (req, res) => {
     powerNeeded: !!powerNeeded,
     monitorNotes: monitorNotes || null,
     elementId: elementId || null,
+    ...stagePlotAudioData(req.body),
   };
   let channel;
   for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -519,6 +522,7 @@ router.patch('/:eventId/channels/:channelId', asyncHandler(async (req, res) => {
   if (powerNeeded !== undefined) data.powerNeeded = !!powerNeeded;
   if (monitorNotes !== undefined) data.monitorNotes = monitorNotes || null;
   if (elementId !== undefined) data.elementId = elementId || null;
+  Object.assign(data, stagePlotAudioData(req.body));
 
   try {
     const updated = await prisma.stagePlotChannel.update({ where: { id: channel.id }, data });

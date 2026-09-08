@@ -7,6 +7,7 @@ import { requireVertical } from '../lib/verticals.js';
 import { uploadFile, getSignedDownloadUrl } from '../lib/fileStorage.js';
 import { getOrCreatePlot } from './stagePlots.js';
 import { decodeStagePlotThumbnail, deleteStagePlotThumbnailIfUnused } from '../lib/stagePlotThumbnails.js';
+import { stagePlotAudioData } from '../lib/stagePlotAudio.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership), requireVertical('band_orchestra'));
@@ -142,6 +143,7 @@ router.post('/from-event/:eventId', asyncHandler(async (req, res) => {
           powerNeeded: c.powerNeeded,
           monitorNotes: c.monitorNotes,
           elementId: c.elementId,
+          ...stagePlotAudioData(c),
         })),
       },
       backlineItems: {
@@ -255,6 +257,7 @@ router.post('/:id/channels', asyncHandler(async (req, res) => {
     powerNeeded: !!powerNeeded,
     monitorNotes: monitorNotes || null,
     elementId: elementId || null,
+    ...stagePlotAudioData(req.body),
   };
   let channel;
   for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -311,6 +314,7 @@ router.patch('/:id/channels/:channelId', asyncHandler(async (req, res) => {
   if (powerNeeded !== undefined) data.powerNeeded = !!powerNeeded;
   if (monitorNotes !== undefined) data.monitorNotes = monitorNotes || null;
   if (elementId !== undefined) data.elementId = elementId || null;
+  Object.assign(data, stagePlotAudioData(req.body));
 
   try {
     const updated = await prisma.stagePlotLibraryChannel.update({ where: { id: channel.id }, data });

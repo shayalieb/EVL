@@ -96,6 +96,16 @@ export async function buildStagePlotViewsHtml({ eventId, stagePlot, checked }) {
         <td style="${cellStyle}">${emailNotes(c.monitorNotes)}</td>
       </tr>`);
     sections.push(`<h3 style="${sectionHeadingStyle}">Production List</h3>${tableHtml(['#', 'Musician', 'Instrument', '48V', 'Power', 'Notes'], rows)}`);
+    const advancedRows = stagePlot.channels.filter((c) => c.inputType || c.preferredDevice || c.monitorMix || c.stageboxName || c.powerDetails || c.cableDetails).map((c) => `<tr>
+      <td style="${cellStyle}">${c.channelNumber}</td>
+      <td style="${cellStyle}">${escapeHtml([c.inputType, c.preferredDevice, c.substituteDevice ? `Alt: ${c.substituteDevice}` : ''].filter(Boolean).join(' · '))}</td>
+      <td style="${cellStyle}">${escapeHtml([c.standType, c.connectionType, c.channelFormat].filter(Boolean).join(' · '))}</td>
+      <td style="${cellStyle}">${escapeHtml([c.stageboxName, c.stageboxInput].filter(Boolean).join(' / '))}</td>
+      <td style="${cellStyle}">${escapeHtml(c.monitorMix || '')}</td>
+      <td style="${cellStyle}">${escapeHtml(c.providedBy || '')}</td>
+      <td style="${cellStyle}">${escapeHtml([c.powerDetails, c.cableDetails].filter(Boolean).join(' · '))}</td>
+    </tr>`);
+    if (advancedRows.length) sections.push(`<h3 style="${sectionHeadingStyle}">Audio Details</h3>${tableHtml(['Ch', 'Input / Device', 'Stand / Connection', 'Patch', 'Monitor', 'Provider', 'Power / Cable'], advancedRows)}`);
   }
 
   if (checked.backlineItems) {

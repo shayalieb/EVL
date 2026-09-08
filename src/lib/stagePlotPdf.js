@@ -74,6 +74,25 @@ async function buildStagePlotDoc({ eventId, eventName, stagePlot, businessInfo, 
         .map((c) => [c.channelNumber, c.musicianName || '', c.source, c.phantomPower ? '✓' : '', c.powerNeeded ? '✓' : '', stagePlotNotesToPlainText(c.monitorNotes)]),
       ...tableStyle,
     });
+
+    const advancedRows = stagePlot.channels.filter((c) => c.inputType || c.preferredDevice || c.monitorMix || c.stageboxName || c.powerDetails || c.cableDetails);
+    if (advancedRows.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 8,
+        margin: { left: marginX },
+        head: [['Ch', 'Input / Device', 'Stand / Connection', 'Patch', 'Monitor', 'Provider', 'Power / Cable']],
+        body: advancedRows.map((c) => [
+          c.channelNumber,
+          [c.inputType, c.preferredDevice, c.substituteDevice ? `Alt: ${c.substituteDevice}` : ''].filter(Boolean).join(' · '),
+          [c.standType, c.connectionType, c.channelFormat].filter(Boolean).join(' · '),
+          [c.stageboxName, c.stageboxInput].filter(Boolean).join(' / '),
+          c.monitorMix || '',
+          c.providedBy || '',
+          [c.powerDetails, c.cableDetails].filter(Boolean).join(' · '),
+        ]),
+        ...tableStyle,
+      });
+    }
   }
 
   if (include.backlineItems && stagePlot.backlineItems?.length) {
