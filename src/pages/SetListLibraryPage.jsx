@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import SetListLibraryModal from '../components/SetListLibraryModal';
@@ -10,13 +10,14 @@ import Tooltip from '../components/ui/Tooltip';
 import Pagination from '../components/ui/Pagination';
 import { useToast } from '../components/ui/Toast';
 import { matchesSearch } from '../lib/search';
-import { formatEventDate, isValidEmailAddress } from '../lib/format';
+import { formatEventDate } from '../lib/format';
 import { deleteDocument } from '../lib/documents';
 import { generateSetListPdf } from '../lib/setListPdf';
 import { renderSetListEmail, sendSetListEmail } from '../lib/setList';
 import { useContractorHydration } from '../lib/useContractorHydration';
 import { querySetListLibrary } from '../lib/setListLibrary';
 import { useServerList } from '../lib/useServerList';
+import { setListRecipientGroups } from '../lib/setListRecipients';
 
 // Resources-section ListView for reusable set lists (band/orchestra only —
 // gated at the nav item in AppLayout.jsx and the route in App.jsx). Editing
@@ -95,14 +96,8 @@ export default function SetListLibraryPage() {
 
   // Whoever's booked on the given event, same pool SetListsEditorPage.jsx
   // draws from.
-  function allBookedFor(event) {
-    return (event?.contractorBookings || [])
-      .map((b) => contractors.find((c) => c.id === b.contractorId))
-      .filter(Boolean);
-  }
-  function bandMembersFor(event) {
-    return allBookedFor(event).filter((c) => isValidEmailAddress(c?.email));
-  }
+  function recipientGroupsFor(event) { return setListRecipientGroups(event, contractors, currentUser?.inquiryStatuses || []); }
+  function bandMembersFor(event) { return recipientGroupsFor(event).confirmed; }
 
   async function handleExportPdf(setList, event) {
     setExportingId(setList.id);
@@ -153,8 +148,12 @@ export default function SetListLibraryPage() {
       } else {
         showToast(`Sent ${successCount} of ${total} emails — some failed`, 'error');
       }
-      await updateSetListLibraryItem(setList.id, { lastSentAt: new Date().toISOString(), lastSentCount: successCount });
-      libraryList.refresh();
+      try {
+        await updateSetListLibraryItem(setList.id, { lastSentAt: new Date().toISOString(), lastSentCount: successCount, expectedUpdatedAt: setList.updatedAt });
+        libraryList.refresh();
+      } catch {
+        showToast('The email was sent, but the “last sent” marker could not be saved. Do not resend unless a recipient reports it missing.', 'error');
+      }
       setEmailTarget(null);
     } catch (err) {
       showToast(err.message || 'Failed to send set list email', 'error');
@@ -166,8 +165,10 @@ export default function SetListLibraryPage() {
   const emailDraft = emailTarget
     ? renderSetListEmail(emailTarget.event.name, emailTarget.event.eventDate, emailTarget.setList, currentUser?.businessInfo)
     : null;
-  const emailBandMembers = emailTarget ? bandMembersFor(emailTarget.event) : [];
-  const emailExcludedCount = emailTarget ? allBookedFor(emailTarget.event).length - emailBandMembers.length : 0;
+  const emailRecipientGroups = useMemo(() => emailTarget ? setListRecipientGroups(emailTarget.event, contractors, currentUser?.inquiryStatuses || []) : { confirmed: [], tentative: [], missingEmailCount: 0 }, [emailTarget, contractors, currentUser?.inquiryStatuses]);
+  const emailBandMembers = emailRecipientGroups.confirmed;
+  const emailTentativeMembers = emailRecipientGroups.tentative;
+  const emailExcludedCount = emailRecipientGroups.missingEmailCount;
   const chooseEventOptions = chooseEventFor ? linkedEventsFor(chooseEventFor.setList) : [];
 
   return (
@@ -200,7 +201,7 @@ export default function SetListLibraryPage() {
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Description</th>
                 <th className="px-4 py-3 text-center">Songs</th>
-                <th className="px-4 py-3">Linked Events</th>
+                <th className="px-4 py-3">Email Context</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -231,7 +232,7 @@ export default function SetListLibraryPage() {
                 const emailDisabledReason = !songsPresent
                   ? 'Add at least one song before emailing this set list'
                   : linked.length === 0
-                    ? 'Link this set list to an event to email it'
+                    ? 'Choose an event as Email / Export Context before emailing this template'
                     : linked.length === 1 && bandMembersFor(linked[0]).length === 0
                       ? 'No band members with an email are booked on the linked event yet'
                       : null;
@@ -373,6 +374,7 @@ export default function SetListLibraryPage() {
         open={!!emailTarget}
         onClose={() => setEmailTarget(null)}
         bandMembers={emailBandMembers}
+        tentativeBandMembers={emailTentativeMembers}
         excludedCount={emailExcludedCount}
         initialSubject={emailDraft?.subject}
         initialBody={emailDraft?.body}

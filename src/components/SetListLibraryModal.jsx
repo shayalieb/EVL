@@ -142,7 +142,7 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
     // eventId: undefined explicitly drops the old single-event field (if
     // this record predates multi-event linking) once JSON-serialized, so it
     // doesn't linger stale alongside the new eventIds array.
-    const payload = { name: name.trim(), description: description.trim(), items: keptItems, eventIds, eventId: undefined };
+    const payload = { name: name.trim(), description: description.trim(), items: keptItems, eventIds, eventId: undefined, ...(setList?.updatedAt ? { expectedUpdatedAt: setList.updatedAt } : {}) };
     setSaving(true);
     setError('');
     try {
@@ -189,7 +189,7 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
         </div>
 
         <div>
-          <label className={labelClass}>Events</label>
+          <label className={labelClass}>Email / Export Context</label>
           <EventCombobox
             events={events}
             selectedEvents={selectedEvents}
@@ -198,7 +198,7 @@ export default function SetListLibraryModal({ open, onClose, setList, onSaved })
             testId="setlist-library-modal-event-picker"
           />
           <p className="text-xs text-slate-400 mt-1">
-            Optional. Linking an event enables email recipients and adds event context to exports. A PDF can still be downloaded without a linked event.
+            Optional. Choose which events may use this library template for recipients and document headings. This does not add the template to the event; use “Add from Library” inside the Event to create its working copy.
           </p>
         </div>
 

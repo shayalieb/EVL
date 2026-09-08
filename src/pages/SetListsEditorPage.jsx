@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useBlocker, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { useToast } from '../components/ui/Toast';
 import { uid } from '../lib/storage';
-import { normalizeUrl, formatEventDate, isValidEmailAddress } from '../lib/format';
+import { normalizeUrl, formatEventDate } from '../lib/format';
 import { uploadDocument, deleteDocument, copyDocument } from '../lib/documents';
-import { getEvent } from '../lib/events';
+import { getEvent, updateEventApi } from '../lib/events';
 import { generateSetListPdf } from '../lib/setListPdf';
 import { renderSetListEmail, sendSetListEmail } from '../lib/setList';
 import DocumentPreviewModal from '../components/DocumentPreviewModal';
@@ -16,6 +16,7 @@ import Tooltip from '../components/ui/Tooltip';
 import SearchInput from '../components/ui/SearchInput';
 import { useContractorHydration } from '../lib/useContractorHydration';
 import { matchesSearch } from '../lib/search';
+import { setListRecipientGroups } from '../lib/setListRecipients';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -38,14 +39,18 @@ function emptySetListItem() {
 export default function SetListsEditorPage() {
   const { eventId } = useParams();
   const { currentUser } = useAuth();
-  const { updateEvent, contractors, setListLibrary, setListLibraryLoading } = useData();
+  const { contractors, setListLibrary, setListLibraryLoading } = useData();
   const { showToast } = useToast();
   const [event, setEvent] = useState(null);
+  const [eventLoading, setEventLoading] = useState(true);
+  const [eventError, setEventError] = useState('');
 
   useEffect(() => {
-    if (!eventId) { setEvent(null); return; }
+    if (!eventId) { setEvent(null); setEventLoading(false); setEventError('Event not found.'); return; }
     let cancelled = false;
-    getEvent(eventId).then((full) => { if (!cancelled) setEvent(full); }).catch(() => { if (!cancelled) setEvent(null); });
+    setEventLoading(true);
+    setEventError('');
+    getEvent(eventId).then((full) => { if (!cancelled) setEvent(full); }).catch((error) => { if (!cancelled) { setEvent(null); setEventError(error.message || 'Unable to load this event.'); } }).finally(() => { if (!cancelled) setEventLoading(false); });
     return () => { cancelled = true; };
   }, [eventId]);
 
@@ -57,6 +62,8 @@ export default function SetListsEditorPage() {
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const dragIndex = useRef(null);
+  const pendingDocumentDeletes = useRef(new Set());
+  const uploadedDraftDocuments = useRef(new Set());
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const hydratedRef = useRef(null);
   const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
@@ -74,6 +81,7 @@ export default function SetListsEditorPage() {
   }, [event]);
 
   const dirty = JSON.stringify(setLists) !== JSON.stringify(event?.setLists || []);
+  const navigationBlocker = useBlocker(dirty && !saving);
   const activeSetList = setLists.find((s) => s.id === activeSetListId);
   const filteredLibrary = setListLibrary.filter((setList) => matchesSearch(librarySearch, [
     setList.name,
@@ -91,14 +99,17 @@ export default function SetListsEditorPage() {
     return () => window.removeEventListener('beforeunload', warnBeforeUnload);
   }, [dirty]);
 
+  useEffect(() => () => {
+    uploadedDraftDocuments.current.forEach((id) => deleteDocument(id).catch(() => {}));
+  }, []);
+
   // Whoever's booked on this event, not just prep-group members (unlike
   // PrepEmailModal's recipient pool) — a set list is relevant to whoever's
   // playing, regardless of which prep groups they were added under.
-  const allBooked = (event?.contractorBookings || [])
-    .map((b) => contractors.find((c) => c.id === b.contractorId))
-    .filter(Boolean);
-  const bandMembers = allBooked.filter((c) => isValidEmailAddress(c?.email));
-  const excludedCount = allBooked.length - bandMembers.length;
+  const recipientGroups = useMemo(() => setListRecipientGroups(event, contractors, currentUser?.inquiryStatuses || []), [event, contractors, currentUser?.inquiryStatuses]);
+  const bandMembers = recipientGroups.confirmed;
+  const tentativeBandMembers = recipientGroups.tentative;
+  const excludedCount = recipientGroups.missingEmailCount;
   const hasSongs = !!activeSetList?.items?.some((it) => it.songTitle?.trim());
 
   function addSetList() {
@@ -124,6 +135,7 @@ export default function SetListsEditorPage() {
         if (it.documentId) {
           try {
             const copied = await copyDocument(it.documentId, eventId);
+            uploadedDraftDocuments.current.add(copied.id);
             doc = { documentId: copied.id, documentName: copied.filename, documentContentType: copied.contentType, documentShareToken: copied.shareToken };
           } catch {
             // Copy failed (e.g. a pre-storage-migration document with no
@@ -168,9 +180,7 @@ export default function SetListsEditorPage() {
     // Deleting individual songs already cleans up their attachment (see
     // removeItem below) — deleting the whole list at once needs the same
     // cleanup, or every song's PDF/image would silently orphan in storage.
-    removed?.items.forEach((item) => {
-      if (item.documentId) deleteDocument(item.documentId).catch(() => {});
-    });
+    removed?.items.forEach((item) => { if (item.documentId) pendingDocumentDeletes.current.add(item.documentId); });
   }
 
   function updateActiveItems(updater) {
@@ -188,7 +198,17 @@ export default function SetListsEditorPage() {
   function removeItem(id) {
     const item = activeSetList?.items.find((it) => it.id === id);
     updateActiveItems((items) => items.filter((it) => it.id !== id));
-    if (item?.documentId) deleteDocument(item.documentId).catch(() => {});
+    if (item?.documentId) pendingDocumentDeletes.current.add(item.documentId);
+  }
+
+  function moveItem(index, direction) {
+    const target = index + direction;
+    if (target < 0 || target >= (activeSetList?.items.length || 0)) return;
+    updateActiveItems((items) => {
+      const next = [...items];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
   }
 
   function handleDrop(targetIndex) {
@@ -209,8 +229,9 @@ export default function SetListsEditorPage() {
     setUploadingItemId(itemId);
     try {
       const item = activeSetList.items.find((it) => it.id === itemId);
-      if (item?.documentId) await deleteDocument(item.documentId).catch(() => {});
+      if (item?.documentId) pendingDocumentDeletes.current.add(item.documentId);
       const doc = await uploadDocument(eventId, file);
+      uploadedDraftDocuments.current.add(doc.id);
       updateItem(itemId, { documentId: doc.id, documentName: doc.filename, documentContentType: doc.contentType, documentShareToken: doc.shareToken });
     } catch (err) {
       showToast(err.message || 'Failed to upload sheet music', 'error');
@@ -222,21 +243,26 @@ export default function SetListsEditorPage() {
   function handleRemoveSheetMusic(itemId) {
     const item = activeSetList.items.find((it) => it.id === itemId);
     updateItem(itemId, { documentId: null, documentName: null, documentContentType: null, documentShareToken: null });
-    if (item?.documentId) deleteDocument(item.documentId).catch(() => {});
+    if (item?.documentId) pendingDocumentDeletes.current.add(item.documentId);
   }
 
   async function handleSave() {
     setSaving(true);
     try {
-      await updateEvent(eventId, { setLists });
+      const savedEvent = await updateEventApi(eventId, { setLists, expectedUpdatedAt: event.updatedAt });
+      pendingDocumentDeletes.current.forEach((id) => deleteDocument(id).catch(() => {}));
+      pendingDocumentDeletes.current.clear();
+      uploadedDraftDocuments.current.clear();
       // `event` here is this page's own full-detail fetch (see the effect
       // above), not the live context array — it won't pick up the save on
       // its own, so `dirty` (which compares against event.setLists) would
       // otherwise stay true forever after a successful save.
-      setEvent((prev) => (prev ? { ...prev, setLists } : prev));
+      setEvent(savedEvent);
       showToast('Set lists saved');
+      return true;
     } catch (err) {
       showToast(err.message || 'Failed to save set lists', 'error');
+      return false;
     } finally {
       setSaving(false);
     }
@@ -249,6 +275,14 @@ export default function SetListsEditorPage() {
   async function handleSendEmail({ subject, body, recipientIds }) {
     setSendingEmail(true);
     try {
+      let savedBeforeSend = event;
+      if (dirty) {
+        savedBeforeSend = await updateEventApi(eventId, { setLists, expectedUpdatedAt: event.updatedAt });
+        pendingDocumentDeletes.current.forEach((id) => deleteDocument(id).catch(() => {}));
+        pendingDocumentDeletes.current.clear();
+        uploadedDraftDocuments.current.clear();
+        setEvent(savedBeforeSend);
+      }
       const fromName = currentUser.businessInfo?.name || `${currentUser.firstName} ${currentUser.lastName}`;
       // Scoped to just the active set list, not the whole book — same
       // reasoning as why Email is a per-set-list action while Download PDF
@@ -270,9 +304,13 @@ export default function SetListsEditorPage() {
       const updatedLists = setLists.map((s) => (
         s.id === activeSetList.id ? { ...s, lastSentAt: new Date().toISOString(), lastSentCount: successCount } : s
       ));
-      setSetLists(updatedLists);
-      await updateEvent(eventId, { setLists: updatedLists });
-      setEvent((prev) => (prev ? { ...prev, setLists: updatedLists } : prev));
+      try {
+        const savedEvent = await updateEventApi(eventId, { setLists: updatedLists, expectedUpdatedAt: savedBeforeSend.updatedAt });
+        setSetLists(updatedLists);
+        setEvent(savedEvent);
+      } catch {
+        showToast('The email was sent, but the “last sent” marker could not be saved. Do not resend unless a recipient reports it missing.', 'error');
+      }
       setEmailModalOpen(false);
     } catch (err) {
       showToast(err.message || 'Failed to send set list email', 'error');
@@ -281,7 +319,8 @@ export default function SetListsEditorPage() {
     }
   }
 
-  if (!event) return <div className="p-6 text-sm text-slate-500">Loading…</div>;
+  if (eventLoading) return <div className="p-6 text-sm text-slate-500">Loading…</div>;
+  if (!event) return <div className="mx-auto max-w-xl p-6 text-center"><p className="font-semibold text-slate-700">Set Lists could not be opened</p><p className="mt-1 text-sm text-slate-500">{eventError}</p><Link to="/events" className="mt-4 inline-block text-sm font-semibold text-indigo-600 hover:underline">Back to Events</Link></div>;
 
   const emailDraft = activeSetList ? renderSetListEmail(event.name, event.eventDate, activeSetList, currentUser?.businessInfo) : null;
   // Download PDF exports every set list in the book at once (unlike Email,
@@ -433,6 +472,8 @@ export default function SetListsEditorPage() {
                     className={`${inputClass} flex-1 min-w-0`}
                   />
                   <div className="flex items-center gap-1 shrink-0">
+                    <button type="button" onClick={() => moveItem(i, -1)} disabled={i === 0} className="w-7 h-7 rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-20" aria-label={`Move song ${i + 1} up`}>↑</button>
+                    <button type="button" onClick={() => moveItem(i, 1)} disabled={i === activeSetList.items.length - 1} className="w-7 h-7 rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-20" aria-label={`Move song ${i + 1} down`}>↓</button>
                     {item.documentId ? (
                       <>
                         <button
@@ -538,12 +579,22 @@ export default function SetListsEditorPage() {
         open={emailModalOpen}
         onClose={() => setEmailModalOpen(false)}
         bandMembers={bandMembers}
+        tentativeBandMembers={tentativeBandMembers}
         excludedCount={excludedCount}
         initialSubject={emailDraft?.subject}
         initialBody={emailDraft?.body}
         sending={sendingEmail}
         onConfirm={handleSendEmail}
       />
+
+      <Modal open={navigationBlocker.state === 'blocked'} onClose={() => navigationBlocker.reset?.()} title="Unsaved set list changes">
+        <p className="text-sm text-slate-600">Your latest set list edits have not been saved. Leaving now will discard them.</p>
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <button type="button" onClick={() => navigationBlocker.reset?.()} className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">Stay here</button>
+          <button type="button" onClick={() => navigationBlocker.proceed?.()} className="rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50">Leave without saving</button>
+          <button type="button" onClick={async () => { if (await handleSave()) navigationBlocker.proceed?.(); }} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Save and leave</button>
+        </div>
+      </Modal>
     </div>
   );
 }

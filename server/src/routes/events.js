@@ -12,6 +12,38 @@ import { normalizeNoOutsideContractorsNeeded } from '../lib/eventStaffingState.j
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
 
+export function validateEventSetLists(setLists) {
+  if (!Array.isArray(setLists) || setLists.length > 25) return 'setLists must contain no more than 25 lists.';
+  if (JSON.stringify(setLists).length > 2_000_000) return 'Set list data is too large.';
+  let totalSongs = 0;
+  const listIds = new Set();
+  for (const list of setLists) {
+    if (!list || typeof list !== 'object' || typeof list.id !== 'string' || !list.id.trim() || list.id.length > 200 || listIds.has(list.id)) return 'Every set list requires a unique valid id.';
+    listIds.add(list.id);
+    if (typeof list.name !== 'string' || !list.name.trim() || list.name.length > 200) return 'Every set list requires a valid name.';
+    if (!Array.isArray(list.items) || list.items.length > 500) return 'A set list cannot contain more than 500 songs.';
+    totalSongs += list.items.length;
+    if (totalSongs > 2000) return 'An event cannot contain more than 2,000 set list songs.';
+    const songIds = new Set();
+    for (const item of list.items) {
+      if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !item.id.trim() || item.id.length > 200 || songIds.has(item.id)) return 'Every song requires a unique valid id.';
+      songIds.add(item.id);
+      if (typeof item.songTitle !== 'string' || item.songTitle.length > 500) return 'Song titles must be text under 500 characters.';
+      if (item.description != null && (typeof item.description !== 'string' || item.description.length > 2000)) return 'Song notes must be text under 2,000 characters.';
+      if (item.link != null && (typeof item.link !== 'string' || item.link.length > 2048 || (item.link && !/^https?:\/\//i.test(item.link)))) return 'Song links must be valid http or https links.';
+      for (const key of ['documentId', 'documentName', 'documentContentType', 'documentShareToken']) if (item[key] != null && (typeof item[key] !== 'string' || item[key].length > 500)) return 'Song attachment information is invalid.';
+    }
+  }
+  return null;
+}
+
+async function validateSetListDocuments(accountId, setLists) {
+  const ids = [...new Set(setLists.flatMap((list) => list.items.map((item) => item.documentId)).filter(Boolean))];
+  if (!ids.length) return null;
+  const count = await prisma.eventDocument.count({ where: { accountId, id: { in: ids } } });
+  return count === ids.length ? null : 'One or more set list attachments are invalid.';
+}
+
 async function normalizeStaffingFlag(accountId, value, contractorBookings) {
   if (!value || !contractorBookings?.length) return Boolean(value);
   const accountData = await prisma.accountData.findUnique({ where: { accountId }, select: { data: true } });
@@ -185,6 +217,10 @@ router.post('/', asyncHandler(async (req, res) => {
   if (!id?.trim()) {
     return res.status(400).json({ error: 'id is required.' });
   }
+  if (rest.setLists !== undefined) {
+    const setListError = validateEventSetLists(rest.setLists) || await validateSetListDocuments(req.membership.accountId, rest.setLists);
+    if (setListError) return res.status(400).json({ error: setListError });
+  }
 
   const data = { id, accountId: req.membership.accountId };
   for (const field of WRITABLE_FIELDS) {
@@ -223,6 +259,11 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   const existing = await prisma.event.findUnique({ where: { id: req.params.id } });
   if (!existing || existing.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Event not found.' });
+  }
+  if (req.body?.expectedUpdatedAt && existing.updatedAt.toISOString() !== req.body.expectedUpdatedAt) return res.status(409).json({ error: 'This event was updated by someone else. Reload it before saving your set lists.' });
+  if (req.body?.setLists !== undefined) {
+    const setListError = validateEventSetLists(req.body.setLists) || await validateSetListDocuments(req.membership.accountId, req.body.setLists);
+    if (setListError) return res.status(400).json({ error: setListError });
   }
 
   const data = {};

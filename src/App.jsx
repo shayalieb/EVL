@@ -209,7 +209,7 @@ function AppRoutes() {
         <Route path="dev/canvas-demo" element={<DevOnlyRoute><CanvasEngineDemoPage /></DevOnlyRoute>} />
         <Route path="events/:eventId/stage-plot" element={<VerticalGate vertical="band_orchestra"><StagePlotEditorPage /></VerticalGate>} />
         <Route path="events/:eventId/floor-plan" element={<VerticalGate vertical="party_planning"><FloorPlanEditorPage /></VerticalGate>} />
-        <Route path="events/:eventId/set-lists" element={<VerticalGate vertical="band_orchestra"><SetListsEditorPage /></VerticalGate>} />
+        <Route path="events/:eventId/set-lists" element={<PermissionGate permission="manageEvents"><VerticalGate vertical="band_orchestra"><SetListsEditorPage /></VerticalGate></PermissionGate>} />
       </Route>
       <Route path="/admin" element={<PlatformAdminArea />}>
         <Route index element={<Navigate to="accounts" replace />} />

@@ -14,7 +14,7 @@ const bodyEditableClass = 'w-full min-h-[220px] max-h-[420px] overflow-y-auto px
 // separate document picker: sheet music already attached to this set
 // list's songs rides along automatically, same "no extra checkbox" pattern
 // EventFormPage's Requests-attached documents already use.
-export default function SetListEmailModal({ open, onClose, bandMembers, excludedCount = 0, initialSubject, initialBody, sending, onConfirm }) {
+export default function SetListEmailModal({ open, onClose, bandMembers, tentativeBandMembers = [], excludedCount = 0, initialSubject, initialBody, sending, onConfirm }) {
   const [subject, setSubject] = useState('');
   const [hasBody, setHasBody] = useState(false);
   const bodyRef = useRef(null);
@@ -25,9 +25,9 @@ export default function SetListEmailModal({ open, onClose, bandMembers, excluded
       setSubject(initialSubject || '');
       if (bodyRef.current) bodyRef.current.innerHTML = initialBody || '';
       setHasBody(!!initialBody?.trim());
-      setRecipientIds([]);
+      setRecipientIds(bandMembers.map((member) => member.id));
     }
-  }, [open, initialSubject, initialBody]);
+  }, [open, initialSubject, initialBody, bandMembers]);
 
   function handleBodyInput() {
     setHasBody(!!bodyRef.current?.textContent?.trim());
@@ -36,6 +36,8 @@ export default function SetListEmailModal({ open, onClose, bandMembers, excluded
   function toggleRecipient(id) {
     setRecipientIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
   }
+
+  const selectableIds = [...bandMembers, ...tentativeBandMembers].map((member) => member.id);
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -47,7 +49,10 @@ export default function SetListEmailModal({ open, onClose, bandMembers, excluded
     <Modal open={open} onClose={onClose} title="Email Set List" widthClass="max-w-2xl">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className={labelClass}>Recipients</label>
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <label className="text-xs font-semibold text-slate-500">Recipients ({recipientIds.length} selected)</label>
+            {selectableIds.length > 0 && <div className="flex gap-2"><button type="button" onClick={() => setRecipientIds(bandMembers.map((member) => member.id))} className="text-xs font-semibold text-indigo-600 hover:underline">Confirmed only</button><button type="button" onClick={() => setRecipientIds(selectableIds)} className="text-xs font-semibold text-indigo-600 hover:underline">Select all</button><button type="button" onClick={() => setRecipientIds([])} className="text-xs font-semibold text-slate-500 hover:underline">Clear</button></div>}
+          </div>
           {bandMembers.length === 0 ? (
             <p className="text-sm text-slate-400">No band members with an email are booked on this event yet.</p>
           ) : (
@@ -75,6 +80,19 @@ export default function SetListEmailModal({ open, onClose, bandMembers, excluded
             <p data-testid="setlist-email-excluded-hint" className="text-xs text-amber-600 mt-2">
               +{excludedCount} more booked on this event, not shown here — no email on file. Add one from Contractors to include {excludedCount === 1 ? 'them' : 'them all'}.
             </p>
+          )}
+          {tentativeBandMembers.length > 0 && (
+            <div className="mt-3 border-t border-slate-100 pt-3">
+              <p className="mb-2 text-xs font-semibold text-amber-700">Tentative performers — select only if they should receive this set list</p>
+              <div className="flex flex-wrap gap-2">
+                {tentativeBandMembers.map((contractor) => (
+                  <label key={contractor.id} className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm cursor-pointer ${recipientIds.includes(contractor.id) ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-slate-200 text-slate-600'}`}>
+                    <input type="checkbox" checked={recipientIds.includes(contractor.id)} onChange={() => toggleRecipient(contractor.id)} className="sr-only" />
+                    {contractor.firstName} {contractor.lastName}
+                  </label>
+                ))}
+              </div>
+            </div>
           )}
         </div>
 
