@@ -6,7 +6,7 @@ import LandingDashboardPreview from '../components/LandingDashboardPreview';
 import {
   FileIcon, UsersIcon, ClipboardIcon, BellIcon, ChevronDownIcon,
   CalendarIcon, ClockIcon, DollarIcon, WrenchIcon, AlertIcon, InfoIcon, MapPinIcon, NoteIcon, SearchIcon,
-  StarIcon, ShieldIcon, ChartIcon, BoltIcon,
+  StarIcon, ShieldIcon, ChartIcon, BoltIcon, SparkleIcon,
 } from '../components/ui/icons';
 import { getLandingConfig, joinWaitlist, sendContactMessage } from '../lib/landing';
 
@@ -40,7 +40,7 @@ const PAIN_POINTS = [
   {
     title: 'Confirmed? Tentative? Ghosted?',
     problem: "Chasing contractors for a yes/no by text, with no single place to see who's actually locked in for Saturday.",
-    fix: "Every contractor's status is tracked per event, and they can confirm or decline from a link on their own phone — no more guessing.",
+    fix: "Every contractor's status is tracked per event — they can confirm or decline from a link on their own phone, or just reply to your email and let AI update their status the moment the reply comes in.",
   },
   {
     title: 'The same quartet, rebuilt from scratch every single gig.',
@@ -74,13 +74,13 @@ const FEATURE_GROUPS = [
     id: 'clients',
     title: 'For your clients',
     icon: 'file',
-    items: ['Inquiry-to-booking pipeline', 'Proposals your client accepts online', 'Contracts with e-signature', 'Invoicing with built-in Stripe payments'],
+    items: ['Inquiry-to-booking pipeline', 'Proposals your client accepts online', 'Contracts with e-signature', 'Invoicing with built-in Stripe payments', 'AI drafts a priced proposal straight from a client’s inquiry'],
   },
   {
     id: 'roster',
     title: 'For your roster',
     icon: 'users',
-    items: ['Contractor roster & availability', 'Per-event confirm/decline tracking', 'Ensembles — save a group once, add its whole lineup in one click', 'A home-screen link every contractor can check themselves'],
+    items: ['Contractor roster & availability', 'Per-event confirm/decline tracking', 'Ensembles — save a group once, add its whole lineup in one click', 'A home-screen link every contractor can check themselves', 'AI reads a contractor’s email reply and updates their status automatically'],
   },
   {
     id: 'dayOf',
@@ -92,7 +92,26 @@ const FEATURE_GROUPS = [
     id: 'oversight',
     title: 'For staying on top of it',
     icon: 'bell',
-    items: ['A dashboard that surfaces what actually needs attention', 'Automatic alerts for at-risk events and overdue invoices', 'Email templates with merge fields for real event details', 'Manual reminders tied to any client or contractor', 'A Financials page tracking money in, money out, contractor payments due, and bookkeeper-ready exports'],
+    items: ['A dashboard that surfaces what actually needs attention', 'Automatic alerts for at-risk events and overdue invoices', 'Email templates with merge fields for real event details', 'Manual reminders tied to any client or contractor', 'A Financials page tracking money in, money out, contractor payments due, and bookkeeper-ready exports', 'Ask the GigWorks Assistant instead of digging through menus'],
+  },
+];
+
+// The "AI, built in" showcase — hardcoded like SCREENSHOTS below rather than
+// admin-configurable, since AdminWebsitePage.jsx has no editing tab for it
+// yet (no raw-JSON escape hatch either, so a config field nobody can edit
+// from the admin UI would just be dead weight). Revisit if that changes.
+const AI_FEATURES = [
+  {
+    title: 'Contractors confirm without you asking twice',
+    description: "When a contractor replies to a booking email, GigWorks reads it and updates their status automatically — confirmed or not available — the moment the reply lands. A small AI mark shows exactly which statuses it set, so you always know what happened on its own versus what you changed by hand.",
+  },
+  {
+    title: "Proposals drafted before you've finished reading the inquiry",
+    description: 'Paste in a client\'s inquiry and GigWorks drafts a full proposal — pulling real pricing from your own catalog, not a guess — ready for you to review and send, not to fill in from scratch.',
+  },
+  {
+    title: 'Ask GigWorks Assistant instead of digging through menus',
+    description: "A chat built into the app that answers questions about your schedule, overdue invoices, or a specific client or contractor, and can create a reminder, add a client, or update a booking when you ask. It always shows you what it's about to do first — nothing happens until you confirm.",
   },
 ];
 
@@ -110,6 +129,7 @@ const SCREENSHOTS = [
 const NAV_LINKS = [
   { href: '#story', label: 'Story' },
   { href: '#features', label: 'Features' },
+  { href: '#ai', label: 'AI' },
   { href: '#pricing', label: 'Pricing' },
   { href: '#faq', label: 'FAQ' },
 ];
@@ -149,6 +169,10 @@ const FAQS = [
   {
     q: 'When can I start using it, and what does it cost?',
     a: '',
+  },
+  {
+    q: 'Does GigWorks use AI? What does it actually do, and is my data safe?',
+    a: "Yes — GigWorks uses AI in two places today: reading a contractor's email reply to automatically update their confirm or decline status (always marked with a small AI badge, so you can see at a glance what it set versus what you changed by hand), and the GigWorks Assistant, a chat built into the app you can ask about your schedule or use to draft a proposal, create a reminder, or update a booking. Anything the Assistant proposes is shown to you first — nothing saves until you confirm it. Your account data is only ever used to answer your own questions or process your own emails, processed through Anthropic's Claude API, never used to train any AI model or shared with other accounts.",
   },
 ];
 
@@ -303,8 +327,9 @@ export default function LandingPage({ previewConfig } = {}) {
   const navLinks = [
     { href: '#story', label: navigation?.story || NAV_LINKS[0].label },
     { href: '#features', label: navigation?.features || NAV_LINKS[1].label },
-    { href: '#pricing', label: navigation?.pricing || NAV_LINKS[2].label },
-    { href: '#faq', label: navigation?.faq || NAV_LINKS[3].label },
+    { href: '#ai', label: 'AI' },
+    { href: '#pricing', label: navigation?.pricing || NAV_LINKS[3].label },
+    { href: '#faq', label: navigation?.faq || NAV_LINKS[4].label },
   ];
   const pricingTiers = pricing?.tiers?.map((tier) => ({
     id: tier.id,
@@ -471,8 +496,12 @@ export default function LandingPage({ previewConfig } = {}) {
                   {hero?.headline || 'Built by a musician who spent 20 years chasing confirmations instead of chasing gigs.'}
                 </h1>
                 <p className="mt-5 text-lg text-indigo-200 max-w-2xl mx-auto lg:mx-0">
-                  {hero?.description || "GigWorks is the business software for entertainment agencies and bandleaders who book out multiple musicians — proposals, contracts, and invoicing for your clients, plus the day-of details connected to who's actually on the gig."}
+                  {hero?.description || "GigWorks is the business software for entertainment agencies and bandleaders who book out multiple musicians — proposals, contracts, and invoicing for your clients, the day-of details connected to who's actually on the gig, and AI that reads contractor replies and drafts your proposals so less of it lands on you."}
                 </p>
+                <a href="#ai" className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-emerald-300/30 bg-emerald-400/10 px-3.5 py-1.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-400/20 transition-colors">
+                  <SparkleIcon className="h-3.5 w-3.5" />
+                  One of the first AI-native platforms in gig entertainment software
+                </a>
                 <div className="mt-7 flex items-center justify-center lg:justify-start gap-3 flex-wrap">
                   {publicSignupsEnabled ? (
                     <a href="#pricing" data-testid="landing-hero-plans-link" className="px-7 py-3.5 rounded-xl bg-white text-indigo-700 text-base font-semibold shadow-lg shadow-black/20 hover:shadow-xl hover:-translate-y-0.5 hover:bg-indigo-50 transition-all">{navigation?.signup || 'View Plans'}</a>
@@ -564,6 +593,35 @@ export default function LandingPage({ previewConfig } = {}) {
             </Reveal>
           ))}
         </div>
+      </section>
+
+      {/* AI showcase — hardcoded (see AI_FEATURES above), placed right after
+          the real screenshots and before the general feature grid so the
+          category-leadership claim lands while the visitor is still looking
+          at the actual product, not buried after a wall of feature copy. */}
+      <section id="ai" className="relative overflow-hidden bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950 text-white scroll-mt-16">
+        <div className="pointer-events-none absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 12% 15%, #34d399 0, transparent 30%), radial-gradient(circle at 88% 80%, #6366f1 0, transparent 32%)' }} aria-hidden="true" />
+        <Reveal className="relative max-w-5xl mx-auto px-4 sm:px-6 py-16 md:py-24">
+          <div className="text-center max-w-2xl mx-auto mb-14">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/30 bg-emerald-400/10 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide text-emerald-200">
+              <SparkleIcon className="h-3.5 w-3.5" />
+              AI, built in — not bolted on
+            </span>
+            <h2 className="mt-4 text-2xl sm:text-3xl font-bold tracking-tight">One of the first AI-native platforms built for gig entertainment businesses</h2>
+            <p className="mt-3 text-slate-300">Most software in this space still expects you to read every email and fill in every field yourself. GigWorks doesn't.</p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            {AI_FEATURES.map((feature, i) => (
+              <Reveal key={feature.title} delay={i * 90} data-testid="landing-ai-feature" className="rounded-2xl border border-white/10 bg-white/[0.06] p-5 backdrop-blur-sm">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300">
+                  <SparkleIcon className="h-5 w-5" />
+                </span>
+                <h3 className="mt-3.5 font-bold text-white">{feature.title}</h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-300">{feature.description}</p>
+              </Reveal>
+            ))}
+          </div>
+        </Reveal>
       </section>
 
       {/* Feature cards — an admin-manageable grid (src/pages/admin/

@@ -16,6 +16,7 @@ import { getStripeClient } from '../lib/stripe.js';
 import { priceIdFor } from '../lib/plans.js';
 import { resolveLinkExpiration } from '../lib/linkExpiration.js';
 import { quickBooksPilotGraduationReadiness, quickBooksPilotHealth, QUICKBOOKS_PILOT_TEST_STEPS, updateQuickBooksPilotTestResults } from '../lib/quickBooksPilot.js';
+import { backfillEmailAiClassification } from '../lib/emailAiBackfill.js';
 
 const router = Router();
 const REVIEW_LINK_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -50,6 +51,15 @@ router.use('/support', requireAdminPermission('manageSupport'));
 router.use('/platform-admins', requireAdminPermission('manageAdmins'));
 router.use('/website', requireAdminPermission('manageWebsite'));
 router.use('/waitlist', requireAdminPermission('manageAccounts'));
+
+// Owner-only, not gated by any per-admin permission (unlike the sections
+// above) — these trigger data mutations across every account's bookings at
+// once, not scoped to a single account the way the rest of this router is.
+function requirePlatformOwner(req, res, next) {
+  if (!req.user?.isPlatformOwner) return res.status(403).json({ error: 'Not authorized.' });
+  next();
+}
+router.use('/maintenance', requirePlatformOwner);
 
 function ownerOf(account) {
   const owner = account.memberships.find((m) => m.role === 'owner');
@@ -1018,6 +1028,16 @@ router.delete('/platform-admins/:id', asyncHandler(async (req, res) => {
 
   await prisma.user.update({ where: { id: target.id }, data: { isPlatformAdmin: false, adminPermissions: {} } });
   res.json({ ok: true });
+}));
+
+// One-off, idempotent — see server/src/lib/emailAiBackfill.js. Exists as an
+// HTTP route (rather than only the CLI script at
+// server/scripts/backfillEmailAiClassification.js) because production's DB
+// is only reachable from inside the running app, not by running a script
+// against it directly — this is how that same logic gets triggered there.
+router.post('/maintenance/backfill-email-ai-classification', asyncHandler(async (req, res) => {
+  const summary = await backfillEmailAiClassification();
+  res.json({ summary });
 }));
 
 export default router;
