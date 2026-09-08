@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import CanvasNotesPopover from './CanvasNotesPopover';
 import { stagePlotNotesToPlainText } from '../lib/stagePlotNotes';
+import { useToast } from './ui/Toast';
 
 const PROVIDED_BY_OPTIONS = ['', 'band', 'venue', 'rental'];
 const PROVIDED_BY_LABELS = { band: 'Band', venue: 'Venue', rental: 'Rental' };
@@ -12,8 +13,10 @@ const cellInputClass = 'w-full px-1.5 py-1 rounded border border-transparent hov
 // StagePlotBacklineItem model. Not linked to canvas icons like a channel can
 // be — backline is a rider list, not a specific placed instrument.
 export default function StagePlotBacklineList({ api, items, onItemsChange }) {
+  const { showToast } = useToast();
   const [busyId, setBusyId] = useState(null);
   const [openItemId, setOpenItemId] = useState(null);
+  const saveSequence = useRef(new Map());
 
   async function handleAdd() {
     const item = await api.addItem({ item: 'New Item' });
@@ -21,12 +24,20 @@ export default function StagePlotBacklineList({ api, items, onItemsChange }) {
   }
 
   async function handleFieldChange(item, patch) {
+    const previous = item;
+    const sequence = (saveSequence.current.get(item.id) || 0) + 1;
+    saveSequence.current.set(item.id, sequence);
     onItemsChange(items.map((i) => (i.id === item.id ? { ...i, ...patch } : i)));
     setBusyId(item.id);
     try {
       await api.updateItem(item.id, patch);
+    } catch (err) {
+      if (saveSequence.current.get(item.id) === sequence) {
+        onItemsChange(items.map((current) => (current.id === item.id ? previous : current)));
+        showToast(err.message || 'Could not save the backline item. Your previous value was restored.', 'error');
+      }
     } finally {
-      setBusyId(null);
+      if (saveSequence.current.get(item.id) === sequence) setBusyId(null);
     }
   }
 
@@ -35,6 +46,8 @@ export default function StagePlotBacklineList({ api, items, onItemsChange }) {
     try {
       await api.deleteItem(item.id);
       onItemsChange(items.filter((i) => i.id !== item.id));
+    } catch (err) {
+      showToast(err.message || 'Could not delete the backline item', 'error');
     } finally {
       setBusyId(null);
     }

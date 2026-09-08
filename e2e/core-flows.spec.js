@@ -55,6 +55,16 @@ test('stage plot library clearly separates reusable templates from gig copies', 
   await expect(page.getByText('Reusable template', { exact: true })).toBeVisible();
   await expect(page.getByText(/Changes here affect future copies only/)).toBeVisible();
   await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  await page.getByTestId('stageplot-icon-vocal-mic').click();
+  const canvas = page.locator('canvas').last();
+  await canvas.click({ position: { x: 300, y: 180 } });
+  await page.getByRole('button', { name: 'Select', exact: true }).click();
+  await canvas.click({ position: { x: 300, y: 180 } });
+  await expect(page.getByTestId('stageplot-size-inspector')).toBeVisible();
+  await page.getByTestId('stageplot-selected-size-input').fill('96');
+  await expect(page.getByTestId('stageplot-selected-size-input')).toHaveValue('96');
+  await page.getByTestId('stageplot-selected-rotation-input').fill('30');
+  await expect(page.getByTestId('stageplot-selected-rotation-input')).toHaveValue('30');
   await page.waitForTimeout(2200);
   await expect(page.getByText('Saved', { exact: true })).toBeVisible();
 });

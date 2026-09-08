@@ -124,7 +124,13 @@ function LinearIconGraphic({ linearKind, width, isSelected }) {
 // demo page's placeholder icon set), so this component works whether or
 // not a real icon set is wired up.
 function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSelect, onEdit, onDragStart, onDragEnd, dragBoundFunc, shapeRef }) {
-  const image = useSvgImage(icon?.svg);
+  const isLinear = !!icon?.linearKind;
+  // Older scenes stored size as Group scale factors. New edits store actual
+  // dimensions so an icon is rendered at its final resolution instead of
+  // stretching a fixed 56px bitmap (which made SVG strokes look heavier).
+  const renderedWidth = isLinear ? null : Math.max(20, element.width || ICON_SIZE * (element.scaleX || 1));
+  const renderedHeight = isLinear ? null : Math.max(20, element.height || ICON_SIZE * (element.scaleY || 1));
+  const image = useSvgImage(icon?.svg, renderedWidth, renderedHeight);
   // Icon, label, and number badge all live inside one draggable/transformable
   // Group instead of as separate top-level siblings — Konva moves/transforms
   // a Group's whole subtree as one unit natively, which is what keeps the
@@ -135,8 +141,8 @@ function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSe
   // it). Children are positioned relative to the Group's own (0,0) origin.
   const baseLabel = element.label || icon?.label || element.iconId || '';
   const labelText = element.seats ? `${baseLabel} (${element.seats})` : baseLabel;
-  const linearWidth = icon?.linearKind ? Math.max(LINEAR_MIN_WIDTH, element.width || LINEAR_DEFAULT_WIDTH) : null;
-  const labelY = linearWidth != null ? LINEAR_HEIGHT / 2 + 10 : icon ? ICON_SIZE / 2 + 12 : 24;
+  const linearWidth = isLinear ? Math.max(LINEAR_MIN_WIDTH, element.width || LINEAR_DEFAULT_WIDTH) : null;
+  const labelY = linearWidth != null ? LINEAR_HEIGHT / 2 + 10 : icon ? renderedHeight / 2 + 12 : 24;
   // The label and number badge live inside the same rotatable/scalable Group
   // as the icon (see the file-level comment below) so they track drags
   // correctly, but readers shouldn't have to tilt their head to read a
@@ -148,10 +154,10 @@ function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSe
   // orbiting around it as it turns. boundBoxFunc below never lets scaleX/
   // scaleY reach 0, so this inverse is always finite.
   const counterRotation = -element.rotation;
-  const counterScaleX = 1 / (element.scaleX || 1);
-  const counterScaleY = 1 / (element.scaleY || 1);
+  const counterScaleX = isLinear ? 1 / (element.scaleX || 1) : 1;
+  const counterScaleY = isLinear ? 1 / (element.scaleY || 1) : 1;
   const labelAnchor = rotateOffset(0, labelY, counterRotation);
-  const numberAnchor = rotateOffset(16, -24, counterRotation);
+  const numberAnchor = rotateOffset(linearWidth != null ? 16 : renderedWidth / 2 - 5, linearWidth != null ? -24 : -renderedHeight / 2 + 5, counterRotation);
 
   return (
     <Group
@@ -159,8 +165,8 @@ function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSe
       x={element.x}
       y={element.y}
       rotation={element.rotation}
-      scaleX={element.scaleX}
-      scaleY={element.scaleY}
+      scaleX={isLinear ? element.scaleX : 1}
+      scaleY={isLinear ? element.scaleY : 1}
       draggable
       dragBoundFunc={dragBoundFunc}
       onClick={onSelect}
@@ -172,10 +178,10 @@ function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSe
     >
       {isMultiSelected && (
         <Rect
-          width={(linearWidth ?? ICON_SIZE) + 10}
-          height={(linearWidth != null ? LINEAR_HEIGHT : ICON_SIZE) + 10}
-          offsetX={((linearWidth ?? ICON_SIZE) + 10) / 2}
-          offsetY={((linearWidth != null ? LINEAR_HEIGHT : ICON_SIZE) + 10) / 2}
+          width={(linearWidth ?? renderedWidth) + 10}
+          height={(linearWidth != null ? LINEAR_HEIGHT : renderedHeight) + 10}
+          offsetX={((linearWidth ?? renderedWidth) + 10) / 2}
+          offsetY={((linearWidth != null ? LINEAR_HEIGHT : renderedHeight) + 10) / 2}
           stroke="#4f46e5"
           strokeWidth={1.5}
           strokeScaleEnabled={false}
@@ -189,10 +195,10 @@ function ElementShape({ element, icon, number, isSelected, isMultiSelected, onSe
       ) : icon && image ? (
         <KonvaImage
           image={image}
-          width={ICON_SIZE}
-          height={ICON_SIZE}
-          offsetX={ICON_SIZE / 2}
-          offsetY={ICON_SIZE / 2}
+          width={renderedWidth}
+          height={renderedHeight}
+          offsetX={renderedWidth / 2}
+          offsetY={renderedHeight / 2}
           shadowColor={isSelected ? '#4f46e5' : undefined}
           shadowBlur={isSelected ? 8 : 0}
           shadowOpacity={isSelected ? 0.6 : 0}
@@ -377,6 +383,7 @@ const CanvasStage = forwardRef(function CanvasStage({
   const [draftName, setDraftName] = useState('');
   const [draftDescriptionHtml, setDraftDescriptionHtml] = useState('');
   const [liveRotation, setLiveRotation] = useState(null);
+  const [liveSize, setLiveSize] = useState(null);
   const [calibrationPoints, setCalibrationPoints] = useState(null);
   const [calibrationDistance, setCalibrationDistance] = useState('');
   const [isPanning, setIsPanning] = useState(false);
@@ -551,8 +558,10 @@ const CanvasStage = forwardRef(function CanvasStage({
   function handleFitToContent() {
     const points = [];
     for (const el of scene.elements) {
-      const half = iconRegistry?.[el.iconId]?.linearKind ? Math.max(LINEAR_MIN_WIDTH, el.width || LINEAR_DEFAULT_WIDTH) / 2 : ICON_SIZE;
-      points.push({ x: el.x - half, y: el.y - half }, { x: el.x + half, y: el.y + half });
+      const isLinear = iconRegistry?.[el.iconId]?.linearKind;
+      const halfWidth = isLinear ? Math.max(LINEAR_MIN_WIDTH, el.width || LINEAR_DEFAULT_WIDTH) / 2 : Math.max(20, el.width || ICON_SIZE * (el.scaleX || 1)) / 2;
+      const halfHeight = isLinear ? LINEAR_HEIGHT / 2 : Math.max(20, el.height || ICON_SIZE * (el.scaleY || 1)) / 2;
+      points.push({ x: el.x - halfWidth, y: el.y - halfHeight }, { x: el.x + halfWidth, y: el.y + halfHeight });
     }
     for (const a of scene.annotations) {
       const w = a.style === 'text' ? TEXT_LABEL_WIDTH : NOTE_WIDTH;
@@ -974,16 +983,16 @@ const CanvasStage = forwardRef(function CanvasStage({
             />
           ))}
 
-          {!cleanRender && liveRotation != null && selectedElement && (
-            <Group x={selectedElement.x} y={selectedElement.y - (selectedIsLinear ? LINEAR_HEIGHT : ICON_SIZE) / 2 - 26} listening={false}>
-              <Rect width={44} height={20} offsetX={22} offsetY={10} fill="#1e293b" cornerRadius={4} />
+          {!cleanRender && (liveRotation != null || liveSize) && selectedElement && (
+            <Group x={selectedElement.x} y={selectedElement.y - (selectedIsLinear ? LINEAR_HEIGHT : Math.max(20, selectedElement.height || ICON_SIZE * (selectedElement.scaleY || 1))) / 2 - 26} listening={false}>
+              <Rect width={liveSize ? 78 : 44} height={20} offsetX={liveSize ? 39 : 22} offsetY={10} fill="#1e293b" cornerRadius={4} />
               <Text
-                text={`${liveRotation}°`}
+                text={liveSize || `${liveRotation}°`}
                 fontSize={12}
                 fill="#fff"
-                width={44}
+                width={liveSize ? 78 : 44}
                 height={20}
-                offsetX={22}
+                offsetX={liveSize ? 39 : 22}
                 offsetY={10}
                 align="center"
                 verticalAlign="middle"
@@ -1007,19 +1016,34 @@ const CanvasStage = forwardRef(function CanvasStage({
             visible={!cleanRender}
             rotateEnabled
             rotationSnaps={ROTATION_SNAPS}
-            enabledAnchors={selectedIsLinear ? ['middle-left', 'middle-right'] : undefined}
+            enabledAnchors={selectedIsLinear ? ['middle-left', 'middle-right'] : ['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+            keepRatio={!selectedIsLinear}
+            flipEnabled={false}
             boundBoxFunc={(oldBox, newBox) => (newBox.width < 20 || newBox.height < 10 ? oldBox : newBox)}
             onTransform={() => {
               // Only the rotate handle gets a live readout — resize-handle
               // drags fire onTransform too, and would otherwise flash a
               // stale/misleading angle label during a plain resize.
-              if (trRef.current?.getActiveAnchor() !== 'rotater') return;
               const node = selectedElementId ? shapeRefs.current[selectedElementId] : null;
-              if (node) setLiveRotation(Math.round(node.rotation()));
+              if (!node) return;
+              if (trRef.current?.getActiveAnchor() === 'rotater') {
+                setLiveSize(null);
+                setLiveRotation(Math.round(node.rotation()));
+                return;
+              }
+              setLiveRotation(null);
+              const baseWidth = selectedIsLinear
+                ? Math.max(LINEAR_MIN_WIDTH, selectedElement?.width || LINEAR_DEFAULT_WIDTH)
+                : Math.max(20, selectedElement?.width || ICON_SIZE * (selectedElement?.scaleX || 1));
+              const baseHeight = selectedIsLinear
+                ? LINEAR_HEIGHT
+                : Math.max(20, selectedElement?.height || ICON_SIZE * (selectedElement?.scaleY || 1));
+              setLiveSize(`${Math.round(baseWidth * node.scaleX())} × ${Math.round(baseHeight * node.scaleY())}`);
             }}
             onTransformEnd={() => {
               const node = selectedElementId ? shapeRefs.current[selectedElementId] : null;
               setLiveRotation(null);
+              setLiveSize(null);
               if (!node) return;
               // A linear icon's length lives in its own `width` field, not
               // Konva's scaleX — bake the gesture's scale into a new width
@@ -1040,10 +1064,16 @@ const CanvasStage = forwardRef(function CanvasStage({
                 }));
                 return;
               }
+              const baseWidth = Math.max(20, selectedElement?.width || ICON_SIZE * (selectedElement?.scaleX || 1));
+              const baseHeight = Math.max(20, selectedElement?.height || ICON_SIZE * (selectedElement?.scaleY || 1));
+              const nextWidth = Math.max(20, baseWidth * node.scaleX());
+              const nextHeight = Math.max(20, baseHeight * node.scaleY());
+              node.scaleX(1);
+              node.scaleY(1);
               onMutate((s) => ({
                 ...s,
                 elements: s.elements.map((e) => (e.id === selectedElementId
-                  ? { ...e, x: node.x(), y: node.y(), rotation: node.rotation(), scaleX: node.scaleX(), scaleY: node.scaleY() }
+                  ? { ...e, x: node.x(), y: node.y(), rotation: node.rotation(), width: nextWidth, height: nextHeight, scaleX: 1, scaleY: 1 }
                   : e)),
               }));
             }}

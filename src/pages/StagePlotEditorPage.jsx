@@ -53,6 +53,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   const [exporting, setExporting] = useState(false);
   const [selectedElementId, setSelectedElementId] = useState(null);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [emailStagePlot, setEmailStagePlot] = useState(null);
   const [threadSummaries, setThreadSummaries] = useState({});
   const [activeThreadContractorId, setActiveThreadContractorId] = useState(null);
   const [saveLibraryModalOpen, setSaveLibraryModalOpen] = useState(false);
@@ -116,6 +117,18 @@ export default function StagePlotEditorPage({ onClose } = {}) {
     setPlot((prev) => (prev ? { ...prev, pages: prev.pages.map((pg) => (pg.id === pageId ? { ...pg, ...patch } : pg)) } : prev));
   }
 
+  async function flushActivePage() {
+    if (!activePageId || !pageEditorRef.current?.hasUnsavedChanges?.()) return plot;
+    const saved = await pageEditorRef.current.flush();
+    if (!saved) {
+      showToast('The latest canvas changes could not be saved. Try again before continuing.', 'error');
+      return null;
+    }
+    const nextPlot = { ...plot, pages: plot.pages.map((page) => (page.id === activePageId ? { ...page, ...saved } : page)) };
+    setPlot(nextPlot);
+    return nextPlot;
+  }
+
   // Placing an icon on the canvas no longer auto-creates a linked Production
   // List row for it — an icon only ends up on the list once someone
   // deliberately adds it there (the canvas double-click popup's "+ Add to
@@ -150,6 +163,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   }
 
   async function handleAddPage() {
+    if (!await flushActivePage()) return;
     const page = await addStagePlotPage(eventId);
     setPlot((prev) => ({ ...prev, pages: [...prev.pages, page] }));
     setActivePageId(page.id);
@@ -162,7 +176,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
     // an icon placed just before hitting "Delete Page" could still be
     // unsaved server-side and get missed, leaving its channel orphaned.
     if (pageId === activePageId) {
-      await pageEditorRef.current?.flush();
+      if (!await flushActivePage()) return;
     }
     // The server also deletes any production-list channels linked to icons
     // that only existed on this page (see stagePlots.js's DELETE
@@ -181,7 +195,11 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   async function handleExportPdf() {
     setExporting(true);
     try {
-      await generateStagePlotPdf({ eventId, eventName: event?.name, stagePlot: plot, businessInfo: currentUser?.businessInfo });
+      const latestPlot = await flushActivePage();
+      if (!latestPlot) return;
+      await generateStagePlotPdf({ eventId, eventName: event?.name, stagePlot: latestPlot, businessInfo: currentUser?.businessInfo });
+    } catch (err) {
+      showToast(err.message || 'Could not export the stage plot', 'error');
     } finally {
       setExporting(false);
     }
@@ -198,6 +216,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
     if (!name) return;
     setSavingToLibrary(true);
     try {
+      if (!await flushActivePage()) return;
       await saveStagePlotToLibrary(eventId, name);
       showToast(`Saved "${name}" to your stage plot library`);
       setSaveLibraryModalOpen(false);
@@ -214,6 +233,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   async function handleAddFromLibrary(item) {
     setApplyingLibraryId(item.id);
     try {
+      if (!await flushActivePage()) return;
       const existingPageIds = new Set(plot.pages.map((p) => p.id));
       const merged = await applyStagePlotLibraryItem(eventId, item.id, { mode: libraryImportMode, include: libraryImportInclude });
       setPlot(merged);
@@ -226,6 +246,25 @@ export default function StagePlotEditorPage({ onClose } = {}) {
     } finally {
       setApplyingLibraryId(null);
     }
+  }
+
+
+  async function handleOpenEmail() {
+    const latestPlot = await flushActivePage();
+    if (!latestPlot) return;
+    setEmailStagePlot(latestPlot);
+    setEmailModalOpen(true);
+  }
+
+  async function handleSelectPage(pageId) {
+    if (pageId === activePageId) return;
+    if (!await flushActivePage()) return;
+    setActivePageId(pageId);
+  }
+
+  async function handleDone() {
+    if (!await flushActivePage()) return;
+    onClose?.();
   }
 
   // Proposes rows for the production/backline lists from a natural-language
@@ -343,7 +382,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
           </button>
           <button
             type="button"
-            onClick={() => setEmailModalOpen(true)}
+            onClick={handleOpenEmail}
             data-testid="stageplot-email-button"
             className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold"
           >
@@ -361,7 +400,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
           {isModal && (
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleDone}
               data-testid="stageplot-modal-done-button"
               className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
             >
@@ -376,7 +415,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
           <button
             key={p.id}
             type="button"
-            onClick={() => setActivePageId(p.id)}
+            onClick={() => handleSelectPage(p.id)}
             data-testid="stageplot-page-tab"
             className={`px-3 py-2 text-sm font-semibold border-b-2 -mb-px ${
               p.id === activePageId ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -495,7 +534,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
         eventId={eventId}
         eventName={event?.name}
         eventDate={event?.eventDate}
-        stagePlot={plot}
+        stagePlot={emailStagePlot || plot}
         rosterContractors={rosterContractors}
         businessInfo={currentUser?.businessInfo}
         fromName={fromName}

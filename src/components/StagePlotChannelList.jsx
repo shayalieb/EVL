@@ -49,6 +49,7 @@ export default function StagePlotChannelList({ api, channels, onChannelsChange, 
   const { showToast } = useToast();
   const [busyId, setBusyId] = useState(null);
   const dragIndex = useRef(null);
+  const saveSequence = useRef(new Map());
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const isLinked = (elementId) => channels.some((c) => c.elementId === elementId);
 
@@ -66,12 +67,20 @@ export default function StagePlotChannelList({ api, channels, onChannelsChange, 
   }
 
   async function handleFieldChange(channel, patch) {
+    const previous = channel;
+    const sequence = (saveSequence.current.get(channel.id) || 0) + 1;
+    saveSequence.current.set(channel.id, sequence);
     onChannelsChange(channels.map((c) => (c.id === channel.id ? { ...c, ...patch } : c)));
     setBusyId(channel.id);
     try {
       await api.updateChannel(channel.id, patch);
+    } catch (err) {
+      if (saveSequence.current.get(channel.id) === sequence) {
+        onChannelsChange(channels.map((c) => (c.id === channel.id ? previous : c)));
+        showToast(err.message || 'Could not save the production item. Your previous value was restored.', 'error');
+      }
     } finally {
-      setBusyId(null);
+      if (saveSequence.current.get(channel.id) === sequence) setBusyId(null);
     }
   }
 
@@ -80,6 +89,8 @@ export default function StagePlotChannelList({ api, channels, onChannelsChange, 
     try {
       await api.deleteChannel(channel.id);
       onChannelsChange(channels.filter((c) => c.id !== channel.id));
+    } catch (err) {
+      showToast(err.message || 'Could not delete the production item', 'error');
     } finally {
       setBusyId(null);
     }
@@ -105,9 +116,9 @@ export default function StagePlotChannelList({ api, channels, onChannelsChange, 
     try {
       const saved = await api.reorderChannels(reordered.map((c) => c.id));
       onChannelsChange(saved);
-    } catch {
+    } catch (err) {
       onChannelsChange(previous);
-      showToast('Failed to reorder the list', 'error');
+      showToast(err.message || 'Could not reorder the list. The previous order was restored.', 'error');
     }
   }
 

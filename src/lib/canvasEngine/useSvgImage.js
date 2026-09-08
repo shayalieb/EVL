@@ -9,38 +9,46 @@ import { useEffect, useState } from 'react';
 const cache = new Map();
 const pending = new Map(); // svgMarkup -> Promise, so concurrent requests for the same icon share one decode
 
-function decode(svgMarkup) {
-  const cached = cache.get(svgMarkup);
+function withRenderedSize(svgMarkup, width, height) {
+  if (!svgMarkup || !width || !height) return svgMarkup;
+  return svgMarkup.replace('<svg ', `<svg width="${Math.ceil(width)}" height="${Math.ceil(height)}" `);
+}
+
+function decode(svgMarkup, width, height) {
+  const sizedMarkup = withRenderedSize(svgMarkup, width, height);
+  const cacheKey = sizedMarkup;
+  const cached = cache.get(cacheKey);
   if (cached) return Promise.resolve(cached);
-  const inFlight = pending.get(svgMarkup);
+  const inFlight = pending.get(cacheKey);
   if (inFlight) return inFlight;
 
   const promise = new Promise((resolve) => {
     const img = new window.Image();
     img.onload = () => {
-      cache.set(svgMarkup, img);
-      pending.delete(svgMarkup);
+      cache.set(cacheKey, img);
+      pending.delete(cacheKey);
       resolve(img);
     };
     img.onerror = () => {
-      pending.delete(svgMarkup);
+      pending.delete(cacheKey);
       resolve(null);
     };
-    img.src = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgMarkup)))}`;
+    img.src = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(sizedMarkup)))}`;
   });
-  pending.set(svgMarkup, promise);
+  pending.set(cacheKey, promise);
   return promise;
 }
 
-export function useSvgImage(svgMarkup) {
-  const [image, setImage] = useState(() => (svgMarkup ? cache.get(svgMarkup) || null : null));
+export function useSvgImage(svgMarkup, width, height) {
+  const cacheKey = withRenderedSize(svgMarkup, width, height);
+  const [image, setImage] = useState(() => (cacheKey ? cache.get(cacheKey) || null : null));
 
   useEffect(() => {
     if (!svgMarkup) { setImage(null); return; }
     let cancelled = false;
-    decode(svgMarkup).then((img) => { if (!cancelled) setImage(img); });
+    decode(svgMarkup, width, height).then((img) => { if (!cancelled) setImage(img); });
     return () => { cancelled = true; };
-  }, [svgMarkup]);
+  }, [svgMarkup, width, height]);
 
   return image;
 }

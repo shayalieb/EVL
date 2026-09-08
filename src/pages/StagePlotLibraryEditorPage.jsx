@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import {
   getStagePlotLibraryItemDetail, saveStagePlotLibraryPage, addStagePlotLibraryPage, deleteStagePlotLibraryPage,
@@ -9,6 +9,7 @@ import {
 import StagePlotPageEditor from '../components/StagePlotPageEditor';
 import StagePlotChannelList from '../components/StagePlotChannelList';
 import StagePlotBacklineList from '../components/StagePlotBacklineList';
+import { useToast } from '../components/ui/Toast';
 
 const inputClass = 'px-2 py-1 rounded-lg border border-slate-300 text-lg font-bold text-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -20,6 +21,8 @@ const inputClass = 'px-2 py-1 rounded-lg border border-slate-300 text-lg font-bo
 // what only makes sense with a real event (Email, Download PDF, roster).
 export default function StagePlotLibraryEditorPage() {
   const { libraryItemId } = useParams();
+  const navigate = useNavigate();
+  const { showToast } = useToast();
   const { renameStagePlotLibraryItem } = useData();
   const [item, setItem] = useState(null);
   const [loadError, setLoadError] = useState('');
@@ -49,6 +52,16 @@ export default function StagePlotLibraryEditorPage() {
     setItem((prev) => (prev ? { ...prev, pages: prev.pages.map((pg) => (pg.id === pageId ? { ...pg, ...patch } : pg)) } : prev));
   }
 
+  async function flushActivePage() {
+    if (!activePageId || !pageEditorRef.current?.hasUnsavedChanges?.()) return true;
+    const saved = await pageEditorRef.current.flush();
+    if (!saved) {
+      showToast('The latest canvas changes could not be saved. Try again before continuing.', 'error');
+      return false;
+    }
+    return true;
+  }
+
   async function handleElementDeleted(elementId) {
     const channel = item.channels.find((c) => c.elementId === elementId);
     if (!channel) return;
@@ -68,15 +81,27 @@ export default function StagePlotLibraryEditorPage() {
   }
 
   async function handleAddPage() {
+    if (!await flushActivePage()) return;
     const page = await addStagePlotLibraryPage(libraryItemId);
     setItem((prev) => ({ ...prev, pages: [...prev.pages, page] }));
     setActivePageId(page.id);
   }
 
+
+  async function handleSelectPage(pageId) {
+    if (pageId === activePageId || !await flushActivePage()) return;
+    setActivePageId(pageId);
+  }
+
+  async function handleBack(e) {
+    e.preventDefault();
+    if (await flushActivePage()) navigate('/stage-plot-library');
+  }
+
   async function handleDeletePage(pageId) {
     if (!item || item.pages.length <= 1) return;
     if (pageId === activePageId) {
-      await pageEditorRef.current?.flush();
+      if (!await flushActivePage()) return;
     }
     const { deletedChannelIds } = await deleteStagePlotLibraryPage(libraryItemId, pageId);
     const removed = new Set(deletedChannelIds || []);
@@ -130,7 +155,7 @@ export default function StagePlotLibraryEditorPage() {
     <div className="p-6 w-full">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <Link to="/stage-plot-library" className="text-xs font-semibold text-slate-400 hover:text-slate-600">&larr; Back to Stage Plot Library</Link>
+          <Link to="/stage-plot-library" onClick={handleBack} className="text-xs font-semibold text-slate-400 hover:text-slate-600">&larr; Back to Stage Plot Library</Link>
           <div className="mt-1 text-xs font-bold uppercase tracking-wide text-indigo-600">Reusable template</div>
           {editingName ? (
             <form onSubmit={handleRenameSubmit} className="mt-0.5">
@@ -160,7 +185,7 @@ export default function StagePlotLibraryEditorPage() {
           <button
             key={p.id}
             type="button"
-            onClick={() => setActivePageId(p.id)}
+            onClick={() => handleSelectPage(p.id)}
             data-testid="stageplot-page-tab"
             className={`px-3 py-2 text-sm font-semibold border-b-2 -mb-px ${
               p.id === activePageId ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'

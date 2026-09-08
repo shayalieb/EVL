@@ -14,6 +14,22 @@ const STAGE_HEIGHT = 580;
 const toolbarButtonClass = 'px-3 py-1.5 rounded-lg border border-slate-300 text-sm disabled:opacity-40';
 const alignActionClass = 'w-full text-left px-3 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed';
 
+function recoveryKey(pageId) {
+  return `gigworks:stage-plot-recovery:${pageId}`;
+}
+
+function initialSceneForPage(page) {
+  const persisted = page.scene && Object.keys(page.scene).length > 0 ? page.scene : createEmptyScene();
+  try {
+    const recovered = sessionStorage.getItem(recoveryKey(page.id));
+    if (!recovered) return persisted;
+    const parsed = JSON.parse(recovered);
+    return parsed?.elements && parsed?.layers ? parsed : persisted;
+  } catch {
+    return persisted;
+  }
+}
+
 // The saved thumbnail (shown on the page tab AND embedded in the exported
 // PDF) has to be the whole stage plot, not whatever's in the viewport when
 // autosave happens to fire — the zoom controls make it easy to be zoomed
@@ -53,7 +69,7 @@ function isTypingTarget(el) {
 // that hasn't landed yet, leaving that icon's channel un-cleaned. Flushing
 // on demand before the delete request closes that window.
 const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage, page, onSaved, selectedElementId, onSelectElement, onElementDeleted, onElementAdded, elementNumbers, elementContent, onUpdateElementContent }, ref) {
-  const initialScene = page.scene && Object.keys(page.scene).length > 0 ? page.scene : createEmptyScene();
+  const initialScene = initialSceneForPage(page);
   const { scene, apply, replaceCurrent, undo, redo, canUndo, canRedo } = useUndoRedo(initialScene);
   const [mode, setMode] = useState('select');
   const [selectedAnnotationId, setSelectedAnnotationId] = useState(null);
@@ -69,7 +85,7 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
   const canvasContainerRef = useRef(null);
   const saveTimer = useRef(null);
   const dirtyRef = useRef(false);
-  const persistedSceneRef = useRef(JSON.stringify(initialScene));
+  const persistedSceneRef = useRef(JSON.stringify(page.scene && Object.keys(page.scene).length > 0 ? page.scene : createEmptyScene()));
   const sceneRef = useRef(scene);
   sceneRef.current = scene;
 
@@ -97,10 +113,13 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
       onSaved({ scene: saved.scene, hasThumbnail: saved.hasThumbnail, updatedAt: saved.updatedAt });
       persistedSceneRef.current = JSON.stringify(saved.scene);
       dirtyRef.current = false;
+      sessionStorage.removeItem(recoveryKey(page.id));
       setSaveStatus('saved');
+      return saved;
     } catch (err) {
       setCleanCapture(false);
       setSaveStatus(err?.status === 409 ? 'conflict' : 'unsaved');
+      return null;
     }
   }, [onSavePage, page.id, page.updatedAt, onSaved]);
 
@@ -117,16 +136,18 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
 
   useImperativeHandle(ref, () => ({
     flush: () => { clearTimeout(saveTimer.current); return persistRef.current(); },
+    hasUnsavedChanges: () => dirtyRef.current,
   }), []);
 
   useEffect(() => {
     if (JSON.stringify(scene) === persistedSceneRef.current) return undefined;
     dirtyRef.current = true;
+    try { sessionStorage.setItem(recoveryKey(page.id), JSON.stringify(scene)); } catch { /* storage is best-effort */ }
     setSaveStatus('unsaved');
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => persistRef.current(), AUTOSAVE_DELAY_MS);
     return () => clearTimeout(saveTimer.current);
-  }, [scene]);
+  }, [scene, page.id]);
 
   // Flush on true unmount only (e.g. switching to another page) instead of
   // losing up to AUTOSAVE_DELAY_MS of edits to a debounce timer that never
@@ -228,7 +249,7 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
   function handleAlign(action) {
     const ids = multiSelectedIds.size > 0 ? [...multiSelectedIds] : selectedElementId ? [selectedElementId] : [];
     if (!ids.length) return;
-    const stageCenter = { x: STAGE_WIDTH / 2, y: STAGE_HEIGHT / 2 };
+    const stageCenter = { x: stageWidth / 2, y: STAGE_HEIGHT / 2 };
     apply((s) => ({
       ...s,
       elements: action === 'align-center' ? alignElementsCenter(s.elements, ids, 'x')
@@ -238,6 +259,41 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
         : action === 'center-on-stage' ? centerElementsOnStage(s.elements, ids, stageCenter)
         : s.elements,
     }));
+  }
+
+  function resizeSelected(rawSize) {
+    const size = Math.max(20, Math.min(600, Number(rawSize) || ICON_SIZE));
+    const ids = multiSelectedIds.size > 0 ? multiSelectedIds : new Set(selectedElementId ? [selectedElementId] : []);
+    if (!ids.size) return;
+    apply((s) => ({
+      ...s,
+      elements: s.elements.map((element) => {
+        if (!ids.has(element.id)) return element;
+        const isLinear = !!STAGE_PLOT_ICONS[element.iconId]?.linearKind;
+        if (isLinear) return { ...element, width: size, scaleX: 1, scaleY: 1 };
+        const currentWidth = Math.max(20, element.width || ICON_SIZE * (element.scaleX || 1));
+        const currentHeight = Math.max(20, element.height || ICON_SIZE * (element.scaleY || 1));
+        return { ...element, width: size, height: size * (currentHeight / currentWidth), scaleX: 1, scaleY: 1 };
+      }),
+    }));
+  }
+
+  function resetSelectedSize() {
+    const ids = multiSelectedIds.size > 0 ? multiSelectedIds : new Set(selectedElementId ? [selectedElementId] : []);
+    if (!ids.size) return;
+    apply((s) => ({
+      ...s,
+      elements: s.elements.map((element) => (ids.has(element.id)
+        ? { ...element, width: STAGE_PLOT_ICONS[element.iconId]?.linearKind ? 160 : ICON_SIZE, height: ICON_SIZE, scaleX: 1, scaleY: 1 }
+        : element)),
+    }));
+  }
+
+  function rotateSelectedTo(rawRotation) {
+    const rotation = ((Number(rawRotation) || 0) % 360 + 360) % 360;
+    const ids = multiSelectedIds.size > 0 ? multiSelectedIds : new Set(selectedElementId ? [selectedElementId] : []);
+    if (!ids.size) return;
+    apply((s) => ({ ...s, elements: s.elements.map((element) => (ids.has(element.id) ? { ...element, rotation } : element)) }));
   }
 
   // Clones whichever selection is active (multi, or the single selected
@@ -491,7 +547,9 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
           Delete Selected{multiSelectedIds.size > 1 ? ` (${multiSelectedIds.size})` : ''}
         </button>
         <span data-testid="stageplot-save-status" className="text-xs text-slate-400 ml-auto">
-          {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'unsaved' ? 'Unsaved changes' : saveStatus === 'conflict' ? (
+          {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'unsaved' ? (
+            <button type="button" className="font-semibold text-amber-600 underline" onClick={() => persistRef.current()}>Couldn't save — retry</button>
+          ) : saveStatus === 'conflict' ? (
             <button type="button" className="font-semibold text-red-600 underline" onClick={() => window.location.reload()}>Updated elsewhere — reload</button>
           ) : 'Saved'}
         </span>
@@ -519,6 +577,40 @@ const StagePlotPageEditor = forwardRef(function StagePlotPageEditor({ onSavePage
             />
             <p className="text-[11px] text-slate-400 mt-1">Or use "Set Scale" above to calibrate from two points.</p>
           </div>
+
+          {(selectedElementId || multiSelectedIds.size > 0) && (
+            <div data-testid="stageplot-size-inspector">
+              <div className="text-xs font-semibold text-slate-500 mb-2">
+                {multiSelectedIds.size > 1 ? `${multiSelectedIds.size} icons selected` : 'Selected icon'}
+              </div>
+              <label className="block text-[11px] text-slate-400 mb-1">
+                {selectedElementId && STAGE_PLOT_ICONS[scene.elements.find((e) => e.id === selectedElementId)?.iconId]?.linearKind ? 'Length' : 'Size'} (px)
+              </label>
+              <input
+                type="number"
+                min="20"
+                max="600"
+                value={Math.round(scene.elements.find((e) => e.id === selectedElementId)?.width || ICON_SIZE * (scene.elements.find((e) => e.id === selectedElementId)?.scaleX || 1))}
+                onChange={(e) => resizeSelected(e.target.value)}
+                data-testid="stageplot-selected-size-input"
+                className="w-full px-2 py-1 rounded border border-slate-300 text-sm"
+              />
+              <button type="button" onClick={resetSelectedSize} data-testid="stageplot-reset-size-button" className="mt-1.5 text-xs font-semibold text-indigo-600">
+                Reset size
+              </button>
+              <label className="block text-[11px] text-slate-400 mt-2 mb-1">Rotation (degrees)</label>
+              <input
+                type="number"
+                min="0"
+                max="359"
+                value={Math.round(scene.elements.find((e) => e.id === selectedElementId)?.rotation || 0)}
+                onChange={(e) => rotateSelectedTo(e.target.value)}
+                data-testid="stageplot-selected-rotation-input"
+                className="w-full px-2 py-1 rounded border border-slate-300 text-sm"
+              />
+              {multiSelectedIds.size > 1 && <p className="text-[11px] text-slate-400 mt-1">Applies the same width to every selected icon.</p>}
+            </div>
+          )}
 
           <div>
             <div className="text-xs font-semibold text-slate-500 mb-2">Layers</div>
