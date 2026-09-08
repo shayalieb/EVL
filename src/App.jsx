@@ -43,6 +43,7 @@ const AdminSupportPage = lazy(() => import('./pages/admin/AdminSupportPage'));
 const AdminAdminsPage = lazy(() => import('./pages/admin/AdminAdminsPage'));
 const AdminWaitlistPage = lazy(() => import('./pages/admin/AdminWaitlistPage'));
 const AdminWebsitePage = lazy(() => import('./pages/admin/AdminWebsitePage'));
+const DesignPartnerAgreementPrintPage = lazy(() => import('./pages/admin/DesignPartnerAgreementPrintPage'));
 const CanvasEngineDemoPage = lazy(() => import('./pages/dev/CanvasEngineDemoPage'));
 const StagePlotEditorPage = lazy(() => import('./pages/StagePlotEditorPage'));
 const FloorPlanEditorPage = lazy(() => import('./pages/FloorPlanEditorPage'));
@@ -125,8 +126,17 @@ function PermissionGate({ permission, children }) {
 // Gates a single route to platform admins without needing a whole nested
 // area like PlatformAdminArea below — for one-off internal/dev pages that
 // live inside the regular app chrome rather than the admin layout.
+//
+// Must gate on authLoading like PlatformAdminArea does: originally this was
+// only ever reached as a route nested inside ProtectedArea, which already
+// resolved authLoading before rendering any children — but a route that
+// uses this directly at the top level (e.g. the design-partner-agreement
+// print page) hits this as the very first check, while currentUser is
+// still null during the initial /auth/me fetch, and would otherwise bounce
+// a real platform admin to /home before their own identity ever loads.
 function DevOnlyRoute({ children }) {
-  const { currentUser } = useAuth();
+  const { currentUser, authLoading } = useAuth();
+  if (authLoading) return null;
   if (!currentUser?.isPlatformAdmin) return <Navigate to="/home" replace />;
   return children;
 }
@@ -216,6 +226,12 @@ function AppRoutes() {
         <Route path="events/:eventId/floor-plan" element={<VerticalGate vertical="party_planning"><FloorPlanEditorPage /></VerticalGate>} />
         <Route path="events/:eventId/set-lists" element={<PermissionGate permission="manageEvents"><VerticalGate vertical="band_orchestra"><SetListsEditorPage /></VerticalGate></PermissionGate>} />
       </Route>
+      {/* Bare, no-AdminLayout page (see DesignPartnerAgreementPrintPage.jsx's
+          own comment for why this can't just live nested under /admin
+          below) — gated the same way as any other platform-admin-only
+          route, just without the admin sidebar/tabs chrome getting in the
+          way of a clean print/save-as-PDF. */}
+      <Route path="/admin/accounts/:accountId/agreements/:agreementId/print" element={<DevOnlyRoute><DesignPartnerAgreementPrintPage /></DevOnlyRoute>} />
       <Route path="/admin" element={<PlatformAdminArea />}>
         <Route index element={<Navigate to="accounts" replace />} />
         <Route path="accounts" element={<AdminAccountsPage />} />

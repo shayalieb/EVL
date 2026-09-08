@@ -112,7 +112,10 @@ export default function AdminAccountProfilePage() {
                       : 'Pending signature'}
                   </p>
                 </div>
-                <button type="button" onClick={() => setViewingAgreement(agreement)} data-testid="admin-account-agreement-view-button" className="shrink-0 text-sm font-semibold text-indigo-600 hover:text-indigo-700">View</button>
+                <div className="shrink-0 flex items-center gap-3">
+                  <button type="button" onClick={() => setViewingAgreement(agreement)} data-testid="admin-account-agreement-view-button" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">View</button>
+                  <Link to={`/admin/accounts/${accountId}/agreements/${agreement.id}/print`} target="_blank" data-testid="admin-account-agreement-print-link" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">Print</Link>
+                </div>
               </div>
             ))}
           </div>
@@ -142,7 +145,7 @@ export default function AdminAccountProfilePage() {
           ) : (
             <p className="text-sm font-semibold text-amber-600">Not yet signed.</p>
           )}
-          <p className="text-xs text-slate-400">Use your browser's print function to save a copy of this agreement.</p>
+          <Link to={`/admin/accounts/${accountId}/agreements/${viewingAgreement.id}/print`} target="_blank" className="inline-block text-sm font-semibold text-indigo-600 hover:text-indigo-700">Open printable version →</Link>
         </div>
       )}
     </Modal>
