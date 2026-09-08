@@ -155,7 +155,7 @@ export default function AppLayout() {
           </Link>
         </div>
 
-        <div className="hidden sm:block text-lg font-bold text-slate-500">
+        <div className="hidden md:block text-lg font-bold text-slate-500">
           Event and Gig Management
         </div>
 
@@ -165,10 +165,12 @@ export default function AppLayout() {
             type="button"
             onClick={() => setAssistantOpen(true)}
             data-testid="assistant-open-button"
-            className="min-w-11 min-h-11 p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            className="min-h-11 flex items-center gap-1.5 pl-2.5 pr-3 rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300"
             aria-label="GigWorks Assistant"
           >
-            <SparkleIcon className="w-5 h-5" />
+            <SparkleIcon className="w-4 h-4 shrink-0" />
+            <span className="text-sm font-semibold lg:hidden">AI</span>
+            <span className="hidden lg:inline text-sm font-semibold whitespace-nowrap">GigWorks Assistant</span>
           </button>
         )}
         <div className="relative">
