@@ -43,12 +43,23 @@ const HISTORY_CONTEXT_TURNS = 20;
 const HISTORY_RETENTION_DAYS = 7;
 const PROPOSAL_TTL_MS = 30 * 60 * 1000;
 
-function fallbackTrainingAnswer(question) {
+export function fallbackTrainingAnswer(question) {
   if (!/(how (?:do|can|should)|teach|train|training|help|getting started|where (?:is|do)|show me how)/i.test(String(question || ''))) return null;
   const articles = findHelpArticles(question);
   if (!articles.length) return null;
   const article = articles[0];
-  return { answer: `I found a training guide for this:\n\n${article.title}\n${article.summary}\n\nOpen the guide for the complete steps.`, pendingAction: null, link: { recordType: 'help', recordId: article.id, label: article.title }, fallback: true };
+  const usefulLines = String(article.content || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => /^\d+[.)]\s+/.test(line) || /^(Tip|Note):/.test(line))
+    .slice(0, 7);
+  const instructions = usefulLines.length ? `\n\n${usefulLines.join('\n')}` : '';
+  return {
+    answer: `## ${article.title}\n${article.summary}${instructions}\n\nOpen the full guide for screenshots, details, and related guidance.`,
+    pendingAction: null,
+    link: { recordType: 'help', recordId: article.id, label: article.title },
+    fallback: true,
+  };
 }
 
 router.post('/ask', assistantLimiter, asyncHandler(async (req, res) => {
