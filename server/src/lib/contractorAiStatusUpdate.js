@@ -27,7 +27,7 @@ export function applyAiReplyClassification({ event, inquiryStatuses, contractorI
   if (!targetStatus) return null;
 
   const contractorBookings = event.contractorBookings.map((b) =>
-    (b.contractorId === contractorId ? { ...b, inquiryStatusId: targetStatus.id } : b)
+    (b.contractorId === contractorId ? { ...b, inquiryStatusId: targetStatus.id, statusSetByAi: true } : b)
   );
 
   const history = [

@@ -858,7 +858,7 @@ export default function EventFormPage() {
 
   function changeBookingStatus(contractorId, inquiryStatusId) {
     setForm((f) => {
-      const contractorBookings = f.contractorBookings.map((b) => (b.contractorId === contractorId ? { ...b, inquiryStatusId } : b));
+      const contractorBookings = f.contractorBookings.map((b) => (b.contractorId === contractorId ? { ...b, inquiryStatusId, statusSetByAi: false } : b));
       return {
         ...f,
         noOutsideContractorsNeeded: normalizeNoOutsideContractorsNeeded(f.noOutsideContractorsNeeded, contractorBookings, inquiryStatuses),
