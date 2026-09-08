@@ -152,10 +152,11 @@ test('all stage plot tables exposed by Supabase have row-level security enabled'
     FROM pg_class
     WHERE relname IN (
       'StagePlot', 'StagePlotPage', 'StagePlotChannel', 'StagePlotBacklineItem',
-      'StagePlotLibraryItem', 'StagePlotLibraryPage', 'StagePlotLibraryChannel', 'StagePlotLibraryBacklineItem'
+      'StagePlotLibraryItem', 'StagePlotLibraryPage', 'StagePlotLibraryChannel', 'StagePlotLibraryBacklineItem',
+      'StagePlotShare'
     )
   `);
-  assert.equal(rows.length, 8);
+  assert.equal(rows.length, 9);
   assert.ok(rows.every((row) => row.relrowsecurity), JSON.stringify(rows));
 });
 

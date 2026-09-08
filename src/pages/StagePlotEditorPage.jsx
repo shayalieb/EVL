@@ -17,6 +17,7 @@ import StagePlotAiPromptBar from '../components/StagePlotAiPromptBar';
 import StagePlotProposalCard from '../components/StagePlotProposalCard';
 import StagePlotSuggestionBanner from '../components/StagePlotSuggestionBanner';
 import StagePlotReadiness from '../components/StagePlotReadiness';
+import StagePlotShareModal from '../components/StagePlotShareModal';
 import StagePlotEmailModal from '../components/StagePlotEmailModal';
 import EmailThreadModal from '../components/EmailThreadModal';
 import Modal from '../components/ui/Modal';
@@ -54,6 +55,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   const [exporting, setExporting] = useState(false);
   const [selectedElementId, setSelectedElementId] = useState(null);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
   const [emailStagePlot, setEmailStagePlot] = useState(null);
   const [threadSummaries, setThreadSummaries] = useState({});
   const [activeThreadContractorId, setActiveThreadContractorId] = useState(null);
@@ -257,6 +259,11 @@ export default function StagePlotEditorPage({ onClose } = {}) {
     setEmailModalOpen(true);
   }
 
+  async function handleOpenShare() {
+    if (!await flushActivePage()) return;
+    setShareModalOpen(true);
+  }
+
   async function handleSelectPage(pageId) {
     if (pageId === activePageId) return;
     if (!await flushActivePage()) return;
@@ -365,6 +372,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
           </div>
         )}
         <div className="flex items-center gap-2">
+          <button type="button" onClick={handleOpenShare} className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold">Share</button>
           <button
             type="button"
             onClick={() => setLibraryPickerOpen(true)}
@@ -410,6 +418,8 @@ export default function StagePlotEditorPage({ onClose } = {}) {
           )}
         </div>
       </div>
+
+      <StagePlotShareModal open={shareModalOpen} onClose={() => setShareModalOpen(false)} eventId={eventId} />
 
       <div className="flex items-center gap-1 mb-3 border-b border-slate-200 overflow-x-auto">
         {sortedPages.map((p) => (

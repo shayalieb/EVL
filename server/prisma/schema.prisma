@@ -1271,12 +1271,29 @@ model StagePlot {
   channels       StagePlotChannel[]
   backlineItems  StagePlotBacklineItem[]
   equipmentUsage StagePlotEquipmentUsage[]
+  share          StagePlotShare?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([accountId, eventId])
   @@index([accountId])
+}
+
+model StagePlotShare {
+  id          String    @id @default(cuid())
+  stagePlotId String    @unique
+  stagePlot   StagePlot @relation(fields: [stagePlotId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  publicToken String    @unique
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  lastViewedAt DateTime?
+  viewCount   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([expiresAt])
 }
 
 // One page's scene graph — src/lib/canvasEngine/sceneModel.js's shape

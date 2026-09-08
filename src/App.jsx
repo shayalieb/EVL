@@ -59,6 +59,7 @@ const CookiePolicyPage = lazy(() => import('./pages/CookiePolicyPage'));
 const AgencyGroupsPage = lazy(() => import('./pages/AgencyGroupsPage'));
 const FinancialsPage = lazy(() => import('./pages/FinancialsPage'));
 const ReviewSubmissionPage = lazy(() => import('./pages/ReviewSubmissionPage'));
+const PublicStagePlotPage = lazy(() => import('./pages/PublicStagePlotPage'));
 
 // The marketing site lives at the exact root path, which otherwise sits
 // inside this same route tree (see AppRoutes' `path="/"` below) — checking
@@ -194,6 +195,7 @@ function AppRoutes() {
       <Route path="/inquiry/:token" element={<InquiryFormPage />} />
       <Route path="/rsvp/:token" element={<RsvpPage />} />
       <Route path="/gigs/:token" element={<ContractorCalendarPage />} />
+      <Route path="/stage-plot/:token" element={<PublicStagePlotPage />} />
       <Route path="/portal" element={<PortalArea />}>
         <Route index element={<PortalProtectedRoute />} />
         <Route path="login" element={<PortalLoginGate />} />
