@@ -7,9 +7,24 @@ import { relatedRecordPath } from '../lib/reminders';
 import { useToast } from './ui/Toast';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
+const STARTER_PROMPTS = ['What needs my attention this week?', 'Teach me how to create and send an invoice', 'Show my overdue invoices', 'How do I build a stage plot?'];
 
 function formatActivityTime(iso) {
   return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+function AssistantMessageContent({ content }) {
+  const lines = String(content || '').split('\n');
+  return <div className="space-y-1.5">{lines.map((line, index) => {
+    const trimmed = line.trim();
+    if (!trimmed) return <div key={index} className="h-1" />;
+    if (/^#{1,3}\s+/.test(trimmed)) return <p key={index} className="pt-1 font-bold text-slate-900">{trimmed.replace(/^#{1,3}\s+/, '')}</p>;
+    const numbered = trimmed.match(/^(\d+)[.)]\s+(.+)/);
+    if (numbered) return <div key={index} className="grid grid-cols-[1.5rem_1fr] gap-1"><span className="font-bold text-indigo-600">{numbered[1]}.</span><span>{numbered[2]}</span></div>;
+    const bullet = trimmed.match(/^[-*•]\s+(.+)/);
+    if (bullet) return <div key={index} className="grid grid-cols-[1rem_1fr] gap-1"><span className="font-bold text-indigo-500">•</span><span>{bullet[1]}</span></div>;
+    return <p key={index}>{trimmed}</p>;
+  })}</div>;
 }
 
 // Chat history persists server-side for 7 days (AssistantMessage — see
@@ -68,8 +83,8 @@ export default function AssistantModal({ open, onClose }) {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages, asking]);
 
-  async function handleAsk() {
-    const trimmed = question.trim();
+  async function handleAsk(inputQuestion = question) {
+    const trimmed = String(inputQuestion || '').trim();
     if (!trimmed || asking) return;
     setMessages((prev) => [...prev, { role: 'user', content: trimmed }]);
     setQuestion('');
@@ -86,10 +101,10 @@ export default function AssistantModal({ open, onClose }) {
     }
   }
 
-  async function handleConfirmAction(index, type, fields, description) {
+  async function handleConfirmAction(index, proposalId, clientChoice) {
     setConfirmingIndex(index);
     try {
-      await confirmAssistantAction(type, fields, description);
+      await confirmAssistantAction(proposalId, clientChoice);
       setMessages((prev) => prev.map((m, i) => (i === index ? { ...m, pendingAction: { ...m.pendingAction, done: true } } : m)));
       showToast('Done.');
     } catch (err) {
@@ -187,7 +202,8 @@ export default function AssistantModal({ open, onClose }) {
 
             {!messagesLoading && messages.length === 0 && (
               <div data-testid="assistant-empty-banner" className="text-sm text-slate-400 text-center py-6">
-                Ask about your schedule, open proposals, overdue invoices, a client, or a contractor — ask it to create a reminder, add a client, or update a booking — or ask "how do I..." for training and getting-started help.
+                <p>Ask about your work, request a safe change, or use the Assistant as a step-by-step training guide.</p>
+                <div className="mt-4 grid gap-2 text-left sm:grid-cols-2">{STARTER_PROMPTS.map((prompt) => <button key={prompt} type="button" onClick={() => handleAsk(prompt)} className="rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">{prompt}</button>)}</div>
               </div>
             )}
 
@@ -197,7 +213,7 @@ export default function AssistantModal({ open, onClose }) {
                   <div key={i} data-testid="assistant-message" className={`flex flex-col gap-2 ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
                     {m.content && (
                       <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap break-words ${m.role === 'user' ? 'bg-indigo-100 text-slate-800' : 'bg-slate-100 text-slate-800'}`}>
-                        {m.content}
+                        <AssistantMessageContent content={m.content} />
                       </div>
                     )}
                     {m.link && (
@@ -215,7 +231,7 @@ export default function AssistantModal({ open, onClose }) {
                         <AssistantActionCard
                           pendingAction={m.pendingAction}
                           confirming={confirmingIndex === i}
-                          onConfirm={(type, fields) => handleConfirmAction(i, type, fields, m.pendingAction.description)}
+                          onConfirm={(proposalId, clientChoice) => handleConfirmAction(i, proposalId, clientChoice)}
                           onDismiss={() => handleDismissAction(i)}
                         />
                       </div>
@@ -245,7 +261,7 @@ export default function AssistantModal({ open, onClose }) {
               <div className="flex justify-end mt-2">
                 <button
                   type="button"
-                  onClick={handleAsk}
+                  onClick={() => handleAsk()}
                   disabled={asking || !question.trim()}
                   data-testid="assistant-send-button"
                   className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"

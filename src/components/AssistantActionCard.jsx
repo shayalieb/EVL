@@ -11,16 +11,14 @@ export default function AssistantActionCard({ pendingAction, onConfirm, onDismis
   const confirmDisabled = confirming || (needsClientDecision && !clientChoice);
 
   function handleConfirmClick() {
-    if (needsClientDecision && clientChoice !== 'new') {
-      onConfirm(pendingAction.type, { ...pendingAction.fields, useExistingClientId: clientChoice });
-    } else {
-      onConfirm(pendingAction.type, pendingAction.fields);
-    }
+    onConfirm(pendingAction.id, needsClientDecision ? clientChoice : null);
   }
 
   return (
     <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 text-sm" data-testid="assistant-action-card">
+      <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-indigo-600">Review before saving</div>
       <div className="font-semibold text-slate-700 mb-2">{pendingAction.description}</div>
+      {pendingAction.expiresAt && <p className="mb-3 text-xs text-slate-500">This confirmation expires at {new Date(pendingAction.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.</p>}
 
       {needsClientDecision && (
         <fieldset className="mb-3 space-y-1.5">

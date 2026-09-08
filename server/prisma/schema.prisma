@@ -79,6 +79,7 @@ model Account {
   reminders                 Reminder[]
   assistantActions          AssistantAction[]
   assistantMessages         AssistantMessage[]
+  assistantProposals        AssistantProposal[]
   emailDomain               EmailDomain?
   stagePlots                StagePlot[]
   stagePlotEquipmentUsages  StagePlotEquipmentUsage[]
@@ -1117,6 +1118,26 @@ model AssistantAction {
   createdAt DateTime @default(now())
 
   @@index([accountId, createdAt])
+}
+
+// Short-lived, single-use confirmation boundary for Assistant writes. The
+// browser receives only this row's opaque id; executable fields stay on the
+// server and are revalidated inside the same transaction as the action.
+model AssistantProposal {
+  id          String   @id @default(cuid())
+  accountId   String
+  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  userId      String
+  type        String
+  description String   @db.Text
+  fields      Json
+  candidates  Json     @default("[]")
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([accountId, userId, expiresAt])
+  @@index([expiresAt, usedAt])
 }
 
 // One row per chat turn in the GigWorks Assistant, kept for 7 days so a

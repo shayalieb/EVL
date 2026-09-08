@@ -13,16 +13,13 @@ export async function askAssistant(question) {
   });
 }
 
-// `type` matches a pendingAction's `type`; `fields` should be exactly (or a
-// user-edited version of) that pendingAction's `fields` — the server
-// re-validates and re-checks permissions regardless of what's sent.
-// `description` is passed through purely for the Activity log display (see
-// listAssistantActivity below) — cosmetic only, every actual field is
-// re-validated server-side regardless of what description accompanies it.
-export async function confirmAssistantAction(type, fields, description) {
+// The executable proposal stays server-side. The client returns only its
+// opaque, short-lived id and (when duplicate clients were found) the user's
+// explicit comparison choice.
+export async function confirmAssistantAction(proposalId, clientChoice = null) {
   const data = await apiFetch('/assistant/confirm-action', {
     method: 'POST',
-    body: JSON.stringify({ type, fields, description }),
+    body: JSON.stringify({ proposalId, clientChoice }),
   });
   return data.result;
 }

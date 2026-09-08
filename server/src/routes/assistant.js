@@ -11,6 +11,7 @@ import {
   addClientAction,
   createBookingAction,
   updateBookingAction,
+  findHelpArticles,
 } from '../lib/gigworksAssistant.js';
 
 const router = Router();
@@ -40,9 +41,17 @@ function requireBookingsPermission(req, res) {
 // still exceed this before it exceeds 7 days).
 const HISTORY_CONTEXT_TURNS = 20;
 const HISTORY_RETENTION_DAYS = 7;
+const PROPOSAL_TTL_MS = 30 * 60 * 1000;
+
+function fallbackTrainingAnswer(question) {
+  if (!/(how (?:do|can|should)|teach|train|training|help|getting started|where (?:is|do)|show me how)/i.test(String(question || ''))) return null;
+  const articles = findHelpArticles(question);
+  if (!articles.length) return null;
+  const article = articles[0];
+  return { answer: `I found a training guide for this:\n\n${article.title}\n${article.summary}\n\nOpen the guide for the complete steps.`, pendingAction: null, link: { recordType: 'help', recordId: article.id, label: article.title }, fallback: true };
+}
 
 router.post('/ask', assistantLimiter, asyncHandler(async (req, res) => {
-  if (!requireBookingsPermission(req, res)) return;
   const { question } = req.body || {};
   const trimmedQuestion = question?.trim();
   if (!trimmedQuestion) return res.status(400).json({ error: 'A question is required.' });
@@ -59,7 +68,18 @@ router.post('/ask', assistantLimiter, asyncHandler(async (req, res) => {
   const history = recent.reverse();
 
   try {
-    const result = await answerAssistantQuestion(req.membership.accountId, trimmedQuestion, history);
+    let result;
+    try {
+      result = await answerAssistantQuestion(req.membership.accountId, trimmedQuestion, history, effectivePermissions(req.membership));
+    } catch (error) {
+      result = fallbackTrainingAnswer(trimmedQuestion);
+      if (!result) throw error;
+    }
+    if (result.pendingAction) {
+      const action = result.pendingAction;
+      const proposal = await prisma.assistantProposal.create({ data: { accountId: req.membership.accountId, userId: req.session.userId, type: action.type, description: action.description, fields: action.fields, candidates: action.candidates || [], expiresAt: new Date(Date.now() + PROPOSAL_TTL_MS) } });
+      result.pendingAction = { id: proposal.id, type: proposal.type, description: proposal.description, candidates: proposal.candidates, expiresAt: proposal.expiresAt };
+    }
     // A proposed action can come back with no accompanying text (e.g. the
     // model went straight to propose_update_booking) — pendingAction/link
     // themselves are never persisted (a stale re-confirmable card for a
@@ -75,7 +95,7 @@ router.post('/ask', assistantLimiter, asyncHandler(async (req, res) => {
     ]).then(() => {
       const cutoff = new Date(Date.now() - HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000);
       return prisma.assistantMessage.deleteMany({ where: { accountId: req.membership.accountId, userId: req.session.userId, createdAt: { lt: cutoff } } });
-    }).catch((err) => console.error('Failed to persist assistant chat history:', err));
+    }).then(() => prisma.assistantProposal.deleteMany({ where: { expiresAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } } })).catch((err) => console.error('Failed to persist assistant chat history:', err));
     res.json(result);
   } catch (err) {
     console.error('GigWorks Assistant /ask failed:', err);
@@ -108,37 +128,38 @@ router.delete('/messages', asyncHandler(async (req, res) => {
 // Reminder.relatedType's vocabulary — used to build a "View" link the same
 // way relatedRecordPath already does for reminders.
 const ACTION_HANDLERS = {
-  create_reminder: { handler: (req, fields) => createReminderAction(req.membership.accountId, req.session.userId, fields), targetType: null },
-  add_client: { handler: (req, fields) => addClientAction(req.membership.accountId, fields), requirePermission: 'manageClients', targetType: 'client' },
-  create_booking: { handler: (req, fields) => createBookingAction(req.membership.accountId, fields), requirePermission: 'manageBookings', targetType: 'booking' },
-  update_booking: { handler: (req, fields) => updateBookingAction(req.membership.accountId, fields), requirePermission: 'manageBookings', targetType: 'booking' },
+  create_reminder: { handler: (req, fields, db) => createReminderAction(req.membership.accountId, req.session.userId, fields, db), targetType: null },
+  add_client: { handler: (req, fields, db) => addClientAction(req.membership.accountId, fields, db), requirePermission: 'manageClients', targetType: 'client' },
+  create_booking: { handler: (req, fields, db) => createBookingAction(req.membership.accountId, fields, db), requirePermission: 'manageBookings', targetType: 'booking' },
+  update_booking: { handler: (req, fields, db) => updateBookingAction(req.membership.accountId, fields, db), requirePermission: 'manageBookings', targetType: 'booking' },
 };
 
 router.post('/confirm-action', assistantLimiter, asyncHandler(async (req, res) => {
-  const { type, fields, description } = req.body || {};
-  const action = ACTION_HANDLERS[type];
-  if (!action) return res.status(400).json({ error: 'Unknown action type.' });
-  if (action.requirePermission && !effectivePermissions(req.membership)[action.requirePermission]) {
-    return res.status(403).json({ error: 'Not authorized.' });
-  }
+  const proposalId = String(req.body?.proposalId || '');
+  if (!proposalId) return res.status(400).json({ error: 'A valid Assistant proposal is required.' });
   try {
-    const result = await action.handler(req, fields);
-    // Best-effort — logging the action for the Activity view should never
-    // block or fail the write itself, which has already succeeded by now.
-    prisma.assistantAction.create({
-      data: {
-        accountId: req.membership.accountId,
-        userId: req.session.userId,
-        type,
-        description: description || type,
-        targetType: action.targetType,
-        targetId: action.targetType ? result?.id || null : null,
-      },
-    }).catch((err) => console.error('Failed to log assistant action:', err));
-    res.status(201).json({ type, result });
+    const completed = await prisma.$transaction(async (tx) => {
+      const proposal = await tx.assistantProposal.findFirst({ where: { id: proposalId, accountId: req.membership.accountId, userId: req.session.userId, usedAt: null, expiresAt: { gt: new Date() } } });
+      if (!proposal) throw new Error('This Assistant proposal expired or was already used. Ask the Assistant to prepare it again.');
+      const action = ACTION_HANDLERS[proposal.type];
+      if (!action) throw new Error('Unknown action type.');
+      if (action.requirePermission && !effectivePermissions(req.membership)[action.requirePermission]) throw Object.assign(new Error('Not authorized.'), { status: 403 });
+      const fields = { ...proposal.fields };
+      if (proposal.type === 'add_client' && req.body?.clientChoice && req.body.clientChoice !== 'new') {
+        const allowedIds = Array.isArray(proposal.candidates) ? proposal.candidates.map((candidate) => candidate.id) : [];
+        if (!allowedIds.includes(req.body.clientChoice)) throw new Error('Choose one of the clients shown in this proposal.');
+        fields.useExistingClientId = req.body.clientChoice;
+      }
+      const claimed = await tx.assistantProposal.updateMany({ where: { id: proposal.id, usedAt: null }, data: { usedAt: new Date() } });
+      if (claimed.count !== 1) throw new Error('This Assistant proposal was already used.');
+      const result = await action.handler(req, fields, tx);
+      await tx.assistantAction.create({ data: { accountId: req.membership.accountId, userId: req.session.userId, type: proposal.type, description: proposal.description, targetType: action.targetType, targetId: action.targetType ? result?.id || null : null } });
+      return { type: proposal.type, result };
+    });
+    res.status(201).json(completed);
   } catch (err) {
-    console.error(`GigWorks Assistant /confirm-action (${type}) failed:`, err);
-    res.status(400).json({ error: err.message || 'Failed to complete that action.' });
+    console.error('GigWorks Assistant /confirm-action failed:', err);
+    res.status(err.status || 400).json({ error: err.message || 'Failed to complete that action.' });
   }
 }));
 
