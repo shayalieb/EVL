@@ -37,6 +37,29 @@ export function validateEventSetLists(setLists) {
   return null;
 }
 
+export const SCHEDULE_ITEM_TYPES = ['load_in', 'setup', 'soundcheck', 'doors', 'ceremony', 'cocktail_hour', 'dinner', 'set', 'break', 'load_out', 'other'];
+
+// Applies to both Event.schedule and Booking.schedule — DataContext.jsx's
+// convertBookingToEvent copies a Booking's schedule verbatim into the new
+// Event, so both need the same shape/limits. Modeled directly on
+// validateEventSetLists above; `type` is optional (older/imported rows have
+// none — the client treats a missing type as 'other') but whitelisted when
+// present so a hand-crafted request can't stash arbitrary category strings.
+export function validateEventSchedule(schedule) {
+  if (!Array.isArray(schedule) || schedule.length > 200) return 'schedule must contain no more than 200 items.';
+  if (JSON.stringify(schedule).length > 500_000) return 'Schedule data is too large.';
+  const ids = new Set();
+  for (const item of schedule) {
+    if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !item.id.trim() || item.id.length > 200 || ids.has(item.id)) return 'Every schedule item requires a unique valid id.';
+    ids.add(item.id);
+    if (item.type != null && !SCHEDULE_ITEM_TYPES.includes(item.type)) return 'Invalid schedule item type.';
+    if (item.time != null && (typeof item.time !== 'string' || item.time.length > 50)) return 'Schedule item times must be text under 50 characters.';
+    if (item.name != null && (typeof item.name !== 'string' || item.name.length > 200)) return 'Schedule item names must be text under 200 characters.';
+    if (item.details != null && (typeof item.details !== 'string' || item.details.length > 2000)) return 'Schedule item details must be text under 2,000 characters.';
+  }
+  return null;
+}
+
 async function validateSetListDocuments(accountId, setLists) {
   const ids = [...new Set(setLists.flatMap((list) => list.items.map((item) => item.documentId)).filter(Boolean))];
   if (!ids.length) return null;
@@ -221,6 +244,10 @@ router.post('/', asyncHandler(async (req, res) => {
     const setListError = validateEventSetLists(rest.setLists) || await validateSetListDocuments(req.membership.accountId, rest.setLists);
     if (setListError) return res.status(400).json({ error: setListError });
   }
+  if (rest.schedule !== undefined) {
+    const scheduleError = validateEventSchedule(rest.schedule);
+    if (scheduleError) return res.status(400).json({ error: scheduleError });
+  }
 
   const data = { id, accountId: req.membership.accountId };
   for (const field of WRITABLE_FIELDS) {
@@ -264,6 +291,10 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   if (req.body?.setLists !== undefined) {
     const setListError = validateEventSetLists(req.body.setLists) || await validateSetListDocuments(req.membership.accountId, req.body.setLists);
     if (setListError) return res.status(400).json({ error: setListError });
+  }
+  if (req.body?.schedule !== undefined) {
+    const scheduleError = validateEventSchedule(req.body.schedule);
+    if (scheduleError) return res.status(400).json({ error: scheduleError });
   }
 
   const data = {};

@@ -38,7 +38,7 @@ model User {
   accountAdminNotes         AccountAdminNote[]
   accountActivities         AccountActivity[]
   ownedQuickBooksPilots     QuickBooksPilot[]         @relation("QuickBooksPilotOwner")
-  quickBooksPilotTestRuns  QuickBooksPilotTestRun[]  @relation("QuickBooksPilotTester")
+  quickBooksPilotTestRuns   QuickBooksPilotTestRun[]  @relation("QuickBooksPilotTester")
   financialTransactions     FinancialTransaction[]    @relation("FinancialTransactionCreator")
   savedFinancialReports     SavedFinancialReport[]
   closedFinancialPeriods    FinancialPeriod[]         @relation("FinancialPeriodCloser")
@@ -94,6 +94,8 @@ model Account {
   offerings                 Offering[]
   contractorGroups          ContractorGroup[]
   setListLibraryItems       SetListLibraryItem[]
+  runOfShowLibraryItems     RunOfShowLibraryItem[]
+  runOfShowShares           RunOfShowShare[]
   stagePlotLibraryItems     StagePlotLibraryItem[]
   bookings                  Booking[]
   events                    Event[]
@@ -142,31 +144,31 @@ model Account {
   // platform's Stripe account, never created with a {stripeAccount} option.
   // See server/src/lib/plans.js for the tier table and
   // server/src/routes/subscriptionWebhooks.js for what keeps this in sync.
-  stripeCustomerId     String?           @unique
-  stripeSubscriptionId String?           @unique
+  stripeCustomerId          String?               @unique
+  stripeSubscriptionId      String?               @unique
   // Mirrors Stripe's own subscription status verbatim ('trialing' |
   // 'active' | 'past_due' | 'canceled' | 'unpaid' | 'incomplete' |
   // 'incomplete_expired'). Null means this account has never started a
   // checkout — distinct from any of the real statuses, and deliberately
   // never gated on in membership.js's attachMembership, so accounts that
   // predate billing (or that an admin created directly) aren't affected.
-  subscriptionStatus   String?
-  planTier             String? // 'solo' | 'team' | 'studio' | 'agency' — see lib/plans.js
-  billingInterval      String? // 'month' | 'year'
+  subscriptionStatus        String?
+  planTier                  String? // 'solo' | 'team' | 'studio' | 'agency' — see lib/plans.js
+  billingInterval           String? // 'month' | 'year'
   // Denormalized from planTier so team.js's invite route can check the seat
   // cap with a plain count query, no Stripe API call needed per invite.
-  seatLimit            Int?
-  agencyGroupLimit     Int? // purchased managed-group capacity for Agency tier
-  trialEndsAt          DateTime?
+  seatLimit                 Int?
+  agencyGroupLimit          Int? // purchased managed-group capacity for Agency tier
+  trialEndsAt               DateTime?
   // Acquisition context, captured when the account is created so platform
   // admins can distinguish public signups from manually-created accounts.
-  signupSource         String            @default("admin") // 'public' | 'admin'
-  signupPlan           String? // landing-page selection before checkout
-  signupInterval       String? // 'month' | 'year'
-  messagingProfile     MessagingProfile?
-  quickBooksConnection QuickBooksConnection?
-  quickBooksPilot      QuickBooksPilot?
-  quickBooksAccessEnabled Boolean @default(false)
+  signupSource              String                @default("admin") // 'public' | 'admin'
+  signupPlan                String? // landing-page selection before checkout
+  signupInterval            String? // 'month' | 'year'
+  messagingProfile          MessagingProfile?
+  quickBooksConnection      QuickBooksConnection?
+  quickBooksPilot           QuickBooksPilot?
+  quickBooksAccessEnabled   Boolean               @default(false)
   quickBooksAccessEnabledAt DateTime?
 
   // Design partner / test user program (server/src/lib/designPartnerAgreements.js).
@@ -176,10 +178,10 @@ model Account {
   // account-scoped route until agreementsSignedAt is set. Never auto-clears
   // access after the agreements' own term (see DesignPartnerAgreement.expiresAt)
   // elapses — that's a stated contractual duration, not a login expiry.
-  isDesignPartner      Boolean                   @default(false)
-  agreementsRequiredAt DateTime?
-  agreementsSignedAt   DateTime?
-  designPartnerAgreements DesignPartnerAgreement[]
+  isDesignPartner               Boolean                  @default(false)
+  agreementsRequiredAt          DateTime?
+  agreementsSignedAt            DateTime?
+  designPartnerAgreements       DesignPartnerAgreement[]
   // Free-access benefit granted by signing (see the NDA's "Program Access"
   // section, built at signing time in designPartnerAgreements.js's /sign
   // route from the agreement rows' own computed expiresAt — not a
@@ -190,7 +192,7 @@ model Account {
   // plan picker), never a hard lockout, and never trips again once a plan
   // is chosen. designPartnerExpiryNotifiedAt is a one-time-send marker for
   // the 30-day-advance-notice email (designPartnerExpiryScheduler.js).
-  freeAccessExpiresAt         DateTime?
+  freeAccessExpiresAt           DateTime?
   designPartnerExpiryNotifiedAt DateTime?
 }
 
@@ -211,10 +213,10 @@ model DesignPartnerAgreement {
   documentText String @db.Text
   termYears    Int    @default(2)
 
-  signedAt      DateTime?
-  signatureName String?
-  signatureImage String? @db.Text
-  expiresAt     DateTime?
+  signedAt       DateTime?
+  signatureName  String?
+  signatureImage String?   @db.Text
+  expiresAt      DateTime?
 
   createdAt DateTime @default(now())
 
@@ -226,24 +228,24 @@ model DesignPartnerAgreement {
 // remains in the connection/link/log tables; this record only stores rollout
 // ownership, customer feedback, and manual approval milestones.
 model QuickBooksPilot {
-  id             String   @id @default(cuid())
-  accountId      String   @unique
-  account        Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  status         String   @default("onboarding") // onboarding | active | paused | graduated | offboarded
-  supportStatus  String   @default("open") // open | waiting_customer | resolved
-  ownerUserId    String?
-  owner          User?    @relation("QuickBooksPilotOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  reviewedAt     DateTime?
-  approvedAt     DateTime?
-  onboardingCompletedAt DateTime?
-  documentationSharedAt DateTime?
+  id                     String                   @id @default(cuid())
+  accountId              String                   @unique
+  account                Account                  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  status                 String                   @default("onboarding") // onboarding | active | paused | graduated | offboarded
+  supportStatus          String                   @default("open") // open | waiting_customer | resolved
+  ownerUserId            String?
+  owner                  User?                    @relation("QuickBooksPilotOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  reviewedAt             DateTime?
+  approvedAt             DateTime?
+  onboardingCompletedAt  DateTime?
+  documentationSharedAt  DateTime?
   firstCycleCompletedAt  DateTime?
   secondCycleCompletedAt DateTime?
-  nextFollowUpAt DateTime?
-  feedback       String?  @db.Text
-  testRuns       QuickBooksPilotTestRun[]
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  nextFollowUpAt         DateTime?
+  feedback               String?                  @db.Text
+  testRuns               QuickBooksPilotTestRun[]
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
 
   @@index([status, supportStatus])
   @@index([ownerUserId])
@@ -251,16 +253,16 @@ model QuickBooksPilot {
 }
 
 model QuickBooksPilotTestRun {
-  id           String   @id @default(cuid())
-  pilotId      String
-  pilot        QuickBooksPilot @relation(fields: [pilotId], references: [id], onDelete: Cascade)
-  testedById   String?
-  testedBy     User?    @relation("QuickBooksPilotTester", fields: [testedById], references: [id], onDelete: SetNull)
-  status       String   @default("in_progress") // in_progress | passed | failed
-  results      Json     @default("{}")
-  startedAt    DateTime @default(now())
-  completedAt  DateTime?
-  updatedAt    DateTime @updatedAt
+  id          String          @id @default(cuid())
+  pilotId     String
+  pilot       QuickBooksPilot @relation(fields: [pilotId], references: [id], onDelete: Cascade)
+  testedById  String?
+  testedBy    User?           @relation("QuickBooksPilotTester", fields: [testedById], references: [id], onDelete: SetNull)
+  status      String          @default("in_progress") // in_progress | passed | failed
+  results     Json            @default("{}")
+  startedAt   DateTime        @default(now())
+  completedAt DateTime?
+  updatedAt   DateTime        @updatedAt
 
   @@index([pilotId, startedAt])
   @@index([status, startedAt])
@@ -270,51 +272,51 @@ model QuickBooksPilotTestRun {
 // credentials are encrypted by the application before reaching Prisma; the
 // database never contains usable plaintext access or refresh tokens.
 model QuickBooksConnection {
-  id                      String   @id @default(cuid())
-  accountId               String   @unique
-  account                 Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  realmId                 String   @unique
-  companyName             String?
-  country                 String?
-  accessTokenEncrypted    String   @db.Text
-  refreshTokenEncrypted   String   @db.Text
-  accessTokenExpiresAt    DateTime
-  refreshTokenExpiresAt   DateTime?
-  connectedByUserId       String?
-  status                  String   @default("active") // active | needs_reauthorization | disconnected
-  lastHealthCheckAt       DateTime?
-  lastSuccessfulSyncAt    DateTime?
-  lastError               String?  @db.Text
-  accountsSnapshot        Json     @default("[]")
-  classesSnapshot         Json     @default("[]")
-  locationsSnapshot       Json     @default("[]")
-  itemsSnapshot           Json     @default("[]")
-  accountingMappings      Json     @default("{}")
-  referenceDataRefreshedAt DateTime?
-  setupCompletedAt        DateTime?
-  reconciliationEnabled  Boolean  @default(false)
-  reconciliationFrequencyHours Int @default(24)
-  lastReconciliationAt    DateTime?
-  lastReconciliationStatus String?
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  id                           String    @id @default(cuid())
+  accountId                    String    @unique
+  account                      Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  realmId                      String    @unique
+  companyName                  String?
+  country                      String?
+  accessTokenEncrypted         String    @db.Text
+  refreshTokenEncrypted        String    @db.Text
+  accessTokenExpiresAt         DateTime
+  refreshTokenExpiresAt        DateTime?
+  connectedByUserId            String?
+  status                       String    @default("active") // active | needs_reauthorization | disconnected
+  lastHealthCheckAt            DateTime?
+  lastSuccessfulSyncAt         DateTime?
+  lastError                    String?   @db.Text
+  accountsSnapshot             Json      @default("[]")
+  classesSnapshot              Json      @default("[]")
+  locationsSnapshot            Json      @default("[]")
+  itemsSnapshot                Json      @default("[]")
+  accountingMappings           Json      @default("{}")
+  referenceDataRefreshedAt     DateTime?
+  setupCompletedAt             DateTime?
+  reconciliationEnabled        Boolean   @default(false)
+  reconciliationFrequencyHours Int       @default(24)
+  lastReconciliationAt         DateTime?
+  lastReconciliationStatus     String?
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
 
   @@index([status])
 }
 
 model QuickBooksEntityLink {
-  id               String   @id @default(cuid())
-  accountId        String
-  entityType       String   // customer | invoice
-  localId          String
-  quickBooksId     String?
+  id                  String    @id @default(cuid())
+  accountId           String
+  entityType          String // customer | invoice
+  localId             String
+  quickBooksId        String?
   quickBooksSyncToken String?
-  displayName      String?
-  status           String   @default("pending") // pending | synced | failed | needs_review
-  lastError        String?  @db.Text
-  lastSyncedAt     DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  displayName         String?
+  status              String    @default("pending") // pending | synced | failed | needs_review
+  lastError           String?   @db.Text
+  lastSyncedAt        DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@unique([accountId, entityType, localId])
   @@unique([accountId, entityType, quickBooksId])
@@ -324,7 +326,7 @@ model QuickBooksEntityLink {
 model QuickBooksSyncLog {
   id          String   @id @default(cuid())
   accountId   String
-  entityType String
+  entityType  String
   localId     String
   action      String
   status      String
@@ -1163,7 +1165,7 @@ model AssistantAction {
   userId    String?
 
   type        String // 'create_reminder' | 'add_client' | 'create_booking' | 'update_booking'
-  description String @db.Text
+  description String  @db.Text
   targetType  String? // 'reminder' | 'client' | 'booking' — for building a link, same vocabulary as Reminder.relatedType
   targetId    String?
 
@@ -1176,17 +1178,17 @@ model AssistantAction {
 // browser receives only this row's opaque id; executable fields stay on the
 // server and are revalidated inside the same transaction as the action.
 model AssistantProposal {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   accountId   String
-  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account     Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
   userId      String
   type        String
-  description String   @db.Text
+  description String    @db.Text
   fields      Json
-  candidates  Json     @default("[]")
+  candidates  Json      @default("[]")
   expiresAt   DateTime
   usedAt      DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   @@index([accountId, userId, expiresAt])
   @@index([expiresAt, usedAt])
@@ -1282,34 +1284,34 @@ model StagePlot {
 }
 
 model StagePlotShare {
-  id          String    @id @default(cuid())
-  stagePlotId String    @unique
-  stagePlot   StagePlot @relation(fields: [stagePlotId], references: [id], onDelete: Cascade)
-  tokenHash   String    @unique
-  publicToken String    @unique
-  expiresAt   DateTime?
-  revokedAt   DateTime?
-  lastViewedAt DateTime?
-  viewCount   Int       @default(0)
+  id                      String    @id @default(cuid())
+  stagePlotId             String    @unique
+  stagePlot               StagePlot @relation(fields: [stagePlotId], references: [id], onDelete: Cascade)
+  tokenHash               String    @unique
+  publicToken             String    @unique
+  expiresAt               DateTime?
+  revokedAt               DateTime?
+  lastViewedAt            DateTime?
+  viewCount               Int       @default(0)
   publishedRevisionNumber Int?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   @@index([expiresAt])
 }
 
 model StagePlotRevision {
-  id             String    @id @default(cuid())
-  stagePlotId    String
-  stagePlot      StagePlot @relation(fields: [stagePlotId], references: [id], onDelete: Cascade)
-  revisionNumber Int
-  note           String?   @db.Text
-  publishedByName String?
-  snapshot       Json
-  thumbnailKeys  String[]
-  summary        Json      @default("{}")
+  id               String    @id @default(cuid())
+  stagePlotId      String
+  stagePlot        StagePlot @relation(fields: [stagePlotId], references: [id], onDelete: Cascade)
+  revisionNumber   Int
+  note             String?   @db.Text
+  publishedByName  String?
+  snapshot         Json
+  thumbnailKeys    String[]
+  summary          Json      @default("{}")
   contentUpdatedAt DateTime
-  publishedAt    DateTime  @default(now())
+  publishedAt      DateTime  @default(now())
 
   @@unique([stagePlotId, revisionNumber])
   @@index([stagePlotId, publishedAt])
@@ -1348,25 +1350,25 @@ model StagePlotChannel {
   stagePlotId String
   stagePlot   StagePlot @relation(fields: [stagePlotId], references: [id], onDelete: Cascade)
 
-  channelNumber Int
-  source        String // instrument/role, e.g. "Lead Vocals" — see StagePlotChannelList.jsx's "Instrument" column
-  musicianName  String?
-  phantomPower  Boolean @default(false) // "48V" in the UI
-  powerNeeded   Boolean @default(false) // AC power at this position
-  monitorNotes  String? @db.Text
-  elementId     String?
-  inputType     String?
-  preferredDevice String?
+  channelNumber    Int
+  source           String // instrument/role, e.g. "Lead Vocals" — see StagePlotChannelList.jsx's "Instrument" column
+  musicianName     String?
+  phantomPower     Boolean @default(false) // "48V" in the UI
+  powerNeeded      Boolean @default(false) // AC power at this position
+  monitorNotes     String? @db.Text
+  elementId        String?
+  inputType        String?
+  preferredDevice  String?
   substituteDevice String?
-  standType     String?
-  connectionType String?
-  channelFormat String @default("mono")
-  stageboxName  String?
-  stageboxInput String?
-  providedBy    String?
-  monitorMix    String?
-  powerDetails  String?
-  cableDetails  String?
+  standType        String?
+  connectionType   String?
+  channelFormat    String  @default("mono")
+  stageboxName     String?
+  stageboxInput    String?
+  providedBy       String?
+  monitorMix       String?
+  powerDetails     String?
+  cableDetails     String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1680,6 +1682,55 @@ model SetListLibraryItem {
   @@index([accountId, createdAt, id])
 }
 
+// Reusable run-of-show templates — timeline items stay as ordered JSON for
+// the same reason SetListLibraryItem's songs do: the editor saves/reorders
+// the whole list as one unit, and applying a template to an event is a
+// client-side array clone with fresh ids (no server round-trip needed).
+model RunOfShowLibraryItem {
+  id        String  @id
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  name          String
+  description   String?   @db.Text
+  items         Json      @default("[]")
+  eventIds      Json      @default("[]")
+  searchText    String?   @db.Text
+  lastSentAt    DateTime?
+  lastSentCount Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([accountId])
+  @@index([accountId, createdAt, id])
+}
+
+// Public share link for an event's Run of Show. Unlike StagePlotShare, there
+// is no revision/publish step here — the public page always reads the
+// event's live `schedule` field, since a timeline that keeps changing right
+// up to showtime is expected, not something to snapshot against. accountId
+// lives directly on this row (rather than being reached through a parent
+// document row, the way StagePlotShare reaches it via stagePlot.accountId)
+// because the public route needs it to re-scope the live Event lookup with
+// no parent table to join through.
+model RunOfShowShare {
+  id           String    @id @default(cuid())
+  accountId    String
+  account      Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  eventId      String    @unique
+  tokenHash    String    @unique
+  publicToken  String    @unique
+  expiresAt    DateTime?
+  revokedAt    DateTime?
+  lastViewedAt DateTime?
+  viewCount    Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([expiresAt])
+}
+
 // Reusable stage-plot templates — the same StagePlot/StagePlotPage/
 // StagePlotChannel/StagePlotBacklineItem shape (server/src/routes/
 // stagePlots.js), but account-scoped instead of event-scoped since a
@@ -1730,25 +1781,25 @@ model StagePlotLibraryChannel {
   libraryItemId String
   libraryItem   StagePlotLibraryItem @relation(fields: [libraryItemId], references: [id], onDelete: Cascade)
 
-  channelNumber Int
-  source        String
-  musicianName  String?
-  phantomPower  Boolean @default(false)
-  powerNeeded   Boolean @default(false)
-  monitorNotes  String? @db.Text
-  elementId     String?
-  inputType     String?
-  preferredDevice String?
+  channelNumber    Int
+  source           String
+  musicianName     String?
+  phantomPower     Boolean @default(false)
+  powerNeeded      Boolean @default(false)
+  monitorNotes     String? @db.Text
+  elementId        String?
+  inputType        String?
+  preferredDevice  String?
   substituteDevice String?
-  standType     String?
-  connectionType String?
-  channelFormat String @default("mono")
-  stageboxName  String?
-  stageboxInput String?
-  providedBy    String?
-  monitorMix    String?
-  powerDetails  String?
-  cableDetails  String?
+  standType        String?
+  connectionType   String?
+  channelFormat    String  @default("mono")
+  stageboxName     String?
+  stageboxInput    String?
+  providedBy       String?
+  monitorMix       String?
+  powerDetails     String?
+  cableDetails     String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

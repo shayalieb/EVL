@@ -1428,6 +1428,15 @@ export default function EventFormPage() {
               Set Lists
             </Link>
           )}
+          {isEditing && currentUser.activeVerticals?.includes('band_orchestra') && (
+            <Link
+              to={`/events/${eventId}/run-of-show`}
+              data-testid="event-form-run-of-show-link"
+              className="min-h-11 shrink-0 px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
+            >
+              Run of Show
+            </Link>
+          )}
           {isEditing && currentUser.activeVerticals?.includes('party_planning') && (
             <Link
               to={`/events/${eventId}/floor-plan`}
@@ -1818,7 +1827,12 @@ export default function EventFormPage() {
           </div>
         </div>
 
-        <div className={activeTab === 'details' ? cardClass : 'hidden'}>
+        {/* Superseded by the dedicated Run of Show editor for band_orchestra
+            accounts (see the "Run of Show" button above) — keeping both in
+            sync would mean two competing places to edit the same
+            Event.schedule field, so this free-text version stays for every
+            other vertical only. */}
+        <div className={activeTab === 'details' && !currentUser.activeVerticals?.includes('band_orchestra') ? cardClass : 'hidden'}>
           <div className="flex items-center justify-between mb-5">
             <h3 className={`${cardTitleClass} mb-0`}>Event Schedule</h3>
             <button

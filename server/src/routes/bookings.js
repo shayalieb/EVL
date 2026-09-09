@@ -5,6 +5,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createWithPreservedId } from '../lib/idPreservingCreate.js';
 import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPageResponse } from '../lib/pagination.js';
+import { validateEventSchedule } from './events.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -185,6 +186,10 @@ router.post('/', asyncHandler(async (req, res) => {
   if (!id?.trim()) {
     return res.status(400).json({ error: 'id is required.' });
   }
+  if (rest.schedule !== undefined) {
+    const scheduleError = validateEventSchedule(rest.schedule);
+    if (scheduleError) return res.status(400).json({ error: scheduleError });
+  }
 
   const data = { id, accountId: req.membership.accountId };
   for (const field of WRITABLE_FIELDS) {
@@ -215,6 +220,10 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   const existing = await prisma.booking.findUnique({ where: { id: req.params.id } });
   if (!existing || existing.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Booking not found.' });
+  }
+  if (req.body?.schedule !== undefined) {
+    const scheduleError = validateEventSchedule(req.body.schedule);
+    if (scheduleError) return res.status(400).json({ error: scheduleError });
   }
 
   const data = {};

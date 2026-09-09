@@ -27,6 +27,7 @@ const NAV_GROUPS = [
       { to: '/offerings', label: 'Offerings', icon: '🎁' },
       { to: '/set-lists', label: 'Set Lists', icon: '🎵', vertical: 'band_orchestra' },
       { to: '/stage-plot-library', label: 'Stage Plot Library', icon: '🎛️', vertical: 'band_orchestra' },
+      { to: '/run-of-show-library', label: 'Run of Show', icon: '🗓️', vertical: 'band_orchestra' },
       { to: '/email-templates', label: 'Email Templates', icon: '✉️' },
     ],
   },

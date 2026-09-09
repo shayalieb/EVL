@@ -51,6 +51,8 @@ const SetListsEditorPage = lazy(() => import('./pages/SetListsEditorPage'));
 const SetListLibraryPage = lazy(() => import('./pages/SetListLibraryPage'));
 const StagePlotLibraryPage = lazy(() => import('./pages/StagePlotLibraryPage'));
 const StagePlotLibraryEditorPage = lazy(() => import('./pages/StagePlotLibraryEditorPage'));
+const RunOfShowEditorPage = lazy(() => import('./pages/RunOfShowEditorPage'));
+const RunOfShowLibraryPage = lazy(() => import('./pages/RunOfShowLibraryPage'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const CustomerStoriesPage = lazy(() => import('./pages/CustomerStoriesPage'));
 const TermsOfServicePage = lazy(() => import('./pages/TermsOfServicePage'));
@@ -60,6 +62,7 @@ const AgencyGroupsPage = lazy(() => import('./pages/AgencyGroupsPage'));
 const FinancialsPage = lazy(() => import('./pages/FinancialsPage'));
 const ReviewSubmissionPage = lazy(() => import('./pages/ReviewSubmissionPage'));
 const PublicStagePlotPage = lazy(() => import('./pages/PublicStagePlotPage'));
+const PublicRunOfShowPage = lazy(() => import('./pages/PublicRunOfShowPage'));
 
 // The marketing site lives at the exact root path, which otherwise sits
 // inside this same route tree (see AppRoutes' `path="/"` below) — checking
@@ -196,6 +199,7 @@ function AppRoutes() {
       <Route path="/rsvp/:token" element={<RsvpPage />} />
       <Route path="/gigs/:token" element={<ContractorCalendarPage />} />
       <Route path="/stage-plot/:token" element={<PublicStagePlotPage />} />
+      <Route path="/run-of-show/:token" element={<PublicRunOfShowPage />} />
       <Route path="/portal" element={<PortalArea />}>
         <Route index element={<PortalProtectedRoute />} />
         <Route path="login" element={<PortalLoginGate />} />
@@ -213,6 +217,7 @@ function AppRoutes() {
         <Route path="set-lists" element={<VerticalGate vertical="band_orchestra"><SetListLibraryPage /></VerticalGate>} />
         <Route path="stage-plot-library" element={<VerticalGate vertical="band_orchestra"><StagePlotLibraryPage /></VerticalGate>} />
         <Route path="stage-plot-library/:libraryItemId" element={<VerticalGate vertical="band_orchestra"><StagePlotLibraryEditorPage /></VerticalGate>} />
+        <Route path="run-of-show-library" element={<VerticalGate vertical="band_orchestra"><RunOfShowLibraryPage /></VerticalGate>} />
         <Route path="bookings" element={<BookingsPage />} />
         <Route path="bookings/new" element={<BookingFormPage />} />
         <Route path="bookings/:bookingId" element={<BookingFormPage />} />
@@ -227,6 +232,7 @@ function AppRoutes() {
         <Route path="events/:eventId/stage-plot" element={<VerticalGate vertical="band_orchestra"><StagePlotEditorPage /></VerticalGate>} />
         <Route path="events/:eventId/floor-plan" element={<VerticalGate vertical="party_planning"><FloorPlanEditorPage /></VerticalGate>} />
         <Route path="events/:eventId/set-lists" element={<PermissionGate permission="manageEvents"><VerticalGate vertical="band_orchestra"><SetListsEditorPage /></VerticalGate></PermissionGate>} />
+        <Route path="events/:eventId/run-of-show" element={<PermissionGate permission="manageEvents"><VerticalGate vertical="band_orchestra"><RunOfShowEditorPage /></VerticalGate></PermissionGate>} />
       </Route>
       {/* Bare, no-AdminLayout page (see DesignPartnerAgreementPrintPage.jsx's
           own comment for why this can't just live nested under /admin
