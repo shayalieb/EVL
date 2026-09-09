@@ -32,7 +32,12 @@ function canonicalize(value) {
 // as Set List (see SetListsEditorPage.jsx's own header comment) — explicit
 // Save Changes, not autosave, since a show-day timeline is edited in bursts,
 // not keystroke-by-keystroke like a canvas.
-export default function RunOfShowEditorPage() {
+// onClose is only passed when this is rendered inside EventFormPage's Run of
+// Show side panel rather than its own route — see StagePlotEditorPage.jsx's
+// header comment for why useParams() still resolves eventId correctly
+// either way (both sit inside the /events/:eventId route tree).
+export default function RunOfShowEditorPage({ onClose } = {}) {
+  const isModal = !!onClose;
   const { eventId } = useParams();
   const { runOfShowLibrary, runOfShowLibraryLoading, addRunOfShowLibraryItem } = useData();
   const { showToast } = useToast();
@@ -176,16 +181,25 @@ export default function RunOfShowEditorPage() {
     }
   }
 
+  function handleDone() {
+    if (dirty && !window.confirm('You have unsaved run of show changes. Leave without saving?')) return;
+    onClose?.();
+  }
+
   if (eventLoading) return <div className="p-6 text-sm text-slate-500">Loading…</div>;
   if (!event) return <div className="mx-auto max-w-xl p-6 text-center"><p className="font-semibold text-slate-700">Run of Show could not be opened</p><p className="mt-1 text-sm text-slate-500">{eventError}</p><Link to="/events" className="mt-4 inline-block text-sm font-semibold text-indigo-600 hover:underline">Back to Events</Link></div>;
 
   return (
-    <div className="p-6 max-w-[1100px] mx-auto">
+    <div className={isModal ? 'w-full' : 'p-6 max-w-[1100px] mx-auto'}>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <div>
-          <Link to={`/events/${eventId}`} className="text-xs font-semibold text-slate-400 hover:text-slate-600">&larr; Back to event</Link>
-          <h1 className="text-lg font-bold text-slate-800">Run of Show{event.name ? ` — ${event.name}` : ''}</h1>
-        </div>
+        {isModal ? (
+          <div />
+        ) : (
+          <div>
+            <Link to={`/events/${eventId}`} className="text-xs font-semibold text-slate-400 hover:text-slate-600">&larr; Back to event</Link>
+            <h1 className="text-lg font-bold text-slate-800">Run of Show{event.name ? ` — ${event.name}` : ''}</h1>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <span data-testid="run-of-show-save-status" className="text-xs text-slate-400">{dirty ? 'Unsaved changes' : 'Saved'}</span>
           <button type="button" onClick={() => setShareModalOpen(true)} data-testid="run-of-show-share-button" className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold">
@@ -200,6 +214,16 @@ export default function RunOfShowEditorPage() {
           >
             {saving ? 'Saving…' : 'Save Changes'}
           </button>
+          {isModal && (
+            <button
+              type="button"
+              onClick={handleDone}
+              data-testid="run-of-show-modal-done-button"
+              className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold"
+            >
+              Done
+            </button>
+          )}
         </div>
       </div>
 

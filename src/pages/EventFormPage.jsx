@@ -12,6 +12,7 @@ import PrepEmailModal from '../components/PrepEmailModal';
 import GroupChipSelector from '../components/GroupChipSelector';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Modal from '../components/ui/Modal';
+import SidePanel from '../components/ui/SidePanel';
 import HistoryModal from '../components/HistoryModal';
 import VenueCombobox from '../components/VenueCombobox';
 import { useData } from '../context/DataContext';
@@ -40,6 +41,8 @@ import { depositPaymentState } from '../lib/depositPaymentState';
 import { activeContractorBookingCount, normalizeNoOutsideContractorsNeeded } from '../lib/eventStaffingState';
 
 const StagePlotEditorPage = lazy(() => import('./StagePlotEditorPage'));
+const SetListsEditorPage = lazy(() => import('./SetListsEditorPage'));
+const RunOfShowEditorPage = lazy(() => import('./RunOfShowEditorPage'));
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -235,7 +238,9 @@ export default function EventFormPage() {
   const businessInfo = useAgencyBranding(form.groupId, currentUser?.businessInfo, currentUser?.planTier === 'agency');
   const [addingType, setAddingType] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
-  const [stagePlotModalOpen, setStagePlotModalOpen] = useState(false);
+  const [stagePlotPanelOpen, setStagePlotPanelOpen] = useState(false);
+  const [setListPanelOpen, setSetListPanelOpen] = useState(false);
+  const [runOfShowPanelOpen, setRunOfShowPanelOpen] = useState(false);
   const [emailHistoryEntries, setEmailHistoryEntries] = useState([]);
   const [newTypeLabel, setNewTypeLabel] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -1409,34 +1414,6 @@ export default function EventFormPage() {
               View Booking →
             </button>
           )}
-          {isEditing && currentUser.activeVerticals?.includes('band_orchestra') && (
-            <button
-              type="button"
-              onClick={() => setStagePlotModalOpen(true)}
-              data-testid="event-form-stage-plot-link"
-              className="min-h-11 shrink-0 px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
-            >
-              Stage Plot
-            </button>
-          )}
-          {isEditing && currentUser.activeVerticals?.includes('band_orchestra') && (
-            <Link
-              to={`/events/${eventId}/set-lists`}
-              data-testid="event-form-set-lists-link"
-              className="min-h-11 shrink-0 px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
-            >
-              Set Lists
-            </Link>
-          )}
-          {isEditing && currentUser.activeVerticals?.includes('band_orchestra') && (
-            <Link
-              to={`/events/${eventId}/run-of-show`}
-              data-testid="event-form-run-of-show-link"
-              className="min-h-11 shrink-0 px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
-            >
-              Run of Show
-            </Link>
-          )}
           {isEditing && currentUser.activeVerticals?.includes('party_planning') && (
             <Link
               to={`/events/${eventId}/floor-plan`}
@@ -1445,16 +1422,6 @@ export default function EventFormPage() {
             >
               Floor Plan
             </Link>
-          )}
-          {isEditing && (
-            <button
-              type="button"
-              onClick={() => setHistoryModalOpen(true)}
-              data-testid="event-form-history-button"
-              className="min-h-11 shrink-0 px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
-            >
-              History
-            </button>
           )}
           <button type="button" onClick={handleLeaveWithoutSaving} data-testid="event-form-cancel-button" className="min-h-11 shrink-0 px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">
             Cancel
@@ -1542,6 +1509,46 @@ export default function EventFormPage() {
         >
           Prep
         </button>
+        {isEditing && currentUser.activeVerticals?.includes('band_orchestra') && (
+          <button
+            type="button"
+            onClick={() => setStagePlotPanelOpen(true)}
+            data-testid="event-form-tab-stage-plot"
+            className="shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px border-transparent text-slate-500 hover:text-slate-700"
+          >
+            Stage Plot
+          </button>
+        )}
+        {isEditing && currentUser.activeVerticals?.includes('band_orchestra') && (
+          <button
+            type="button"
+            onClick={() => setSetListPanelOpen(true)}
+            data-testid="event-form-tab-set-lists"
+            className="shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px border-transparent text-slate-500 hover:text-slate-700"
+          >
+            Set Lists
+          </button>
+        )}
+        {isEditing && currentUser.activeVerticals?.includes('band_orchestra') && (
+          <button
+            type="button"
+            onClick={() => setRunOfShowPanelOpen(true)}
+            data-testid="event-form-tab-run-of-show"
+            className="shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px border-transparent text-slate-500 hover:text-slate-700"
+          >
+            Run of Show
+          </button>
+        )}
+        {isEditing && (
+          <button
+            type="button"
+            onClick={() => setHistoryModalOpen(true)}
+            data-testid="event-form-tab-history"
+            className="shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px border-transparent text-slate-500 hover:text-slate-700"
+          >
+            History
+          </button>
+        )}
         {isAdminOrOwner && (
           <button
             type="button"
@@ -2801,19 +2808,44 @@ export default function EventFormPage() {
         entries={[...(event?.history || []), ...emailHistoryEntries]}
       />
 
-      <Modal
-        open={stagePlotModalOpen}
-        onClose={() => setStagePlotModalOpen(false)}
+      <SidePanel
+        open={stagePlotPanelOpen}
+        onClose={() => setStagePlotPanelOpen(false)}
         title={`Stage Plot${event?.name ? ` — ${event.name}` : ''}`}
-        widthClass="max-w-[1650px]"
-        bodyClassName="px-6 py-5 max-h-[85vh] overflow-y-auto"
+        testId="event-form-stage-plot-panel"
       >
-        {stagePlotModalOpen && (
+        {stagePlotPanelOpen && (
           <Suspense fallback={<div className="py-12 text-center text-sm text-slate-500">Loading stage plot editor…</div>}>
-            <StagePlotEditorPage onClose={() => setStagePlotModalOpen(false)} />
+            <StagePlotEditorPage onClose={() => setStagePlotPanelOpen(false)} />
           </Suspense>
         )}
-      </Modal>
+      </SidePanel>
+
+      <SidePanel
+        open={setListPanelOpen}
+        onClose={() => setSetListPanelOpen(false)}
+        title={`Set Lists${event?.name ? ` — ${event.name}` : ''}`}
+        testId="event-form-set-lists-panel"
+      >
+        {setListPanelOpen && (
+          <Suspense fallback={<div className="py-12 text-center text-sm text-slate-500">Loading set lists…</div>}>
+            <SetListsEditorPage onClose={() => setSetListPanelOpen(false)} />
+          </Suspense>
+        )}
+      </SidePanel>
+
+      <SidePanel
+        open={runOfShowPanelOpen}
+        onClose={() => setRunOfShowPanelOpen(false)}
+        title={`Run of Show${event?.name ? ` — ${event.name}` : ''}`}
+        testId="event-form-run-of-show-panel"
+      >
+        {runOfShowPanelOpen && (
+          <Suspense fallback={<div className="py-12 text-center text-sm text-slate-500">Loading run of show…</div>}>
+            <RunOfShowEditorPage onClose={() => setRunOfShowPanelOpen(false)} />
+          </Suspense>
+        )}
+      </SidePanel>
 
       <AcceptPaymentModal
         open={!!payingContractorId}

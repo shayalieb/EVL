@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useBlocker, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { useToast } from '../components/ui/Toast';
@@ -36,7 +36,12 @@ function emptySetListItem() {
 // Event object already works — updateEvent() rewrites the whole account
 // blob on every call, so firing it on every keystroke would be wasteful and
 // would spam the event's history log with an entry per keystroke.
-export default function SetListsEditorPage() {
+// onClose is only passed when this is rendered inside EventFormPage's Set
+// Lists side panel rather than its own route — see StagePlotEditorPage.jsx's
+// header comment for why useParams() still resolves eventId correctly
+// either way (both sit inside the /events/:eventId route tree).
+export default function SetListsEditorPage({ onClose } = {}) {
+  const isModal = !!onClose;
   const { eventId } = useParams();
   const { currentUser } = useAuth();
   const { contractors, setListLibrary, setListLibraryLoading } = useData();
@@ -81,7 +86,12 @@ export default function SetListsEditorPage() {
   }, [event]);
 
   const dirty = JSON.stringify(setLists) !== JSON.stringify(event?.setLists || []);
-  const navigationBlocker = useBlocker(dirty && !saving);
+  // No in-app navigation blocker here — react-router's useBlocker requires a
+  // data router (createBrowserRouter/RouterProvider), and this app renders a
+  // plain <BrowserRouter> (App.jsx), so it throws at render time. The
+  // beforeunload guard below still covers tab-close/refresh; in-app
+  // navigation away from unsaved changes isn't intercepted. (Same fix as
+  // RunOfShowEditorPage.jsx — see its header comment.)
   const activeSetList = setLists.find((s) => s.id === activeSetListId);
   const filteredLibrary = setListLibrary.filter((setList) => matchesSearch(librarySearch, [
     setList.name,
@@ -272,6 +282,11 @@ export default function SetListsEditorPage() {
     await generateSetListPdf({ eventName: event?.name, eventDate: event?.eventDate, setLists, businessInfo: currentUser?.businessInfo });
   }
 
+  function handleDone() {
+    if (dirty && !window.confirm('You have unsaved set list changes. Leave without saving?')) return;
+    onClose?.();
+  }
+
   async function handleSendEmail({ subject, body, recipientIds }) {
     setSendingEmail(true);
     try {
@@ -331,12 +346,16 @@ export default function SetListsEditorPage() {
   const emailDisabledReason = !activeSetList ? null : !hasSongs ? 'Add at least one song before emailing this set list' : null;
 
   return (
-    <div className="p-6 max-w-[1100px] mx-auto">
+    <div className={isModal ? 'w-full' : 'p-6 max-w-[1100px] mx-auto'}>
       <div className="flex items-center justify-between mb-4">
-        <div>
-          <Link to={`/events/${eventId}`} className="text-xs font-semibold text-slate-400 hover:text-slate-600">&larr; Back to event</Link>
-          <h1 className="text-lg font-bold text-slate-800">Set Lists{event.name ? ` — ${event.name}` : ''}</h1>
-        </div>
+        {isModal ? (
+          <div />
+        ) : (
+          <div>
+            <Link to={`/events/${eventId}`} className="text-xs font-semibold text-slate-400 hover:text-slate-600">&larr; Back to event</Link>
+            <h1 className="text-lg font-bold text-slate-800">Set Lists{event.name ? ` — ${event.name}` : ''}</h1>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <span data-testid="setlist-save-status" className="text-xs text-slate-400">{dirty ? 'Unsaved changes' : 'Saved'}</span>
           {pdfDisabledReason ? (
@@ -376,6 +395,16 @@ export default function SetListsEditorPage() {
           >
             {saving ? 'Saving…' : 'Save Changes'}
           </button>
+          {isModal && (
+            <button
+              type="button"
+              onClick={handleDone}
+              data-testid="setlist-modal-done-button"
+              className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold"
+            >
+              Done
+            </button>
+          )}
         </div>
       </div>
       {activeSetList?.lastSentAt && (
@@ -587,14 +616,6 @@ export default function SetListsEditorPage() {
         onConfirm={handleSendEmail}
       />
 
-      <Modal open={navigationBlocker.state === 'blocked'} onClose={() => navigationBlocker.reset?.()} title="Unsaved set list changes">
-        <p className="text-sm text-slate-600">Your latest set list edits have not been saved. Leaving now will discard them.</p>
-        <div className="mt-4 flex flex-wrap justify-end gap-2">
-          <button type="button" onClick={() => navigationBlocker.reset?.()} className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">Stay here</button>
-          <button type="button" onClick={() => navigationBlocker.proceed?.()} className="rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50">Leave without saving</button>
-          <button type="button" onClick={async () => { if (await handleSave()) navigationBlocker.proceed?.(); }} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Save and leave</button>
-        </div>
-      </Modal>
     </div>
   );
 }
