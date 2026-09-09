@@ -3,10 +3,15 @@ import { drawLetterhead, drawHeaderRule, drawImageBlock, getAutoTableStyle } fro
 import { fetchStagePlotPageThumbnail } from './stagePlots';
 import { stagePlotNotesToPlainText } from './stagePlotNotes';
 import { formatEventDate, formatEventTime } from './format';
+import { getStagePlotTechnicalDetailLines } from './stagePlotTechnicalDetails';
 
 const PROVIDED_BY_LABELS = { band: 'Band', venue: 'Venue', rental: 'Rental' };
 
 const DEFAULT_INCLUDE = { eventDetails: true, pages: true, channels: true, backlineItems: true };
+
+function technicalDetails(channel) {
+  return getStagePlotTechnicalDetailLines(channel).map(({ heading, value }) => `${heading}: ${value}`).join('\n');
+}
 
 // jsPDF pulls in html2canvas/DOMPurify (~450KB) even though we only use its
 // plain drawing API — lazy-load it so that weight isn't in the main bundle.
@@ -83,35 +88,17 @@ async function buildStagePlotDoc({ eventId, eventName, event, stagePlot, busines
     doc.text(`Production List${stagePlot.revisionLabel ? ` · ${stagePlot.revisionLabel}` : ''}`, marginX, y);
     y += 4;
 
+    const hasTechnicalDetails = stagePlot.channels.some((channel) => technicalDetails(channel));
     autoTable(doc, {
       startY: y,
       margin: { left: marginX },
-      head: [['#', 'Musician', 'Instrument', '48V', 'Power', 'Notes']],
+      head: [[...['#', 'Musician', 'Instrument', '48V', 'Power', 'Notes'], ...(hasTechnicalDetails ? ['Technical requirements'] : [])]],
       body: stagePlot.channels
         .slice()
         .sort((a, b) => a.channelNumber - b.channelNumber)
-        .map((c) => [c.channelNumber, c.musicianName || '', c.source, c.phantomPower ? '✓' : '', c.powerNeeded ? '✓' : '', stagePlotNotesToPlainText(c.monitorNotes)]),
+        .map((c) => [...[c.channelNumber, c.musicianName || '', c.source, c.phantomPower ? '✓' : '', c.powerNeeded ? '✓' : '', stagePlotNotesToPlainText(c.monitorNotes)], ...(hasTechnicalDetails ? [technicalDetails(c)] : [])]),
       ...tableStyle,
     });
-
-    const advancedRows = stagePlot.channels.filter((c) => c.inputType || c.preferredDevice || c.monitorMix || c.stageboxName || c.powerDetails || c.cableDetails);
-    if (advancedRows.length) {
-      autoTable(doc, {
-        startY: doc.lastAutoTable.finalY + 8,
-        margin: { left: marginX },
-        head: [['Ch', 'Input / Device', 'Stand / Connection', 'Patch', 'Monitor', 'Provider', 'Power / Cable']],
-        body: advancedRows.map((c) => [
-          c.channelNumber,
-          [c.inputType, c.preferredDevice, c.substituteDevice ? `Alt: ${c.substituteDevice}` : ''].filter(Boolean).join(' · '),
-          [c.standType, c.connectionType, c.channelFormat].filter(Boolean).join(' · '),
-          [c.stageboxName, c.stageboxInput].filter(Boolean).join(' / '),
-          c.monitorMix || '',
-          c.providedBy || '',
-          [c.powerDetails, c.cableDetails].filter(Boolean).join(' · '),
-        ]),
-        ...tableStyle,
-      });
-    }
   }
 
   if (include.backlineItems && stagePlot.backlineItems?.length) {

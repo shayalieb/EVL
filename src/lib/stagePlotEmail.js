@@ -2,6 +2,7 @@ import { formatEventDate, formatEventTime } from './format';
 import { escapeHtml } from './htmlEscape';
 import { fetchStagePlotPageThumbnail } from './stagePlots';
 import { stagePlotNotesToPlainText } from './stagePlotNotes';
+import { getStagePlotTechnicalDetailLines } from './stagePlotTechnicalDetails';
 
 const PROVIDED_BY_LABELS = { band: 'Band', venue: 'Venue', rental: 'Rental' };
 
@@ -30,6 +31,12 @@ const cellStyle = 'padding:4px 8px;border-bottom:1px solid #e2e8f0;';
 const headStyle = 'padding:4px 8px;border-bottom:2px solid #cbd5e1;';
 const sectionHeadingStyle = 'font-size:14px;font-weight:700;color:#1e293b;margin:20px 0 8px;';
 const emptyStyle = 'font-size:13px;color:#94a3b8;';
+
+function technicalDetailsHtml(channel) {
+  return getStagePlotTechnicalDetailLines(channel)
+    .map(({ heading, value }) => `<strong>${escapeHtml(heading)}:</strong> ${escapeHtml(value)}`)
+    .join('<br />');
+}
 
 function emailNotes(value) {
   return escapeHtml(stagePlotNotesToPlainText(value)).replace(/\n/g, '<br />');
@@ -99,6 +106,7 @@ export async function buildStagePlotViewsHtml({ eventId, event, businessInfo, st
   }
 
   if (checked.channels) {
+    const hasTechnicalDetails = stagePlot.channels.some((channel) => technicalDetailsHtml(channel));
     const rows = stagePlot.channels
       .slice()
       .sort((a, b) => a.channelNumber - b.channelNumber)
@@ -109,18 +117,9 @@ export async function buildStagePlotViewsHtml({ eventId, event, businessInfo, st
         <td style="${cellStyle}">${c.phantomPower ? '✓' : ''}</td>
         <td style="${cellStyle}">${c.powerNeeded ? '✓' : ''}</td>
         <td style="${cellStyle}">${emailNotes(c.monitorNotes)}</td>
+        ${hasTechnicalDetails ? `<td style="${cellStyle}">${technicalDetailsHtml(c)}</td>` : ''}
       </tr>`);
-    sections.push(`<h3 style="${sectionHeadingStyle}">Production List</h3>${tableHtml(['#', 'Musician', 'Instrument', '48V', 'Power', 'Notes'], rows)}`);
-    const advancedRows = stagePlot.channels.filter((c) => c.inputType || c.preferredDevice || c.monitorMix || c.stageboxName || c.powerDetails || c.cableDetails).map((c) => `<tr>
-      <td style="${cellStyle}">${c.channelNumber}</td>
-      <td style="${cellStyle}">${escapeHtml([c.inputType, c.preferredDevice, c.substituteDevice ? `Alt: ${c.substituteDevice}` : ''].filter(Boolean).join(' · '))}</td>
-      <td style="${cellStyle}">${escapeHtml([c.standType, c.connectionType, c.channelFormat].filter(Boolean).join(' · '))}</td>
-      <td style="${cellStyle}">${escapeHtml([c.stageboxName, c.stageboxInput].filter(Boolean).join(' / '))}</td>
-      <td style="${cellStyle}">${escapeHtml(c.monitorMix || '')}</td>
-      <td style="${cellStyle}">${escapeHtml(c.providedBy || '')}</td>
-      <td style="${cellStyle}">${escapeHtml([c.powerDetails, c.cableDetails].filter(Boolean).join(' · '))}</td>
-    </tr>`);
-    if (advancedRows.length) sections.push(`<h3 style="${sectionHeadingStyle}">Audio Details</h3>${tableHtml(['Ch', 'Input / Device', 'Stand / Connection', 'Patch', 'Monitor', 'Provider', 'Power / Cable'], advancedRows)}`);
+    sections.push(`<h3 style="${sectionHeadingStyle}">Production List</h3>${tableHtml([...['#', 'Musician', 'Instrument', '48V', 'Power', 'Notes'], ...(hasTechnicalDetails ? ['Technical requirements'] : [])], rows)}`);
   }
 
   if (checked.backlineItems) {
