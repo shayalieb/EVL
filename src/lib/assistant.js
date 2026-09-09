@@ -46,6 +46,16 @@ export async function clearAssistantMessages() {
   return apiFetch('/assistant/messages', { method: 'DELETE' });
 }
 
+export async function getAssistantTrainingProgress() {
+  const data = await apiFetch('/assistant/training');
+  return data.progress;
+}
+
+export async function saveAssistantTrainingProgress(guideId, update) {
+  const data = await apiFetch(`/assistant/training/${encodeURIComponent(guideId)}`, { method: 'PUT', body: JSON.stringify(update) });
+  return data.progress;
+}
+
 // Returns { title, hours, offerings, lineItems, summary } — offerings are
 // real catalog objects (matched server-side against the account's actual
 // pricing), lineItems are the assistant's own priced estimates for

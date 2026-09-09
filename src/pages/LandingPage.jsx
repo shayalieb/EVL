@@ -92,7 +92,7 @@ const FEATURE_GROUPS = [
     id: 'oversight',
     title: 'For staying on top of it',
     icon: 'bell',
-    items: ['A dashboard that surfaces what actually needs attention', 'Automatic alerts for at-risk events and overdue invoices', 'Email templates with merge fields for real event details', 'Manual reminders tied to any client or contractor', 'A Financials page tracking money in, money out, contractor payments due, and bookkeeper-ready exports', 'Ask the GigWorks Assistant instead of digging through menus'],
+    items: ['A dashboard that surfaces what actually needs attention', 'Automatic alerts for at-risk events and overdue invoices', 'Email templates with merge fields for real event details', 'Manual reminders tied to any client or contractor', 'A Financials page tracking money in, money out, contractor payments due, and bookkeeper-ready exports', 'Proactive, progress-saving training with GigWorks Assistant'],
   },
 ];
 
@@ -110,8 +110,8 @@ const AI_FEATURES = [
     description: 'Paste in a client\'s inquiry and GigWorks drafts a full proposal — pulling real pricing from your own catalog, not a guess — ready for you to review and send, not to fill in from scratch.',
   },
   {
-    title: 'Ask GigWorks Assistant instead of digging through menus',
-    description: "A chat built into the app that answers questions about your schedule, overdue invoices, or a specific client or contractor, and can create a reminder, add a client, or update a booking when you ask. It always shows you what it's about to do first — nothing happens until you confirm.",
+    title: 'Learn and work with GigWorks Assistant',
+    description: "A proactive in-app guide that teaches each teammate the workflows they can use, remembers their progress across devices, and answers questions about real work. It can also prepare supported changes, but always shows what it's about to do first — nothing happens until you confirm.",
   },
 ];
 
@@ -172,7 +172,7 @@ const FAQS = [
   },
   {
     q: 'Does GigWorks use AI? What does it actually do, and is my data safe?',
-    a: "Yes — GigWorks uses AI in two places today: reading a contractor's email reply to automatically update their confirm or decline status (always marked with a small AI badge, so you can see at a glance what it set versus what you changed by hand), and the GigWorks Assistant, a chat built into the app you can ask about your schedule or use to draft a proposal, create a reminder, or update a booking. Anything the Assistant proposes is shown to you first — nothing saves until you confirm it. Your account data is only ever used to answer your own questions or process your own emails, processed through Anthropic's Claude API, never used to train any AI model or shared with other accounts.",
+    a: "Yes — GigWorks uses AI to read contractor replies and update confirmation status, and in GigWorks Assistant. The Assistant proactively recommends short, permission-aware lessons, remembers each user's progress, answers questions about real work, and can prepare supported changes such as reminders, clients, or booking updates. Anything it proposes is shown to you first — nothing saves until you confirm it. Your account data is only used to answer your own questions or process your own emails through Anthropic's Claude API; it is never shared across accounts or used to train an AI model.",
   },
 ];
 

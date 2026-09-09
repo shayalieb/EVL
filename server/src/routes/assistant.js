@@ -47,6 +47,7 @@ function requireBookingsPermission(req, res) {
 const HISTORY_CONTEXT_TURNS = 20;
 const HISTORY_RETENTION_DAYS = 7;
 const PROPOSAL_TTL_MS = 30 * 60 * 1000;
+const TRAINING_GUIDE_STEP_COUNTS = new Map([['setup-business', 4], ['first-booking', 4], ['staff-event', 4], ['invoice-payment', 4], ['pay-contractors', 3], ['day-of', 3]]);
 
 export function fallbackTrainingAnswer(question) {
   if (!/(how (?:do|can|should)|teach|train|training|help|getting started|where (?:is|do)|show me how)/i.test(String(question || ''))) return null;
@@ -136,6 +137,40 @@ router.get('/messages', asyncHandler(async (req, res) => {
 router.delete('/messages', asyncHandler(async (req, res) => {
   await prisma.assistantMessage.deleteMany({ where: { accountId: req.membership.accountId, userId: req.session.userId } });
   res.json({ ok: true });
+}));
+
+router.get('/training', asyncHandler(async (req, res) => {
+  const progress = await prisma.assistantTrainingProgress.findMany({
+    where: { accountId: req.membership.accountId, userId: req.session.userId },
+    orderBy: { updatedAt: 'desc' },
+  });
+  res.json({ progress });
+}));
+
+router.put('/training/:guideId', asyncHandler(async (req, res) => {
+  const { guideId } = req.params;
+  if (!TRAINING_GUIDE_STEP_COUNTS.has(guideId)) return res.status(400).json({ error: 'Unknown training guide.' });
+  const hasCompletedSteps = Array.isArray(req.body?.completedSteps);
+  const completedSteps = hasCompletedSteps
+    ? [...new Set(req.body.completedSteps.map(Number).filter((step) => Number.isInteger(step) && step >= 0 && step < 20))].sort((a, b) => a - b)
+    : undefined;
+  const completedAt = hasCompletedSteps && completedSteps.length >= TRAINING_GUIDE_STEP_COUNTS.get(guideId) ? new Date() : null;
+  if (req.body?.dismissDays !== undefined) {
+    const dismissDays = Number(req.body.dismissDays);
+    if (!Number.isFinite(dismissDays) || dismissDays < 1 || dismissDays > 30) return res.status(400).json({ error: 'Reminder delay must be between 1 and 30 days.' });
+  }
+  const hasDismissalUpdate = req.body?.dismissDays !== undefined || req.body?.clearDismissal === true;
+  const dismissedUntil = req.body?.clearDismissal === true
+    ? null
+    : req.body?.dismissDays
+      ? new Date(Date.now() + Math.min(30, Math.max(1, Number(req.body.dismissDays))) * 86400000)
+      : null;
+  const progress = await prisma.assistantTrainingProgress.upsert({
+    where: { accountId_userId_guideId: { accountId: req.membership.accountId, userId: req.session.userId, guideId } },
+    create: { accountId: req.membership.accountId, userId: req.session.userId, guideId, completedSteps: completedSteps || [], completedAt, dismissedUntil },
+    update: { ...(hasCompletedSteps ? { completedSteps, completedAt } : {}), ...(hasDismissalUpdate ? { dismissedUntil } : {}) },
+  });
+  res.json({ progress });
 }));
 
 // Every action type re-checks permissions from scratch here — never trusts

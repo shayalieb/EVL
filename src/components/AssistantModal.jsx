@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Modal from './ui/Modal';
 import AssistantActionCard from './AssistantActionCard';
-import { askAssistant, confirmAssistantAction, listAssistantActivity, getAssistantMessages, clearAssistantMessages } from '../lib/assistant';
+import { askAssistant, confirmAssistantAction, listAssistantActivity, getAssistantMessages, clearAssistantMessages, getAssistantTrainingProgress, saveAssistantTrainingProgress } from '../lib/assistant';
 import { relatedRecordPath } from '../lib/reminders';
 import { useToast } from './ui/Toast';
 import { useAuth } from '../context/AuthContext';
@@ -44,7 +44,7 @@ function AssistantMessageContent({ content }) {
 // ever applied from this component without that explicit confirm) or a
 // `link` (a plain navigation shortcut, no confirmation needed since
 // nothing changes).
-export default function AssistantModal({ open, onClose }) {
+export default function AssistantModal({ open, onClose, initialView = 'chat', initialGuideId = null, onTrainingChanged = null }) {
   const { showToast } = useToast();
   const { can } = useAuth();
   const navigate = useNavigate();
@@ -59,12 +59,15 @@ export default function AssistantModal({ open, onClose }) {
   const [activityLoading, setActivityLoading] = useState(false);
   const [activeGuideId, setActiveGuideId] = useState(null);
   const [guideStep, setGuideStep] = useState(0);
+  const [trainingProgress, setTrainingProgress] = useState([]);
+  const [trainingLoading, setTrainingLoading] = useState(false);
+  const [savingTraining, setSavingTraining] = useState(false);
   const listRef = useRef(null);
 
   useEffect(() => {
     if (!open) return;
-    setView('chat');
-    setActiveGuideId(null);
+    setView(initialView);
+    setActiveGuideId(initialGuideId);
     setGuideStep(0);
     setQuestion('');
     setMessagesLoading(true);
@@ -72,7 +75,20 @@ export default function AssistantModal({ open, onClose }) {
       .then((list) => setMessages(list.map(({ role, content }) => ({ role, content }))))
       .catch(() => setMessages([]))
       .finally(() => setMessagesLoading(false));
-  }, [open]);
+    setTrainingLoading(true);
+    getAssistantTrainingProgress()
+      .then((list) => {
+        setTrainingProgress(list);
+        if (initialGuideId) {
+          const guide = ASSISTANT_GUIDES.find((item) => item.id === initialGuideId);
+          const completed = list.find((item) => item.guideId === initialGuideId)?.completedSteps || [];
+          const nextStep = guide?.steps.findIndex((_, index) => !completed.includes(index)) ?? 0;
+          setGuideStep(nextStep < 0 ? 0 : nextStep);
+        }
+      })
+      .catch(() => setTrainingProgress([]))
+      .finally(() => setTrainingLoading(false));
+  }, [open, initialView, initialGuideId]);
 
   useEffect(() => {
     if (!open || view !== 'activity') return;
@@ -147,9 +163,44 @@ export default function AssistantModal({ open, onClose }) {
   const availableGuides = ASSISTANT_GUIDES.filter((guide) => !guide.permission || can(guide.permission));
   const activeGuide = availableGuides.find((guide) => guide.id === activeGuideId);
 
+  function guideProgress(guideId) {
+    return trainingProgress.find((item) => item.guideId === guideId) || { completedSteps: [], completedAt: null };
+  }
+
   function openGuide(guide) {
     setActiveGuideId(guide.id);
-    setGuideStep(0);
+    const completed = guideProgress(guide.id).completedSteps || [];
+    setGuideStep(guide.steps.findIndex((_, index) => !completed.includes(index)) === -1 ? 0 : guide.steps.findIndex((_, index) => !completed.includes(index)));
+  }
+
+  async function updateGuideProgress(guide, completedSteps, completed = false) {
+    setSavingTraining(true);
+    try {
+      const saved = await saveAssistantTrainingProgress(guide.id, { completedSteps, completed, clearDismissal: true });
+      setTrainingProgress((previous) => [...previous.filter((item) => item.guideId !== guide.id), saved]);
+      onTrainingChanged?.(saved);
+      return saved;
+    } catch (error) {
+      showToast(error.message || 'Failed to save training progress.', 'error');
+      return null;
+    } finally {
+      setSavingTraining(false);
+    }
+  }
+
+  async function completeCurrentStep() {
+    const completed = guideProgress(activeGuide.id).completedSteps || [];
+    const nextCompleted = [...new Set([...completed, guideStep])].sort((a, b) => a - b);
+    const guideDone = nextCompleted.length === activeGuide.steps.length;
+    const saved = await updateGuideProgress(activeGuide, nextCompleted, guideDone);
+    if (!saved) return;
+    if (guideDone) {
+      showToast('Guide completed. Nice work!');
+      setActiveGuideId(null);
+    } else {
+      const nextStep = activeGuide.steps.findIndex((_, index) => !nextCompleted.includes(index));
+      setGuideStep(nextStep);
+    }
   }
 
   function openTrainingStep(step) {
@@ -233,28 +284,31 @@ export default function AssistantModal({ open, onClose }) {
           </div>
         ) : view === 'learn' ? (
           <div className="max-h-[32rem] overflow-y-auto pr-1" data-testid="assistant-learn-panel">
-            {!activeGuide ? (
+            {trainingLoading ? <div className="py-8 text-center text-sm text-slate-400">Loading your training…</div> : !activeGuide ? (
               <div>
                 <div className="mb-4">
                   <h3 className="font-bold text-slate-800">Guided training</h3>
                   <p className="mt-1 text-sm text-slate-500">Choose a real workflow. GigWorks will take you through it in the right order.</p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {availableGuides.map((guide) => (
+                  {availableGuides.map((guide) => {
+                    const progress = guideProgress(guide.id);
+                    const count = progress.completedSteps?.length || 0;
+                    return (
                     <button key={guide.id} type="button" onClick={() => openGuide(guide)} className="rounded-xl border border-slate-200 p-4 text-left hover:border-indigo-300 hover:bg-indigo-50/40" data-testid="assistant-guide-card">
                       <div className="font-semibold text-slate-800">{guide.title}</div>
                       <div className="mt-1 text-xs leading-5 text-slate-500">{guide.description}</div>
-                      <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-indigo-600">{guide.steps.length} steps · {guide.duration}</div>
+                      <div className={`mt-3 text-[11px] font-semibold uppercase tracking-wide ${progress.completedAt ? 'text-emerald-700' : 'text-indigo-600'}`}>{progress.completedAt ? 'Completed ✓' : count ? `${count} of ${guide.steps.length} complete · Resume` : `${guide.steps.length} steps · ${guide.duration}`}</div>
                     </button>
-                  ))}
+                  );})}
                 </div>
               </div>
             ) : (
               <div>
                 <button type="button" onClick={() => setActiveGuideId(null)} className="mb-3 text-xs font-semibold text-indigo-600 hover:underline">← All guides</button>
                 <h3 className="font-bold text-slate-800">{activeGuide.title}</h3>
-                <p className="mt-1 text-sm text-slate-500">Step {guideStep + 1} of {activeGuide.steps.length}</p>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-indigo-600 transition-all" style={{ width: `${((guideStep + 1) / activeGuide.steps.length) * 100}%` }} /></div>
+                <p className="mt-1 text-sm text-slate-500">Step {guideStep + 1} of {activeGuide.steps.length} · {guideProgress(activeGuide.id).completedSteps?.length || 0} complete</p>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-indigo-600 transition-all" style={{ width: `${((guideProgress(activeGuide.id).completedSteps?.length || 0) / activeGuide.steps.length) * 100}%` }} /></div>
                 <div className="mt-5 rounded-xl border border-indigo-100 bg-indigo-50/50 p-4" data-testid="assistant-guide-step">
                   <div className="text-xs font-bold uppercase tracking-wide text-indigo-600">Current step</div>
                   <div className="mt-1 font-bold text-slate-800">{activeGuide.steps[guideStep].title}</div>
@@ -262,16 +316,17 @@ export default function AssistantModal({ open, onClose }) {
                   <div className="mt-4 flex flex-wrap gap-2">
                     <button type="button" onClick={() => openTrainingStep(activeGuide.steps[guideStep])} className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700">Open this step →</button>
                     <button type="button" onClick={() => askAboutStep(activeGuide.steps[guideStep])} className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50">Ask Assistant</button>
+                    {!guideProgress(activeGuide.id).completedSteps?.includes(guideStep) && <button type="button" onClick={completeCurrentStep} disabled={savingTraining} className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60">{savingTraining ? 'Saving…' : 'Mark complete & continue'}</button>}
                   </div>
                 </div>
                 <ol className="mt-4 space-y-2">
                   {activeGuide.steps.map((step, index) => (
-                    <li key={step.title}><button type="button" onClick={() => setGuideStep(index)} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm ${index === guideStep ? 'bg-slate-100 font-semibold text-slate-800' : 'text-slate-500 hover:bg-slate-50'}`}><span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${index < guideStep ? 'bg-emerald-100 text-emerald-700' : index === guideStep ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{index < guideStep ? '✓' : index + 1}</span>{step.title}</button></li>
+                    <li key={step.title}><button type="button" onClick={() => setGuideStep(index)} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm ${index === guideStep ? 'bg-slate-100 font-semibold text-slate-800' : 'text-slate-500 hover:bg-slate-50'}`}><span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${guideProgress(activeGuide.id).completedSteps?.includes(index) ? 'bg-emerald-100 text-emerald-700' : index === guideStep ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{guideProgress(activeGuide.id).completedSteps?.includes(index) ? '✓' : index + 1}</span>{step.title}</button></li>
                   ))}
                 </ol>
                 <div className="mt-4 flex justify-between">
                   <button type="button" onClick={() => setGuideStep((step) => Math.max(0, step - 1))} disabled={guideStep === 0} className="text-xs font-semibold text-slate-500 disabled:opacity-40">← Previous</button>
-                  {guideStep < activeGuide.steps.length - 1 ? <button type="button" onClick={() => setGuideStep((step) => step + 1)} className="text-xs font-semibold text-indigo-600">Next step →</button> : <button type="button" onClick={() => setActiveGuideId(null)} className="text-xs font-semibold text-emerald-700">Finish guide ✓</button>}
+                  <button type="button" onClick={() => setGuideStep((step) => Math.min(activeGuide.steps.length - 1, step + 1))} disabled={guideStep === activeGuide.steps.length - 1} className="text-xs font-semibold text-indigo-600 disabled:opacity-40">Next step →</button>
                 </div>
               </div>
             )}

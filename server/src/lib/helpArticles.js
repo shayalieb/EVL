@@ -49,6 +49,30 @@ export const HELP_CATEGORIES = [
         ],
       },
       {
+        id: 'gigworks-assistant-training',
+        title: 'Learn GigWorks with the Assistant',
+        summary: 'Use proactive, guided lessons that remember your progress and match your access.',
+        blocks: [
+          { type: 'p', text: 'GigWorks Assistant is both a work assistant and an in-app trainer. When you have an unfinished lesson, a “Your next GigWorks lesson” card appears near the top of the workspace. It recommends the next useful workflow instead of expecting you to know what to learn first.' },
+          { type: 'h', text: 'Start or resume a lesson' },
+          { type: 'steps', items: [
+            'Choose “Start lesson” on the recommendation card, or open GigWorks Assistant and select Learn.',
+            'Open the current step to work in the real part of GigWorks, or choose “Ask Assistant” for a plain-language explanation.',
+            'Choose “Mark complete & continue” only after you understand or finish the step.',
+            'Leave whenever you need to. Your completed steps are saved to your user profile and resume on another signed-in device.',
+          ] },
+          { type: 'p', text: 'The Learn tab shows setup, booking, staffing, invoicing, contractor payment, and day-of preparation guides. You only see lessons for areas your account permissions allow you to use.' },
+          { type: 'h', text: 'Chat, Learn, and Activity' },
+          { type: 'list', items: [
+            'Chat — ask questions about your work, request instructions, or prepare supported changes. GigWorks asks for confirmation before it changes records.',
+            'Learn — follow short, ordered workflows with saved progress and direct links to the correct screens and Help articles.',
+            'Activity — review the confirmed changes the Assistant has made for the account.',
+          ] },
+          { type: 'tip', text: 'Busy right now? Choose “Remind me next week.” The lesson is not lost, and GigWorks will offer it again after seven days.' },
+          { type: 'note', text: 'Training progress belongs to the signed-in user, not the entire company. Teammates can learn at their own pace without changing one another’s completion status.' },
+        ],
+      },
+      {
         id: 'setup',
         title: 'Set up your business',
         summary: 'The one-time setup in Settings before you start booking gigs.',

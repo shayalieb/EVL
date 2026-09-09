@@ -80,6 +80,7 @@ model Account {
   assistantActions          AssistantAction[]
   assistantMessages         AssistantMessage[]
   assistantProposals        AssistantProposal[]
+  assistantTrainingProgress AssistantTrainingProgress[]
   emailDomain               EmailDomain?
   stagePlots                StagePlot[]
   stagePlotEquipmentUsages  StagePlotEquipmentUsage[]
@@ -1217,6 +1218,22 @@ model AssistantMessage {
   createdAt DateTime @default(now())
 
   @@index([accountId, userId, createdAt])
+}
+
+model AssistantTrainingProgress {
+  id             String    @id @default(cuid())
+  accountId      String
+  account        Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  userId         String
+  guideId        String
+  completedSteps Int[]     @default([])
+  completedAt    DateTime?
+  dismissedUntil DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([accountId, userId, guideId])
+  @@index([accountId, userId])
 }
 
 // A business's own sending domain, self-service configured in Settings —

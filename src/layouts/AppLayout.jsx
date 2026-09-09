@@ -6,6 +6,10 @@ import Logo from '../components/ui/Logo';
 import { BellIcon, SparkleIcon } from '../components/ui/icons';
 import { fetchReminders, completeReminder, relatedRecordPath } from '../lib/reminders';
 import AssistantModal from '../components/AssistantModal';
+import { ASSISTANT_GUIDES } from '../lib/assistantGuides';
+import { getAssistantTrainingProgress, saveAssistantTrainingProgress } from '../lib/assistant';
+
+const TRAINING_ORDER = ['setup-business', 'first-booking', 'staff-event', 'invoice-payment', 'pay-contractors', 'day-of'];
 
 const NAV_GROUPS = [
   {
@@ -41,7 +45,7 @@ const NAV_GROUPS = [
 ];
 
 export default function AppLayout() {
-  const { currentUser, logout, sizeWarning } = useAuth();
+  const { currentUser, logout, sizeWarning, can } = useAuth();
   const { groups: agencyGroups, isAgency, loading: groupsLoading, selectedGroupId, selectedGroup, setSelectedGroupId, pathFor } = useAgencyGroup();
   const [sizeWarningDismissed, setSizeWarningDismissed] = useState(false);
   const [designPartnerNoticeDismissed, setDesignPartnerNoticeDismissed] = useState(false);
@@ -50,6 +54,10 @@ export default function AppLayout() {
   const [reminders, setReminders] = useState([]);
   const [bellOpen, setBellOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantInitialView, setAssistantInitialView] = useState('chat');
+  const [assistantInitialGuideId, setAssistantInitialGuideId] = useState(null);
+  const [trainingProgress, setTrainingProgress] = useState([]);
+  const [trainingLoaded, setTrainingLoaded] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -76,6 +84,17 @@ export default function AppLayout() {
       document.removeEventListener('visibilitychange', load);
     };
   }, []);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    let cancelled = false;
+    setTrainingLoaded(false);
+    getAssistantTrainingProgress()
+      .then((progress) => { if (!cancelled) setTrainingProgress(progress); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setTrainingLoaded(true); });
+    return () => { cancelled = true; };
+  }, [currentUser?.id]);
 
   useEffect(() => {
     function closeMenus(event) {
@@ -133,6 +152,36 @@ export default function AppLayout() {
   const freeAccessExpiresAt = currentUser?.freeAccessExpiresAt ? new Date(currentUser.freeAccessExpiresAt) : null;
   const daysUntilFreeAccessExpires = freeAccessExpiresAt ? Math.ceil((freeAccessExpiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)) : null;
   const showDesignPartnerNotice = daysUntilFreeAccessExpires !== null && daysUntilFreeAccessExpires > 0 && daysUntilFreeAccessExpires <= 30;
+  const availableTrainingGuides = TRAINING_ORDER
+    .map((id) => ASSISTANT_GUIDES.find((guide) => guide.id === id))
+    .filter((guide) => guide && (!guide.permission || can(guide.permission)));
+  const recommendedGuide = trainingLoaded && availableTrainingGuides.find((guide) => {
+    const progress = trainingProgress.find((item) => item.guideId === guide.id);
+    return !progress?.completedAt && (!progress?.dismissedUntil || new Date(progress.dismissedUntil) <= new Date());
+  });
+
+  function openAssistant(view = 'chat', guideId = null) {
+    setAssistantInitialView(view);
+    setAssistantInitialGuideId(guideId);
+    setAssistantOpen(true);
+  }
+
+  function handleTrainingChanged(saved) {
+    setTrainingProgress((previous) => [...previous.filter((item) => item.guideId !== saved.guideId), saved]);
+  }
+
+  async function dismissTrainingRecommendation() {
+    if (!recommendedGuide) return;
+    try {
+      const saved = await saveAssistantTrainingProgress(recommendedGuide.id, { dismissDays: 7 });
+      handleTrainingChanged(saved);
+    } catch {
+      setTrainingProgress((previous) => {
+        const existing = previous.find((item) => item.guideId === recommendedGuide.id);
+        return [...previous.filter((item) => item.guideId !== recommendedGuide.id), { ...existing, guideId: recommendedGuide.id, dismissedUntil: new Date(Date.now() + 7 * 86400000).toISOString(), completedSteps: existing?.completedSteps || [] }];
+      });
+    }
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -171,10 +220,10 @@ export default function AppLayout() {
         </div>
 
         <div className="flex items-center gap-2">
-        {currentUser?.permissions?.manageBookings && (
+        {currentUser && (
           <button
             type="button"
-            onClick={() => setAssistantOpen(true)}
+            onClick={() => openAssistant()}
             data-testid="assistant-open-button"
             className="min-h-11 flex items-center gap-1.5 pl-2.5 pr-3 rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300"
             aria-label="GigWorks Assistant"
@@ -383,10 +432,25 @@ export default function AppLayout() {
               </button>
             </div>
           )}
+          {recommendedGuide && (
+            <div data-testid="assistant-training-banner" className="mb-4 flex flex-col gap-3 rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50 to-violet-50 px-4 py-3 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white"><SparkleIcon className="h-4 w-4" /></span>
+                <div>
+                  <div className="font-bold text-slate-900">Your next GigWorks lesson: {recommendedGuide.title}</div>
+                  <div className="mt-0.5 text-xs leading-5 text-slate-600">A {recommendedGuide.duration} guided walkthrough. Your progress is saved, so you can leave and resume anytime.</div>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2 pl-11 sm:pl-0">
+                <button type="button" onClick={dismissTrainingRecommendation} className="rounded-lg px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-white/70">Remind me next week</button>
+                <button type="button" onClick={() => openAssistant('learn', recommendedGuide.id)} className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700">Start lesson →</button>
+              </div>
+            </div>
+          )}
           <Outlet />
         </main>
       </div>
-      <AssistantModal open={assistantOpen} onClose={() => setAssistantOpen(false)} />
+      <AssistantModal open={assistantOpen} onClose={() => setAssistantOpen(false)} initialView={assistantInitialView} initialGuideId={assistantInitialGuideId} onTrainingChanged={handleTrainingChanged} />
     </div>
   );
 }
