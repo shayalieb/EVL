@@ -2,17 +2,18 @@ import { getDocumentStyle } from './documentLayouts';
 import { drawLetterhead, drawHeaderRule, drawImageBlock, getAutoTableStyle } from './documentPdfKit';
 import { fetchStagePlotPageThumbnail } from './stagePlots';
 import { stagePlotNotesToPlainText } from './stagePlotNotes';
+import { formatEventDate, formatEventTime } from './format';
 
 const PROVIDED_BY_LABELS = { band: 'Band', venue: 'Venue', rental: 'Rental' };
 
-const DEFAULT_INCLUDE = { pages: true, channels: true, backlineItems: true };
+const DEFAULT_INCLUDE = { eventDetails: true, pages: true, channels: true, backlineItems: true };
 
 // jsPDF pulls in html2canvas/DOMPurify (~450KB) even though we only use its
 // plain drawing API — lazy-load it so that weight isn't in the main bundle.
 // `include` lets a caller (the Stage Plot email composer) build a PDF with
 // only the sections a user checked off, rather than always everything —
 // defaults to the full document for the existing "Download PDF" button.
-async function buildStagePlotDoc({ eventId, eventName, stagePlot, businessInfo, include = DEFAULT_INCLUDE }) {
+async function buildStagePlotDoc({ eventId, eventName, event, stagePlot, businessInfo, include = DEFAULT_INCLUDE }) {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable'),
@@ -27,6 +28,24 @@ async function buildStagePlotDoc({ eventId, eventName, stagePlot, businessInfo, 
   const sortedPages = stagePlot.pages.slice().sort((a, b) => a.order - b.order);
   let startedDoc = false;
 
+  if (include.eventDetails) {
+    startedDoc = true;
+    let y = 16;
+    y = await drawLetterhead(doc, { businessInfo, layout, scale, marginX, pageWidth, y, fallbackName: 'Technical Rider' });
+    y = drawHeaderRule(doc, { layout, accentRgb, marginX, pageWidth, y });
+    doc.setFontSize(18); doc.setTextColor(30); doc.text('Technical Production Package', marginX, y); y += 8;
+    doc.setFontSize(12); doc.text(`${eventName || event?.name || 'Event'}${stagePlot.revisionLabel ? ` · ${stagePlot.revisionLabel}` : ''}`, marginX, y); y += 8;
+    const venue = event?.venue || {};
+    const details = [
+      ['Date', formatEventDate(event?.eventDate)], ['Performance', [formatEventTime(event?.startTime), formatEventTime(event?.endTime)].filter(Boolean).join(' – ')], ['Venue', venue.name],
+      ['Address', [venue.address1, venue.address2, venue.city, venue.state, venue.zip].filter(Boolean).join(', ')], ['Load-in', venue.loadInInfo],
+      ['Venue production contact', [venue.contactName, venue.contactPhone, venue.contactEmail].filter(Boolean).join(' · ')], ['Day-of contact', [event?.contactPhone, event?.contactEmail].filter(Boolean).join(' · ')], ['Artist contact', [businessInfo?.name, businessInfo?.phone, businessInfo?.email].filter(Boolean).join(' · ')],
+    ].filter(([, value]) => value);
+    autoTable(doc, { startY: y, margin: { left: marginX }, body: details, ...tableStyle });
+    const schedule = (event?.schedule || []).filter((item) => item.time || item.name || item.details);
+    if (schedule.length) autoTable(doc, { startY: doc.lastAutoTable.finalY + 8, margin: { left: marginX }, head: [['Time', 'Schedule', 'Details']], body: schedule.map((item) => [formatEventTime(item.time), item.name || '', item.details || '']), ...tableStyle });
+  }
+
   if (include.pages) {
     for (const page of sortedPages) {
       if (startedDoc) doc.addPage();
@@ -38,7 +57,7 @@ async function buildStagePlotDoc({ eventId, eventName, stagePlot, businessInfo, 
 
       doc.setFontSize(13);
       doc.setTextColor(30);
-      doc.text(`${eventName || 'Event'} — ${page.name}`, marginX, y);
+      doc.text(`${eventName || 'Event'} — ${page.name}${stagePlot.revisionLabel ? ` · ${stagePlot.revisionLabel}` : ''}`, marginX, y);
       y += 6;
 
       const thumbnail = page.hasThumbnail ? await fetchStagePlotPageThumbnail(eventId, page.id) : null;
@@ -61,7 +80,7 @@ async function buildStagePlotDoc({ eventId, eventName, stagePlot, businessInfo, 
 
     doc.setFontSize(13);
     doc.setTextColor(30);
-    doc.text('Production List', marginX, y);
+    doc.text(`Production List${stagePlot.revisionLabel ? ` · ${stagePlot.revisionLabel}` : ''}`, marginX, y);
     y += 4;
 
     autoTable(doc, {
@@ -104,7 +123,7 @@ async function buildStagePlotDoc({ eventId, eventName, stagePlot, businessInfo, 
 
     doc.setFontSize(13);
     doc.setTextColor(30);
-    doc.text('Backline List', marginX, y);
+    doc.text(`Backline List${stagePlot.revisionLabel ? ` · ${stagePlot.revisionLabel}` : ''}`, marginX, y);
     y += 4;
 
     autoTable(doc, {
@@ -116,12 +135,12 @@ async function buildStagePlotDoc({ eventId, eventName, stagePlot, businessInfo, 
     });
   }
 
-  const filename = `${(eventName || 'Event').replace(/[^a-z0-9]+/gi, '-')}-Stage-Plot.pdf`;
+  const filename = `${(eventName || 'Event').replace(/[^a-z0-9]+/gi, '-')}-Technical-Rider.pdf`;
   return { doc, filename };
 }
 
-export async function generateStagePlotPdf({ eventId, eventName, stagePlot, businessInfo }) {
-  const { doc, filename } = await buildStagePlotDoc({ eventId, eventName, stagePlot, businessInfo });
+export async function generateStagePlotPdf({ eventId, eventName, event, stagePlot, businessInfo }) {
+  const { doc, filename } = await buildStagePlotDoc({ eventId, eventName, event, stagePlot, businessInfo });
   doc.save(filename);
 }
 
@@ -129,8 +148,8 @@ export async function generateStagePlotPdf({ eventId, eventName, stagePlot, busi
 // attachment without a round-trip through document storage — same shape as
 // generatePrepSheetPdfAttachment in prepSheetPdf.js. `include` is passed
 // straight through to buildStagePlotDoc (see its comment).
-export async function generateStagePlotPdfAttachment({ eventId, eventName, stagePlot, businessInfo, include }) {
-  const { doc, filename } = await buildStagePlotDoc({ eventId, eventName, stagePlot, businessInfo, include });
+export async function generateStagePlotPdfAttachment({ eventId, eventName, event, stagePlot, businessInfo, include }) {
+  const { doc, filename } = await buildStagePlotDoc({ eventId, eventName, event, stagePlot, businessInfo, include });
   const dataUri = doc.output('datauristring', filename);
   const base64 = dataUri.slice(dataUri.indexOf(',') + 1);
   return { filename, contentType: 'application/pdf', base64 };

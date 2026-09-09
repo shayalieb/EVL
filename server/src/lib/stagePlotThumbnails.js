@@ -23,9 +23,10 @@ export function decodeStagePlotThumbnail(dataUrl) {
 // reference to it is gone, so cleaning one copy cannot break another.
 export async function deleteStagePlotThumbnailIfUnused(storageKey) {
   if (!storageKey) return;
-  const [eventReferences, libraryReferences] = await Promise.all([
+  const [eventReferences, libraryReferences, revisionReferences] = await Promise.all([
     prisma.stagePlotPage.count({ where: { thumbnailStorageKey: storageKey } }),
     prisma.stagePlotLibraryPage.count({ where: { thumbnailStorageKey: storageKey } }),
+    prisma.stagePlotRevision.count({ where: { thumbnailKeys: { has: storageKey } } }),
   ]);
-  if (eventReferences + libraryReferences === 0) await deleteFile(storageKey);
+  if (eventReferences + libraryReferences + revisionReferences === 0) await deleteFile(storageKey);
 }

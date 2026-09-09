@@ -1272,6 +1272,7 @@ model StagePlot {
   backlineItems  StagePlotBacklineItem[]
   equipmentUsage StagePlotEquipmentUsage[]
   share          StagePlotShare?
+  revisions      StagePlotRevision[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1290,10 +1291,28 @@ model StagePlotShare {
   revokedAt   DateTime?
   lastViewedAt DateTime?
   viewCount   Int       @default(0)
+  publishedRevisionNumber Int?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   @@index([expiresAt])
+}
+
+model StagePlotRevision {
+  id             String    @id @default(cuid())
+  stagePlotId    String
+  stagePlot      StagePlot @relation(fields: [stagePlotId], references: [id], onDelete: Cascade)
+  revisionNumber Int
+  note           String?   @db.Text
+  publishedByName String?
+  snapshot       Json
+  thumbnailKeys  String[]
+  summary        Json      @default("{}")
+  contentUpdatedAt DateTime
+  publishedAt    DateTime  @default(now())
+
+  @@unique([stagePlotId, revisionNumber])
+  @@index([stagePlotId, publishedAt])
 }
 
 // One page's scene graph — src/lib/canvasEngine/sceneModel.js's shape

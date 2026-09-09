@@ -27,6 +27,7 @@ import { matchesSearch } from '../lib/search';
 import { getEvent } from '../lib/events';
 import { useContractorHydration } from '../lib/useContractorHydration';
 import { isValidEmailAddress } from '../lib/format';
+import { getStagePlotShare } from '../lib/stagePlotShare';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -200,7 +201,9 @@ export default function StagePlotEditorPage({ onClose } = {}) {
     try {
       const latestPlot = await flushActivePage();
       if (!latestPlot) return;
-      await generateStagePlotPdf({ eventId, eventName: event?.name, stagePlot: latestPlot, businessInfo: currentUser?.businessInfo });
+      const shareState = await getStagePlotShare(eventId).catch(() => null);
+      const revisionLabel = shareState?.share?.publishedRevisionNumber ? `Revision ${shareState.share.publishedRevisionNumber}${shareState.hasUnpublishedChanges ? ' — Draft changes not published' : ''}` : 'Draft — not published';
+      await generateStagePlotPdf({ eventId, eventName: event?.name, event, stagePlot: { ...latestPlot, revisionLabel }, businessInfo: currentUser?.businessInfo });
     } catch (err) {
       showToast(err.message || 'Could not export the stage plot', 'error');
     } finally {
@@ -255,13 +258,21 @@ export default function StagePlotEditorPage({ onClose } = {}) {
   async function handleOpenEmail() {
     const latestPlot = await flushActivePage();
     if (!latestPlot) return;
-    setEmailStagePlot(latestPlot);
+    const shareState = await getStagePlotShare(eventId).catch(() => null);
+    const revisionLabel = shareState?.share?.publishedRevisionNumber ? `Revision ${shareState.share.publishedRevisionNumber}${shareState.hasUnpublishedChanges ? ' — Draft changes not published' : ''}` : 'Draft — not published';
+    setEmailStagePlot({ ...latestPlot, revisionLabel });
     setEmailModalOpen(true);
   }
 
   async function handleOpenShare() {
     if (!await flushActivePage()) return;
     setShareModalOpen(true);
+  }
+
+  function handleRevisionRestored(restoredPlot) {
+    setPlot(restoredPlot);
+    setActivePageId(restoredPlot.pages[0]?.id || null);
+    setSelectedElementId(null);
   }
 
   async function handleSelectPage(pageId) {
@@ -395,7 +406,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
             data-testid="stageplot-email-button"
             className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold"
           >
-            Email
+            Send Rider
           </button>
           <button
             type="button"
@@ -404,7 +415,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
             data-testid="stageplot-export-pdf-button"
             className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold disabled:opacity-50"
           >
-            {exporting ? 'Exporting…' : 'Download PDF'}
+            {exporting ? 'Exporting…' : 'Download Rider'}
           </button>
           {isModal && (
             <button
@@ -419,7 +430,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
         </div>
       </div>
 
-      <StagePlotShareModal open={shareModalOpen} onClose={() => setShareModalOpen(false)} eventId={eventId} />
+      <StagePlotShareModal open={shareModalOpen} onClose={() => setShareModalOpen(false)} eventId={eventId} onRestored={handleRevisionRestored} />
 
       <div className="flex items-center gap-1 mb-3 border-b border-slate-200 overflow-x-auto">
         {sortedPages.map((p) => (
@@ -548,6 +559,7 @@ export default function StagePlotEditorPage({ onClose } = {}) {
         eventId={eventId}
         eventName={event?.name}
         eventDate={event?.eventDate}
+        event={event}
         stagePlot={emailStagePlot || plot}
         rosterContractors={rosterContractors}
         businessInfo={currentUser?.businessInfo}

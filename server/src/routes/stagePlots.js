@@ -14,6 +14,7 @@ import { logEquipmentUsage, getEquipmentSuggestions } from '../lib/stagePlotEqui
 import { stagePlotAudioData } from '../lib/stagePlotAudio.js';
 import { generateToken, hashToken } from '../lib/resetToken.js';
 import { linkAvailability, resolveLinkExpiration } from '../lib/linkExpiration.js';
+import { buildStagePlotSnapshot, stagePlotContentUpdatedAt, summarizeStagePlotRevision } from '../lib/stagePlotRevisions.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership), requireVertical('band_orchestra'));
@@ -54,7 +55,42 @@ function serializeShare(share) {
     lastViewedAt: share.lastViewedAt,
     viewCount: share.viewCount,
     updatedAt: share.updatedAt,
+    publishedRevisionNumber: share.publishedRevisionNumber,
   };
+}
+
+function revisionSummary(revision) {
+  return { revisionNumber: revision.revisionNumber, note: revision.note, publishedByName: revision.publishedByName, publishedAt: revision.publishedAt, summary: revision.summary };
+}
+
+async function loadRevisionSource(accountId, eventId, database = prisma) {
+  const plot = await database.stagePlot.findUnique({ where: { accountId_eventId: { accountId, eventId } }, include: { pages: true, channels: true, backlineItems: true, revisions: { orderBy: { revisionNumber: 'desc' } } } });
+  if (!plot) return null;
+  const event = await database.event.findFirst({ where: { id: eventId, accountId, deletedAt: null }, select: { name: true, eventType: true, eventDate: true, startTime: true, endTime: true, venue: true, updatedAt: true } });
+  return { plot, event };
+}
+
+async function publishRevision({ accountId, eventId, userId, note = '', rotateToken = false, expiration = null }) {
+  return withSerializableTransaction(prisma, async (tx) => {
+    const source = await loadRevisionSource(accountId, eventId, tx);
+    if (!source) return null;
+    const previous = source.plot.revisions[0] || null;
+    const snapshot = buildStagePlotSnapshot(source.plot, source.event);
+    const revisionNumber = (previous?.revisionNumber || 0) + 1;
+    const user = await tx.user.findUnique({ where: { id: userId }, select: { firstName: true, lastName: true, email: true } });
+    const publishedByName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.email || null;
+    const contentUpdatedAt = source.event?.updatedAt && new Date(source.event.updatedAt) > new Date(stagePlotContentUpdatedAt(source.plot)) ? source.event.updatedAt : stagePlotContentUpdatedAt(source.plot);
+    const thumbnailKeys = snapshot.pages.map((page) => page.thumbnailStorageKey).filter(Boolean);
+    const revision = await tx.stagePlotRevision.create({ data: { stagePlotId: source.plot.id, revisionNumber, note: String(note || '').trim().slice(0, 1000) || null, publishedByName, snapshot, thumbnailKeys, summary: summarizeStagePlotRevision(snapshot, previous?.snapshot || null), contentUpdatedAt } });
+    const token = rotateToken ? generateToken() : null;
+    const shareToken = token || generateToken();
+    const share = await tx.stagePlotShare.upsert({
+      where: { stagePlotId: source.plot.id },
+      update: { ...(token ? { tokenHash: hashToken(token), publicToken: token } : {}), ...(expiration ? { expiresAt: expiration.expiresAt } : {}), revokedAt: null, publishedRevisionNumber: revisionNumber },
+      create: { stagePlotId: source.plot.id, tokenHash: hashToken(shareToken), publicToken: shareToken, expiresAt: expiration?.expiresAt || null, publishedRevisionNumber: revisionNumber },
+    });
+    return { share, revision, contentUpdatedAt: stagePlotContentUpdatedAt(source.plot) };
+  });
 }
 
 // Get-or-create — an event's stage plot is provisioned lazily on first
@@ -90,24 +126,53 @@ router.get('/:eventId', asyncHandler(async (req, res) => {
 }));
 
 router.get('/:eventId/share', asyncHandler(async (req, res) => {
-  const plot = await prisma.stagePlot.findUnique({ where: { accountId_eventId: { accountId: req.membership.accountId, eventId: req.params.eventId } }, include: { share: true } });
+  const plot = await prisma.stagePlot.findUnique({ where: { accountId_eventId: { accountId: req.membership.accountId, eventId: req.params.eventId } }, include: { share: true, pages: true, channels: true, backlineItems: true, revisions: { orderBy: { revisionNumber: 'desc' }, take: 20 } } });
   if (!plot) return res.status(404).json({ error: 'Stage plot not found.' });
-  res.json({ share: serializeShare(plot.share) });
+  const published = plot.revisions.find((revision) => revision.revisionNumber === plot.share?.publishedRevisionNumber);
+  const event = await prisma.event.findFirst({ where: { id: req.params.eventId, accountId: req.membership.accountId }, select: { updatedAt: true } });
+  const currentUpdatedAt = event?.updatedAt && new Date(event.updatedAt) > new Date(stagePlotContentUpdatedAt(plot)) ? event.updatedAt : stagePlotContentUpdatedAt(plot);
+  res.json({ share: serializeShare(plot.share), revisions: plot.revisions.map(revisionSummary), hasUnpublishedChanges: !!plot.share && (!published || new Date(currentUpdatedAt) > new Date(published.contentUpdatedAt)) });
 }));
 
 router.post('/:eventId/share', asyncHandler(async (req, res) => {
   if (!effectivePermissions(req.membership).manageEvents) return res.status(403).json({ error: 'Not authorized.' });
-  const plot = await prisma.stagePlot.findUnique({ where: { accountId_eventId: { accountId: req.membership.accountId, eventId: req.params.eventId } } });
-  if (!plot) return res.status(404).json({ error: 'Stage plot not found.' });
   const expiration = resolveLinkExpiration(req.body?.expiration, { defaultPreset: '30_days' });
   if (expiration.error) return res.status(400).json({ error: expiration.error });
-  const token = generateToken();
-  const share = await prisma.stagePlotShare.upsert({
-    where: { stagePlotId: plot.id },
-    update: { tokenHash: hashToken(token), publicToken: token, expiresAt: expiration.expiresAt, revokedAt: null },
-    create: { stagePlotId: plot.id, tokenHash: hashToken(token), publicToken: token, expiresAt: expiration.expiresAt },
+  const result = await publishRevision({ accountId: req.membership.accountId, eventId: req.params.eventId, userId: req.session.userId, note: req.body?.note || 'Initial shared version', rotateToken: true, expiration });
+  if (!result) return res.status(404).json({ error: 'Stage plot not found.' });
+  res.status(201).json({ share: serializeShare(result.share), revision: revisionSummary(result.revision), hasUnpublishedChanges: false });
+}));
+
+router.post('/:eventId/share/publish', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) return res.status(403).json({ error: 'Not authorized.' });
+  const current = await prisma.stagePlot.findUnique({ where: { accountId_eventId: { accountId: req.membership.accountId, eventId: req.params.eventId } }, include: { share: true } });
+  if (!current?.share || linkAvailability(current.share) !== 'active') return res.status(409).json({ error: 'Create or reactivate a share link before publishing an update.' });
+  const result = await publishRevision({ accountId: req.membership.accountId, eventId: req.params.eventId, userId: req.session.userId, note: req.body?.note });
+  if (!result) return res.status(404).json({ error: 'Stage plot not found.' });
+  res.status(201).json({ share: serializeShare(result.share), revision: revisionSummary(result.revision), hasUnpublishedChanges: false });
+}));
+
+router.post('/:eventId/share/revisions/:revisionNumber/restore', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageEvents) return res.status(403).json({ error: 'Not authorized.' });
+  const plot = await prisma.stagePlot.findUnique({ where: { accountId_eventId: { accountId: req.membership.accountId, eventId: req.params.eventId } }, include: { pages: true } });
+  if (!plot) return res.status(404).json({ error: 'Stage plot not found.' });
+  const revisionNumber = Number.parseInt(req.params.revisionNumber, 10);
+  const revision = await prisma.stagePlotRevision.findUnique({ where: { stagePlotId_revisionNumber: { stagePlotId: plot.id, revisionNumber } } });
+  if (!revision) return res.status(404).json({ error: 'Revision not found.' });
+  const snapshot = revision.snapshot;
+  await prisma.$transaction(async (tx) => {
+    await tx.stagePlotChannel.deleteMany({ where: { stagePlotId: plot.id } });
+    await tx.stagePlotBacklineItem.deleteMany({ where: { stagePlotId: plot.id } });
+    await tx.stagePlotPage.deleteMany({ where: { stagePlotId: plot.id } });
+    await Promise.all([
+      ...(snapshot.pages || []).map((page) => tx.stagePlotPage.create({ data: { stagePlotId: plot.id, order: page.order, name: page.name, scene: page.scene, thumbnailStorageKey: page.thumbnailStorageKey } })),
+      ...(snapshot.channels || []).map((channel) => tx.stagePlotChannel.create({ data: { stagePlotId: plot.id, ...channel } })),
+      ...(snapshot.backlineItems || []).map((item) => tx.stagePlotBacklineItem.create({ data: { stagePlotId: plot.id, ...item } })),
+    ]);
   });
-  res.status(201).json({ share: serializeShare(share) });
+  await Promise.all([...new Set(plot.pages.map((page) => page.thumbnailStorageKey).filter(Boolean))].map((key) => deleteStagePlotThumbnailIfUnused(key)));
+  const restored = await getOrCreatePlot(req.membership.accountId, req.params.eventId);
+  res.json({ stagePlot: serializePlot(restored), restoredRevisionNumber: revisionNumber });
 }));
 
 router.delete('/:eventId/share', asyncHandler(async (req, res) => {
@@ -654,34 +719,32 @@ const publicStagePlotLimiter = createRateLimiter('public-stage-plot', { windowMs
 publicStagePlotsRouter.get('/:token', publicStagePlotLimiter, asyncHandler(async (req, res) => {
   const share = await prisma.stagePlotShare.findUnique({
     where: { tokenHash: hashToken(req.params.token) },
-    include: { stagePlot: { include: { pages: true, channels: true, backlineItems: true } } },
+    include: { stagePlot: { include: { pages: true, channels: true, backlineItems: true, revisions: true } } },
   });
   if (!share) return res.status(404).json({ error: 'This stage plot link is invalid.' });
   const availability = linkAvailability(share);
   if (availability !== 'active') return res.status(410).json({ error: availability === 'revoked' ? 'This stage plot link has been revoked.' : 'This stage plot link has expired.', reason: availability });
 
+  const revision = share.stagePlot.revisions.find((item) => item.revisionNumber === share.publishedRevisionNumber);
   const event = await prisma.event.findFirst({ where: { id: share.stagePlot.eventId, accountId: share.stagePlot.accountId, deletedAt: null }, select: { name: true, eventType: true, eventDate: true, startTime: true, endTime: true, venue: true } });
-  const pages = await Promise.all(share.stagePlot.pages.slice().sort((a, b) => a.order - b.order).map(async (page) => ({
-    id: page.id,
+  const snapshot = revision?.snapshot || buildStagePlotSnapshot(share.stagePlot, event);
+  const pages = await Promise.all((snapshot.pages || []).slice().sort((a, b) => a.order - b.order).map(async (page, index) => ({
+    id: `page-${index}`,
     order: page.order,
     name: page.name,
     imageUrl: page.thumbnailStorageKey ? await getSignedDownloadUrl(page.thumbnailStorageKey, `${page.name || 'stage-plot'}.png`).catch(() => null) : null,
   })));
   const updated = await prisma.stagePlotShare.update({ where: { id: share.id }, data: { lastViewedAt: new Date(), viewCount: { increment: 1 } } });
-  const channelFields = ['channelNumber', 'source', 'musicianName', 'phantomPower', 'powerNeeded', 'monitorNotes', 'inputType', 'preferredDevice', 'substituteDevice', 'standType', 'connectionType', 'channelFormat', 'stageboxName', 'stageboxInput', 'providedBy', 'monitorMix', 'powerDetails', 'cableDetails'];
-  const publicChannel = (channel) => Object.fromEntries(channelFields.map((field) => [field, channel[field]]));
-  const latestContentUpdate = [share.stagePlot.updatedAt, ...share.stagePlot.pages.map((item) => item.updatedAt), ...share.stagePlot.channels.map((item) => item.updatedAt), ...share.stagePlot.backlineItems.map((item) => item.updatedAt)].reduce((latest, value) => new Date(value) > new Date(latest) ? value : latest);
-  const venue = event?.venue && typeof event.venue === 'object' ? event.venue : {};
   res.json({
     stagePlot: {
-      name: share.stagePlot.name,
-      event: event ? { name: event.name, eventType: event.eventType, eventDate: event.eventDate, startTime: event.startTime, endTime: event.endTime, venue: { name: venue.name || null, address1: venue.address1 || null, address2: venue.address2 || null, city: venue.city || null, state: venue.state || null, zip: venue.zip || null } } : null,
+      name: snapshot.name,
+      event: snapshot.event,
       pages,
-      channels: share.stagePlot.channels.slice().sort((a, b) => a.channelNumber - b.channelNumber).map(publicChannel),
-      backlineItems: share.stagePlot.backlineItems.map((item) => ({ item: item.item, quantity: item.quantity, providedBy: item.providedBy, notesHtml: item.notesHtml })),
-      updatedAt: latestContentUpdate,
+      channels: snapshot.channels || [],
+      backlineItems: snapshot.backlineItems || [],
+      updatedAt: revision?.contentUpdatedAt || stagePlotContentUpdatedAt(share.stagePlot),
     },
-    share: { expiresAt: updated.expiresAt, viewCount: updated.viewCount },
+    share: { expiresAt: updated.expiresAt, viewCount: updated.viewCount, revision: revision ? revisionSummary(revision) : null },
   });
 }));
 

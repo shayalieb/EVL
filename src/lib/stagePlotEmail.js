@@ -1,4 +1,4 @@
-import { formatEventDate } from './format';
+import { formatEventDate, formatEventTime } from './format';
 import { escapeHtml } from './htmlEscape';
 import { fetchStagePlotPageThumbnail } from './stagePlots';
 import { stagePlotNotesToPlainText } from './stagePlotNotes';
@@ -9,6 +9,7 @@ const PROVIDED_BY_LABELS = { band: 'Band', venue: 'Venue', rental: 'Rental' };
 // so a "checked" object built from these can be passed straight through to
 // both the PDF and the email-body builders below.
 export const STAGE_PLOT_VIEW_OPTIONS = [
+  { key: 'eventDetails', label: 'Event & Contacts' },
   { key: 'pages', label: 'Stage Plot' },
   { key: 'channels', label: 'Production List' },
   { key: 'backlineItems', label: 'Backline List' },
@@ -21,7 +22,8 @@ export function buildStagePlotEmailSubject({ businessName, eventName, eventDate,
   const labels = STAGE_PLOT_VIEW_OPTIONS.filter((o) => checked[o.key]).map((o) => o.label);
   const dateLabel = eventDate ? formatEventDate(eventDate) : '';
   const eventPart = [eventName, dateLabel && `(${dateLabel})`].filter(Boolean).join(' ');
-  return [businessName || 'GigWorks', eventPart, labels.join(', ') || 'Stage Plot Info'].filter(Boolean).join(' — ');
+  const fullPackage = labels.length === STAGE_PLOT_VIEW_OPTIONS.length;
+  return [businessName || 'GigWorks', eventPart, fullPackage ? 'Technical Production Package' : labels.join(', ') || 'Stage Plot Info'].filter(Boolean).join(' — ');
 }
 
 const cellStyle = 'padding:4px 8px;border-bottom:1px solid #e2e8f0;';
@@ -49,9 +51,22 @@ function tableHtml(headers, rows) {
 // clients. Notes fields (monitorNotes/notesHtml) are already-composed rich
 // text HTML, inserted as-is rather than escaped — everything else is a
 // plain value and gets escapeHtml'd.
-export async function buildStagePlotViewsHtml({ eventId, stagePlot, checked }) {
-  const sections = [];
+export async function buildStagePlotViewsHtml({ eventId, event, businessInfo, stagePlot, checked }) {
+  const sections = stagePlot.revisionLabel ? [`<p style="font-size:12px;font-weight:700;color:#4f46e5;">${escapeHtml(stagePlot.revisionLabel)}</p>`] : [];
   const inlineImages = [];
+
+  if (checked.eventDetails) {
+    const venue = event?.venue || {};
+    const eventRows = [
+      ['Event', event?.name], ['Date', formatEventDate(event?.eventDate)], ['Performance', [formatEventTime(event?.startTime), formatEventTime(event?.endTime)].filter(Boolean).join(' – ')],
+      ['Venue', venue.name], ['Address', [venue.address1, venue.address2, venue.city, venue.state, venue.zip].filter(Boolean).join(', ')],
+      ['Load-in', venue.loadInInfo], ['Venue production contact', [venue.contactName, venue.contactPhone, venue.contactEmail].filter(Boolean).join(' · ')],
+      ['Day-of contact', [event?.contactPhone, event?.contactEmail].filter(Boolean).join(' · ')],
+      ['Artist contact', [businessInfo?.name, businessInfo?.phone, businessInfo?.email].filter(Boolean).join(' · ')],
+    ].filter(([, value]) => value).map(([label, value]) => `<tr><td style="${headStyle}">${escapeHtml(label)}</td><td style="${cellStyle}">${escapeHtml(value)}</td></tr>`);
+    const scheduleRows = (event?.schedule || []).filter((item) => item.time || item.name || item.details).map((item) => `<tr><td style="${cellStyle}">${escapeHtml(formatEventTime(item.time))}</td><td style="${cellStyle}">${escapeHtml(item.name || '')}</td><td style="${cellStyle}">${escapeHtml(item.details || '')}</td></tr>`);
+    sections.push(`<h3 style="${sectionHeadingStyle}">Event & Production Contacts</h3><table style="width:100%;border-collapse:collapse;font-size:12px;"><tbody>${eventRows.join('')}</tbody></table>${scheduleRows.length ? `<h3 style="${sectionHeadingStyle}">Schedule</h3>${tableHtml(['Time', 'Item', 'Details'], scheduleRows)}` : ''}`);
+  }
 
   if (checked.pages) {
     const sortedPages = stagePlot.pages.slice().sort((a, b) => a.order - b.order);

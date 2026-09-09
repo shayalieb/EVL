@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Modal from './ui/Modal';
 import RichTextToolbar from './ui/RichTextToolbar';
 import { useToast } from './ui/Toast';
@@ -6,6 +6,7 @@ import { STAGE_PLOT_VIEW_OPTIONS, buildStagePlotEmailSubject, buildStagePlotView
 import { generateStagePlotPdfAttachment } from '../lib/stagePlotPdf';
 import { sendThreadedEmail } from '../lib/email/threads';
 import { sendEmail } from '../lib/email/send';
+import { getStagePlotReadiness } from '../lib/stagePlotReadiness';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -17,7 +18,7 @@ function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
-const DEFAULT_CHECKED = { pages: true, channels: true, backlineItems: true };
+const DEFAULT_CHECKED = { eventDetails: true, pages: true, channels: true, backlineItems: true };
 
 // Compose an email for the Stage Plot editor — recipients are contractors
 // on this event's roster (full reply-tracking via the same threaded system
@@ -27,7 +28,7 @@ const DEFAULT_CHECKED = { pages: true, channels: true, backlineItems: true };
 // rendered straight into the email body (buildStagePlotViewsHtml) below the
 // user's own message, and the same selection drives a single combined PDF
 // attachment (generateStagePlotPdfAttachment's `include`).
-export default function StagePlotEmailModal({ open, onClose, eventId, eventName, eventDate, stagePlot, rosterContractors, businessInfo, fromName, onSent }) {
+export default function StagePlotEmailModal({ open, onClose, eventId, eventName, eventDate, event, stagePlot, rosterContractors, businessInfo, fromName, onSent }) {
   const { showToast } = useToast();
   const [selectedContractorIds, setSelectedContractorIds] = useState([]);
   const [adhocEmails, setAdhocEmails] = useState([]);
@@ -37,6 +38,12 @@ export default function StagePlotEmailModal({ open, onClose, eventId, eventName,
   const [subjectTouched, setSubjectTouched] = useState(false);
   const [sending, setSending] = useState(false);
   const bodyRef = useRef(null);
+  const readiness = useMemo(() => getStagePlotReadiness(stagePlot), [stagePlot]);
+  const packageCounts = {
+    pages: stagePlot?.pages?.length || 0,
+    inputs: stagePlot?.channels?.length || 0,
+    backline: stagePlot?.backlineItems?.length || 0,
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -84,9 +91,9 @@ export default function StagePlotEmailModal({ open, onClose, eventId, eventName,
     setSending(true);
     try {
       const userBody = bodyRef.current?.innerHTML || '';
-      const { html: viewsHtml, inlineImages } = await buildStagePlotViewsHtml({ eventId, stagePlot, checked });
+      const { html: viewsHtml, inlineImages } = await buildStagePlotViewsHtml({ eventId, event, businessInfo, stagePlot, checked });
       const fullBody = `${userBody}${viewsHtml}`;
-      const pdfAttachment = await generateStagePlotPdfAttachment({ eventId, eventName, stagePlot, businessInfo, include: checked });
+      const pdfAttachment = await generateStagePlotPdfAttachment({ eventId, eventName, event, stagePlot, businessInfo, include: checked });
 
       let successCount = 0;
       for (const contractorId of selectedContractorIds) {
@@ -133,8 +140,13 @@ export default function StagePlotEmailModal({ open, onClose, eventId, eventName,
   }
 
   return (
-    <Modal open={open} onClose={handleClose} title="Email Stage Plot" widthClass="max-w-2xl">
+    <Modal open={open} onClose={handleClose} title="Send Technical Package" widthClass="max-w-2xl">
       <div className="space-y-4">
+        <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-3 text-sm text-indigo-800">One coordinated package for the venue or production team: event contacts, schedule, stage plot, input and audio details, and backline. Uncheck anything this recipient does not need.</div>
+        <div className={`rounded-lg border p-3 text-sm ${readiness.ready ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+          <div className="font-semibold">{readiness.ready ? 'Ready to send' : `${readiness.requiredCount} production item${readiness.requiredCount === 1 ? '' : 's'} still need attention`}</div>
+          <div className="mt-0.5 text-xs">{packageCounts.pages} stage plot page{packageCounts.pages === 1 ? '' : 's'} · {packageCounts.inputs} input{packageCounts.inputs === 1 ? '' : 's'} · {packageCounts.backline} backline item{packageCounts.backline === 1 ? '' : 's'}{!readiness.ready ? ' · Sending is still allowed.' : ''}</div>
+        </div>
         <div>
           <label className={labelClass}>Recipients</label>
           {rosterContractors.length === 0 ? (
