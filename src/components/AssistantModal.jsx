@@ -15,17 +15,31 @@ function formatActivityTime(iso) {
   return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
+// Assistant answers use a deliberately small, safe subset of Markdown.
+// Rendering tokens as React text/components keeps account content escaped
+// while preventing formatting markers such as **Settings** from appearing
+// literally in the conversation.
+function InlineAssistantContent({ text }) {
+  const parts = String(text || '').split(/(\*\*[^*\n]+\*\*|`[^`\n]+`|\*[^*\n]+\*)/g).filter(Boolean);
+  return parts.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) return <strong key={index} className="font-semibold text-slate-900">{part.slice(2, -2)}</strong>;
+    if (part.startsWith('`') && part.endsWith('`')) return <code key={index} className="rounded bg-slate-200/70 px-1 py-0.5 font-mono text-[0.9em] text-slate-800">{part.slice(1, -1)}</code>;
+    if (part.startsWith('*') && part.endsWith('*')) return <em key={index}>{part.slice(1, -1)}</em>;
+    return part;
+  });
+}
+
 function AssistantMessageContent({ content }) {
   const lines = String(content || '').split('\n');
   return <div className="space-y-1.5">{lines.map((line, index) => {
     const trimmed = line.trim();
     if (!trimmed) return <div key={index} className="h-1" />;
-    if (/^#{1,3}\s+/.test(trimmed)) return <p key={index} className="pt-1 font-bold text-slate-900">{trimmed.replace(/^#{1,3}\s+/, '')}</p>;
+    if (/^#{1,3}\s+/.test(trimmed)) return <p key={index} className="pt-1 font-bold text-slate-900"><InlineAssistantContent text={trimmed.replace(/^#{1,3}\s+/, '')} /></p>;
     const numbered = trimmed.match(/^(\d+)[.)]\s+(.+)/);
-    if (numbered) return <div key={index} className="grid grid-cols-[1.5rem_1fr] gap-1"><span className="font-bold text-indigo-600">{numbered[1]}.</span><span>{numbered[2]}</span></div>;
+    if (numbered) return <div key={index} className="grid grid-cols-[1.5rem_1fr] gap-1"><span className="font-bold text-indigo-600">{numbered[1]}.</span><span><InlineAssistantContent text={numbered[2]} /></span></div>;
     const bullet = trimmed.match(/^[-*•]\s+(.+)/);
-    if (bullet) return <div key={index} className="grid grid-cols-[1rem_1fr] gap-1"><span className="font-bold text-indigo-500">•</span><span>{bullet[1]}</span></div>;
-    return <p key={index}>{trimmed}</p>;
+    if (bullet) return <div key={index} className="grid grid-cols-[1rem_1fr] gap-1"><span className="font-bold text-indigo-500">•</span><span><InlineAssistantContent text={bullet[1]} /></span></div>;
+    return <p key={index}><InlineAssistantContent text={trimmed} /></p>;
   })}</div>;
 }
 
