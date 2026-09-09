@@ -1246,6 +1246,21 @@ model EmailDomain {
   dnsRecords     Json // Resend's returned record list — auto-applied (GoDaddy) or shown as instructions, per isCustomDomain
   verifiedAt     DateTime?
 
+  // A replacement is verified alongside the active domain. Mail keeps
+  // using the active verified domain until the candidate is promoted.
+  pendingDomain         String?   @unique
+  pendingIsCustomDomain Boolean?
+  pendingResendDomainId String?   @unique
+  pendingStatus         String?
+  pendingDnsRecords     Json?
+  pendingCreatedAt      DateTime?
+  sendingStatus          String @default("pending")
+  receivingStatus        String @default("pending")
+  pendingSendingStatus   String?
+  pendingReceivingStatus String?
+  lastHealthCheckedAt    DateTime?
+  lastTestEmailAt        DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

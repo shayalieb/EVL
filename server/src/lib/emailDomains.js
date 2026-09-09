@@ -1,6 +1,8 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from './prisma.js';
-import { createResendDomain, verifyResendDomain } from './resendDomains.js';
+import { createResendDomain, verifyResendDomain, deleteResendDomain } from './resendDomains.js';
 import { addDnsRecords, ROOT_DOMAIN } from './godaddyDns.js';
+import { analyzeEmailDomainRecords } from './emailDomainHealth.js';
 
 const SUBDOMAIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 // Reserved so a business can't claim a name the platform itself might need
@@ -122,11 +124,100 @@ export async function provisionCustomEmailDomain(accountId, rawDomain) {
 export async function refreshEmailDomainStatus(accountId) {
   const existing = await prisma.emailDomain.findUnique({ where: { accountId } });
   if (!existing) return null;
+  if (existing.pendingResendDomainId) {
+    const { status, dnsRecords } = await verifyResendDomain(existing.pendingResendDomainId);
+    const health = analyzeEmailDomainRecords(dnsRecords);
+    if (health.sendingStatus !== 'verified') {
+      return prisma.emailDomain.update({
+        where: { accountId },
+        data: { pendingStatus: status, pendingDnsRecords: dnsRecords, pendingSendingStatus: health.sendingStatus, pendingReceivingStatus: health.receivingStatus, lastHealthCheckedAt: new Date() },
+      });
+    }
+    const oldResendDomainId = existing.resendDomainId;
+    const promoted = await prisma.emailDomain.update({
+      where: { accountId },
+      data: {
+        domain: existing.pendingDomain,
+        isCustomDomain: existing.pendingIsCustomDomain,
+        resendDomainId: existing.pendingResendDomainId,
+        status: health.sendingStatus,
+        dnsRecords,
+        sendingStatus: health.sendingStatus,
+        receivingStatus: health.receivingStatus,
+        verifiedAt: new Date(),
+        pendingDomain: null,
+        pendingIsCustomDomain: null,
+        pendingResendDomainId: null,
+        pendingStatus: null,
+        pendingDnsRecords: Prisma.DbNull,
+        pendingCreatedAt: null,
+        pendingSendingStatus: null,
+        pendingReceivingStatus: null,
+        lastHealthCheckedAt: new Date(),
+      },
+    });
+    deleteResendDomain(oldResendDomainId).catch(() => {});
+    return promoted;
+  }
   const { status, dnsRecords } = await verifyResendDomain(existing.resendDomainId);
+  const health = analyzeEmailDomainRecords(dnsRecords);
   return prisma.emailDomain.update({
     where: { accountId },
-    data: { status, dnsRecords, verifiedAt: status === 'verified' ? new Date() : existing.verifiedAt },
+    data: { status, dnsRecords, ...health, lastHealthCheckedAt: new Date(), verifiedAt: health.sendingStatus === 'verified' ? (existing.verifiedAt || new Date()) : existing.verifiedAt },
   });
+}
+
+export async function startCustomEmailDomainReplacement(accountId, rawDomain) {
+  const existing = await prisma.emailDomain.findUnique({ where: { accountId } });
+  if (!existing) throw Object.assign(new Error('No email domain is configured yet.'), { status: 404 });
+  const { valid, value: domain, error } = validateCustomDomain(rawDomain);
+  if (!valid) throw Object.assign(new Error(error), { status: 400 });
+  if (domain === existing.domain) throw Object.assign(new Error('That is already your active domain.'), { status: 400 });
+
+  const replacement = await createResendDomain(domain);
+  try {
+    const updated = await prisma.emailDomain.update({
+      where: { accountId },
+      data: {
+        pendingDomain: domain,
+        pendingIsCustomDomain: true,
+        pendingResendDomainId: replacement.resendDomainId,
+        pendingStatus: 'pending',
+        pendingDnsRecords: replacement.dnsRecords,
+      pendingCreatedAt: new Date(),
+      pendingSendingStatus: 'pending',
+      pendingReceivingStatus: 'pending',
+      },
+    });
+    if (existing.pendingResendDomainId) deleteResendDomain(existing.pendingResendDomainId).catch(() => {});
+    return updated;
+  } catch (err) {
+    deleteResendDomain(replacement.resendDomainId).catch(() => {});
+    if (err.code === 'P2002') throw Object.assign(new Error('That domain is already in use.'), { status: 409 });
+    throw err;
+  }
+}
+
+export async function cancelEmailDomainReplacement(accountId) {
+  const existing = await prisma.emailDomain.findUnique({ where: { accountId } });
+  if (!existing?.pendingResendDomainId) return existing;
+  const removedResendDomainId = existing.pendingResendDomainId;
+  const updated = await prisma.emailDomain.update({
+    where: { accountId },
+    data: { pendingDomain: null, pendingIsCustomDomain: null, pendingResendDomainId: null, pendingStatus: null, pendingDnsRecords: Prisma.DbNull, pendingCreatedAt: null, pendingSendingStatus: null, pendingReceivingStatus: null },
+  });
+  deleteResendDomain(removedResendDomainId).catch(() => {});
+  return updated;
+}
+
+export async function removeEmailDomain(accountId) {
+  const existing = await prisma.emailDomain.findUnique({ where: { accountId } });
+  if (!existing) return;
+  await prisma.emailDomain.delete({ where: { accountId } });
+  await Promise.allSettled([
+    existing.pendingResendDomainId && deleteResendDomain(existing.pendingResendDomainId),
+    deleteResendDomain(existing.resendDomainId),
+  ].filter(Boolean));
 }
 
 export async function getEmailDomain(accountId) {
@@ -137,5 +228,5 @@ export async function getEmailDomain(accountId) {
 // usable, so callers never need to re-check status themselves.
 export async function getVerifiedEmailDomain(accountId) {
   const domain = await prisma.emailDomain.findUnique({ where: { accountId } });
-  return domain?.status === 'verified' ? domain : null;
+  return domain?.sendingStatus === 'verified' || domain?.status === 'verified' ? domain : null;
 }

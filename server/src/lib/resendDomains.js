@@ -31,3 +31,10 @@ export async function getResendDomainStatus(resendDomainId) {
   if (error) throw new Error(error.message || 'Failed to fetch domain status.');
   return { status: data.status, dnsRecords: data.records };
 }
+
+export async function deleteResendDomain(resendDomainId) {
+  if (!resendDomainId) return;
+  const resend = getResendClient();
+  const { error } = await resend.domains.remove(resendDomainId);
+  if (error) throw new Error(error.message || 'Failed to remove Resend domain.');
+}

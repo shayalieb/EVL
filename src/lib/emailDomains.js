@@ -19,3 +19,21 @@ export async function verifyEmailDomain() {
   const data = await apiFetch('/email-domains/verify', { method: 'POST' });
   return data.domain;
 }
+
+export async function replaceEmailDomain(domain) {
+  const data = await apiFetch('/email-domains/replacement', { method: 'POST', body: JSON.stringify({ domain }) });
+  return data.domain;
+}
+
+export async function cancelEmailDomainReplacement() {
+  const data = await apiFetch('/email-domains/replacement', { method: 'DELETE' });
+  return data.domain;
+}
+
+export async function removeEmailDomain() {
+  await apiFetch('/email-domains', { method: 'DELETE' });
+}
+
+export async function sendEmailDomainTest(to) {
+  return apiFetch('/email-domains/test-email', { method: 'POST', body: JSON.stringify({ to }) });
+}

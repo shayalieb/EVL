@@ -60,6 +60,7 @@ import { startReminderRuleEngine } from './lib/reminderRuleEngine.js';
 import { startDeletedRecordPurger } from './lib/deletedRecordPurger.js';
 import { startInquiryLinkPurger } from './lib/inquiryLinkPurger.js';
 import { startQuickBooksReconciliationScheduler } from './lib/quickBooksReconciliation.js';
+import { startEmailDomainHealthScheduler } from './lib/emailDomainHealthScheduler.js';
 import { ensureCsrfCookie } from './lib/csrf.js';
 import { asyncHandler } from './lib/asyncHandler.js';
 import { validateRuntimeConfig } from './lib/runtimeConfig.js';
@@ -345,6 +346,7 @@ export function startServer() {
       startDeletedRecordPurger(),
       startInquiryLinkPurger(),
       startQuickBooksReconciliationScheduler(),
+      startEmailDomainHealthScheduler(),
     );
   });
   server.once('error', (err) => {
