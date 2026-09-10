@@ -74,7 +74,8 @@ function buildFieldMap({ event, contractor, booking, contractors, pricingTierId 
     if (event.eventNote) params.set('description', event.eventNote);
     if (contractor.email) params.set('attendeeEmail', contractor.email);
     if (contractor.firstName || contractor.lastName) params.set('attendeeName', `${contractor.firstName} ${contractor.lastName}`.trim());
-    addToCalendar = `<a href="${import.meta.env.VITE_API_BASE}/calendar/invite.ics?${params.toString()}">Add to Calendar</a>`;
+    const apiBase = import.meta.env.PROD ? '/api' : (import.meta.env.VITE_API_BASE || '/api');
+    addToCalendar = `<a href="${apiBase}/calendar/invite.ics?${params.toString()}">Add to Calendar</a>`;
   }
   return {
     ContractorFirstName: escapeHtml(contractor.firstName),

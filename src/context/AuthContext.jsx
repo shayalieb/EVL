@@ -9,10 +9,14 @@ import { createVenue } from '../lib/venues';
 import { syncCatalog } from '../lib/offerings';
 import { syncSetListLibrary } from '../lib/setListLibrary';
 
-// Relative in production (e.g. `/api`) — vercel.json proxies /api/* to the
-// Railway backend so the browser only ever talks to the frontend's own
-// domain, keeping the session cookie first-party. See .env.example.
-export const API_BASE = import.meta.env.VITE_API_BASE;
+// Always relative in production — vercel.json/netlify.toml proxy /api/* to
+// Railway, so the browser only talks to the frontend's own domain and the
+// session cookie stays first-party. Do not let a stale deployment-level
+// VITE_API_BASE override silently turn authentication into a third-party-
+// cookie dependency. Development can still point directly at localhost.
+export const API_BASE = import.meta.env.PROD
+  ? '/api'
+  : (import.meta.env.VITE_API_BASE || '/api');
 
 // True for both "never approved" and "approved, but billing lapsed since" —
 // either way every account-scoped route 403s (see membership.js's
