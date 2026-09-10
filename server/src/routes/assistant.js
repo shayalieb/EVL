@@ -47,9 +47,21 @@ function requireBookingsPermission(req, res) {
 const HISTORY_CONTEXT_TURNS = 20;
 const HISTORY_RETENTION_DAYS = 7;
 const PROPOSAL_TTL_MS = 30 * 60 * 1000;
-const TRAINING_GUIDE_STEP_COUNTS = new Map([['setup-business', 4], ['first-booking', 4], ['staff-event', 4], ['invoice-payment', 4], ['pay-contractors', 3], ['day-of', 3]]);
+const TRAINING_GUIDE_STEP_COUNTS = new Map([['setup-business', 4], ['migrate-data', 5], ['first-booking', 4], ['staff-event', 4], ['invoice-payment', 4], ['pay-contractors', 3], ['day-of', 3]]);
 
 export function fallbackTrainingAnswer(question) {
+  const migrationQuestion = /(migrat|import|pandadoc|google calendar|client (?:csv|list)|move (?:my|our) (?:data|records|clients))/i.test(String(question || ''));
+  if (migrationQuestion) {
+    const source = /pandadoc/i.test(question) ? 'PandaDoc' : /google calendar/i.test(question) ? 'Google Calendar' : /client (?:csv|list)/i.test(question) ? 'client list' : null;
+    return {
+      answer: source
+        ? `## Step 1: Export from ${source}\nOpen the migration guide and follow only the ${source} export instructions. Save an untouched copy of the export; nothing should be deleted from the source system.\n\nTell me when the export is ready, or paste any warning you see.`
+        : '## Step 1: Choose your source\nWhich system are you moving data from — PandaDoc, Google Calendar, or a client CSV? I’ll give you one step at a time.',
+      pendingAction: null,
+      link: { recordType: 'help', recordId: 'migration-center', label: 'Migrate your data into GigWorks' },
+      fallback: true,
+    };
+  }
   if (!/(how (?:do|can|should)|teach|train|training|help|getting started|where (?:is|do)|show me how)/i.test(String(question || ''))) return null;
   const articles = findHelpArticles(question);
   if (!articles.length) return null;

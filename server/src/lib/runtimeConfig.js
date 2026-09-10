@@ -24,6 +24,14 @@ export function validateRuntimeConfig(env = process.env) {
       if (env.QUICKBOOKS_REDIRECT_URI && !isHttpsUrl(env.QUICKBOOKS_REDIRECT_URI)) errors.push('QUICKBOOKS_REDIRECT_URI must be a valid HTTPS URL in production.');
       if (env.QUICKBOOKS_TOKEN_ENCRYPTION_KEY && env.QUICKBOOKS_TOKEN_ENCRYPTION_KEY.length < 32) errors.push('QUICKBOOKS_TOKEN_ENCRYPTION_KEY must be at least 32 characters.');
     }
+    const googleCalendarConfigured = !!(env.GOOGLE_CALENDAR_CLIENT_ID || env.GOOGLE_CALENDAR_CLIENT_SECRET || env.GOOGLE_CALENDAR_REDIRECT_URI || env.GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY);
+    if (googleCalendarConfigured) {
+      for (const key of ['GOOGLE_CALENDAR_CLIENT_ID', 'GOOGLE_CALENDAR_CLIENT_SECRET', 'GOOGLE_CALENDAR_REDIRECT_URI', 'GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY']) {
+        if (!env[key]) errors.push(`${key} is required when Google Calendar OAuth is configured.`);
+      }
+      if (env.GOOGLE_CALENDAR_REDIRECT_URI && !isHttpsUrl(env.GOOGLE_CALENDAR_REDIRECT_URI)) errors.push('GOOGLE_CALENDAR_REDIRECT_URI must be a valid HTTPS URL in production.');
+      if (env.GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY && env.GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY.length < 32) errors.push('GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY must be at least 32 characters.');
+    }
     const twilioConfigured = !!(env.TWILIO_ACCOUNT_SID || env.TWILIO_AUTH_TOKEN);
     if (twilioConfigured) {
       if (!(env.TWILIO_ACCOUNT_SID || '').trim()) errors.push('TWILIO_ACCOUNT_SID is required when SMS is configured.');

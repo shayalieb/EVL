@@ -9,7 +9,7 @@ import AssistantModal from '../components/AssistantModal';
 import { ASSISTANT_GUIDES } from '../lib/assistantGuides';
 import { getAssistantTrainingProgress, saveAssistantTrainingProgress } from '../lib/assistant';
 
-const TRAINING_ORDER = ['setup-business', 'first-booking', 'staff-event', 'invoice-payment', 'pay-contractors', 'day-of'];
+const TRAINING_ORDER = ['setup-business', 'migrate-data', 'first-booking', 'staff-event', 'invoice-payment', 'pay-contractors', 'day-of'];
 
 const NAV_GROUPS = [
   {

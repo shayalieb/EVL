@@ -25,6 +25,7 @@ import invoicesRouter, { publicInvoicesRouter } from './routes/invoices.js';
 import inquiryLinksRouter, { publicInquiryLinksRouter } from './routes/inquiryLinks.js';
 import stripeWebhooksRouter from './routes/stripeWebhooks.js';
 import calendarRouter from './routes/calendar.js';
+import googleCalendarRouter from './routes/googleCalendar.js';
 import supportRouter from './routes/support.js';
 import { publicLandingRouter } from './routes/landing.js';
 import adminRouter from './routes/admin.js';
@@ -288,6 +289,7 @@ app.use('/api/agreements', designPartnerAgreementsRouter);
 app.use('/api/financials', financialsRouter);
 app.use('/api/integrations/quickbooks', quickBooksRouter);
 app.use('/api/integrations/quickbooks/sync', quickBooksSyncRouter);
+app.use('/api/integrations/google-calendar', googleCalendarRouter);
 // Client-facing self-service portal — public/token-login, own session
 // scope (portalSession above), see routes/portal.js.
 app.use('/api/portal', portalSession, portalRouter);

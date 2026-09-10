@@ -168,6 +168,7 @@ model Account {
   signupInterval            String? // 'month' | 'year'
   messagingProfile          MessagingProfile?
   quickBooksConnection      QuickBooksConnection?
+  googleCalendarConnection  GoogleCalendarConnection?
   quickBooksPilot           QuickBooksPilot?
   quickBooksAccessEnabled   Boolean               @default(false)
   quickBooksAccessEnabledAt DateTime?
@@ -195,6 +196,23 @@ model Account {
   // the 30-day-advance-notice email (designPartnerExpiryScheduler.js).
   freeAccessExpiresAt           DateTime?
   designPartnerExpiryNotifiedAt DateTime?
+}
+
+// Read-only Google Calendar connection used to select and preview calendars
+// in Migration Center. Tokens are encrypted before they reach Prisma.
+model GoogleCalendarConnection {
+  id                    String   @id @default(cuid())
+  accountId             String   @unique
+  account               Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  googleEmail           String?
+  accessTokenEncrypted  String   @db.Text
+  refreshTokenEncrypted String?  @db.Text
+  accessTokenExpiresAt  DateTime
+  connectedByUserId     String?
+  status                String   @default("active")
+  lastError             String?  @db.Text
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
 
 // One row per legal document (NDA, non-compete) a design partner account

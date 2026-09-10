@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assistantToolNamesForPermissions, eventAttentionIssues, financialSnapshot, findHelpArticles, updateClientAction, updateEventAction } from '../src/lib/gigworksAssistant.js';
+import { assistantToolNamesForPermissions, eventAttentionIssues, financialSnapshot, findHelpArticles, migrationAssistantInstructions, updateClientAction, updateEventAction } from '../src/lib/gigworksAssistant.js';
 import { fallbackTrainingAnswer } from '../src/routes/assistant.js';
 import { ASSISTANT_GUIDES } from '../../src/lib/assistantGuides.js';
 import { HELP_ARTICLES_FLAT } from '../../src/lib/helpArticles.js';
@@ -97,6 +97,21 @@ test('local training search works without calling an AI provider', () => {
   assert.match(articles[0].content, /stage/i);
 });
 
+test('migration help is searchable for PandaDoc and calendar questions', () => {
+  for (const question of ['move my PandaDoc records', 'import old Google Calendar events', 'migrate a client CSV']) {
+    const articles = findHelpArticles(question);
+    assert.ok(articles.some((article) => article.id === 'migration-center'), question);
+  }
+});
+
+test('migration assistant pauses at safety checkpoints', () => {
+  const instructions = migrationAssistantInstructions();
+  assert.match(instructions, /exactly one next step per turn/i);
+  assert.match(instructions, /preview changes nothing/i);
+  assert.match(instructions, /Never advance to confirmation/i);
+  assert.match(instructions, /remain separate bookings/i);
+});
+
 test('training fallback returns useful steps and a verified Help Center link', () => {
   const result = fallbackTrainingAnswer('Teach me how to create and send an invoice');
   assert.equal(result.fallback, true);
@@ -106,6 +121,15 @@ test('training fallback returns useful steps and a verified Help Center link', (
   assert.match(result.answer, /full guide/i);
 });
 
+test('migration fallback starts with one source-specific step', () => {
+  const unknown = fallbackTrainingAnswer('Help me migrate my records');
+  assert.equal(unknown.link.recordId, 'migration-center');
+  assert.match(unknown.answer, /Which system/i);
+  const pandaDoc = fallbackTrainingAnswer('Import my PandaDoc data');
+  assert.match(pandaDoc.answer, /Step 1: Export from PandaDoc/i);
+  assert.doesNotMatch(pandaDoc.answer, /Confirm and import/i);
+});
+
 test('ordinary operational questions do not receive a generic training fallback', () => {
   assert.equal(fallbackTrainingAnswer('Which invoices are overdue?'), null);
 });
@@ -113,6 +137,8 @@ test('ordinary operational questions do not receive a generic training fallback'
 test('guided training paths only link to real Help Center articles', () => {
   const articleIds = new Set(HELP_ARTICLES_FLAT.map((article) => article.id));
   assert.ok(ASSISTANT_GUIDES.length >= 6);
+  const migrationGuide = ASSISTANT_GUIDES.find((guide) => guide.id === 'migrate-data');
+  assert.equal(migrationGuide.steps.length, 5);
   for (const guide of ASSISTANT_GUIDES) {
     assert.ok(guide.steps.length >= 3, `${guide.id} should be a meaningful workflow`);
     for (const step of guide.steps) {

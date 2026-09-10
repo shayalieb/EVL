@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { commitDataImport, previewDataImport } from '../lib/imports';
+import { beginGoogleCalendarConnection, disconnectGoogleCalendar, exportGoogleCalendar, getGoogleCalendars, getGoogleCalendarStatus } from '../lib/googleCalendar';
 import { useToast } from '../components/ui/Toast';
 
 const fileClass = 'block w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:font-semibold file:text-indigo-700 hover:file:bg-indigo-100';
@@ -29,6 +30,7 @@ function Stat({ label, value, tone = 'slate' }) {
 
 export default function ImportDataPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { showToast } = useToast();
   const [sourceType, setSourceType] = useState('');
   const [migrationName, setMigrationName] = useState('');
@@ -42,6 +44,21 @@ export default function ImportDataPage() {
   const [working, setWorking] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const [googleConnection, setGoogleConnection] = useState(null);
+  const [googleCalendars, setGoogleCalendars] = useState([]);
+  const [googleCalendarId, setGoogleCalendarId] = useState('');
+  const [googleLoading, setGoogleLoading] = useState(true);
+
+  useEffect(() => {
+    const callbackStatus = searchParams.get('googleCalendar');
+    if (callbackStatus === 'connected') { setSourceType('google_calendar'); setMigrationName('Google Calendar migration'); showToast('Google Calendar connected.'); }
+    if (callbackStatus === 'error') setError(searchParams.get('message') || 'Unable to connect Google Calendar.');
+    if (callbackStatus) { const next = new URLSearchParams(searchParams); next.delete('googleCalendar'); next.delete('message'); setSearchParams(next, { replace: true }); }
+    getGoogleCalendarStatus().then(async (connection) => {
+      setGoogleConnection(connection);
+      if (connection.connected) { const calendars = await getGoogleCalendars(); setGoogleCalendars(calendars); setGoogleCalendarId(calendars.find((item) => item.primary)?.id || calendars[0]?.id || ''); }
+    }).catch(() => {}).finally(() => setGoogleLoading(false));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const unresolved = useMemo(() => preview?.clients.filter((client) => client.recommendation === 'review' && !decisions[client.rowId]).length || 0, [preview, decisions]);
 
@@ -49,7 +66,13 @@ export default function ImportDataPage() {
     event.preventDefault();
     setWorking(true); setError(''); setResult(null);
     try {
-      const nextSources = { sourceType, migrationName, clientsCsv: await readFile(clientFile), calendarIcs: await readFile(calendarFile), pandaDocCsv: await readFile(pandaDocFile) };
+      let calendarIcs = await readFile(calendarFile);
+      if (sourceType === 'google_calendar' && googleConnection?.connected && googleCalendarId && !calendarFile) {
+        const exported = await exportGoogleCalendar(googleCalendarId);
+        calendarIcs = exported.calendarIcs;
+        if (exported.limited) showToast('Google returned the first 2,500 events. Import these before loading additional history.', 'warning');
+      }
+      const nextSources = { sourceType, migrationName, clientsCsv: await readFile(clientFile), calendarIcs, pandaDocCsv: await readFile(pandaDocFile) };
       const data = await previewDataImport(nextSources);
       const defaults = {};
       for (const client of data.preview.clients) {
@@ -103,6 +126,20 @@ export default function ImportDataPage() {
     URL.revokeObjectURL(url);
   }
 
+  async function connectGoogle() {
+    setGoogleLoading(true); setError('');
+    try { window.location.assign(await beginGoogleCalendarConnection()); }
+    catch (err) { setError(err.message); setGoogleLoading(false); }
+  }
+
+  async function disconnectGoogle() {
+    if (!window.confirm('Disconnect Google Calendar? No Google events or GigWorks records will be deleted.')) return;
+    setGoogleLoading(true);
+    try { setGoogleConnection(await disconnectGoogleCalendar()); setGoogleCalendars([]); setGoogleCalendarId(''); showToast('Google Calendar disconnected.'); }
+    catch (err) { setError(err.message); }
+    finally { setGoogleLoading(false); }
+  }
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div>
@@ -129,7 +166,11 @@ export default function ImportDataPage() {
           </div>}
 
           {sourceType === 'pandadoc' && <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700"><div className="font-semibold">PandaDoc export checklist</div><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Ask PandaDoc Support for the workspace contact export.</li><li>In PandaDoc Reports, export Document data or Data analytics as CSV.</li><li>Upload both files below. GigWorks recognizes comma- and semicolon-separated exports.</li></ol><p className="mt-2 text-xs text-slate-500">Original signed PDFs are not uploaded in this step. Keep the PandaDoc bulk download available for the document-attachment phase.</p></div>}
-          {sourceType === 'google_calendar' && <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700"><div className="font-semibold">Google Calendar export checklist</div><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Open Google Calendar Settings.</li><li>Select Import &amp; export, then Export.</li><li>Open the downloaded ZIP and choose the calendar’s `.ics` file.</li></ol></div>}
+          {sourceType === 'google_calendar' && <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="font-semibold">Google Calendar connection</div><p className="mt-1 text-xs text-slate-500">Read-only access lets GigWorks load a calendar directly into the same safe preview. It cannot edit or delete Google events.</p></div><span className={`rounded-full px-2 py-1 text-xs font-semibold ${googleConnection?.connected ? 'bg-emerald-100 text-emerald-700' : 'bg-white text-slate-500'}`}>{googleConnection?.connected ? 'Connected' : 'Not connected'}</span></div>
+            {googleConnection?.connected ? <div className="mt-4 flex flex-wrap items-end gap-3"><label className="min-w-64 flex-1"><span className="mb-1 block text-xs font-semibold">Calendar to import</span><select value={googleCalendarId} onChange={(event) => { setGoogleCalendarId(event.target.value); resetPreview(); }} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">{googleCalendars.map((calendar) => <option key={calendar.id} value={calendar.id}>{calendar.name}{calendar.primary ? ' (Primary)' : ''}</option>)}</select></label><button type="button" onClick={disconnectGoogle} disabled={googleLoading} className="min-h-11 rounded-lg border border-red-200 bg-white px-3 text-sm font-semibold text-red-600">Disconnect</button></div> : <div className="mt-4"><button type="button" onClick={connectGoogle} disabled={googleLoading || !googleConnection?.configured} className="rounded-lg bg-indigo-600 px-4 py-2.5 font-semibold text-white disabled:opacity-50">{googleLoading ? 'Checking…' : 'Connect Google Calendar'}</button>{googleConnection && !googleConnection.configured && <p className="mt-2 text-xs text-amber-700">Google OAuth credentials must be configured by GigWorks before direct connection is available.</p>}</div>}
+            <details className="mt-4"><summary className="cursor-pointer text-xs font-semibold text-indigo-700">Use a downloaded .ics file instead</summary><ol className="mt-2 list-decimal space-y-1 pl-5 text-xs"><li>Open Google Calendar Settings.</li><li>Select Import &amp; export, then Export.</li><li>Open the ZIP and choose the calendar’s .ics file below.</li></ol></details>
+          </div>}
 
           {sourceType && <div className="grid gap-6 md:grid-cols-2">
             <div>
@@ -138,7 +179,7 @@ export default function ImportDataPage() {
               <p className="mt-2 text-xs text-slate-500">Supports Name or First Name/Last Name, Email, Phone, Address, City, State, ZIP, and Notes.</p>
             </div>
             {(sourceType === 'google_calendar' || sourceType === 'other') && <div>
-              <label htmlFor="calendar-file" className="mb-2 block text-sm font-semibold text-slate-700">Google Calendar export (.ics)</label>
+              <label htmlFor="calendar-file" className="mb-2 block text-sm font-semibold text-slate-700">{googleConnection?.connected ? 'Optional Google Calendar export (.ics)' : 'Google Calendar export (.ics)'}</label>
               <input id="calendar-file" type="file" accept=".ics,text/calendar" onChange={(e) => { setCalendarFile(e.target.files?.[0] || null); resetPreview(); }} className={fileClass} />
               <p className="mt-2 text-xs text-slate-500">In Google Calendar: Settings → Import & export → Export. Google’s .ics file normally contains previous and upcoming events; both are included in the preview.</p>
             </div>}
@@ -149,7 +190,7 @@ export default function ImportDataPage() {
             </div>}
           </div>}
           {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
-          <button type="submit" disabled={working || !sourceType || (!clientFile && !calendarFile && !pandaDocFile)} className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">{working ? 'Checking files…' : 'Preview migration'}</button>
+          <button type="submit" disabled={working || !sourceType || (!clientFile && !calendarFile && !pandaDocFile && !(sourceType === 'google_calendar' && googleConnection?.connected && googleCalendarId))} className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">{working ? 'Checking files…' : 'Preview migration'}</button>
         </form>
       )}
 

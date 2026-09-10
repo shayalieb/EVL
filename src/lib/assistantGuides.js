@@ -3,6 +3,20 @@
 // in which to learn the product and deep-link every step to the real screen.
 export const ASSISTANT_GUIDES = [
   {
+    id: 'migrate-data',
+    title: 'Move your existing data into GigWorks',
+    description: 'Safely bring over clients and booking history with a preview before anything changes.',
+    permission: 'manageBookings',
+    duration: '8 min',
+    steps: [
+      { title: 'Choose what you are moving', description: 'Identify whether your records come from PandaDoc, Google Calendar, or a client CSV.', path: '/help?article=migration-center', articleId: 'migration-center' },
+      { title: 'Export the source files', description: 'Download the supported files without deleting or changing the originals.', path: '/help?article=migration-center', articleId: 'migration-center' },
+      { title: 'Open the Migration Center', description: 'Choose the source and upload the files you prepared.', path: '/import' },
+      { title: 'Preview and resolve matches', description: 'Check every warning and decide how possible client matches should be handled.', path: '/help?article=migration-center', articleId: 'migration-center' },
+      { title: 'Import and verify', description: 'Confirm only after review, then download the migration report and spot-check the results.', path: '/import' },
+    ],
+  },
+  {
     id: 'first-booking',
     title: 'Take a lead from inquiry to signed gig',
     description: 'Learn the complete sales workflow without skipping an important handoff.',
@@ -78,4 +92,3 @@ export const ASSISTANT_GUIDES = [
     ],
   },
 ];
-
