@@ -2,9 +2,22 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto
 
 const MAX_CLIENT_ROWS = 5000;
 const MAX_CALENDAR_EVENTS = 5000;
+const MAX_DOCUMENT_ROWS = 5000;
 
 function clean(value, max = 2000) {
   return String(value ?? '').replace(/^\uFEFF/, '').trim().slice(0, max);
+}
+
+function detectedDelimiter(text) {
+  const firstRecord = String(text || '').replace(/^\uFEFF/, '').split(/\r?\n/, 1)[0] || '';
+  let commas = 0; let semicolons = 0; let quoted = false;
+  for (let i = 0; i < firstRecord.length; i += 1) {
+    if (firstRecord[i] === '"' && firstRecord[i + 1] === '"' && quoted) i += 1;
+    else if (firstRecord[i] === '"') quoted = !quoted;
+    else if (!quoted && firstRecord[i] === ',') commas += 1;
+    else if (!quoted && firstRecord[i] === ';') semicolons += 1;
+  }
+  return semicolons > commas ? ';' : ',';
 }
 
 export function parseCsv(text) {
@@ -13,6 +26,7 @@ export function parseCsv(text) {
   let field = '';
   let quoted = false;
   const source = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const delimiter = detectedDelimiter(source);
   for (let i = 0; i < source.length; i += 1) {
     const char = source[i];
     if (quoted) {
@@ -20,14 +34,14 @@ export function parseCsv(text) {
       else if (char === '"') quoted = false;
       else field += char;
     } else if (char === '"') quoted = true;
-    else if (char === ',') { row.push(field); field = ''; }
+    else if (char === delimiter) { row.push(field); field = ''; }
     else if (char === '\n') { row.push(field); if (row.some((cell) => cell.trim())) rows.push(row); row = []; field = ''; }
     else field += char;
   }
-  if (quoted) throw new Error('The client CSV has an unclosed quoted field.');
+  if (quoted) throw new Error('The CSV has an unclosed quoted field.');
   row.push(field);
   if (row.some((cell) => cell.trim())) rows.push(row);
-  return rows;
+  return { rows, delimiter };
 }
 
 const HEADER_ALIASES = {
@@ -61,7 +75,8 @@ export function normalizePhone(value) {
 
 export function parseClientsCsv(text) {
   if (!String(text || '').trim()) return { clients: [], errors: [], headers: [] };
-  const rows = parseCsv(text);
+  const parsed = parseCsv(text);
+  const { rows } = parsed;
   if (rows.length < 2) throw new Error('The client CSV needs a header row and at least one client row.');
   const headers = rows[0].map(headerKey);
   if (!headers.includes('fullName') && !(headers.includes('firstName') && headers.includes('lastName'))) {
@@ -93,7 +108,75 @@ export function parseClientsCsv(text) {
     });
   });
   if (rows.length - 1 > MAX_CLIENT_ROWS) errors.push({ rowNumber: null, messages: [`Only the first ${MAX_CLIENT_ROWS} client rows can be imported at once.`] });
-  return { clients, errors, headers: headers.filter(Boolean) };
+  return { clients, errors, headers: headers.filter(Boolean), delimiter: parsed.delimiter };
+}
+
+const PANDADOC_HEADERS = {
+  sourceDocumentId: ['document id', 'document uuid', 'id'],
+  documentName: ['document name', 'name', 'document title', 'title'],
+  recipients: ['document recipient', 'document recipients', 'recipient', 'recipients', 'recipient email', 'client email', 'customer email'],
+  status: ['document status', 'status'], template: ['template used', 'template name', 'template'],
+  createdAt: ['creation date', 'created date', 'date created', 'created at'],
+  sentAt: ['sent date', 'date sent', 'sent at'], completedAt: ['completed date', 'date completed', 'completed at'],
+  updatedAt: ['updated date', 'date updated', 'revision date', 'modified date'],
+  total: ['total', 'document total', 'amount'], currency: ['total currency', 'currency'],
+  link: ['document link', 'document url', 'link', 'url'],
+};
+
+function normalizedHeader(value) {
+  return clean(value, 160).toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+}
+
+function pandaDocHeaderKey(value) {
+  const normalized = normalizedHeader(value);
+  return Object.entries(PANDADOC_HEADERS).find(([, aliases]) => aliases.includes(normalized))?.[0] || null;
+}
+
+function dateOnly(value) {
+  const raw = clean(value, 100);
+  if (!raw) return null;
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const us = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  if (us) return `${us[3]}-${us[1].padStart(2, '0')}-${us[2].padStart(2, '0')}`;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+}
+
+export function parsePandaDocDocumentsCsv(text) {
+  if (!String(text || '').trim()) return { documents: [], errors: [], delimiter: ',' };
+  const parsed = parseCsv(text);
+  const { rows } = parsed;
+  if (rows.length < 2) throw new Error('The PandaDoc report needs a header row and at least one document row.');
+  const headers = rows[0].map(pandaDocHeaderKey);
+  if (!headers.includes('documentName')) throw new Error('The PandaDoc report needs a Document name column.');
+  const documents = [];
+  const errors = [];
+  rows.slice(1, MAX_DOCUMENT_ROWS + 1).forEach((cells, index) => {
+    const raw = {};
+    headers.forEach((key, cellIndex) => { if (key && raw[key] === undefined) raw[key] = clean(cells[cellIndex], 5000); });
+    const rowNumber = index + 2;
+    const documentName = clean(raw.documentName, 300);
+    const eventDate = dateOnly(raw.completedAt) || dateOnly(raw.sentAt) || dateOnly(raw.createdAt) || dateOnly(raw.updatedAt);
+    const recipientEmails = [...new Set((raw.recipients?.match(/[^\s,;<>]+@[^\s,;<>]+\.[^\s,;<>]+/g) || []).map(normalizeEmail).filter(Boolean))];
+    const rowErrors = [];
+    if (!documentName) rowErrors.push('Document name is missing.');
+    if (!eventDate) rowErrors.push('No supported created, sent, completed, or updated date was found.');
+    if (rowErrors.length) errors.push({ rowNumber, title: documentName || 'Untitled document', messages: rowErrors });
+    const status = clean(raw.status, 80).toLowerCase() || 'unknown';
+    documents.push({
+      rowId: `pandadoc-${rowNumber}`, rowNumber, sourceDocumentId: clean(raw.sourceDocumentId, 500) || null,
+      eventName: documentName, eventDate, recipientEmails, status,
+      terminal: ['completed', 'paid', 'declined', 'expired', 'voided'].some((value) => status.includes(value)),
+      template: clean(raw.template, 300) || null, total: clean(raw.total, 100) || null,
+      currency: clean(raw.currency, 30) || null, link: /^https?:\/\//i.test(clean(raw.link, 2000)) ? clean(raw.link, 2000) : null,
+      createdAt: clean(raw.createdAt, 100) || null, sentAt: clean(raw.sentAt, 100) || null,
+      completedAt: clean(raw.completedAt, 100) || null, updatedAt: clean(raw.updatedAt, 100) || null,
+      valid: rowErrors.length === 0,
+    });
+  });
+  if (rows.length - 1 > MAX_DOCUMENT_ROWS) errors.push({ rowNumber: null, title: null, messages: [`Only the first ${MAX_DOCUMENT_ROWS} PandaDoc rows can be imported at once.`] });
+  return { documents, errors, delimiter: parsed.delimiter };
 }
 
 function unfoldIcs(text) {
@@ -154,7 +237,7 @@ export function parseGoogleCalendarIcs(text) {
 }
 
 export function sourceDigest(sources) {
-  return createHash('sha256').update(JSON.stringify({ clientsCsv: sources.clientsCsv || '', calendarIcs: sources.calendarIcs || '' })).digest('hex');
+  return createHash('sha256').update(JSON.stringify({ clientsCsv: sources.clientsCsv || '', calendarIcs: sources.calendarIcs || '', pandaDocCsv: sources.pandaDocCsv || '', sourceType: sources.sourceType || 'other', migrationName: sources.migrationName || '' })).digest('hex');
 }
 
 export function createImportToken(accountId, digest, secret = process.env.SESSION_SECRET) {
@@ -181,4 +264,11 @@ export function stableImportId(importId, type, rowId) {
   hex[12] = '4';
   hex[16] = ['8', '9', 'a', 'b'][Number.parseInt(hex[16], 16) % 4];
   return `${hex.slice(0, 8).join('')}-${hex.slice(8, 12).join('')}-${hex.slice(12, 16).join('')}-${hex.slice(16, 20).join('')}-${hex.slice(20).join('')}`;
+}
+
+// Stable across separate import attempts, unlike stableImportId. When the
+// source provides its own immutable identifier (PandaDoc document id or
+// Google Calendar UID), re-importing the same export cannot duplicate it.
+export function stableSourceRecordId(accountId, source, sourceId) {
+  return stableImportId(accountId, source, sourceId);
 }

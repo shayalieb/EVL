@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
-import { createImportToken, parseClientsCsv, parseGoogleCalendarIcs, sourceDigest, stableImportId, verifyImportToken } from '../lib/dataImport.js';
+import { createImportToken, parseClientsCsv, parseGoogleCalendarIcs, parsePandaDocDocumentsCsv, sourceDigest, stableImportId, stableSourceRecordId, verifyImportToken } from '../lib/dataImport.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -18,14 +18,20 @@ function requireImportPermissions(req, res) {
 }
 
 function sourcesFrom(body) {
-  return { clientsCsv: String(body?.clientsCsv || ''), calendarIcs: String(body?.calendarIcs || '') };
+  const sourceType = ['google_calendar', 'pandadoc', 'csv', 'other'].includes(body?.sourceType) ? body.sourceType : 'other';
+  return {
+    sourceType, migrationName: String(body?.migrationName || '').trim().slice(0, 160),
+    clientsCsv: String(body?.clientsCsv || ''), calendarIcs: String(body?.calendarIcs || ''),
+    pandaDocCsv: String(body?.pandaDocCsv || ''),
+  };
 }
 
 async function buildPreview(accountId, sources) {
   const parsedClients = parseClientsCsv(sources.clientsCsv);
   const parsedCalendar = parseGoogleCalendarIcs(sources.calendarIcs);
+  const parsedPandaDoc = parsePandaDocDocumentsCsv(sources.pandaDocCsv);
   const validClients = parsedClients.clients.filter((client) => client.valid);
-  const emails = [...new Set([...validClients.map((client) => client.email), ...parsedCalendar.events.flatMap((event) => event.attendeeEmails)].filter(Boolean))];
+  const emails = [...new Set([...validClients.map((client) => client.email), ...parsedCalendar.events.flatMap((event) => event.attendeeEmails), ...parsedPandaDoc.documents.flatMap((document) => document.recipientEmails)].filter(Boolean))];
   const phones = [...new Set(validClients.map((client) => client.phoneNormalized).filter(Boolean))];
   const matchConditions = [...(emails.length ? [{ emailNormalized: { in: emails } }] : []), ...(phones.length ? [{ phoneNormalized: { in: phones } }] : [])];
   const [existing, accountData] = await Promise.all([
@@ -56,26 +62,34 @@ async function buildPreview(accountId, sources) {
   const importedEmailRows = new Map(clients.filter((client) => client.email).map((client) => [client.email, client.linkedRowId || client.rowId]));
   const existingEmailMatches = new Map(existing.filter((client) => client.emailNormalized).map((client) => [client.emailNormalized, client.id]));
   const today = new Date().toISOString().slice(0, 10);
-  const bookings = parsedCalendar.events.filter((event) => event.valid).map((event) => {
-    const importedMatches = [...new Set(event.attendeeEmails.map((email) => importedEmailRows.get(email)).filter(Boolean))];
-    const existingMatches = [...new Set(event.attendeeEmails.map((email) => existingEmailMatches.get(email)).filter(Boolean))];
+  const sourceBookings = [
+    ...parsedCalendar.events.filter((event) => event.valid).map((event) => ({ ...event, source: 'Google Calendar', sourceType: 'google_calendar', sourceRecordId: event.sourceUid ? `${event.sourceUid}:${event.eventDate}:${event.startTime || 'all-day'}` : null, matchEmails: event.attendeeEmails, terminal: false })),
+    ...parsedPandaDoc.documents.filter((document) => document.valid).map((document) => ({ ...document, source: 'PandaDoc', sourceType: 'pandadoc', sourceRecordId: document.sourceDocumentId || document.link, matchEmails: document.recipientEmails, allDay: true, startTime: null, endTime: null, location: null, description: null, timezone: null })),
+  ];
+  const bookings = sourceBookings.map((event) => {
+    const importedMatches = [...new Set(event.matchEmails.map((email) => importedEmailRows.get(email)).filter(Boolean))];
+    const existingMatches = [...new Set(event.matchEmails.map((email) => existingEmailMatches.get(email)).filter(Boolean))];
     const clientMatch = importedMatches.length === 1
       ? { type: 'imported', id: importedMatches[0] }
       : existingMatches.length === 1
         ? { type: 'existing', id: existingMatches[0] }
         : null;
-    return { ...event, historical: event.eventDate < today, clientMatch, clientMatchAmbiguous: !clientMatch && importedMatches.length + existingMatches.length > 1 };
+    return { ...event, historical: event.terminal || event.eventDate < today, clientMatch, clientMatchAmbiguous: !clientMatch && importedMatches.length + existingMatches.length > 1 };
   });
   return {
-    clients, bookings, defaultBookingStatus: accountData?.data?.bookingStatuses?.[0]?.id || null,
-    errors: { clients: parsedClients.errors, calendar: parsedCalendar.errors },
+    clients, bookings, sourceType: sources.sourceType, migrationName: sources.migrationName,
+    detected: { clientsDelimiter: parsedClients.delimiter || null, pandaDocDelimiter: parsedPandaDoc.delimiter || null },
+    defaultBookingStatus: accountData?.data?.bookingStatuses?.[0]?.id || null,
+    errors: { clients: parsedClients.errors, calendar: parsedCalendar.errors, pandaDoc: parsedPandaDoc.errors },
     summary: {
       clientRows: clients.length, clientsToCreate: clients.filter((item) => item.recommendation === 'create').length,
       clientsMatched: clients.filter((item) => item.recommendation === 'link').length,
       clientsNeedReview: clients.filter((item) => item.recommendation === 'review').length,
       bookingsToCreate: bookings.length, recurringBookings: bookings.filter((item) => item.recurring).length,
       historicalBookings: bookings.filter((item) => item.historical).length,
-      skippedInvalidRows: parsedClients.errors.length + parsedCalendar.errors.length,
+      pandaDocDocuments: bookings.filter((item) => item.sourceType === 'pandadoc').length,
+      bookingsWithoutSourceId: bookings.filter((item) => !item.sourceRecordId).length,
+      skippedInvalidRows: parsedClients.errors.length + parsedCalendar.errors.length + parsedPandaDoc.errors.length,
     },
   };
 }
@@ -83,7 +97,7 @@ async function buildPreview(accountId, sources) {
 router.post('/preview', asyncHandler(async (req, res) => {
   if (!requireImportPermissions(req, res)) return;
   const sources = sourcesFrom(req.body);
-  if (!sources.clientsCsv.trim() && !sources.calendarIcs.trim()) return res.status(400).json({ error: 'Choose a client CSV or Google Calendar .ics file.' });
+  if (!sources.clientsCsv.trim() && !sources.calendarIcs.trim() && !sources.pandaDocCsv.trim()) return res.status(400).json({ error: 'Choose at least one client, calendar, or PandaDoc report file.' });
   const preview = await buildPreview(req.membership.accountId, sources);
   res.json({ preview, token: createImportToken(req.membership.accountId, sourceDigest(sources)) });
 }));
@@ -124,19 +138,34 @@ router.post('/commit', asyncHandler(async (req, res) => {
       let clientId = null;
       if (booking.clientMatch?.type === 'existing') clientId = booking.clientMatch.id;
       if (booking.clientMatch?.type === 'imported') clientId = clientIds.get(booking.clientMatch.id) || null;
-      const id = stableImportId(verified.id, 'booking', booking.rowId);
+      const id = booking.sourceRecordId
+        ? stableSourceRecordId(req.membership.accountId, booking.sourceType, booking.sourceRecordId)
+        : stableImportId(verified.id, 'booking', booking.rowId);
       const schedule = booking.allDay ? [] : [{ id: stableImportId(verified.id, 'schedule', booking.rowId), time: booking.startTime, name: booking.eventName, details: booking.endTime ? `Ends at ${booking.endTime}` : '' }];
-      const notes = [booking.description, booking.location ? `Imported location: ${booking.location}` : null, booking.timezone ? `Source timezone: ${booking.timezone}` : null, booking.recurring ? 'Imported from a recurring Google Calendar series. Only this exported VEVENT was imported.' : null].filter(Boolean).join('\n\n') || null;
+      const sourceDetails = booking.sourceType === 'pandadoc' ? [
+        `PandaDoc status: ${booking.status}`,
+        booking.sourceDocumentId ? `PandaDoc document ID: ${booking.sourceDocumentId}` : null,
+        booking.template ? `Template: ${booking.template}` : null,
+        booking.total ? `Document total: ${booking.total}${booking.currency ? ` ${booking.currency}` : ''}` : null,
+        booking.link ? `Original PandaDoc link: ${booking.link}` : null,
+      ] : [
+        booking.location ? `Imported location: ${booking.location}` : null,
+        booking.timezone ? `Source timezone: ${booking.timezone}` : null,
+      ];
+      const notes = [`Imported from ${booking.source}.`, ...sourceDetails, booking.description].filter(Boolean).join('\n\n') || null;
       bookingsToCreate.push({
         id, accountId: req.membership.accountId, eventName: booking.eventName, eventDate: booking.eventDate,
         clientId, bookingStatus: preview.defaultBookingStatus, completedAt: booking.historical ? new Date() : null,
         notes, venue: booking.location ? { name: booking.location } : {},
-        schedule, activityLog: [{ id: stableImportId(verified.id, 'activity', booking.rowId), at: new Date().toISOString(), type: 'imported', note: 'Imported from Google Calendar.' }], history: [],
+        schedule, activityLog: [{ id: stableImportId(verified.id, 'activity', booking.rowId), at: new Date().toISOString(), type: 'imported', note: `Imported from ${booking.source}.` }], history: [],
       });
     }
+    const existingBookingIds = bookingsToCreate.length ? new Set((await tx.booking.findMany({ where: { id: { in: bookingsToCreate.map((booking) => booking.id) } }, select: { id: true } })).map((booking) => booking.id)) : new Set();
+    const newHistoricalBookings = bookingsToCreate.filter((booking) => booking.completedAt && !existingBookingIds.has(booking.id)).length;
     const bookingInsert = bookingsToCreate.length ? await tx.booking.createMany({ data: bookingsToCreate, skipDuplicates: true }) : { count: 0 };
-    await tx.accountActivity.create({ data: { accountId: req.membership.accountId, actorUserId: req.session.userId, type: 'data_import_completed', summary: `Imported ${clientInsert.count} clients and ${bookingInsert.count} separate bookings`, metadata: { importId: verified.id, clientsCreated: clientInsert.count, clientsLinked, clientsSkipped, bookingsCreated: bookingInsert.count } } });
-    return { clientsCreated: clientInsert.count, clientsLinked, clientsSkipped, bookingsCreated: bookingInsert.count };
+    const completedAt = new Date();
+    await tx.accountActivity.create({ data: { accountId: req.membership.accountId, actorUserId: req.session.userId, type: 'data_import_completed', summary: `Imported ${clientInsert.count} clients and ${bookingInsert.count} separate bookings`, metadata: { importId: verified.id, migrationName: sources.migrationName || null, sourceType: sources.sourceType, clientsCreated: clientInsert.count, clientsLinked, clientsSkipped, bookingsCreated: bookingInsert.count, historicalBookings: newHistoricalBookings } } });
+    return { migrationId: verified.id, migrationName: sources.migrationName || null, sourceType: sources.sourceType, completedAt, clientsCreated: clientInsert.count, clientsLinked, clientsSkipped, bookingsCreated: bookingInsert.count, historicalBookings: newHistoricalBookings, skippedRows: preview.summary.skippedInvalidRows };
   });
   res.json({ result });
 }));
