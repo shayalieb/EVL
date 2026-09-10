@@ -51,6 +51,7 @@ import dashboardRouter from './routes/dashboard.js';
 import agencyGroupsRouter from './routes/agencyGroups.js';
 import financialsRouter from './routes/financials.js';
 import assistantRouter from './routes/assistant.js';
+import importsRouter from './routes/imports.js';
 import quickBooksRouter from './routes/quickBooks.js';
 import quickBooksSyncRouter from './routes/quickBooksSync.js';
 import portalRouter from './routes/portal.js';
@@ -143,6 +144,10 @@ app.use('/api/email', express.json({ limit: '20mb' }));
 // aggressively compressed venue-plan background in the scene JSON.
 app.use('/api/stage-plots', express.json({ limit: '5mb' }));
 app.use('/api/stage-plot-library', express.json({ limit: '5mb' }));
+// Calendar exports and client CSVs are text carried inside JSON so preview
+// and commit can validate the exact same source bytes. Keep the larger
+// allowance scoped to this authenticated import route only.
+app.use('/api/imports', express.json({ limit: '10mb' }));
 
 app.use(express.json());
 
@@ -278,6 +283,7 @@ app.use('/api/bookings', bookingsRouter);
 app.use('/api/events', eventsRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/assistant', assistantRouter);
+app.use('/api/imports', importsRouter);
 app.use('/api/agreements', designPartnerAgreementsRouter);
 app.use('/api/financials', financialsRouter);
 app.use('/api/integrations/quickbooks', quickBooksRouter);

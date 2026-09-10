@@ -38,6 +38,7 @@ const NAV_GROUPS = [
   {
     label: 'Account',
     items: [
+      { to: '/import', label: 'Import Data', icon: '📥', permissions: ['manageBookings', 'manageClients'] },
       { to: '/help', label: 'Help', icon: '💬' },
       { to: '/settings', label: 'Settings', icon: '⚙️' },
     ],
@@ -128,7 +129,7 @@ export default function AppLayout() {
   const navGroups = NAV_GROUPS
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => (!item.vertical || currentUser?.activeVerticals?.includes(item.vertical)) && (!item.permission || currentUser?.permissions?.[item.permission])),
+      items: group.items.filter((item) => (!item.vertical || currentUser?.activeVerticals?.includes(item.vertical)) && (!item.permission || currentUser?.permissions?.[item.permission]) && (!item.permissions || item.permissions.every((permission) => currentUser?.permissions?.[permission]))),
     }))
     .map((group, i) => (
       currentUser?.isPlatformAdmin && i === NAV_GROUPS.length - 1

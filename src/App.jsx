@@ -63,6 +63,7 @@ const FinancialsPage = lazy(() => import('./pages/FinancialsPage'));
 const ReviewSubmissionPage = lazy(() => import('./pages/ReviewSubmissionPage'));
 const PublicStagePlotPage = lazy(() => import('./pages/PublicStagePlotPage'));
 const PublicRunOfShowPage = lazy(() => import('./pages/PublicRunOfShowPage'));
+const ImportDataPage = lazy(() => import('./pages/ImportDataPage'));
 
 // The marketing site lives at the exact root path, which otherwise sits
 // inside this same route tree (see AppRoutes' `path="/"` below) — checking
@@ -227,6 +228,7 @@ function AppRoutes() {
         <Route path="reminders" element={<RemindersPage />} />
         <Route path="email-templates" element={<EmailTemplatesPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="import" element={<PermissionGate permission="manageBookings"><PermissionGate permission="manageClients"><ImportDataPage /></PermissionGate></PermissionGate>} />
         <Route path="help" element={<HelpPage />} />
         <Route path="dev/canvas-demo" element={<DevOnlyRoute><CanvasEngineDemoPage /></DevOnlyRoute>} />
         <Route path="events/:eventId/stage-plot" element={<VerticalGate vertical="band_orchestra"><StagePlotEditorPage /></VerticalGate>} />
