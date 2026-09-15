@@ -163,7 +163,7 @@ model Account {
   trialEndsAt               DateTime?
   // Acquisition context, captured when the account is created so platform
   // admins can distinguish public signups from manually-created accounts.
-  signupSource              String                @default("admin") // 'public' | 'admin'
+  signupSource              String                @default("admin") // 'public' | 'admin' | 'test'
   signupPlan                String? // landing-page selection before checkout
   signupInterval            String? // 'month' | 'year'
   messagingProfile          MessagingProfile?

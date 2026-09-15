@@ -40,6 +40,7 @@ export default function AdminAccountsPage() {
   const [accounts, setAccounts] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [addOpen, setAddOpen] = useState(false);
+  const [testOpen, setTestOpen] = useState(false);
   const [disableTarget, setDisableTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [resendingId, setResendingId] = useState(null);
@@ -161,8 +162,12 @@ export default function AdminAccountsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap gap-3 items-center justify-between">
         <h2 className="text-2xl font-bold text-slate-800">Accounts</h2>
+        <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => setTestOpen(true)} data-testid="admin-accounts-add-test-button" className="px-4 py-2 rounded-lg border border-indigo-200 text-indigo-700 text-sm font-semibold hover:bg-indigo-50">
+          + Add Test Account
+        </button>
         <button
           type="button"
           onClick={() => setAddOpen(true)}
@@ -171,6 +176,7 @@ export default function AdminAccountsPage() {
         >
           + New Account
         </button>
+        </div>
       </div>
 
       <section className="grid gap-3 sm:grid-cols-3" aria-label="QuickBooks pilot status">
@@ -256,6 +262,7 @@ export default function AdminAccountsPage() {
                 <td className="px-4 py-3">
                   <Link to={`/admin/accounts/${a.id}`} className="font-medium text-slate-800 hover:text-indigo-700 hover:underline">{a.owner ? `${a.owner.firstName} ${a.owner.lastName}` : '—'}</Link>
                   <div className="text-slate-500 text-xs">{a.owner?.email}</div>
+                  {a.signupSource === 'test' && <span className="text-xs font-semibold text-amber-700">Test account</span>}
                 </td>
                 <td className="hidden sm:table-cell px-4 py-3 text-slate-600">{a.memberCount}</td>
                 <td className="hidden md:table-cell px-4 py-3 text-slate-500 text-xs">
@@ -264,7 +271,7 @@ export default function AdminAccountsPage() {
                   {a.subscriptionStatus && <div className="capitalize text-indigo-600">{a.subscriptionStatus}</div>}
                 </td>
                 <td className="hidden lg:table-cell px-4 py-3 text-slate-500 text-xs">
-                  <div className="capitalize">{a.signupSource === 'public' ? 'Website' : 'Admin'}</div>
+                  <div className="capitalize">{a.signupSource === 'test' ? 'Test' : a.signupSource === 'public' ? 'Website' : 'Admin'}</div>
                   <div>{new Date(a.createdAt).toLocaleDateString()}</div>
                 </td>
                 <td className="hidden sm:table-cell px-4 py-3 text-slate-500 text-xs">
@@ -369,6 +376,7 @@ export default function AdminAccountsPage() {
       </div>
 
       <NewAccountModal open={addOpen} onClose={() => setAddOpen(false)} onCreated={() => { setAddOpen(false); load(); }} />
+      <NewAccountModal testAccount open={testOpen} onClose={() => setTestOpen(false)} onCreated={() => { setTestOpen(false); load(); }} />
 
       {disableTarget && !disableTarget.disabledAt ? (
         <DisableAccountModal
@@ -463,7 +471,7 @@ function DisableAccountModal({ account, onClose, onDisabled }) {
   );
 }
 
-function NewAccountModal({ open, onClose, onCreated }) {
+function NewAccountModal({ open, onClose, onCreated, testAccount = false }) {
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', requireAgreements: false });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -472,7 +480,7 @@ function NewAccountModal({ open, onClose, onCreated }) {
 
   useEffect(() => {
     if (open) {
-      setForm({ firstName: '', lastName: '', email: '', requireAgreements: false });
+      setForm({ firstName: '', lastName: '', email: '', password: '', requireAgreements: false });
       setError('');
       setExpiration(emptyLinkExpiration('7_days'));
     }
@@ -487,11 +495,11 @@ function NewAccountModal({ open, onClose, onCreated }) {
     setError('');
     setSaving(true);
     try {
-      await apiFetch('/admin/accounts', {
+      await apiFetch(testAccount ? '/admin/accounts/test' : '/admin/accounts', {
         method: 'POST',
         body: JSON.stringify({ ...form, email: form.email.trim().toLowerCase(), expiration: serializeLinkExpiration(expiration) }),
       });
-      showToast('Invite sent');
+      showToast(testAccount ? 'Test account created. You can now log in with its email and password.' : 'Invite sent');
       onCreated();
     } catch (err) {
       setError(err.message);
@@ -501,8 +509,9 @@ function NewAccountModal({ open, onClose, onCreated }) {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="New Account">
+    <Modal open={open} onClose={saving ? () => {} : onClose} title={testAccount ? 'Add Test Account' : 'New Account'}>
       <form onSubmit={handleSubmit} className="space-y-3">
+        {testAccount && <p className="text-sm text-slate-500">Create an approved account for testing or trying an import. Set its password below to log in immediately. No invitation email is sent.</p>}
         {error && <div data-testid="admin-accounts-new-account-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -519,12 +528,14 @@ function NewAccountModal({ open, onClose, onCreated }) {
         <div>
           <label className={labelClass}>Email</label>
           <input required type="email" value={form.email} onChange={(e) => update('email', e.target.value)} data-testid="admin-accounts-new-account-email-input" className={inputClass} />
-          <p className="mt-1 text-xs text-slate-400">They'll get an email with a link to set their own password.</p>
+          {!testAccount && <p className="mt-1 text-xs text-slate-400">They'll get an email with a link to set their own password.</p>}
         </div>
 
-        <LinkExpirationPicker value={expiration} onChange={setExpiration} label="Invitation expiration" testId="admin-accounts-invite-expiration" />
+        {testAccount && <div><label htmlFor="test-account-password" className={labelClass}>Password</label><input id="test-account-password" type="password" autoComplete="new-password" required minLength={8} value={form.password || ''} onChange={(e) => update('password', e.target.value)} data-testid="admin-accounts-test-password-input" className={inputClass} /><p className="mt-1 text-xs text-slate-400">Use at least 8 characters.</p></div>}
 
-        <label className="flex items-start gap-2 text-sm text-slate-700 rounded-lg border border-slate-200 px-3 py-2.5">
+        {!testAccount && <LinkExpirationPicker value={expiration} onChange={setExpiration} label="Invitation expiration" testId="admin-accounts-invite-expiration" />}
+
+        {!testAccount && <label className="flex items-start gap-2 text-sm text-slate-700 rounded-lg border border-slate-200 px-3 py-2.5">
           <input
             type="checkbox"
             checked={form.requireAgreements}
@@ -536,12 +547,12 @@ function NewAccountModal({ open, onClose, onCreated }) {
             Require Design Partner Agreements (NDA + Non-Compete)
             <span className="block text-xs text-slate-400 mt-0.5">Tags this as a design partner account — they'll have to e-sign both agreements before they can use GigWorks.</span>
           </span>
-        </label>
+        </label>}
 
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} data-testid="admin-accounts-new-account-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button type="button" disabled={saving} onClick={onClose} data-testid="admin-accounts-new-account-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
           <button type="submit" disabled={saving} data-testid="admin-accounts-new-account-submit-button" className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
-            {saving ? 'Sending…' : 'Send Invite'}
+            {testAccount ? (saving ? 'Creating…' : 'Create Test Account') : (saving ? 'Sending…' : 'Send Invite')}
           </button>
         </div>
       </form>

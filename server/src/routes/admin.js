@@ -18,6 +18,7 @@ import { resolveLinkExpiration } from '../lib/linkExpiration.js';
 import { quickBooksPilotGraduationReadiness, quickBooksPilotHealth, QUICKBOOKS_PILOT_TEST_STEPS, updateQuickBooksPilotTestResults } from '../lib/quickBooksPilot.js';
 import { backfillEmailAiClassification } from '../lib/emailAiBackfill.js';
 import { buildAgreementDocuments } from '../lib/designPartnerAgreements.js';
+import { createTestAccount } from '../lib/testAccount.js';
 
 const router = Router();
 const REVIEW_LINK_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -510,6 +511,16 @@ async function createInvitedUser({ firstName, lastName, email, expiration, requi
 
   return user;
 }
+
+router.post('/accounts/test', asyncHandler(async (req, res) => {
+  try {
+    const account = await createTestAccount(prisma, req.body || {}, req.user.id, allPermissions());
+    res.status(201).json({ account });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+}));
 
 router.post('/accounts', asyncHandler(async (req, res) => {
   const { firstName, lastName, email, expiration, requireAgreements } = req.body || {};
