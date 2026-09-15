@@ -642,7 +642,7 @@ export default function BookingFormPage() {
         groomName: booking.groomName || '',
         guestCount: booking.guestCount ?? '',
         venue: { ...emptyVenue(), ...booking.venue },
-        schedule: booking.schedule && booking.schedule.length ? booking.schedule : [emptyScheduleItem()],
+        schedule: Array.isArray(booking.schedule) ? booking.schedule : [],
         depositAmount: booking.depositAmount ?? '',
         depositDueDate: booking.depositDueDate || '',
         depositPaid: !!booking.depositPaid,
@@ -2244,9 +2244,9 @@ export default function BookingFormPage() {
                     {form.activityLog.map((entry) => (
                       <div key={entry.id} className="text-sm text-slate-600 flex gap-2">
                         <span className="text-slate-400 shrink-0">
-                          {new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          {(entry.date || entry.at) ? new Date(entry.date || entry.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
                         </span>
-                        <span>{entry.text}</span>
+                        <span>{entry.text || entry.note || ''}</span>
                       </div>
                     ))}
                   </div>
