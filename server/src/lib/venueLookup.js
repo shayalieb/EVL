@@ -41,8 +41,21 @@ export async function lookupVenue({ query, placeId, country = 'us' }, { apiKey =
     }
     const response = await fetchImpl(url, { signal: AbortSignal.timeout(10000) });
     if (!response.ok) throw new Error('Provider unavailable');
-    const data = await response.json();
-    return (data.features || []).map((feature) => mapVenuePlace(feature.properties)).filter((place) => place.placeId && place.name && place.countryCode === country);
+    let data = await response.json();
+    if (!placeId && !data.features?.length) {
+      const fallback = new URL('https://api.geoapify.com/v1/geocode/search');
+      fallback.search = new URLSearchParams({ apiKey, text: query.replace(/\s+v\d+$/i, '').trim(), type: 'amenity', filter: `countrycode:${country}`, limit: '10' }).toString();
+      const fallbackResponse = await fetchImpl(fallback, { signal: AbortSignal.timeout(10000) });
+      if (!fallbackResponse.ok) throw new Error('Name lookup unavailable');
+      data = await fallbackResponse.json();
+    }
+    return (data.features || []).map((feature) => {
+      const place = mapVenuePlace(feature.properties);
+      // Places results may omit country_code; the country boundary already
+      // restricts search results. Details still require an explicit country.
+      if (!placeId && !place.countryCode) place.countryCode = country;
+      return place;
+    }).filter((place) => place.placeId && place.name && place.countryCode === country);
   } catch {
     throw Object.assign(new Error('Venue lookup is temporarily unavailable. Please try again.'), { status: 502 });
   }
