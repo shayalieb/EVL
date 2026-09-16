@@ -1,0 +1,43 @@
+import { useState } from 'react';
+import { apiFetch } from '../context/AuthContext';
+import Modal from './ui/Modal';
+import { fillEmptyVenueFields } from '../lib/venueLookup';
+
+export default function VenueLookup({ venue, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [places, setPlaces] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function search(place) {
+    if (busy) return;
+    setBusy(true); setError(''); setSelected(null);
+    if (!place) setPlaces(null);
+    try {
+      const params = new URLSearchParams(place ? { placeId: place.placeId } : { query });
+      const data = await apiFetch(`/venues/lookup?${params}`);
+      if (place) {
+        const found = data.places.find((item) => item.placeId === place.placeId);
+        if (!found) throw new Error('Details are unavailable for this venue. Try another match.');
+        setSelected(found);
+      } else setPlaces(data.places);
+    } catch (err) { setError(err.message); }
+    finally { setBusy(false); }
+  }
+  return <>
+    <button type="button" className="mt-2 text-sm font-semibold text-indigo-600" onClick={() => { setQuery([venue.name, venue.city, venue.state].filter(Boolean).join(', ')); setPlaces(null); setSelected(null); setError(''); setOpen(true); }}>Find venue details</button>
+    <Modal open={open} onClose={() => { if (!busy) setOpen(false); }} title="Find venue details">
+      <div className="space-y-4">
+        <p className="text-sm text-slate-500">Search by venue name and city or state, then check the address. Available details fill empty fields only.</p>
+        <label className="block text-sm font-semibold">Venue and area<input value={query} maxLength={240} disabled={busy} onChange={(event) => { setQuery(event.target.value); setPlaces(null); setSelected(null); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); search(); } }} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
+        <button type="button" disabled={busy || query.trim().length < 3} onClick={() => search()} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? 'Looking up…' : 'Search venues'}</button>
+        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+        {places?.length === 0 && <p className="text-sm text-slate-500">No matches found. Try another spelling or a more specific area.</p>}
+        <div className="space-y-2">{places?.map((place) => <button type="button" key={place.placeId} disabled={busy} onClick={() => search(place)} className="block w-full rounded-lg border border-slate-200 p-3 text-left hover:bg-slate-50"><span className="block font-semibold">{place.name}</span><span className="text-sm text-slate-500">{place.formattedAddress}</span></button>)}</div>
+        {selected && <section className="space-y-2 rounded-lg bg-indigo-50 p-3"><h4 className="font-semibold">{selected.name}</h4><p className="text-sm">{selected.formattedAddress}</p>{selected.contactPhone && <p className="text-sm">Phone: {selected.contactPhone}</p>}{selected.contactEmail && <p className="text-sm">Email: {selected.contactEmail}</p>}<button type="button" onClick={() => { onSelect(fillEmptyVenueFields(venue, selected)); setOpen(false); }} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">Fill empty fields</button></section>}
+        <p className="text-xs text-slate-500">Powered by <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer" className="underline">Geoapify</a> · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="underline">OpenStreetMap contributors</a></p>
+      </div>
+    </Modal>
+  </>;
+}

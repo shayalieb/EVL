@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useData } from '../context/DataContext';
+import VenueLookup from './VenueLookup';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -10,7 +11,7 @@ const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text
 // saved — see DataContext's ensureVenueSaved). Picking a suggestion instead
 // fires onSelectVenue with the full record so the caller can autofill every
 // other venue field (address, contact, notes) in one shot.
-export default function VenueCombobox({ value, onChangeName, onSelectVenue, testId }) {
+export default function VenueCombobox({ value, onChangeName, onSelectVenue, testId, currentVenue }) {
   const { searchVenues } = useData();
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState([]);
@@ -38,6 +39,7 @@ export default function VenueCombobox({ value, onChangeName, onSelectVenue, test
         data-testid={testId}
         className={inputClass}
       />
+      {currentVenue && <VenueLookup venue={currentVenue} onSelect={onSelectVenue} />}
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />

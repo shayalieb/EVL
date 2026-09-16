@@ -1727,6 +1727,7 @@ export default function EventFormPage() {
               <div>
                 <label className={labelClass}>Venue Name</label>
                 <VenueCombobox
+                  currentVenue={form.venue}
                   value={form.venue.name}
                   onChangeName={(name) => updateVenue('name', name)}
                   onSelectVenue={selectSavedVenue}

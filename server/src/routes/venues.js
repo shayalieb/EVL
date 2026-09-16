@@ -5,9 +5,26 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createWithPreservedId } from '../lib/idPreservingCreate.js';
 import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPageResponse } from '../lib/pagination.js';
+import { lookupVenue } from '../lib/venueLookup.js';
+import { createRateLimiter } from '../lib/rateLimiter.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
+
+router.get('/lookup', createRateLimiter('venue-lookup', { windowMs: 60000, limit: 20 }), asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const permissions = effectivePermissions(req.membership);
+  if (!permissions.manageVenues && !permissions.manageBookings && !permissions.manageEvents) return res.status(403).json({ error: 'Not authorized.' });
+  const query = typeof req.query.query === 'string' ? req.query.query.trim() : '';
+  const placeId = typeof req.query.placeId === 'string' ? req.query.placeId.trim() : '';
+  if (placeId ? !/^[a-zA-Z0-9_-]{1,500}$/.test(placeId) : query.length < 3 || query.length > 240) return res.status(400).json({ error: 'Enter a venue name and city or state (3–240 characters).' });
+  try {
+    res.json({ places: await lookupVenue({ query, placeId }) });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    throw error;
+  }
+}));
 
 const FIELDS = ['address1', 'address2', 'city', 'state', 'zip', 'contactName', 'contactPhone', 'contactPhoneExt', 'contactEmail', 'locationNote', 'loadInInfo'];
 

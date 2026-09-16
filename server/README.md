@@ -43,6 +43,16 @@ No deploy config files needed — Railway auto-detects Node via
 Point the frontend's `VITE_API_BASE` at the deployed URL (or
 `http://localhost:4000/api` for local dev).
 
+## Venue lookup
+
+Set `GEOAPIFY_API_KEY` on the backend service to enable **Find venue details**
+under Venue Name in booking and event forms. The key stays on the server.
+Search uses Geoapify amenity geocoding; choosing a result retrieves its place
+details. Users review the match and fill only empty name/address/phone/email
+fields. Missing data remains blank. Existing fields and event-specific notes
+are preserved. Coverage varies by location; this is not a complete wedding
+venue directory. The lookup displays Geoapify and OpenStreetMap attribution.
+
 ## Dedicated-number SMS
 
 Gigworks owns the Twilio connection; customers request a number from
