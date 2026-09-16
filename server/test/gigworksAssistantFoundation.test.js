@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assistantToolNamesForPermissions, eventAttentionIssues, financialSnapshot, findHelpArticles, migrationAssistantInstructions, updateClientAction, updateEventAction } from '../src/lib/gigworksAssistant.js';
+import { assistantToolNamesForPermissions, createBookingAction, createEventAction, eventAttentionIssues, financialSnapshot, findHelpArticles, migrationAssistantInstructions, updateClientAction, updateEventAction } from '../src/lib/gigworksAssistant.js';
 import { fallbackTrainingAnswer } from '../src/routes/assistant.js';
 import { ASSISTANT_GUIDES } from '../../src/lib/assistantGuides.js';
 import { HELP_ARTICLES_FLAT } from '../../src/lib/helpArticles.js';
@@ -35,6 +35,33 @@ test('operational coverage follows each matching module permission', () => {
   assert.equal(tools.includes('propose_add_contractor'), false);
   assert.equal(tools.includes('propose_add_venue'), true);
   assert.equal(tools.includes('propose_update_event'), true);
+  assert.equal(tools.includes('propose_create_event'), true);
+});
+
+test('confirmed Assistant booking/inquiry is saved with an auditable activity entry', async () => {
+  let saved;
+  const db = {
+    client: { findFirst: async () => ({ id: 'client-1', accountId: 'account-1' }) },
+    booking: { create: async ({ data }) => { saved = data; return { ...data, createdAt: new Date(), updatedAt: new Date() }; } },
+  };
+  const result = await createBookingAction('account-1', { eventName: 'New inquiry', clientId: 'client-1', eventDate: '2026-10-10', bookingStatus: 'Inquiry' }, db);
+  assert.equal(result.id, saved.id);
+  assert.equal(saved.accountId, 'account-1');
+  assert.equal(saved.bookingStatus, 'Inquiry');
+  assert.match(saved.activityLog[0].text, /GigWorks Assistant/);
+});
+
+test('confirmed Assistant event is saved with safe defaults and history', async () => {
+  let saved;
+  const db = {
+    client: { findFirst: async () => ({ id: 'client-1' }) },
+    event: { create: async ({ data }) => { saved = data; return { ...data, createdAt: new Date(), updatedAt: new Date() }; } },
+  };
+  const result = await createEventAction('account-1', { name: 'Fall Gala', clientId: 'client-1', eventDate: '2026-10-11', startTime: '18:30' }, db);
+  assert.equal(result.id, saved.id);
+  assert.equal(saved.accountId, 'account-1');
+  assert.deepEqual(saved.schedule, []);
+  assert.match(saved.history[0].note, /GigWorks Assistant/);
 });
 
 test('final-phase write tools follow their own module permissions', () => {

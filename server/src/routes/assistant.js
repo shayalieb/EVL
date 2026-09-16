@@ -14,6 +14,7 @@ import {
   updateContractorAction,
   addVenueAction,
   createBookingAction,
+  createEventAction,
   updateBookingAction,
   updateEventAction,
   findHelpArticles,
@@ -198,6 +199,7 @@ const ACTION_HANDLERS = {
   update_contractor: { handler: (req, fields, db) => updateContractorAction(req.membership.accountId, fields, db), requirePermission: 'manageContractors', targetType: 'contractor' },
   add_venue: { handler: (req, fields, db) => addVenueAction(req.membership.accountId, fields, db), requirePermission: 'manageVenues', targetType: 'venue' },
   create_booking: { handler: (req, fields, db) => createBookingAction(req.membership.accountId, fields, db), requirePermission: 'manageBookings', targetType: 'booking' },
+  create_event: { handler: (req, fields, db) => createEventAction(req.membership.accountId, fields, db), requirePermission: 'manageEvents', targetType: 'event' },
   update_booking: { handler: (req, fields, db) => updateBookingAction(req.membership.accountId, fields, db), requirePermission: 'manageBookings', targetType: 'booking' },
   update_event: { handler: (req, fields, db) => updateEventAction(req.membership.accountId, fields, db), requirePermission: 'manageEvents', targetType: 'event' },
 };
@@ -221,6 +223,13 @@ router.post('/confirm-action', assistantLimiter, asyncHandler(async (req, res) =
       const claimed = await tx.assistantProposal.updateMany({ where: { id: proposal.id, usedAt: null }, data: { usedAt: new Date() } });
       if (claimed.count !== 1) throw new Error('This Assistant proposal was already used.');
       const result = await action.handler(req, fields, tx);
+      if (action.targetType && result?.id) {
+        const model = action.targetType === 'booking' ? tx.booking : action.targetType === 'event' ? tx.event : null;
+        if (model) {
+          const persisted = await model.findFirst({ where: { id: result.id, accountId: req.membership.accountId }, select: { id: true } });
+          if (!persisted) throw new Error(`The ${action.targetType} could not be verified after saving. Please try again.`);
+        }
+      }
       await tx.assistantAction.create({ data: { accountId: req.membership.accountId, userId: req.session.userId, type: proposal.type, description: proposal.description, targetType: action.targetType, targetId: action.targetType ? result?.id || null : null } });
       return { type: proposal.type, result };
     });

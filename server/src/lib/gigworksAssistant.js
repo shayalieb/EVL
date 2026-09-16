@@ -42,6 +42,7 @@ const TOOL_PERMISSIONS = {
   propose_update_contractor: 'manageContractors',
   propose_add_venue: 'manageVenues',
   propose_create_booking: 'manageBookings',
+  propose_create_event: 'manageEvents',
   propose_update_booking: 'manageBookings',
   propose_update_event: 'manageEvents',
 };
@@ -219,7 +220,7 @@ const TOOLS = [
 // the user to review and confirm in the UI. Nothing under this file writes
 // to the database on its own; see the *Action functions below, which only
 // run from POST /assistant/confirm-action after explicit user confirmation.
-const TERMINAL_TOOLS = new Set(['navigate_to', 'propose_create_reminder', 'propose_add_client', 'propose_update_client', 'propose_add_contractor', 'propose_update_contractor', 'propose_add_venue', 'propose_create_booking', 'propose_update_booking', 'propose_update_event']);
+const TERMINAL_TOOLS = new Set(['navigate_to', 'propose_create_reminder', 'propose_add_client', 'propose_update_client', 'propose_add_contractor', 'propose_update_contractor', 'propose_add_venue', 'propose_create_booking', 'propose_create_event', 'propose_update_booking', 'propose_update_event']);
 
 // The one real safety boundary for booking edits — the model's schema
 // literally has no properties for deletedAt, venue, schedule, proposal,
@@ -302,7 +303,7 @@ const WRITE_TOOLS = [
   },
   {
     name: 'propose_create_booking',
-    description: 'Propose creating a new booking for an existing client. This does not create it — the user must confirm first. clientId must come from find_client or a just-confirmed add_client — never invent one.',
+    description: 'Propose creating a new booking or inquiry for an existing client. This does not create it — the user must confirm first. clientId must come from find_client or a just-confirmed add_client — never invent one.',
     input_schema: {
       type: 'object',
       properties: {
@@ -310,9 +311,24 @@ const WRITE_TOOLS = [
         clientId: { type: 'string' },
         eventDate: { type: 'string', description: 'YYYY-MM-DD.' },
         eventType: { type: 'string' },
+        bookingStatus: { type: 'string', description: 'Use the account booking/inquiry status the user requested, when provided.' },
         notes: { type: 'string' },
       },
       required: ['eventName', 'clientId'],
+    },
+  },
+  {
+    name: 'propose_create_event',
+    description: 'Propose creating a standalone event. This does not create it — the user must confirm first. If a client is supplied, clientId must come from find_client; never invent one.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' }, clientId: { type: 'string' }, eventDate: { type: 'string', description: 'YYYY-MM-DD.' },
+        eventType: { type: 'string' }, eventStatus: { type: 'string' }, contactPhone: { type: 'string' },
+        contactEmail: { type: 'string' }, startTime: { type: 'string', description: '24-hour HH:mm.' },
+        endTime: { type: 'string', description: '24-hour HH:mm.' }, eventNote: { type: 'string' },
+      },
+      required: ['name'],
     },
   },
   {
@@ -692,7 +708,15 @@ async function buildPendingAction(accountId, name, input) {
     return {
       type: 'create_booking',
       description: `Create a new booking: ${input.eventName}${client ? ` for ${client.firstName} ${client.lastName}` : ''}${input.eventDate ? ` on ${fmtDate(input.eventDate)}` : ''}`,
-      fields: { eventName: input.eventName, clientId: input.clientId, eventDate: input.eventDate || null, eventType: input.eventType || null, notes: input.notes || null },
+      fields: { eventName: input.eventName, clientId: input.clientId, eventDate: input.eventDate || null, eventType: input.eventType || null, bookingStatus: input.bookingStatus || null, notes: input.notes || null },
+    };
+  }
+  if (name === 'propose_create_event') {
+    const client = input.clientId ? await prisma.client.findFirst({ where: { id: input.clientId, accountId }, select: { firstName: true, lastName: true } }) : null;
+    return {
+      type: 'create_event',
+      description: `Create a new event: ${input.name}${client ? ` for ${client.firstName} ${client.lastName}` : ''}${input.eventDate ? ` on ${fmtDate(input.eventDate)}` : ''}`,
+      fields: Object.fromEntries(Object.entries(input).map(([key, value]) => [key, value || null])),
     };
   }
   if (name === 'propose_update_booking') {
@@ -892,23 +916,48 @@ export async function addVenueAction(accountId, fields, db = prisma) {
 }
 
 export async function createBookingAction(accountId, fields, db = prisma) {
-  const { eventName, clientId, eventDate, eventType, notes } = fields || {};
-  if (!eventName?.trim()) throw new Error('eventName is required.');
+  const { eventName, clientId, eventDate, eventType, bookingStatus, notes } = fields || {};
+  const cleanName = safeText(eventName, 250);
+  if (!cleanName) throw new Error('eventName is required.');
   if (!clientId) throw new Error('clientId is required.');
+  if (eventDate && !/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) throw new Error('Event date must use YYYY-MM-DD.');
   const client = await db.client.findFirst({ where: { id: clientId, accountId } });
   if (!client) throw new Error('Client not found.');
   return createWithPreservedId(db.booking, {
     id: randomUUID(),
     accountId,
-    eventName: eventName.trim(),
+    eventName: cleanName,
     clientId,
     eventDate: eventDate || null,
-    eventType: eventType || null,
-    notes: notes || null,
+    eventType: safeText(eventType, 250) || null,
+    bookingStatus: safeText(bookingStatus, 250) || null,
+    notes: safeText(notes, 10000) || null,
     venue: {},
     schedule: [],
     activityLog: [{ id: randomUUID(), date: new Date().toISOString(), text: 'Created via GigWorks Assistant' }],
     history: [],
+  }, accountId);
+}
+
+export async function createEventAction(accountId, fields, db = prisma) {
+  const name = safeText(fields?.name, 250);
+  if (!name) throw new Error('Event name is required.');
+  if (fields?.eventDate && !/^\d{4}-\d{2}-\d{2}$/.test(fields.eventDate)) throw new Error('Event date must use YYYY-MM-DD.');
+  for (const key of ['startTime', 'endTime']) if (fields?.[key] && !/^([01]\d|2[0-3]):[0-5]\d$/.test(fields[key])) throw new Error(`${key} must use 24-hour HH:mm.`);
+  const contactEmail = fields?.contactEmail ? normalizeValidEmail(fields.contactEmail) : null;
+  if (fields?.contactEmail && !contactEmail) throw new Error('A valid event contact email is required.');
+  if (fields?.clientId) {
+    const client = await db.client.findFirst({ where: { id: fields.clientId, accountId }, select: { id: true } });
+    if (!client) throw new Error('Client not found.');
+  }
+  return createWithPreservedId(db.event, {
+    id: randomUUID(), accountId, name, clientId: fields?.clientId || null,
+    eventDate: fields?.eventDate || null, eventType: safeText(fields?.eventType, 250) || null,
+    eventStatus: safeText(fields?.eventStatus, 250) || null, contactPhone: safeText(fields?.contactPhone, 60) || null,
+    contactEmail, startTime: fields?.startTime || null, endTime: fields?.endTime || null,
+    eventNote: safeText(fields?.eventNote, 10000) || null, venue: {}, contractorBookings: [], categoryTabs: [],
+    schedule: [], prepGroups: [], requests: [], shotList: [], secondShooters: [], otherExpenses: [], setLists: [],
+    history: [{ id: randomUUID(), at: new Date().toISOString(), type: 'created', note: 'Created via GigWorks Assistant' }],
   }, accountId);
 }
 
