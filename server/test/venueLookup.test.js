@@ -21,11 +21,16 @@ test('lookup requires configuration and hides provider errors', async () => {
   await assert.rejects(lookupVenue({ query: 'Hall' }, { apiKey: 'secret', fetchImpl: async () => { throw new Error('secret'); } }), (error) => error.status === 502 && !error.message.includes('secret'));
 });
 test('search encodes query and returns named matches only', async () => {
-  const result = await lookupVenue({ query: 'Hall & Garden, NY' }, { apiKey: 'secret', fetchImpl: async (url) => {
+  const result = await lookupVenue({ query: 'Hall & Garden V2' }, { apiKey: 'secret', fetchImpl: async (url) => {
     assert.equal(url.hostname, 'api.geoapify.com');
-    assert.equal(url.searchParams.get('text'), 'Hall & Garden, NY');
-    assert.equal(url.searchParams.get('type'), 'amenity');
-    assert.equal(url.searchParams.get('filter'), 'countrycode:us');
+    if (url.pathname === '/v1/geocode/search') {
+      assert.equal(url.searchParams.get('type'), 'country');
+      assert.equal(url.searchParams.get('filter'), 'countrycode:us');
+      return { ok: true, json: async () => ({ features: [{ properties: { place_id: 'usa', country_code: 'us' } }] }) };
+    }
+    assert.equal(url.pathname, '/v2/places');
+    assert.equal(url.searchParams.get('name'), 'Hall & Garden');
+    assert.equal(url.searchParams.get('filter'), 'place:usa');
     return { ok: true, json: async () => ({ features: [{ properties: { place_id: 'id', name: 'Hall', country_code: 'us' } }, { properties: { place_id: 'other', name: 'Hall', country_code: 'ca' } }, { properties: { place_id: 'city' } }] }) };
   } });
   assert.equal(result.length, 1);
