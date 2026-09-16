@@ -25,7 +25,13 @@ test('search encodes query and returns named matches only', async () => {
     assert.equal(url.hostname, 'api.geoapify.com');
     assert.equal(url.searchParams.get('text'), 'Hall & Garden, NY');
     assert.equal(url.searchParams.get('type'), 'amenity');
-    return { ok: true, json: async () => ({ features: [{ properties: { place_id: 'id', name: 'Hall' } }, { properties: { place_id: 'city' } }] }) };
+    assert.equal(url.searchParams.get('filter'), 'countrycode:us');
+    return { ok: true, json: async () => ({ features: [{ properties: { place_id: 'id', name: 'Hall', country_code: 'us' } }, { properties: { place_id: 'other', name: 'Hall', country_code: 'ca' } }, { properties: { place_id: 'city' } }] }) };
   } });
   assert.equal(result.length, 1);
+});
+
+test('country selection also excludes out-of-country detail results', async () => {
+  const result = await lookupVenue({ placeId: 'id', country: 'ca' }, { apiKey: 'secret', fetchImpl: async () => ({ ok: true, json: async () => ({ features: [{ properties: { place_id: 'id', name: 'Hall', country_code: 'us' } }] }) }) });
+  assert.deepEqual(result, []);
 });

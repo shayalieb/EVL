@@ -6,6 +6,7 @@ import { fillEmptyVenueFields } from '../lib/venueLookup';
 export default function VenueLookup({ venue, onSelect }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [country, setCountry] = useState('us');
   const [places, setPlaces] = useState(null);
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -15,7 +16,7 @@ export default function VenueLookup({ venue, onSelect }) {
     setBusy(true); setError(''); setSelected(null);
     if (!place) setPlaces(null);
     try {
-      const params = new URLSearchParams(place ? { placeId: place.placeId } : { query });
+      const params = new URLSearchParams(place ? { placeId: place.placeId, country } : { query, country });
       const data = await apiFetch(`/venues/lookup?${params}`);
       if (place) {
         // Geoapify can return a canonical details ID different from its search ID.
@@ -31,6 +32,8 @@ export default function VenueLookup({ venue, onSelect }) {
     <Modal open={open} onClose={() => { if (!busy) setOpen(false); }} title="Find venue details">
       <div className="space-y-4">
         <p className="text-sm text-slate-500">Search by venue name and city or state, then check the address. Available details fill empty fields only.</p>
+        <label className="block text-sm font-semibold">Country<select value={country} disabled={busy} onChange={(event) => { setCountry(event.target.value); setPlaces(null); setSelected(null); setError(''); }} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"><option value="us">United States</option><option value="ca">Canada</option><option value="gb">United Kingdom</option><option value="il">Israel</option><option value="au">Australia</option><option value="nz">New Zealand</option><option value="ie">Ireland</option><option value="fr">France</option><option value="de">Germany</option><option value="mx">Mexico</option></select></label>
+        <p className="text-xs text-slate-500">Only venues in the selected country are shown.</p>
         <label className="block text-sm font-semibold">Venue and area<input value={query} maxLength={240} disabled={busy} onChange={(event) => { setQuery(event.target.value); setPlaces(null); setSelected(null); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); search(); } }} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
         <button type="button" disabled={busy || query.trim().length < 3} onClick={() => search()} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? 'Looking up…' : 'Search venues'}</button>
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
