@@ -69,3 +69,20 @@ export async function closeRedis() {
     connectPromise = undefined;
   }
 }
+
+// One atomic, shared daily budget for the entire application. Fail closed when
+// Redis is unavailable so restarts/replicas cannot reset the paid-search cap.
+export async function reserveGoogleVenueSearch({ getRedis = connectedRedis, dailyLimit = process.env.GOOGLE_VENUE_DAILY_LIMIT || 25 } = {}) {
+  const limit = Number(dailyLimit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 10000) throw Object.assign(new Error('Google search is disabled by the daily budget setting.'), { status: 503 });
+  try {
+    const redis = await getRedis();
+    if (!redis) throw new Error('Shared budget unavailable');
+    const day = new Date().toISOString().slice(0, 10);
+    const used = await redis.eval("local n = redis.call('INCR', KEYS[1]); if n == 1 then redis.call('EXPIRE', KEYS[1], 172800) end; return n", { keys: [`evl:google-venue-budget:${day}`], arguments: [] });
+    if (Number(used) > limit) throw Object.assign(new Error('Today’s Google search limit has been reached. Use regular search, website import, or manual entry.'), { status: 429 });
+  } catch (error) {
+    if (error.status === 429) throw error;
+    throw Object.assign(new Error('Google search is unavailable because its daily budget cannot be checked. Use regular search or website import.'), { status: 503 });
+  }
+}

@@ -47,8 +47,8 @@ Point the frontend's `VITE_API_BASE` at the deployed URL (or
 
 Set `GEOAPIFY_API_KEY` on the backend service to enable **Find venue details**
 under Venue Name in booking and event forms. The key stays on the server.
-Search uses Geoapify amenity geocoding; choosing a result retrieves its place
-details. Users review the match and fill only empty name/address/phone/email
+Search uses Geoapify Places name search within the selected country, with
+amenity geocoding as a fallback; choosing a result retrieves its place details. Users review the match and fill only empty name/address/phone/email
 fields. Missing data remains blank. Existing fields and event-specific notes
 are preserved. Coverage varies by location; this is not a complete wedding
 venue directory. The lookup displays Geoapify and OpenStreetMap attribution.
@@ -71,3 +71,26 @@ Gigworks owns the Twilio connection; customers request a number from
 Delivery callbacks are added automatically when Gigworks sends a message.
 Twilio webhook signatures are required and contractor STOP/START keywords
 update the account's consent record automatically.
+
+### Additional venue sources
+
+**Search Google** uses Places API (New) Text Search, only on explicit clicks.
+Set `GOOGLE_PLACES_API_KEY` on the API service, restricted to Places API (New).
+Set `REDIS_URL` and optionally `GOOGLE_VENUE_DAILY_LIMIT` (default 25 searches
+per UTC day, shared across all users and replicas). The budget fails closed
+without Redis, counts failed provider requests, and survives API restarts.
+Also configure Google Cloud quotas as a second cost safeguard. No key is sent
+to the browser. The field mask uses Text Search Pro fields; there is no polling,
+autocomplete billing, pagination, or automatic paid fallback.
+
+Google results are country-checked and displayed with Google Maps attribution
+and provider credits, with links to Google Maps. They are not copied into
+bookings or persisted/cached. Public terms and privacy pages disclose this use.
+
+**Import from venue website** requires no provider key. It reads JSON-LD
+published on the supplied HTTPS page; it does not infer missing fields or crawl
+the site. Users review the match (including country) and fill only empty fields.
+Some websites do not publish this structured information and require manual
+entry. Robots exclusions are respected; blocked/unavailable sites are not
+bypassed. Imports validate public IPv4 DNS and pin the connection, validate each
+redirect, cap response size/time, and do not execute page scripts.

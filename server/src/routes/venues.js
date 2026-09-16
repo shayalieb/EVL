@@ -6,6 +6,9 @@ import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createWithPreservedId } from '../lib/idPreservingCreate.js';
 import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPageResponse } from '../lib/pagination.js';
 import { lookupVenue } from '../lib/venueLookup.js';
+import { lookupGoogleVenues } from '../lib/googleVenueLookup.js';
+import { importVenueWebsite } from '../lib/venueWebsite.js';
+import { reserveGoogleVenueSearch } from '../lib/rateLimiter.js';
 import { createRateLimiter } from '../lib/rateLimiter.js';
 
 const router = Router();
@@ -19,13 +22,33 @@ router.get('/lookup', createRateLimiter('venue-lookup', { windowMs: 60000, limit
   const country = typeof req.query.country === 'string' ? req.query.country.trim().toLowerCase() : 'us';
   if (!/^[a-z]{2}$/.test(country)) return res.status(400).json({ error: 'Choose a country for venue search.' });
   const placeId = typeof req.query.placeId === 'string' ? req.query.placeId.trim() : '';
-  if (placeId ? !/^[a-zA-Z0-9_-]{1,500}$/.test(placeId) : query.length < 3 || query.length > 240) return res.status(400).json({ error: 'Enter a venue name and city or state (3–240 characters).' });
+  if (placeId ? !/^[a-zA-Z0-9_-]{1,500}$/.test(placeId) : query.length < 3 || query.length > 240) return res.status(400).json({ error: 'Enter a venue name (3–240 characters).' });
   try {
     res.json({ places: await lookupVenue({ query, placeId, country }) });
   } catch (error) {
     if (error.status) return res.status(error.status).json({ error: error.message });
     throw error;
   }
+}));
+
+router.get('/google-search', createRateLimiter('google-venue-search', { windowMs: 60000, limit: 5 }), asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const permissions = effectivePermissions(req.membership);
+  if (!permissions.manageVenues && !permissions.manageBookings && !permissions.manageEvents) return res.status(403).json({ error: 'Not authorized.' });
+  const query = typeof req.query.query === 'string' ? req.query.query.trim() : '';
+  const country = typeof req.query.country === 'string' ? req.query.country.toLowerCase() : 'us';
+  if (query.length < 3 || query.length > 240 || !/^[a-z]{2}$/.test(country)) return res.status(400).json({ error: 'Enter a venue name and choose a country.' });
+  try { res.json({ places: await lookupGoogleVenues({ query, country }, { reserve: reserveGoogleVenueSearch }) }); }
+  catch (error) { res.status(error.status || 502).json({ error: error.status ? error.message : 'Google search is unavailable.' }); }
+}));
+
+router.post('/website-import', createRateLimiter('venue-website-import', { windowMs: 60000, limit: 5 }), asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const permissions = effectivePermissions(req.membership);
+  if (!permissions.manageVenues && !permissions.manageBookings && !permissions.manageEvents) return res.status(403).json({ error: 'Not authorized.' });
+  if (typeof req.body?.url !== 'string' || req.body.url.length > 2048) return res.status(400).json({ error: 'Enter a venue website address.' });
+  try { res.json(await importVenueWebsite(req.body.url)); }
+  catch (error) { res.status(error.status || 502).json({ error: error.status ? error.message : 'This website could not be read. Try its contact page or enter the details manually.' }); }
 }));
 
 const FIELDS = ['address1', 'address2', 'city', 'state', 'zip', 'contactName', 'contactPhone', 'contactPhoneExt', 'contactEmail', 'locationNote', 'loadInInfo'];
