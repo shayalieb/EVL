@@ -18,7 +18,8 @@ export default function VenueLookup({ venue, onSelect }) {
       const params = new URLSearchParams(place ? { placeId: place.placeId } : { query });
       const data = await apiFetch(`/venues/lookup?${params}`);
       if (place) {
-        const found = data.places.find((item) => item.placeId === place.placeId);
+        // Geoapify can return a canonical details ID different from its search ID.
+        const found = data.places[0];
         if (!found) throw new Error('Details are unavailable for this venue. Try another match.');
         setSelected(found);
       } else setPlaces(data.places);
