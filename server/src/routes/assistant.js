@@ -109,6 +109,7 @@ router.post('/ask', assistantLimiter, asyncHandler(async (req, res) => {
       const action = result.pendingAction;
       const proposal = await prisma.assistantProposal.create({ data: { accountId: req.membership.accountId, userId: req.session.userId, type: action.type, description: action.description, fields: action.fields, candidates: action.candidates || [], expiresAt: new Date(Date.now() + PROPOSAL_TTL_MS) } });
       result.pendingAction = { id: proposal.id, type: proposal.type, description: proposal.description, candidates: proposal.candidates, expiresAt: proposal.expiresAt };
+      result.answer = 'Review the details below, then click Confirm. This record is not saved in Gigworks yet.';
     }
     // A proposed action can come back with no accompanying text (e.g. the
     // model went straight to propose_update_booking) — pendingAction/link
@@ -138,17 +139,27 @@ router.post('/ask', assistantLimiter, asyncHandler(async (req, res) => {
 // backstop for a user who hasn't asked anything in a while.
 router.get('/messages', asyncHandler(async (req, res) => {
   const cutoff = new Date(Date.now() - HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000);
-  const messages = await prisma.assistantMessage.findMany({
-    where: { accountId: req.membership.accountId, userId: req.session.userId, createdAt: { gte: cutoff } },
-    orderBy: { createdAt: 'asc' },
-  });
-  res.json({ messages });
+  const [messages, pendingActions] = await Promise.all([
+    prisma.assistantMessage.findMany({
+      where: { accountId: req.membership.accountId, userId: req.session.userId, createdAt: { gte: cutoff } },
+      orderBy: { createdAt: 'asc' },
+    }),
+    prisma.assistantProposal.findMany({
+      where: { accountId: req.membership.accountId, userId: req.session.userId, usedAt: null, expiresAt: { gt: new Date() } },
+      select: { id: true, type: true, description: true, candidates: true, expiresAt: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    }),
+  ]);
+  res.json({ messages, pendingActions });
 }));
 
 // Only ever clears the caller's own chat — never another team member's,
 // even though everyone on the account shares the same Activity log above.
 router.delete('/messages', asyncHandler(async (req, res) => {
-  await prisma.assistantMessage.deleteMany({ where: { accountId: req.membership.accountId, userId: req.session.userId } });
+  await prisma.$transaction([
+    prisma.assistantMessage.deleteMany({ where: { accountId: req.membership.accountId, userId: req.session.userId } }),
+    prisma.assistantProposal.deleteMany({ where: { accountId: req.membership.accountId, userId: req.session.userId, usedAt: null } }),
+  ]);
   res.json({ ok: true });
 }));
 
@@ -231,7 +242,7 @@ router.post('/confirm-action', assistantLimiter, asyncHandler(async (req, res) =
         }
       }
       await tx.assistantAction.create({ data: { accountId: req.membership.accountId, userId: req.session.userId, type: proposal.type, description: proposal.description, targetType: action.targetType, targetId: action.targetType ? result?.id || null : null } });
-      return { type: proposal.type, result };
+      return { type: proposal.type, targetType: action.targetType, result };
     });
     res.status(201).json(completed);
   } catch (err) {

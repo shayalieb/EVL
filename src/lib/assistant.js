@@ -21,7 +21,7 @@ export async function confirmAssistantAction(proposalId, clientChoice = null) {
     method: 'POST',
     body: JSON.stringify({ proposalId, clientChoice }),
   });
-  return data.result;
+  return data;
 }
 
 // The audit trail of confirmed writes the assistant has made for this
@@ -37,7 +37,15 @@ export async function listAssistantActivity() {
 // this is the actual conversation text, private to the person who asked.
 export async function getAssistantMessages() {
   const data = await apiFetch('/assistant/messages');
-  return data.messages;
+  return [
+    ...data.messages.map((message) => ({ ...message, sortAt: message.createdAt })),
+    ...(data.pendingActions || []).map((pendingAction) => ({
+      role: 'assistant',
+      content: 'Pending confirmation — this record is not saved in Gigworks yet.',
+      pendingAction,
+      sortAt: pendingAction.createdAt,
+    })),
+  ].sort((a, b) => new Date(a.sortAt) - new Date(b.sortAt));
 }
 
 // Wipes this user's entire persisted chat (not just the 7-day window) —

@@ -86,7 +86,7 @@ export default function AssistantModal({ open, onClose, initialView = 'chat', in
     setQuestion('');
     setMessagesLoading(true);
     getAssistantMessages()
-      .then((list) => setMessages(list.map(({ role, content }) => ({ role, content }))))
+      .then((list) => setMessages(list))
       .catch(() => setMessages([]))
       .finally(() => setMessagesLoading(false));
     setTrainingLoading(true);
@@ -141,9 +141,12 @@ export default function AssistantModal({ open, onClose, initialView = 'chat', in
   async function handleConfirmAction(index, proposalId, clientChoice) {
     setConfirmingIndex(index);
     try {
-      await confirmAssistantAction(proposalId, clientChoice);
-      setMessages((prev) => prev.map((m, i) => (i === index ? { ...m, pendingAction: { ...m.pendingAction, done: true } } : m)));
-      showToast('Done.');
+      const completed = await confirmAssistantAction(proposalId, clientChoice);
+      setMessages((prev) => prev.map((m, i) => (i === index ? {
+        ...m,
+        pendingAction: { ...m.pendingAction, done: true, targetType: completed.targetType, targetId: completed.result?.id },
+      } : m)));
+      showToast(completed.targetType ? `Saved ${completed.targetType} in Gigworks.` : 'Saved in Gigworks.');
     } catch (err) {
       showToast(err.message || 'Failed to complete that action.', 'error');
     } finally {
@@ -385,7 +388,7 @@ export default function AssistantModal({ open, onClose, initialView = 'chat', in
                         />
                       </div>
                     )}
-                    {m.pendingAction?.done && <div className="text-xs text-slate-400">✓ Done</div>}
+                    {m.pendingAction?.done && <div className="flex items-center gap-3 text-xs font-semibold text-emerald-700"><span>✓ Saved in Gigworks</span>{m.pendingAction.targetType && m.pendingAction.targetId && <button type="button" onClick={() => goTo(m.pendingAction.targetType, m.pendingAction.targetId)} className="text-indigo-600 hover:underline">View {m.pendingAction.targetType} →</button>}</div>}
                     {m.pendingAction?.dismissed && <div className="text-xs text-slate-400">Dismissed</div>}
                   </div>
                 ))}
