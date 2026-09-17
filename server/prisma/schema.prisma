@@ -1593,6 +1593,9 @@ model Contractor {
   // queried/written by the public RSVP route).
   pricingTiers    Json    @default("[]")
   priceNotes      String? @db.Text
+  preferredPaymentMethod String?
+  venmoHandle            String?
+  zelleContact           String?
 
   createdAt       DateTime                   @default(now())
   updatedAt       DateTime                   @updatedAt

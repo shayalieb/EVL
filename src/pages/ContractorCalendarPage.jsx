@@ -7,7 +7,7 @@ import { Skeleton, SkeletonTable } from '../components/ui/Skeleton';
 import Modal from '../components/ui/Modal';
 import { formatCurrency as currency } from '../lib/format';
 
-const PAYMENT_METHOD_LABELS = { ach: 'ACH', check: 'Check', card: 'Credit/Debit Card', cash: 'Cash', wire: 'Wire', other: 'Other' };
+const PAYMENT_METHOD_LABELS = { ach: 'ACH', check: 'Check', card: 'Credit/Debit Card', cash: 'Cash', wire: 'Wire', venmo: 'Venmo', zelle: 'Zelle', other: 'Other' };
 
 function friendlyDate(value) {
   if (!value) return null;

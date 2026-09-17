@@ -13,7 +13,7 @@ const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
 
 const EXPENSE_CATEGORIES = new Set(['contractor_payment', 'production', 'backline', 'travel', 'processing_fee', 'agency_commission', 'tax', 'reimbursement', 'other_expense']);
-const METHODS = new Set(['ach', 'check', 'card', 'cash', 'wire', 'other']);
+const METHODS = new Set(['ach', 'check', 'card', 'cash', 'wire', 'venmo', 'zelle', 'other']);
 const REPORT_TABS = new Set(['receivables', 'payables']);
 const RECEIPT_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
 const RECEIPT_EXTENSIONS = /\.(pdf|jpe?g|png|webp|heic|heif)$/i;
@@ -313,7 +313,7 @@ router.get('/reports', requireFinancialPermission('viewFinancials'), asyncHandle
       if (expectedAmount === null) { incompleteEventCosts.add(event.id); continue; }
       if (assignment.paymentStatus !== 'paid' && inIsoDateRange(event.eventDate, from, to)) {
         const timing = contractorPaymentTiming({ dueDate: assignment.paymentDueDate, eventDate: event.eventDate, today: asOf.toISOString().slice(0, 10) });
-        payables.push({ assignmentId: assignment.id || assignment.contractorId, eventId: event.id, eventName: event.name || 'Untitled event', eventDate: event.eventDate, paymentDueDate: plausibleIsoDate(assignment.paymentDueDate), contractorId: assignment.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor', expectedAmount, pricingComplete: true, ...timing });
+        payables.push({ assignmentId: assignment.id || assignment.contractorId, eventId: event.id, eventName: event.name || 'Untitled event', eventDate: event.eventDate, paymentDueDate: plausibleIsoDate(assignment.paymentDueDate), contractorId: assignment.contractorId, contractorName: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Contractor', expectedAmount, pricingComplete: true, preferredPaymentMethod: contractor?.preferredPaymentMethod || null, venmoHandle: contractor?.venmoHandle || null, zelleContact: contractor?.zelleContact || null, ...timing });
       }
     }
   }

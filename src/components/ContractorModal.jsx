@@ -20,6 +20,7 @@ const emptyForm = {
   contractorType1: '', contractorType2: '',
   pricingTiers: emptyPricingTiers(),
   priceNotes: '',
+  preferredPaymentMethod: '', venmoHandle: '', zelleContact: '',
 };
 
 export default function ContractorModal({ open, onClose, contractor }) {
@@ -54,7 +55,10 @@ export default function ContractorModal({ open, onClose, contractor }) {
         priceNotes: contractor.priceNotes || '',
         email: contractor.email || '',
         phone: contractor.phone || '',
-      } : { ...emptyForm, pricingTiers: emptyPricingTiers(), email: '', phone: '' });
+        preferredPaymentMethod: contractor.preferredPaymentMethod || '',
+        venmoHandle: contractor.venmoHandle || '',
+        zelleContact: contractor.zelleContact || '',
+      } : { ...emptyForm, pricingTiers: emptyPricingTiers(), email: '', phone: '', preferredPaymentMethod: '', venmoHandle: '', zelleContact: '' });
       setError('');
       setAddingType(false);
       setNewTypeLabel('');
@@ -214,6 +218,27 @@ export default function ContractorModal({ open, onClose, contractor }) {
           <div>
             <label className={labelClass}>Phone Number</label>
             <input type="tel" value={form.phone} onChange={(e) => update('phone', formatPhoneNumber(e.target.value))} data-testid="contractor-modal-phone-input" className={inputClass} />
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="text-sm font-semibold text-slate-700">Payment preferences</p>
+          <p className="mt-0.5 text-xs text-slate-500">Used to prefill the payment screen. GigWorks stores the destination and records completed payments.</p>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div>
+              <label className={labelClass}>Preferred method</label>
+              <select value={form.preferredPaymentMethod} onChange={(e) => update('preferredPaymentMethod', e.target.value)} className={inputClass} data-testid="contractor-modal-payment-method-select">
+                <option value="">Not specified</option><option value="ach">ACH</option><option value="check">Check</option><option value="venmo">Venmo</option><option value="zelle">Zelle</option><option value="cash">Cash</option><option value="wire">Wire</option><option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelClass}>Venmo username</label>
+              <input value={form.venmoHandle} onChange={(e) => update('venmoHandle', e.target.value.replace(/^@/, ''))} placeholder="username" className={inputClass} data-testid="contractor-modal-venmo-input" />
+            </div>
+            <div>
+              <label className={labelClass}>Zelle email or phone</label>
+              <input value={form.zelleContact} onChange={(e) => update('zelleContact', e.target.value)} placeholder="name@example.com or phone" className={inputClass} data-testid="contractor-modal-zelle-input" />
+            </div>
           </div>
         </div>
 

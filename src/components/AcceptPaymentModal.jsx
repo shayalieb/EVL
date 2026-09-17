@@ -13,6 +13,8 @@ const METHODS = [
   { value: 'card', label: 'Credit/Debit Card' },
   { value: 'cash', label: 'Cash' },
   { value: 'wire', label: 'Wire' },
+  { value: 'venmo', label: 'Venmo' },
+  { value: 'zelle', label: 'Zelle' },
   { value: 'other', label: 'Other' },
 ];
 
@@ -36,7 +38,7 @@ function todayLocalDate() {
 // onAccept's `overtimeHours` so it can persist the same override
 // ContractorPickerRow's own OT Hours field writes to — one field, two
 // convenient places to edit it.
-export default function AcceptPaymentModal({ open, title = 'Accept Payment', confirmLabel = 'Accept Payment', amountDue, amountLabel = 'Amount due', initialValues, overtime, onClose, onAccept }) {
+export default function AcceptPaymentModal({ open, title = 'Accept Payment', confirmLabel = 'Accept Payment', amountDue, amountLabel = 'Amount due', initialValues, paymentDetails, overtime, onClose, onAccept }) {
   const [amount, setAmount] = useState('');
   const [paymentDate, setPaymentDate] = useState(todayLocalDate());
   const [method, setMethod] = useState('');
@@ -95,7 +97,7 @@ export default function AcceptPaymentModal({ open, title = 'Accept Payment', con
         amount: Number(amount),
         paymentDate,
         method,
-        checkNumber: method === 'check' ? checkNumber.trim() : undefined,
+        checkNumber: checkNumber.trim() || undefined,
         memo: memo.trim() || undefined,
         ...(overtime ? { overtimeHours: Number(overtimeHours) || 0 } : {}),
       });
@@ -144,7 +146,7 @@ export default function AcceptPaymentModal({ open, title = 'Accept Payment', con
         <div>
           <label className={labelClass}>Payment Method</label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {METHODS.map((m) => (
+            {METHODS.filter((m) => paymentDetails || !['venmo', 'zelle'].includes(m.value)).map((m) => (
               <button
                 key={m.value}
                 type="button"
@@ -160,10 +162,11 @@ export default function AcceptPaymentModal({ open, title = 'Accept Payment', con
           </div>
         </div>
 
-        {method === 'check' && (
+        {(method === 'check' || method === 'venmo' || method === 'zelle') && (
           <div>
-            <label className={labelClass}>Check Number</label>
-            <input autoFocus value={checkNumber} onChange={(e) => setCheckNumber(e.target.value)} data-testid="accept-payment-check-number-input" className={inputClass} />
+            <label className={labelClass}>{method === 'check' ? 'Check Number' : 'Payment destination or confirmation'}</label>
+            <input autoFocus value={checkNumber} onChange={(e) => setCheckNumber(e.target.value)} placeholder={method === 'venmo' ? (paymentDetails?.venmoHandle ? `@${paymentDetails.venmoHandle}` : '@username or confirmation') : method === 'zelle' ? (paymentDetails?.zelleContact || 'Email, phone, or confirmation') : ''} data-testid="accept-payment-check-number-input" className={inputClass} />
+            {method !== 'check' && <p className="mt-1 text-xs text-slate-400">Send the payment in {method === 'venmo' ? 'Venmo' : 'your bank’s Zelle service'}, then record its confirmation here.</p>}
           </div>
         )}
 

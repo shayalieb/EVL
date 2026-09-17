@@ -6,7 +6,7 @@ import { getPricingTier, getPricingTiers, getOvertimeHours, getOvertimeAmount } 
 import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
 
 const controlClass = 'min-h-10 rounded-lg border border-slate-300 bg-white px-2.5 text-xs text-slate-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
-const PAYMENT_METHOD_LABELS = { ach: 'ACH', check: 'Check', card: 'Card', cash: 'Cash', wire: 'Wire', other: 'Other' };
+const PAYMENT_METHOD_LABELS = { ach: 'ACH', check: 'Check', card: 'Card', cash: 'Cash', wire: 'Wire', venmo: 'Venmo', zelle: 'Zelle', other: 'Other' };
 const requestStyle = { submitted: 'bg-amber-100 text-amber-800', approved: 'bg-emerald-100 text-emerald-700', disputed: 'bg-rose-100 text-rose-700', paid: 'bg-indigo-100 text-indigo-700' };
 const requestLabel = { submitted: 'Request needs review', approved: 'Request approved', disputed: 'Request returned', paid: 'Request paid' };
 

@@ -2897,13 +2897,17 @@ export default function EventFormPage() {
         amountDue={payingAmountDue}
         amountLabel="Rate"
         overtime={payingOvertime}
+        paymentDetails={payingContractor}
         initialValues={payingBooking?.paymentStatus === 'paid' ? {
           amount: payingBooking.paidAmount,
           paymentDate: payingBooking.paidAt,
           method: payingBooking.paymentMethod,
           checkNumber: payingBooking.paymentReference,
           memo: payingBooking.paymentMemo,
-        } : undefined}
+        } : {
+          method: payingContractor?.preferredPaymentMethod || '',
+          checkNumber: payingContractor?.preferredPaymentMethod === 'venmo' ? payingContractor?.venmoHandle || '' : payingContractor?.preferredPaymentMethod === 'zelle' ? payingContractor?.zelleContact || '' : '',
+        }}
         onClose={() => setPayingContractorId(null)}
         onAccept={async (payload) => {
           markContractorPaid(payingContractorId, payload);

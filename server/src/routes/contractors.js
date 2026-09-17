@@ -12,6 +12,7 @@ import { normalizeValidEmail } from '../lib/emailAddress.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
+const PAYMENT_METHODS = new Set(['ach', 'check', 'cash', 'wire', 'venmo', 'zelle', 'other']);
 
 function frontendUrl() {
   return process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -40,6 +41,9 @@ function serializeContractor(c) {
     contractorType2: c.contractorType2,
     pricingTiers: c.pricingTiers,
     priceNotes: c.priceNotes,
+    preferredPaymentMethod: c.preferredPaymentMethod,
+    venmoHandle: c.venmoHandle,
+    zelleContact: c.zelleContact,
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
   };
@@ -127,7 +131,7 @@ router.post('/', asyncHandler(async (req, res) => {
   if (!effectivePermissions(req.membership).manageContractors) {
     return res.status(403).json({ error: 'Not authorized.' });
   }
-  const { id, firstName, lastName, middleName, email, phone, contractorType1, contractorType2, pricingTiers, priceNotes } = req.body || {};
+  const { id, firstName, lastName, middleName, email, phone, contractorType1, contractorType2, pricingTiers, priceNotes, preferredPaymentMethod, venmoHandle, zelleContact } = req.body || {};
   if (!id?.trim()) {
     return res.status(400).json({ error: 'id is required.' });
   }
@@ -135,6 +139,7 @@ router.post('/', asyncHandler(async (req, res) => {
   if (!firstName?.trim() || !lastName?.trim() || !normalizedEmail) {
     return res.status(400).json({ error: 'First name, last name, and a valid email address are required.' });
   }
+  if (preferredPaymentMethod && !PAYMENT_METHODS.has(preferredPaymentMethod)) return res.status(400).json({ error: 'Select a valid preferred payment method.' });
 
   const contractor = await createWithPreservedId(prisma.contractor, {
     id,
@@ -148,6 +153,9 @@ router.post('/', asyncHandler(async (req, res) => {
     contractorType2: contractorType2 || null,
     pricingTiers: Array.isArray(pricingTiers) ? pricingTiers : [],
     priceNotes: priceNotes?.trim() || null,
+    preferredPaymentMethod: preferredPaymentMethod?.trim() || null,
+    venmoHandle: venmoHandle?.trim().replace(/^@/, '') || null,
+    zelleContact: zelleContact?.trim() || null,
   }, req.membership.accountId);
   res.status(201).json({ contractor: serializeContractor(contractor) });
 }));
@@ -221,7 +229,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     return res.status(404).json({ error: 'Contractor not found.' });
   }
 
-  const { firstName, lastName, middleName, email, phone, contractorType1, contractorType2, pricingTiers, priceNotes } = req.body || {};
+  const { firstName, lastName, middleName, email, phone, contractorType1, contractorType2, pricingTiers, priceNotes, preferredPaymentMethod, venmoHandle, zelleContact } = req.body || {};
   const data = {};
   if (firstName !== undefined) {
     if (!firstName.trim()) return res.status(400).json({ error: 'First name is required.' });
@@ -244,6 +252,12 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   if (contractorType2 !== undefined) data.contractorType2 = contractorType2 || null;
   if (pricingTiers !== undefined) data.pricingTiers = Array.isArray(pricingTiers) ? pricingTiers : [];
   if (priceNotes !== undefined) data.priceNotes = priceNotes?.trim() || null;
+  if (preferredPaymentMethod !== undefined) {
+    if (preferredPaymentMethod && !PAYMENT_METHODS.has(preferredPaymentMethod)) return res.status(400).json({ error: 'Select a valid preferred payment method.' });
+    data.preferredPaymentMethod = preferredPaymentMethod?.trim() || null;
+  }
+  if (venmoHandle !== undefined) data.venmoHandle = venmoHandle?.trim().replace(/^@/, '') || null;
+  if (zelleContact !== undefined) data.zelleContact = zelleContact?.trim() || null;
 
   const contractor = await prisma.contractor.update({ where: { id: existing.id }, data });
   res.json({ contractor: serializeContractor(contractor) });
