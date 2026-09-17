@@ -146,8 +146,8 @@ async function findByToken(token) {
 
 function rejectUnavailable(pr, res) {
   const availability = linkAvailability({ expiresAt: pr.expiresAt });
-  if (availability.available) return false;
-  res.status(410).json({ error: 'This proposal link has expired. Please contact the sender for a new link.', reason: availability.status });
+  if (availability === 'active') return false;
+  res.status(410).json({ error: 'This proposal link has expired. Please contact the sender for a new link.', reason: availability });
   return true;
 }
 

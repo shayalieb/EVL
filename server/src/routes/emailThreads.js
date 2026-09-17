@@ -130,8 +130,9 @@ router.post('/send', requireEmailSendPermission, emailSendLimiter, asyncHandler(
     // (or, for the image, can visibly clip in Outlook) at the narrower
     // width. See that function's own comment for the full reasoning.
     sent = await sendMail({ from: fromAddress, to: contractorEmail, subject, html: buildActionEmailHtml({ businessInfo, bodyHtml: body, maxWidth: 640 }), replyTo: thread.replyToAlias, headers, attachments });
-  } catch {
-    return res.status(503).json({ error: 'Email sending is not configured yet.' });
+  } catch (err) {
+    const unconfigured = err.message?.includes('RESEND_API_KEY');
+    return res.status(unconfigured ? 503 : 502).json({ error: unconfigured ? 'Email sending is not configured yet.' : (err.message || 'Failed to send email.') });
   }
   if (sent.error) return res.status(502).json({ error: sent.error.message || 'Failed to send email.' });
 

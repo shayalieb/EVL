@@ -44,8 +44,9 @@ router.post('/send', requireEmailSendPermission, emailSendLimiter, asyncHandler(
     // ad hoc, non-roster recipients) — see buildActionEmailHtml's own
     // comment for why the default width squeezes that content.
     ({ data, error } = await sendMail({ from, to: recipientEmail, subject, html: buildActionEmailHtml({ businessInfo, bodyHtml: body, ...(wide ? { maxWidth: 640 } : {}) }), replyTo: replyTo ? normalizeValidEmail(replyTo) : undefined, attachments }));
-  } catch {
-    return res.status(503).json({ error: 'Email sending is not configured yet.' });
+  } catch (err) {
+    const unconfigured = err.message?.includes('RESEND_API_KEY');
+    return res.status(unconfigured ? 503 : 502).json({ error: unconfigured ? 'Email sending is not configured yet.' : (err.message || 'Failed to send email.') });
   }
 
   if (error) return res.status(502).json({ error: error.message || 'Failed to send email.' });

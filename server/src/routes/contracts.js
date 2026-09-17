@@ -349,8 +349,8 @@ async function findByToken(token, database = prisma) {
 }
 
 function rejectUnavailable(found, res) {
-  if (found.availability.available) return false;
-  res.status(410).json({ error: 'This contract link has expired. Please contact the sender for a new link.', reason: found.availability.status });
+  if (found.availability === 'active') return false;
+  res.status(410).json({ error: 'This contract link has expired. Please contact the sender for a new link.', reason: found.availability });
   return true;
 }
 
@@ -389,7 +389,7 @@ publicContractsRouter.post('/:token/submit', asyncHandler(async (req, res) => {
   const result = await withSerializableTransaction(prisma, async (tx) => {
     const found = await findByToken(req.params.token, tx);
     if (!found) return { error: { status: 404, message: 'This link is invalid or has expired.' } };
-    if (!found.availability.available) return { error: { status: 410, message: 'This contract link has expired. Please contact the sender for a new link.' } };
+    if (found.availability !== 'active') return { error: { status: 410, message: 'This contract link has expired. Please contact the sender for a new link.' } };
 
     const { contract, role } = found;
     if (email?.trim()) {

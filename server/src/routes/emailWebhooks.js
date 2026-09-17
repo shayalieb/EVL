@@ -77,7 +77,8 @@ function extractThreadId(addresses) {
 
 async function fetchFullEmail(emailId) {
   const resend = getResendClient();
-  const { data } = await resend.get(`/emails/receiving/${emailId}`);
+  const { data, error } = await resend.get(`/emails/receiving/${emailId}`);
+  if (error || !data) throw new Error(error?.message || 'Received email body was unavailable.');
   return data;
 }
 
@@ -103,7 +104,7 @@ async function handleSupportReply(res, rawId, event) {
     full = await fetchFullEmail(event.data.email_id);
   } catch (err) {
     console.error('Failed to fetch received email body:', err);
-    return res.json({ ok: true });
+    return res.status(503).json({ error: 'Could not retrieve the received email yet.' });
   }
 
   try {
@@ -159,7 +160,25 @@ router.post('/resend', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Invalid webhook signature.' });
   }
 
-  if (event.type !== 'email.received') return res.json({ ok: true });
+  if (event.type !== 'email.received') {
+    const deliveryUpdates = {
+      'email.sent': { deliveryStatus: 'sent' },
+      'email.delivered': { deliveryStatus: 'delivered', deliveredAt: new Date(event.created_at || Date.now()), failedAt: null, failureCode: null },
+      'email.delivery_delayed': { deliveryStatus: 'delayed', failureCode: 'delivery_delayed' },
+      'email.bounced': { deliveryStatus: 'failed', failedAt: new Date(event.created_at || Date.now()), failureCode: event.data?.bounce?.subType || event.data?.bounce?.type || 'bounced' },
+      'email.failed': { deliveryStatus: 'failed', failedAt: new Date(event.created_at || Date.now()), failureCode: event.data?.failed?.reason || 'failed' },
+      'email.suppressed': { deliveryStatus: 'failed', failedAt: new Date(event.created_at || Date.now()), failureCode: 'suppressed' },
+      'email.complained': { deliveryStatus: 'failed', failedAt: new Date(event.created_at || Date.now()), failureCode: 'complained' },
+    };
+    const update = deliveryUpdates[event.type];
+    if (update && event.data?.email_id) {
+      await prisma.emailMessage.updateMany({
+        where: { OR: [{ providerMessageId: event.data.email_id }, { resendMessageId: event.data.email_id }] },
+        data: update,
+      });
+    }
+    return res.json({ ok: true });
+  }
 
   const threadId = extractThreadId([...(event.data.to || []), ...(event.data.received_for || [])]);
   if (!threadId) {
@@ -182,7 +201,8 @@ router.post('/resend', asyncHandler(async (req, res) => {
     full = await fetchFullEmail(event.data.email_id);
   } catch (err) {
     console.error('Failed to fetch received email body:', err);
-    return res.json({ ok: true });
+    // A 5xx asks Resend to retry instead of permanently dropping the reply.
+    return res.status(503).json({ error: 'Could not retrieve the received email yet.' });
   }
 
   const { storedBody, plainReply } = cleanReplyContent(full);

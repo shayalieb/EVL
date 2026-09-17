@@ -32,7 +32,7 @@ function serializeMember(m) {
     permissions: effectivePermissions(m),
     createdAt: m.createdAt,
     invitation: invite ? {
-      status: linkAvailability({ expiresAt: invite.expiresAt, revokedAt: invite.revokedAt, usedAt: invite.usedAt, singleUse: true }).status,
+      status: linkAvailability({ expiresAt: invite.expiresAt, revokedAt: invite.revokedAt, usedAt: invite.usedAt, singleUse: true }),
       expiresAt: invite.expiresAt,
       sentAt: invite.createdAt,
     } : null,

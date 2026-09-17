@@ -66,7 +66,9 @@ export async function resolveFromHeader({ accountId, fromName, localPart }) {
 // already treat a missing alias as "skip it" (no inbound configured yet).
 export async function resolveReplyDomain(accountId) {
   const domain = accountId ? await getVerifiedEmailDomain(accountId) : null;
-  if (domain) return domain.domain;
+  // Outbound verification alone does not mean replies can be received. Only
+  // advertise an account domain when its inbound/MX records are also ready.
+  if (domain?.receivingStatus === 'verified') return domain.domain;
   return process.env.RESEND_INBOUND_DOMAIN || null;
 }
 
@@ -178,7 +180,7 @@ export async function sendMail({ from, to, subject, html, replyTo, headers, atta
   const embeddedAttachments = (typeof html === 'object' && html !== null && Array.isArray(html.attachments)) ? html.attachments : [];
   const finalAttachments = [...(attachments || []), ...embeddedAttachments];
 
-  return withTimeout(resend.emails.send({
+  const result = await withTimeout(resend.emails.send({
     from,
     to,
     subject,
@@ -187,4 +189,15 @@ export async function sendMail({ from, to, subject, html, replyTo, headers, atta
     ...(headers ? { headers } : {}),
     ...(finalAttachments.length ? { attachments: finalAttachments } : {}),
   }), SEND_TIMEOUT_MS, 'Resend email send');
+
+  // Resend reports API/provider rejections as a resolved { error } result.
+  // Throwing here gives every caller one consistent failure contract and
+  // prevents workflows from recording a rejected email as successfully sent.
+  if (result?.error) {
+    const error = new Error(result.error.message || 'The email provider rejected this message.');
+    error.code = result.error.name || result.error.statusCode || 'email_provider_error';
+    error.providerError = result.error;
+    throw error;
+  }
+  return result;
 }
