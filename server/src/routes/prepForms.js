@@ -50,7 +50,7 @@ router.post('/:eventId/email', asyncHandler(async (req, res) => {
   const event = await ownedEvent(req, req.params.eventId);
   if (!event) return res.status(404).json({ error: 'Event not found.' });
   const email = normalizeValidEmail(req.body?.email || event.contactEmail);
-  if (!email) return res.status(400).json({ error: 'Add a valid client email address first.' });
+  if (!email) return res.status(400).json({ error: 'Enter a valid recipient email address.' });
   let link = await prisma.eventPrepFormLink.findUnique({ where: { eventId: event.id } });
   if (!link) {
     const token = generateToken();
@@ -59,13 +59,16 @@ router.post('/:eventId/email', asyncHandler(async (req, res) => {
   const accountData = await prisma.accountData.findUnique({ where: { accountId: event.accountId } });
   const businessInfo = accountData?.data?.businessInfo || {};
   const bandName = businessInfo.name || 'the band';
-  const { error } = await sendMail({
-    from: await resolveFromHeader({ accountId: event.accountId, fromName: bandName, localPart: 'events' }),
-    to: email,
-    subject: `${event.name || 'Your event'} — requests and preparation details`,
-    html: buildActionEmailHtml({ businessInfo, heading: 'Share your event requests', bodyHtml: `<p>Please use this form to send your requests and preparation notes for ${escapeHtml(event.name || 'your event')}.</p><p>If you would rather discuss anything over the phone, please reach out directly to ${escapeHtml(bandName)}.</p>`, buttonText: 'Open request form', buttonUrl: formUrl(link) }),
-  });
-  if (error) return res.status(502).json({ error: error.message || 'The email could not be sent.' });
+  try {
+    await sendMail({
+      from: await resolveFromHeader({ accountId: event.accountId, fromName: bandName, localPart: 'events' }),
+      to: email,
+      subject: `${event.name || 'Your event'} — requests and preparation details`,
+      html: buildActionEmailHtml({ businessInfo, heading: 'Share your event requests', bodyHtml: `<p>Please use this form to send your requests and preparation notes for ${escapeHtml(event.name || 'your event')}.</p><p>If you would rather discuss anything over the phone, please reach out directly to ${escapeHtml(bandName)}.</p>`, buttonText: 'Open request form', buttonUrl: formUrl(link) }),
+    });
+  } catch (error) {
+    return res.status(502).json({ error: error.message || 'The email could not be sent.' });
+  }
   res.json({ ok: true, url: formUrl(link), email });
 }));
 

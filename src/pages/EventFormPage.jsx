@@ -314,6 +314,9 @@ export default function EventFormPage() {
   const [prepEmailModalOpen, setPrepEmailModalOpen] = useState(false);
   const [sendingPrepEmail, setSendingPrepEmail] = useState(false);
   const [sharingPrepForm, setSharingPrepForm] = useState(false);
+  const [prepFormEmailOpen, setPrepFormEmailOpen] = useState(false);
+  const [prepFormRecipient, setPrepFormRecipient] = useState('');
+  const [prepFormEmailError, setPrepFormEmailError] = useState('');
   const [uploadingRequestId, setUploadingRequestId] = useState(null);
 
   const hasCategories = contractorTypes.length > 0;
@@ -1151,12 +1154,25 @@ export default function EventFormPage() {
 
   async function handleEmailPrepForm() {
     if (!event) return showToast('Save the event before emailing the client form.', 'error');
+    if (!isValidEmailAddress(prepFormRecipient)) {
+      setPrepFormEmailError('Enter a valid email address.');
+      return;
+    }
     setSharingPrepForm(true);
+    setPrepFormEmailError('');
     try {
-      await emailPrepFormLink(event.id, form.contactEmail);
-      showToast(`Client request form emailed to ${form.contactEmail}`);
-    } catch (err) { showToast(err.message || 'Could not email the client form.', 'error'); }
+      await emailPrepFormLink(event.id, prepFormRecipient);
+      setPrepFormEmailOpen(false);
+      showToast(`Client request form emailed to ${prepFormRecipient}`);
+    } catch (err) { setPrepFormEmailError(err.message || 'Could not email the client form.'); }
     finally { setSharingPrepForm(false); }
+  }
+
+  function openPrepFormEmail() {
+    if (!event) return showToast('Save the event before emailing the client form.', 'error');
+    setPrepFormRecipient(form.contactEmail || '');
+    setPrepFormEmailError('');
+    setPrepFormEmailOpen(true);
   }
 
   async function handleMarkPrepFormReviewed() {
@@ -2271,8 +2287,8 @@ export default function EventFormPage() {
               <button type="button" onClick={handleCopyPrepForm} disabled={!event || sharingPrepForm} className="px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-700 text-xs font-semibold hover:bg-indigo-50 disabled:opacity-40">
                 Copy Client Form
               </button>
-              <button type="button" onClick={handleEmailPrepForm} disabled={!event || !form.contactEmail || sharingPrepForm} title={!form.contactEmail ? 'Add the client email under Event Details first' : ''} className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-40">
-                {sharingPrepForm ? 'Sending…' : 'Email Client Form'}
+              <button type="button" onClick={openPrepFormEmail} disabled={!event || sharingPrepForm} className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-40">
+                Email Client Form
               </button>
               <button
                 type="button"
@@ -2967,6 +2983,24 @@ export default function EventFormPage() {
           showToast('Payment recorded');
         }}
       />
+
+      <Modal open={prepFormEmailOpen} onClose={sharingPrepForm ? undefined : () => setPrepFormEmailOpen(false)} title="Email Client Form" widthClass="max-w-md">
+        <form onSubmit={(e) => { e.preventDefault(); handleEmailPrepForm(); }} className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-slate-500">Send to</label>
+            <input autoFocus type="email" required value={prepFormRecipient} onChange={(e) => { setPrepFormRecipient(e.target.value); setPrepFormEmailError(''); }} placeholder="client@example.com" className={inputClass} data-testid="event-form-prep-form-recipient-input" />
+            <p className="mt-1 text-xs text-slate-400">The client email is filled in automatically when available. You can replace it with any other address.</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+            The email includes your logo, event details, and an <strong>Open request form</strong> button.
+          </div>
+          {prepFormEmailError && <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700" data-testid="event-form-prep-form-email-error">{prepFormEmailError}</p>}
+          <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+            <button type="button" onClick={() => setPrepFormEmailOpen(false)} disabled={sharingPrepForm} className="min-h-11 rounded-lg px-4 text-sm font-semibold text-slate-600 disabled:opacity-50">Cancel</button>
+            <button type="submit" disabled={sharingPrepForm} className="min-h-11 rounded-lg bg-indigo-600 px-5 text-sm font-semibold text-white disabled:opacity-50" data-testid="event-form-send-prep-form-email-button">{sharingPrepForm ? 'Sending…' : 'Send Email'}</button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal
         open={!!tierPickerContractor}
