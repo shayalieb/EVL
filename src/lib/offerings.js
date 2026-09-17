@@ -46,7 +46,7 @@ export function computeOfferingTotal(offering) {
   if (offering.type === 'package') {
     const base = Number(offering.amount) || 0;
     return base + (offering.lineItems || []).reduce((sum, item) => {
-      if (item.selected === false) return sum;
+      if (item.selected === false || item.excludedFromPrice) return sum;
       const rate = Number(item.rate) || 0;
       if (item.pricingType === 'flat') return sum + rate;
       const chargeable = Math.max(0, (Number(item.quantity) || 0) - (Number(item.includedQuantity) || 0));
@@ -67,9 +67,10 @@ export function packageLineSummary(offering) {
   if (offering?.type !== 'package') return '';
   return (offering.lineItems || []).filter((item) => item.selected !== false).map((item) => {
     const quantity = Math.max(0, Number(item.quantity) || 0);
-    if (item.pricingType === 'flat') return `QTY ${quantity || 1}  •  ${item.name}`;
+    const suffix = item.excludedFromPrice ? ' — Additional, not included in package price' : '';
+    if (item.pricingType === 'flat') return `QTY ${quantity || 1}  •  ${item.name}${suffix}`;
     const included = Number(item.includedQuantity) || 0;
     const extra = Math.max(0, quantity - included);
-    return `QTY ${quantity}  •  ${item.name}${included ? ` (${included} included${extra ? `, ${extra} additional` : ''})` : ''}`;
+    return `QTY ${quantity}  •  ${item.name}${!item.excludedFromPrice && included ? ` (${included} included${extra ? `, ${extra} additional` : ''})` : ''}${suffix}`;
   }).join('\n');
 }

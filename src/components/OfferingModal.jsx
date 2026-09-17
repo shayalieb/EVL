@@ -12,7 +12,7 @@ const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
 
 const CATEGORIES = ['Lighting', 'Flowers', 'Rentals', 'Production', 'Décor', 'Transportation', 'Other'];
 const UNITS = [['item', 'Item'], ['table', 'Table'], ['chair', 'Chair'], ['guest', 'Guest'], ['hour', 'Hour']];
-const blankLine = () => ({ id: uid('pkg'), name: '', pricingType: 'flat', unitType: 'item', rate: '', quantity: 1, includedQuantity: 0, required: true, selected: true });
+const blankLine = () => ({ id: uid('pkg'), name: '', pricingType: 'flat', unitType: 'item', rate: '', quantity: 1, includedQuantity: 0, required: true, selected: true, excludedFromPrice: false });
 const emptyForm = { name: '', details: '', type: 'general', amount: '', unitCount: '', ratePerUnit: '', category: '', lineItems: [] };
 
 export default function OfferingModal({ open, onClose, offering, onSaved }) {
@@ -123,12 +123,12 @@ export default function OfferingModal({ open, onClose, offering, onSaved }) {
                 return <div key={item.id} className="rounded-lg border border-slate-200 bg-white p-3 space-y-3">
                   <div className="flex gap-2"><input required value={item.name} onChange={(e) => patchLine({ name: e.target.value })} placeholder="Line item name" className={`${inputClass} flex-1`} /><button type="button" onClick={() => update('lineItems', form.lineItems.filter((_, i) => i !== index))} className="px-2 text-slate-300 hover:text-red-600" aria-label="Remove line item">✕</button></div>
                   <div className="grid gap-2 sm:grid-cols-5">
-                    <label className={labelClass}>Pricing<select value={item.pricingType} onChange={(e) => patchLine({ pricingType: e.target.value })} className={inputClass}><option value="flat">Flat</option><option value="perUnit">Per unit</option></select></label>
+                    {!item.excludedFromPrice && <label className={labelClass}>Pricing<select value={item.pricingType} onChange={(e) => patchLine({ pricingType: e.target.value })} className={inputClass}><option value="flat">Flat</option><option value="perUnit">Per unit</option></select></label>}
                     <label className={labelClass}>QTY<input type="number" min="0" value={item.quantity ?? 1} onChange={(e) => patchLine({ quantity: e.target.value })} className={inputClass} /></label>
-                    {item.pricingType === 'perUnit' && <><label className={labelClass}>Unit<select value={item.unitType} onChange={(e) => patchLine({ unitType: e.target.value })} className={inputClass}>{UNITS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className={labelClass}>Included<input type="number" min="0" value={item.includedQuantity} onChange={(e) => patchLine({ includedQuantity: e.target.value })} className={inputClass} /></label></>}
-                    <label className={labelClass}>{item.pricingType === 'flat' ? 'Price' : 'Additional rate'}<MoneyInput value={item.rate} onChange={(value) => patchLine({ rate: value })} className={moneyInputClass} /></label>
+                    {!item.excludedFromPrice && item.pricingType === 'perUnit' && <><label className={labelClass}>Unit<select value={item.unitType} onChange={(e) => patchLine({ unitType: e.target.value })} className={inputClass}>{UNITS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className={labelClass}>Included<input type="number" min="0" value={item.includedQuantity} onChange={(e) => patchLine({ includedQuantity: e.target.value })} className={inputClass} /></label></>}
+                    {!item.excludedFromPrice && <label className={labelClass}>{item.pricingType === 'flat' ? 'Price' : 'Additional rate'}<MoneyInput value={item.rate} onChange={(value) => patchLine({ rate: value })} className={moneyInputClass} /></label>}
                   </div>
-                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-600"><input type="checkbox" checked={item.required} onChange={(e) => patchLine({ required: e.target.checked, selected: e.target.checked || item.selected })} />Required item</label>
+                  <div className="flex flex-wrap gap-x-5 gap-y-2"><label className="flex items-center gap-2 text-xs font-semibold text-slate-600"><input type="checkbox" checked={item.required} onChange={(e) => patchLine({ required: e.target.checked, selected: e.target.checked || item.selected })} />Required item</label><label className="flex items-center gap-2 text-xs font-semibold text-amber-700"><input type="checkbox" checked={Boolean(item.excludedFromPrice)} onChange={(e) => patchLine({ excludedFromPrice: e.target.checked })} />Additional — not included in package price</label></div>
                 </div>;
               })}
             </div>

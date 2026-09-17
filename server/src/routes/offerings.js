@@ -14,7 +14,7 @@ const PRICING_TYPES = new Set(['flat', 'perUnit']);
 const UNIT_TYPES = new Set(['item', 'table', 'chair', 'guest', 'hour']);
 
 function validLineItems(value) {
-  return Array.isArray(value) && value.length > 0 && value.length <= 100 && value.every((item) => item && typeof item.id === 'string' && item.id.length <= 200 && typeof item.name === 'string' && item.name.trim() && item.name.length <= 200 && PRICING_TYPES.has(item.pricingType) && UNIT_TYPES.has(item.unitType || 'item') && ['rate', 'quantity', 'includedQuantity'].every((field) => item[field] == null || item[field] === '' || Number.isFinite(Number(item[field]))) && (item.required == null || typeof item.required === 'boolean'));
+  return Array.isArray(value) && value.length > 0 && value.length <= 100 && value.every((item) => item && typeof item.id === 'string' && item.id.length <= 200 && typeof item.name === 'string' && item.name.trim() && item.name.length <= 200 && PRICING_TYPES.has(item.pricingType) && UNIT_TYPES.has(item.unitType || 'item') && ['rate', 'quantity', 'includedQuantity'].every((field) => item[field] == null || item[field] === '' || Number.isFinite(Number(item[field]))) && (item.required == null || typeof item.required === 'boolean') && (item.excludedFromPrice == null || typeof item.excludedFromPrice === 'boolean'));
 }
 
 function serializeOffering(offering) {

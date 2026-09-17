@@ -8,6 +8,7 @@ test('package totals include base, flat items, and units above the included quan
       { pricingType: 'perUnit', quantity: 18, includedQuantity: 10, rate: 85, selected: true },
       { pricingType: 'flat', rate: 400, selected: true },
       { pricingType: 'flat', rate: 175, selected: false },
+      { pricingType: 'flat', rate: 900, selected: true, excludedFromPrice: true },
     ],
   });
   assert.equal(total, 2280);
