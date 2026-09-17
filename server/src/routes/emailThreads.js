@@ -9,6 +9,7 @@ import { emailSendLimiter, requireEmailSendPermission } from '../lib/emailSendPo
 import { normalizeValidEmail } from '../lib/emailAddress.js';
 import { generateToken, hashToken } from '../lib/resetToken.js';
 import { statusBucket } from '../lib/inquiryStatusBucket.js';
+import { hasContractorConfirmationButton, renderContractorConfirmationButton } from '../lib/contractorConfirmationButton.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -126,19 +127,21 @@ router.post('/send', requireEmailSendPermission, emailSendLimiter, asyncHandler(
   // event-scoped URLs take the contractor straight to the relevant gig and
   // make the intended response explicit. GET never mutates state; the public
   // page still requires a deliberate button press before POSTing a response.
+  const wantsConfirmationButton = hasContractorConfirmationButton(body);
   let actionBlock = '';
   const event = await prisma.event.findFirst({ where: { id: eventId, accountId, deletedAt: null }, select: { name: true, contractorBookings: true } });
   const assignment = (event?.contractorBookings || []).find((item) => item.contractorId === contractorId);
   const assignmentStatus = accountData?.data?.inquiryStatuses?.find((item) => item.id === assignment?.inquiryStatusId);
-  if (assignment && statusBucket(assignmentStatus) === 'tentative') {
+  if (wantsConfirmationButton && assignment && statusBucket(assignmentStatus) === 'tentative') {
     let calendarLink = await prisma.contractorCalendarLink.findUnique({ where: { accountId_contractorId: { accountId, contractorId } } });
     if (!calendarLink) {
       const token = generateToken();
       calendarLink = await prisma.contractorCalendarLink.create({ data: { accountId, contractorId, tokenHash: hashToken(token), publicToken: token } });
     }
     const base = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/gigs/${calendarLink.publicToken}?event=${encodeURIComponent(eventId)}`;
-    actionBlock = `<div style="margin:24px 0 8px;text-align:center"><p style="margin:0 0 12px;font-weight:600;color:#334155">Please confirm your availability:</p><a href="${base}&response=confirm" style="display:inline-block;margin:4px;background:#059669;color:#fff;padding:11px 20px;border-radius:8px;text-decoration:none;font-weight:600">Confirm gig</a><a href="${base}&response=decline" style="display:inline-block;margin:4px;background:#fff;color:#b91c1c;border:1px solid #fecaca;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600">Decline</a></div>`;
+    actionBlock = `<div style="margin:24px 0 8px;text-align:center"><a href="${base}&response=confirm" style="display:inline-block;background:#059669;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700">Confirm</a><p style="margin:10px 0 0;font-size:12px;color:#64748b">Review the gig details and confirm or decline on your private page.</p></div>`;
   }
+  const emailBody = renderContractorConfirmationButton(body, actionBlock);
 
   let sent;
   try {
@@ -150,7 +153,7 @@ router.post('/send', requireEmailSendPermission, emailSendLimiter, asyncHandler(
     // tables, a Stage Plot page image), which get uncomfortably squeezed
     // (or, for the image, can visibly clip in Outlook) at the narrower
     // width. See that function's own comment for the full reasoning.
-    sent = await sendMail({ from: fromAddress, to: contractorEmail, subject, html: buildActionEmailHtml({ businessInfo, bodyHtml: `${body}${actionBlock}`, maxWidth: 640 }), replyTo: thread.replyToAlias, headers, attachments });
+    sent = await sendMail({ from: fromAddress, to: contractorEmail, subject, html: buildActionEmailHtml({ businessInfo, bodyHtml: emailBody, maxWidth: 640 }), replyTo: thread.replyToAlias, headers, attachments });
   } catch (err) {
     const unconfigured = err.message?.includes('RESEND_API_KEY');
     return res.status(unconfigured ? 503 : 502).json({ error: unconfigured ? 'Email sending is not configured yet.' : (err.message || 'Failed to send email.') });
@@ -165,7 +168,7 @@ router.post('/send', requireEmailSendPermission, emailSendLimiter, asyncHandler(
       fromAddress,
       toAddress: contractorEmail,
       subject,
-      body,
+      body: emailBody,
       templateId: templateId || null,
       sentByUserId: req.session.userId,
       resendMessageId: sent.data?.id || null,

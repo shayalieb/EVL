@@ -230,6 +230,45 @@ export default function EventFormPage() {
     return () => { cancelled = true; };
   }, [eventId, loadEvent, loadContractors]);
 
+  // Contractor response links update the event on the server without this
+  // authenticated editor being involved. Refresh only those externally
+  // stamped response fields so an open roster moves between Pending,
+  // Confirmed, and Not Available without overwriting unsaved form edits.
+  useEffect(() => {
+    if (!eventId) return undefined;
+    let cancelled = false;
+    const refreshResponses = async () => {
+      if (document.visibilityState === 'hidden') return;
+      try {
+        const remote = await loadEvent(eventId);
+        if (cancelled) return;
+        setForm((current) => {
+          let changed = false;
+          const remoteByContractor = new Map((remote.contractorBookings || []).map((item) => [item.contractorId, item]));
+          const contractorBookings = current.contractorBookings.map((local) => {
+            const incoming = remoteByContractor.get(local.contractorId);
+            if (!incoming?.respondedAt || incoming.responseSource !== 'contractor-link') return local;
+            if (incoming.respondedAt === local.respondedAt && incoming.inquiryStatusId === local.inquiryStatusId) return local;
+            changed = true;
+            return { ...local, inquiryStatusId: incoming.inquiryStatusId, respondedAt: incoming.respondedAt, responseSource: incoming.responseSource, statusSetByAi: false };
+          });
+          return changed ? { ...current, contractorBookings } : current;
+        });
+      } catch {
+        // Quiet background refresh; normal page actions still surface errors.
+      }
+    };
+    const interval = window.setInterval(refreshResponses, 10000);
+    window.addEventListener('focus', refreshResponses);
+    document.addEventListener('visibilitychange', refreshResponses);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshResponses);
+      document.removeEventListener('visibilitychange', refreshResponses);
+    };
+  }, [eventId, loadEvent]);
+
   // Profit/loss is sensitive financial data — same owner/admin-only gate
   // already used for Settings -> Users/Billing.
   const isAdminOrOwner = role === 'owner' || role === 'admin';

@@ -25,6 +25,7 @@ const MERGE_FIELD_GROUPS = [
       { token: '{{ContractorPriceNotes}}', description: 'Price notes' },
       { token: '{{ContractorStartTime}}', description: "This contractor's own call time (falls back to event start time)" },
       { token: '{{ContractorEndTime}}', description: "This contractor's own end time (falls back to event end time)" },
+      { token: '{{ContractorConfirmationButton}}', description: 'A Confirm button that opens this contractor’s unique gig page, where they can accept or decline' },
     ],
   },
   {
