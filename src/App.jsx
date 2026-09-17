@@ -18,6 +18,7 @@ const ProposalRespondPage = lazy(() => import('./pages/ProposalRespondPage'));
 const InvoicePayPage = lazy(() => import('./pages/InvoicePayPage'));
 const InquiryFormPage = lazy(() => import('./pages/InquiryFormPage'));
 const RsvpPage = lazy(() => import('./pages/RsvpPage'));
+const PrepRequestPage = lazy(() => import('./pages/PrepRequestPage'));
 const ContractorCalendarPage = lazy(() => import('./pages/ContractorCalendarPage'));
 const AppLayout = lazy(() => import('./layouts/AppLayout'));
 const HomePage = lazy(() => import('./pages/HomePage'));
@@ -198,6 +199,7 @@ function AppRoutes() {
       <Route path="/invoice/:token" element={<InvoicePayPage />} />
       <Route path="/inquiry/:token" element={<InquiryFormPage />} />
       <Route path="/rsvp/:token" element={<RsvpPage />} />
+      <Route path="/prep-request/:token" element={<PrepRequestPage />} />
       <Route path="/gigs/:token" element={<ContractorCalendarPage />} />
       <Route path="/stage-plot/:token" element={<PublicStagePlotPage />} />
       <Route path="/run-of-show/:token" element={<PublicRunOfShowPage />} />

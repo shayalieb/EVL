@@ -48,6 +48,7 @@ import catalogRouter from './routes/catalog.js';
 import setListLibraryRouter from './routes/setListLibrary.js';
 import bookingsRouter from './routes/bookings.js';
 import eventsRouter from './routes/events.js';
+import prepFormsRouter, { publicPrepFormsRouter } from './routes/prepForms.js';
 import dashboardRouter from './routes/dashboard.js';
 import agencyGroupsRouter from './routes/agencyGroups.js';
 import financialsRouter from './routes/financials.js';
@@ -282,6 +283,7 @@ app.use('/api/catalog', catalogRouter);
 app.use('/api/set-list-library', setListLibraryRouter);
 app.use('/api/bookings', bookingsRouter);
 app.use('/api/events', eventsRouter);
+app.use('/api/prep-forms', prepFormsRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/assistant', assistantRouter);
 app.use('/api/imports', importsRouter);
@@ -295,6 +297,7 @@ app.use('/api/integrations/google-calendar', googleCalendarRouter);
 app.use('/api/portal', portalSession, portalRouter);
 // Public/unauthenticated — same reasoning as /api/contract-sign above.
 app.use('/api/rsvp', publicRsvpRouter);
+app.use('/api/prep-request', publicPrepFormsRouter);
 // Public/unauthenticated — a contractor opens this from a bookmarked/
 // home-screen link, not while logged into the app. See routes/
 // contractorCalendar.js.

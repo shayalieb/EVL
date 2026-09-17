@@ -8,6 +8,7 @@ import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPage
 import { randomUUID } from 'node:crypto';
 import { dollarsToCents } from '../lib/financialLedger.js';
 import { normalizeNoOutsideContractorsNeeded } from '../lib/eventStaffingState.js';
+import { preserveClientPrepRequests } from '../lib/prepForms.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -96,6 +97,8 @@ function serializeEvent(e, paymentRequests = []) {
     noOutsideContractorsNeeded: e.noOutsideContractorsNeeded,
     deletedAt: e.deletedAt,
     completedAt: e.completedAt,
+    prepFormUnreadCount: e.prepFormUnreadCount,
+    prepFormLastSubmittedAt: e.prepFormLastSubmittedAt,
     venue: e.venue,
     contractorBookings: e.contractorBookings,
     categoryTabs: e.categoryTabs,
@@ -300,6 +303,9 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   const data = {};
   for (const field of WRITABLE_FIELDS) {
     if (req.body?.[field] !== undefined) data[field] = req.body[field];
+  }
+  if (Array.isArray(data.requests)) {
+    data.requests = preserveClientPrepRequests(data.requests, existing.requests);
   }
   if (data.groupId && !await prisma.agencyGroup.findFirst({ where: { id: data.groupId, accountId: req.membership.accountId, active: true } })) return res.status(400).json({ error: 'Invalid managed group.' });
   if (data.groupId === '') data.groupId = null;

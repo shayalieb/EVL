@@ -32,6 +32,7 @@ import { getBookingByEvent } from '../lib/bookings';
 import { getDashboard } from '../lib/dashboard';
 import { listInvoices } from '../lib/invoices';
 import { listGuests, createGuest, updateGuest, deleteGuest, getRsvpLink } from '../lib/guests';
+import { getPrepFormLink, emailPrepFormLink, markPrepFormReviewed } from '../lib/prepForms';
 import { InfoIcon, MapPinIcon, ClockIcon, UsersIcon, ClipboardIcon, NoteIcon, FileIcon } from '../components/ui/icons';
 import { BUCKETS, statusBucket } from '../lib/inquiryStatusBucket';
 import { isWedding } from '../lib/eventType';
@@ -252,7 +253,10 @@ export default function EventFormPage() {
             changed = true;
             return { ...local, inquiryStatusId: incoming.inquiryStatusId, respondedAt: incoming.respondedAt, responseSource: incoming.responseSource, statusSetByAi: false };
           });
-          return changed ? { ...current, contractorBookings } : current;
+          const localRequestIds = new Set((current.requests || []).map((item) => item.id));
+          const newClientRequests = (remote.requests || []).filter((item) => item.source === 'client_prep_form' && !localRequestIds.has(item.id));
+          if (newClientRequests.length || remote.prepFormUnreadCount !== current.prepFormUnreadCount) changed = true;
+          return changed ? { ...current, contractorBookings, requests: [...(current.requests || []), ...newClientRequests], prepFormUnreadCount: remote.prepFormUnreadCount || 0, prepFormLastSubmittedAt: remote.prepFormLastSubmittedAt || null } : current;
         });
       } catch {
         // Quiet background refresh; normal page actions still surface errors.
@@ -309,6 +313,7 @@ export default function EventFormPage() {
   const [docPendingDelete, setDocPendingDelete] = useState(null);
   const [prepEmailModalOpen, setPrepEmailModalOpen] = useState(false);
   const [sendingPrepEmail, setSendingPrepEmail] = useState(false);
+  const [sharingPrepForm, setSharingPrepForm] = useState(false);
   const [uploadingRequestId, setUploadingRequestId] = useState(null);
 
   const hasCategories = contractorTypes.length > 0;
@@ -407,6 +412,8 @@ export default function EventFormPage() {
         prepGroups,
         prepNotes: event.prepNotes || '',
         requests: event.requests || [emptyRequestItem()],
+        prepFormUnreadCount: event.prepFormUnreadCount || 0,
+        prepFormLastSubmittedAt: event.prepFormLastSubmittedAt || null,
         shotList: event.shotList || [],
         secondShooters: event.secondShooters || [],
         otherExpenses: event.otherExpenses || [],
@@ -1131,6 +1138,35 @@ export default function EventFormPage() {
     }
   }
 
+  async function handleCopyPrepForm() {
+    if (!event) return showToast('Save the event before sharing the client form.', 'error');
+    setSharingPrepForm(true);
+    try {
+      const data = await getPrepFormLink(event.id);
+      await navigator.clipboard.writeText(data.url);
+      showToast('Client request form link copied');
+    } catch (err) { showToast(err.message || 'Could not copy the client form link.', 'error'); }
+    finally { setSharingPrepForm(false); }
+  }
+
+  async function handleEmailPrepForm() {
+    if (!event) return showToast('Save the event before emailing the client form.', 'error');
+    setSharingPrepForm(true);
+    try {
+      await emailPrepFormLink(event.id, form.contactEmail);
+      showToast(`Client request form emailed to ${form.contactEmail}`);
+    } catch (err) { showToast(err.message || 'Could not email the client form.', 'error'); }
+    finally { setSharingPrepForm(false); }
+  }
+
+  async function handleMarkPrepFormReviewed() {
+    try {
+      await markPrepFormReviewed(event.id);
+      setForm((old) => ({ ...old, prepFormUnreadCount: 0 }));
+      showToast('Client form submissions marked reviewed');
+    } catch (err) { showToast(err.message || 'Could not mark submissions reviewed.', 'error'); }
+  }
+
   async function handleSendPrepEmail({ subject, body, recipientIds, documentIds }) {
     setSendingPrepEmail(true);
     try {
@@ -1551,6 +1587,9 @@ export default function EventFormPage() {
           }`}
         >
           Prep
+          {Number(form.prepFormUnreadCount) > 0 && (
+            <span title="New client form data" className="ml-2 inline-flex min-w-[20px] items-center justify-center rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-bold text-amber-800">● {form.prepFormUnreadCount}</span>
+          )}
         </button>
         {isEditing && currentUser.activeVerticals?.includes('band_orchestra') && (
           <button
@@ -2228,7 +2267,13 @@ export default function EventFormPage() {
         <div className={activeTab === 'prep' ? cardClass : 'hidden'}>
           <div className="flex items-center justify-between mb-5">
             <h3 className={`${cardTitleClass} mb-0`}>Prep Sheet</h3>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={handleCopyPrepForm} disabled={!event || sharingPrepForm} className="px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-700 text-xs font-semibold hover:bg-indigo-50 disabled:opacity-40">
+                Copy Client Form
+              </button>
+              <button type="button" onClick={handleEmailPrepForm} disabled={!event || !form.contactEmail || sharingPrepForm} title={!form.contactEmail ? 'Add the client email under Event Details first' : ''} className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-40">
+                {sharingPrepForm ? 'Sending…' : 'Email Client Form'}
+              </button>
               <button
                 type="button"
                 onClick={handleDownloadPdf}
@@ -2248,6 +2293,13 @@ export default function EventFormPage() {
               </button>
             </div>
           </div>
+
+          {Number(form.prepFormUnreadCount) > 0 && (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <div><p className="text-sm font-bold text-amber-900">New client form data was added</p><p className="text-xs text-amber-700">{form.prepFormUnreadCount} new {Number(form.prepFormUnreadCount) === 1 ? 'submission' : 'submissions'} updated this prep sheet.</p></div>
+              <button type="button" onClick={handleMarkPrepFormReviewed} className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-amber-800 shadow-sm">Mark reviewed</button>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
             <PrepSection title="Event Details" color="#64748b" icon={<InfoIcon className="w-3.5 h-3.5" />}>
@@ -2338,7 +2390,8 @@ export default function EventFormPage() {
               ) : (
                 <div className="space-y-3">
                   {form.requests.map((r) => (
-                    <div key={r.id} data-testid="event-form-request-item-row" className="border border-slate-200 rounded-lg p-3 space-y-2">
+                    <div key={r.id} data-testid="event-form-request-item-row" className={`border rounded-lg p-3 space-y-2 ${r.source === 'client_prep_form' ? 'border-amber-300 bg-amber-50/40' : 'border-slate-200'}`}>
+                      {r.source === 'client_prep_form' && <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-amber-800"><span className="rounded-full bg-amber-100 px-2 py-1">Submitted via client form</span>{r.submittedBy && <span className="text-amber-700">by {r.submittedBy}</span>}</div>}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <input
                           placeholder="Name"

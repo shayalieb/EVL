@@ -2006,6 +2006,8 @@ model Event {
   deletedAt                  DateTime?
   // Same "done, not gone" reasoning as Booking.completedAt above.
   completedAt                DateTime?
+  prepFormUnreadCount        Int       @default(0)
+  prepFormLastSubmittedAt    DateTime?
 
   venue              Json @default("{}")
   contractorBookings Json @default("[]")
@@ -2022,12 +2024,26 @@ model Event {
   createdAt                 DateTime                   @default(now())
   updatedAt                 DateTime                   @updatedAt
   contractorPaymentRequests ContractorPaymentRequest[]
+  prepFormLink              EventPrepFormLink?
 
   @@index([accountId])
   @@index([accountId, deletedAt, createdAt, id])
   @@index([accountId, deletedAt, completedAt, eventDate, id])
   @@index([accountId, groupId, deletedAt, eventDate])
   @@index([deletedAt])
+}
+
+model EventPrepFormLink {
+  id          String   @id @default(cuid())
+  accountId   String
+  eventId     String   @unique
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  tokenHash   String   @unique
+  publicToken String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([accountId])
 }
 
 model ContractorPaymentRequest {
