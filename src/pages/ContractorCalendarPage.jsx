@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { API_BASE } from '../context/AuthContext';
 import { getContractorCalendarByToken, requestContractorPaymentByToken, respondToGigByToken } from '../lib/contractors';
 import EventsCalendarView from '../components/events/EventsCalendarView';
@@ -21,6 +21,7 @@ const BUCKET_COLORS = [
 
 export default function ContractorCalendarPage() {
   const { token } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -30,6 +31,7 @@ export default function ContractorCalendarPage() {
   const [paymentRequestForm, setPaymentRequestForm] = useState({ invoiceNumber: '', note: '', certified: false });
   const [paymentRequestError, setPaymentRequestError] = useState('');
   const [darkMode, setDarkMode] = useState(false);
+  const [responseNotice, setResponseNotice] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -39,6 +41,15 @@ export default function ContractorCalendarPage() {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [token]);
+
+  useEffect(() => {
+    if (!data) return;
+    const eventId = searchParams.get('event');
+    const response = searchParams.get('response');
+    if (!eventId || !['confirm', 'decline'].includes(response)) return;
+    const gig = data.gigs.find((item) => item.id === eventId);
+    if (gig) setSelectedGig(gig);
+  }, [data, searchParams]);
 
   useEffect(() => {
     const manifestLink = document.createElement('link');
@@ -73,6 +84,8 @@ export default function ContractorCalendarPage() {
     setRespondingGigId(gigId);
     try {
       await respondToGigByToken(token, gigId, action);
+      setResponseNotice(action === 'confirm' ? 'You confirmed this gig.' : 'You declined this gig. The business has been notified.');
+      setSearchParams({}, { replace: true });
       const updatedData = await getContractorCalendarByToken(token);
       setData(updatedData);
       if (selectedGig && selectedGig.id === gigId) {
@@ -124,6 +137,7 @@ export default function ContractorCalendarPage() {
   }
 
   const { contractor, businessInfo, gigs } = data;
+  const requestedResponse = searchParams.get('response');
   const calendarEvents = gigs.map((g) => ({ ...g, eventStatus: g.bucket, paid: g.paymentStatus === 'paid' }));
 
   return (
@@ -150,6 +164,7 @@ export default function ContractorCalendarPage() {
       </div>
 
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
+        {responseNotice && <div data-testid="contractor-response-success" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{responseNotice}</div>}
         <div className="flex items-center justify-between text-xs text-slate-500">
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green-500" /> Confirmed</span>
@@ -245,6 +260,12 @@ export default function ContractorCalendarPage() {
       {selectedGig && (
         <Modal open title={selectedGig.name} onClose={() => setSelectedGig(null)} testId="contractor-gig-detail-modal">
           <div className="space-y-4">
+            {['confirm', 'decline'].includes(requestedResponse) && selectedGig.bucket === 'tentative' && (
+              <div className={`rounded-lg border px-3 py-2.5 text-sm ${requestedResponse === 'confirm' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-rose-200 bg-rose-50 text-rose-800'}`}>
+                <strong>{requestedResponse === 'confirm' ? 'Confirm this gig' : 'Decline this gig'}</strong>
+                <p className="mt-1 text-xs">Review the details below, then use the matching button to submit your response.</p>
+              </div>
+            )}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <div className="text-sm font-semibold text-slate-800">

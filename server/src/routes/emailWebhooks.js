@@ -8,6 +8,7 @@ import { sendMail, buildFromHeader, escapeHtml } from '../lib/mailer.js';
 import { stripQuotedText, stripQuotedHtml } from '../lib/emailQuoteStrip.js';
 import { classifyContractorReply } from '../lib/emailReplyClassifier.js';
 import { applyAiReplyClassification } from '../lib/contractorAiStatusUpdate.js';
+import { normalizeValidEmail } from '../lib/emailAddress.js';
 
 const router = Router();
 
@@ -73,6 +74,12 @@ function extractThreadId(addresses) {
     if (match) return match[1];
   }
   return null;
+}
+
+function senderAddress(value) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const match = String(raw || '').match(/<([^<>]+)>/);
+  return normalizeValidEmail(match ? match[1] : raw);
 }
 
 async function fetchFullEmail(emailId) {
@@ -212,19 +219,22 @@ router.post('/resend', asyncHandler(async (req, res) => {
     prisma.event.findUnique({ where: { id: thread.eventId } }),
   ]);
   const contractorName = contractor ? [contractor.firstName, contractor.lastName].filter(Boolean).join(' ') : null;
+  const verifiedContractorSender = !!contractor && senderAddress(full?.from || event.data.from)?.toLowerCase() === normalizeValidEmail(contractor.email)?.toLowerCase();
 
   // Best-effort — a classifier failure (no API key yet, no credits, rate
   // limit, network error) should never block storing the reply itself.
   let aiClassification = null;
-  try {
-    aiClassification = await classifyContractorReply({
-      replyText: plainReply,
-      contractorName,
-      eventName: eventRecord?.name,
-      eventDate: eventRecord?.eventDate,
-    });
-  } catch (err) {
-    console.error(`AI reply classification failed for thread ${thread.id}:`, err);
+  if (verifiedContractorSender) {
+    try {
+      aiClassification = await classifyContractorReply({
+        replyText: plainReply,
+        contractorName,
+        eventName: eventRecord?.name,
+        eventDate: eventRecord?.eventDate,
+      });
+    } catch (err) {
+      console.error(`AI reply classification failed for thread ${thread.id}:`, err);
+    }
   }
 
   try {

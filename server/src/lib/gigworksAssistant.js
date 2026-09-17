@@ -11,6 +11,7 @@ import { createWithPreservedId } from './idPreservingCreate.js';
 import { HELP_ARTICLES_FLAT } from './helpArticles.js';
 import { normalizeValidEmail } from './emailAddress.js';
 import { contractorAssignmentCost } from './financialReports.js';
+import { statusBucket } from './inquiryStatusBucket.js';
 
 // General-reasoning model — unlike emailReplyClassifier.js's bounded 3-way
 // classification, these answers touch real scheduling and pricing
@@ -33,6 +34,7 @@ const TOOL_PERMISSIONS = {
   get_client_summary: 'manageClients',
   find_contractor: 'manageContractors',
   get_contractor_summary: 'manageContractors',
+  get_contractor_responses: 'manageEvents',
   get_pending_contractor_payments: 'viewFinancials',
   find_venue: 'manageVenues',
   get_offerings_summary: 'manageOfferings',
@@ -173,6 +175,17 @@ const TOOLS = [
       type: 'object',
       properties: { contractorId: { type: 'string' } },
       required: ['contractorId'],
+    },
+  },
+  {
+    name: 'get_contractor_responses',
+    description: 'List upcoming contractor assignments that are awaiting a response or were declined, including the latest email delivery state. Use this for questions such as who has not replied, who declined, or which invitations failed.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['pending', 'declined', 'all'], description: 'Defaults to all.' },
+        days: { type: 'number', description: 'How many days ahead to inspect. Defaults to 90.' },
+      },
     },
   },
   {
@@ -545,6 +558,53 @@ async function runTool(name, input, accountId) {
       priceNotes: contractor.priceNotes || null,
       assignedEvents: assigned,
     };
+  }
+
+  if (name === 'get_contractor_responses') {
+    const days = Math.min(365, Math.max(1, Number(input?.days) || 90));
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() + days);
+    const [events, accountData] = await Promise.all([
+      prisma.event.findMany({
+        where: { accountId, deletedAt: null, completedAt: null, eventDate: { gte: today, lte: cutoff.toISOString().slice(0, 10) } },
+        select: { id: true, name: true, eventDate: true, contractorBookings: true },
+        orderBy: { eventDate: 'asc' },
+        take: 200,
+      }),
+      prisma.accountData.findUnique({ where: { accountId } }),
+    ]);
+    const statuses = accountData?.data?.inquiryStatuses || [];
+    const candidateRows = events.flatMap((event) => (event.contractorBookings || []).map((assignment) => {
+      const bucket = statusBucket(statuses.find((item) => item.id === assignment.inquiryStatusId));
+      return { event, assignment, bucket };
+    })).filter((row) => row.bucket !== 'confirmed');
+    const requested = input?.status || 'all';
+    const filtered = candidateRows.filter((row) => requested === 'all' || (requested === 'pending' ? row.bucket === 'tentative' : row.bucket === 'unavailable')).slice(0, 100);
+    const contractorIds = [...new Set(filtered.map((row) => row.assignment.contractorId).filter(Boolean))];
+    const eventIds = [...new Set(filtered.map((row) => row.event.id))];
+    const [contractors, threads] = await Promise.all([
+      contractorIds.length ? prisma.contractor.findMany({ where: { accountId, id: { in: contractorIds } }, select: { id: true, firstName: true, lastName: true, email: true } }) : [],
+      eventIds.length ? prisma.emailThread.findMany({ where: { accountId, eventId: { in: eventIds }, contractorId: { in: contractorIds } }, include: { messages: { where: { direction: 'outbound' }, orderBy: { createdAt: 'desc' }, take: 1 } } }) : [],
+    ]);
+    const contractorById = new Map(contractors.map((item) => [item.id, item]));
+    const threadByPair = new Map(threads.map((thread) => [`${thread.eventId}:${thread.contractorId}`, thread]));
+    return filtered.map(({ event, assignment, bucket }) => {
+      const contractor = contractorById.get(assignment.contractorId);
+      const thread = threadByPair.get(`${event.id}:${assignment.contractorId}`);
+      const latest = thread?.messages?.[0];
+      return {
+        eventId: event.id,
+        eventName: event.name,
+        eventDate: event.eventDate,
+        contractorId: assignment.contractorId,
+        contractor: contractor ? `${contractor.firstName} ${contractor.lastName}`.trim() : 'Unknown contractor',
+        email: contractor?.email || null,
+        response: bucket === 'unavailable' ? 'declined' : 'pending',
+        contactedAt: latest?.createdAt || null,
+        deliveryStatus: latest?.deliveryStatus || (thread ? 'unknown' : 'not-sent'),
+        failureCode: latest?.failureCode || null,
+      };
+    });
   }
 
   if (name === 'get_pending_contractor_payments') {

@@ -15,6 +15,14 @@ const AI_CLASSIFICATION_BADGE = {
   ambiguous: { label: 'Needs Review', className: 'bg-amber-100 text-amber-700' },
 };
 
+const DELIVERY_BADGE = {
+  queued: { label: 'Queued', className: 'bg-slate-100 text-slate-600' },
+  sent: { label: 'Sent', className: 'bg-blue-100 text-blue-700' },
+  delivered: { label: 'Delivered', className: 'bg-emerald-100 text-emerald-700' },
+  delayed: { label: 'Delayed', className: 'bg-amber-100 text-amber-700' },
+  failed: { label: 'Failed', className: 'bg-red-100 text-red-700' },
+};
+
 function formatTimestamp(iso) {
   return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
@@ -135,6 +143,11 @@ export default function EmailThreadModal({ open, onClose, eventId, contractorId,
                   >
                     <div className={`flex items-center gap-1.5 mb-1 ${m.direction === 'outbound' ? 'text-indigo-500' : 'opacity-70'}`}>
                       <span className="text-xs font-semibold">{m.channel === 'sms' ? 'SMS' : m.subject}</span>
+                      {m.direction === 'outbound' && DELIVERY_BADGE[m.deliveryStatus] && (
+                        <span title={m.failureCode || undefined} data-testid="email-thread-delivery-badge" className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${DELIVERY_BADGE[m.deliveryStatus].className}`}>
+                          {DELIVERY_BADGE[m.deliveryStatus].label}
+                        </span>
+                      )}
                       {m.direction === 'inbound' && AI_CLASSIFICATION_BADGE[m.aiClassification] && (
                         <span
                           data-testid="email-thread-ai-classification-badge"
@@ -142,6 +155,9 @@ export default function EmailThreadModal({ open, onClose, eventId, contractorId,
                         >
                           {AI_CLASSIFICATION_BADGE[m.aiClassification].label}
                         </span>
+                      )}
+                      {m.direction === 'inbound' && !m.aiClassification && (
+                        <span data-testid="email-thread-ai-classification-badge" className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">Manual review</span>
                       )}
                     </div>
                     <div className="whitespace-pre-wrap break-words" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(m.body) }} />

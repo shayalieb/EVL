@@ -71,6 +71,7 @@ test('final-phase write tools follow their own module permissions', () => {
   assert.equal(clientTools.includes('propose_update_contractor'), false);
   assert.equal(contractorTools.includes('propose_add_contractor'), true);
   assert.equal(contractorTools.includes('propose_update_contractor'), true);
+  assert.equal(assistantToolNamesForPermissions({ manageEvents: true }).includes('get_contractor_responses'), true);
   assert.equal(contractorTools.includes('propose_update_event'), false);
 });
 

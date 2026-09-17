@@ -1027,13 +1027,14 @@ export default function EventFormPage() {
   const fromName = businessInfo?.name || `${currentUser.firstName} ${currentUser.lastName}`;
 
   async function sendAndMarkEmailed(contractor, templateId, subject, body) {
-    await sendThreadedEmail({
+    const result = await sendThreadedEmail({
       eventId: form.id,
       contractorId: contractor.id,
       contractorEmail: contractor.email,
       subject, body, templateId, fromName,
     });
     advanceInquiryStatusIfTentative(contractor.id, 'Emailed', '#eab308');
+    return result;
   }
 
   async function handleUploadDocument(e) {
@@ -1165,8 +1166,11 @@ export default function EventFormPage() {
     try {
       if (previewState.mode === 'single') {
         const contractor = contractors.find((c) => c.id === previewState.contractorId);
-        await sendAndMarkEmailed(contractor, previewState.templateId, subject, body);
-        showToast(`Email sent to ${contractor.firstName} ${contractor.lastName}`);
+        const result = await sendAndMarkEmailed(contractor, previewState.templateId, subject, body);
+        showToast(result.replyTrackingActive
+          ? `Email sent to ${contractor.firstName} ${contractor.lastName} — replies will be tracked`
+          : `Email sent to ${contractor.firstName} ${contractor.lastName} — response buttons included; email replies are not tracked`,
+        result.replyTrackingActive ? 'success' : 'warning');
       } else {
         const recipients = getRecipientsForActiveTab();
         let successCount = 0;
