@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import SignatureCanvas from './SignatureCanvas';
 import { formatCurrency as currency, formatEventDate, formatVenueLine } from '../lib/format';
-import { computeOfferingTotal, computeOfferingsTotal } from '../lib/offerings';
+import { computeOfferingTotal, computeOfferingsTotal, packageLineSummary } from '../lib/offerings';
 import { DEFAULT_ACCENT_COLOR } from '../lib/colorTheme';
 import { getLayout, getLayoutClasses, DEFAULT_TEXT_SCALE } from '../lib/documentLayouts';
 
@@ -217,6 +217,8 @@ export default function ContractDocument({ snapshot, terms, clientSignature, own
                     <ul className="mt-1 ml-3 list-disc text-[0.75em] text-slate-500 space-y-0.5">
                       {o.instruments.map((inst, idx) => <li key={idx}>{inst}</li>)}
                     </ul>
+                  ) : o.type === 'package' ? (
+                    <div className="whitespace-pre-line text-[0.75em] text-slate-500 mt-1">{packageLineSummary(o)}</div>
                   ) : (
                     o.details && <div className="text-[0.75em] text-slate-400 mt-0.5">{o.details}</div>
                   )}

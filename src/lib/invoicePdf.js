@@ -1,5 +1,5 @@
 import { formatCurrency as currency, formatEventDate } from './format';
-import { computeOfferingTotal, computeOfferingsTotal } from './offerings';
+import { computeOfferingTotal, computeOfferingsTotal, packageLineSummary } from './offerings';
 import { getDocumentStyle } from './documentLayouts';
 import { scaleFont, setFontStyle, drawLetterhead, drawHeaderRule, getAutoTableStyle } from './documentPdfKit';
 
@@ -81,7 +81,7 @@ async function buildInvoiceDoc({ businessInfo, client, event, lineItems, dueDate
     y += 10;
   } else {
     const itemRows = items.map((item) => [
-      item.details ? `${item.name || 'Item'}\n${item.details}` : (item.name || 'Item'),
+      [item.name || 'Item', item.details, packageLineSummary(item)].filter(Boolean).join('\n'),
       item.type === 'perUnit' ? String(item.unitCount ?? '') : '—',
       item.type === 'perUnit' ? currency(item.ratePerUnit) : '—',
       currency(computeOfferingTotal(item)),

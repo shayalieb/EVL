@@ -107,6 +107,7 @@ export default function OfferingsPage() {
           options={[
             { value: 'general', label: 'Flat Price' },
             { value: 'perUnit', label: 'Per Unit' },
+            { value: 'package', label: 'Package' },
           ]}
           testId="offerings-type-filter"
         />
@@ -154,7 +155,7 @@ export default function OfferingsPage() {
                       <span>{o.name}</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-slate-500">{o.type === 'perUnit' ? 'Per Unit' : 'Flat Price'}</td>
+                  <td className="px-4 py-3 text-slate-500">{o.type === 'package' ? `Package${o.category ? ` · ${o.category}` : ''}` : o.type === 'perUnit' ? 'Per Unit' : 'Flat Price'}</td>
                   <td className="px-4 py-3 text-right font-semibold text-slate-700">{currency(computeOfferingTotal(o))}</td>
                   <td className="px-4 py-3">
                     {canEdit && (

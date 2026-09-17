@@ -1685,6 +1685,8 @@ model Offering {
   amount      String?
   unitCount   String?
   ratePerUnit String?
+  category    String?
+  lineItems   Json    @default("[]")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -62,6 +62,19 @@ function QuickItemForm({ onAdd, onCancel }) {
   );
 }
 
+function PackageConfigForm({ offering, onAdd, onCancel }) {
+  const [instance, setInstance] = useState(() => ({ ...offering, id: uid('offitem'), lineItems: (offering.lineItems || []).map((item) => ({ ...item, quantity: Number(item.quantity) || Number(item.includedQuantity) || 0, selected: item.required || item.selected !== false })) }));
+  function updateLine(id, patch) { setInstance((old) => ({ ...old, lineItems: old.lineItems.map((item) => item.id === id ? { ...item, ...patch } : item) })); }
+  return <div className="space-y-4">
+    <div><button type="button" onClick={onCancel} className="text-xs font-semibold text-slate-500">← Back to offerings</button><h3 className="mt-2 text-lg font-bold text-slate-800">Configure {instance.name}</h3><p className="text-sm text-slate-500">Adjust quantities and optional items for this booking.</p></div>
+    <div className="max-h-[26rem] space-y-3 overflow-y-auto pr-1">{instance.lineItems.map((item) => <div key={item.id} className={`rounded-xl border p-3 ${item.selected ? 'border-indigo-200 bg-indigo-50/30' : 'border-slate-200 bg-slate-50 opacity-70'}`}>
+      <div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-slate-800">{item.name}</p><p className="text-xs text-slate-500">{item.pricingType === 'flat' ? `${currency(item.rate)} flat` : `${item.includedQuantity || 0} included · ${currency(item.rate)} per additional ${item.unitType}`}</p></div><label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600"><input type="checkbox" checked={item.selected !== false} disabled={item.required} onChange={(e) => updateLine(item.id, { selected: e.target.checked })} />{item.required ? 'Required' : 'Include'}</label></div>
+      {item.pricingType === 'perUnit' && item.selected !== false && <label className="mt-3 block text-xs font-semibold text-slate-500">Number of {item.unitType}s<input type="number" min="0" value={item.quantity} onChange={(e) => updateLine(item.id, { quantity: e.target.value })} className={`${inputClass} mt-1`} /></label>}
+    </div>)}</div>
+    <div className="flex items-center justify-between border-t border-slate-100 pt-3"><p className="font-bold text-slate-800">Total: {currency(computeOfferingTotal(instance))}</p><button type="button" onClick={() => onAdd(instance)} className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white">Add Package</button></div>
+  </div>;
+}
+
 export default function OfferingPickerModal({ open, onClose, onSelect, allowEnsemble = false }) {
   const { offerings, contractorGroups, contractors, catalogLoading } = useData();
   useContractorHydration(open && allowEnsemble ? contractorGroups.flatMap((group) => group.contractorIds || []) : []);
@@ -69,9 +82,11 @@ export default function OfferingPickerModal({ open, onClose, onSelect, allowEnse
   const [addingQuickItem, setAddingQuickItem] = useState(false);
   const [creatingOffering, setCreatingOffering] = useState(false);
   const [pickingEnsemble, setPickingEnsemble] = useState(false);
+  const [configuringPackage, setConfiguringPackage] = useState(null);
   const filtered = offerings.filter((o) => o.name.toLowerCase().includes(query.trim().toLowerCase()));
 
   function handleSelect(offering) {
+    if (offering.type === 'package') { setConfiguringPackage(offering); return; }
     onSelect(offering);
     onClose();
   }
@@ -80,6 +95,7 @@ export default function OfferingPickerModal({ open, onClose, onSelect, allowEnse
     setQuery('');
     setAddingQuickItem(false);
     setPickingEnsemble(false);
+    setConfiguringPackage(null);
     onClose();
   }
 
@@ -95,6 +111,8 @@ export default function OfferingPickerModal({ open, onClose, onSelect, allowEnse
       />
     );
   }
+
+  if (configuringPackage) return <Modal open={open} onClose={handleClose} title="Configure Package"><PackageConfigForm offering={configuringPackage} onCancel={() => setConfiguringPackage(null)} onAdd={(instance) => { onSelect(instance); handleClose(); }} /></Modal>;
 
   return (
     <Modal open={open} onClose={handleClose} title="Add Offering">
@@ -203,7 +221,7 @@ export default function OfferingPickerModal({ open, onClose, onSelect, allowEnse
               >
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-slate-800 truncate">{o.name}</div>
-                  <div className="text-xs text-slate-400">{o.type === 'perUnit' ? 'Per Unit' : 'Flat Price'}</div>
+                  <div className="text-xs text-slate-400">{o.type === 'package' ? `${o.category || 'Package'} · ${(o.lineItems || []).length} items` : o.type === 'perUnit' ? 'Per Unit' : 'Flat Price'}</div>
                 </div>
                 <div className="text-sm font-semibold text-slate-600 shrink-0">{currency(computeOfferingTotal(o))}</div>
               </button>

@@ -1,0 +1,3 @@
+ALTER TABLE "Offering"
+ADD COLUMN "category" TEXT,
+ADD COLUMN "lineItems" JSONB NOT NULL DEFAULT '[]';

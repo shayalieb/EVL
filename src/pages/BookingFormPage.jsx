@@ -209,12 +209,12 @@ function OfferingsEditor({ offerings, onChange, onAddClick }) {
                   data-testid="booking-form-offering-name-input"
                   className={`${inputClass} font-semibold flex-1 min-w-0`}
                 />
-                {o.type === 'ensemble' ? (
+                {o.type === 'ensemble' || o.type === 'package' ? (
                   <span
                     data-testid="booking-form-offering-ensemble-badge"
                     className="px-3.5 py-2.5 rounded-lg bg-indigo-50 text-indigo-600 text-xs font-semibold w-32 shrink-0 text-center"
                   >
-                    Ensemble
+                    {o.type === 'ensemble' ? 'Ensemble' : 'Package'}
                   </span>
                 ) : (
                   <select
@@ -264,7 +264,7 @@ function OfferingsEditor({ offerings, onChange, onAddClick }) {
                     </ul>
                   )}
                 </div>
-              ) : (
+              ) : o.type !== 'package' ? (
                 <textarea
                   rows={2}
                   value={o.details}
@@ -273,8 +273,16 @@ function OfferingsEditor({ offerings, onChange, onAddClick }) {
                   data-testid="booking-form-offering-details-textarea"
                   className={`${inputClass} mb-2`}
                 />
-              )}
-              {o.type === 'perUnit' ? (
+              ) : <p className="mb-2 text-xs text-slate-500">{o.category || 'Package'} · Adjust the quantities and optional items below.</p>}
+              {o.type === 'package' ? (
+                <div className="space-y-2">
+                  {(o.lineItems || []).map((item) => <div key={item.id} className={`rounded-lg border p-3 ${item.selected === false ? 'border-slate-200 bg-slate-50 opacity-70' : 'border-indigo-100 bg-indigo-50/30'}`}>
+                    <div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-slate-700">{item.name}</p><p className="text-xs text-slate-400">{item.pricingType === 'flat' ? `${currency(item.rate)} flat` : `${item.includedQuantity || 0} included · ${currency(item.rate)} per additional ${item.unitType}`}</p></div><label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600"><input type="checkbox" checked={item.selected !== false} disabled={item.required} onChange={(e) => handleUpdate(o.id, { lineItems: o.lineItems.map((line) => line.id === item.id ? { ...line, selected: e.target.checked } : line) })} />{item.required ? 'Required' : 'Include'}</label></div>
+                    {item.pricingType === 'perUnit' && item.selected !== false && <label className="mt-2 block text-[11px] text-slate-400">Number of {item.unitType}s<input type="number" min="0" value={item.quantity ?? 0} onChange={(e) => handleUpdate(o.id, { lineItems: o.lineItems.map((line) => line.id === item.id ? { ...line, quantity: e.target.value } : line) })} className={`${inputClass} mt-1`} /></label>}
+                  </div>)}
+                  <div><label className="block text-[11px] text-slate-400 mb-1">Base package price</label><MoneyInput value={o.amount} onChange={(value) => handleUpdate(o.id, { amount: value })} className="w-full py-2 rounded-lg border border-slate-300 text-sm" /></div>
+                </div>
+              ) : o.type === 'perUnit' ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label className="block text-[11px] text-slate-400 mb-1">Unit Count</label>

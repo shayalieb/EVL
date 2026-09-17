@@ -9,7 +9,13 @@ import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPage
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
 
-const TYPES = new Set(['general', 'perUnit']);
+const TYPES = new Set(['general', 'perUnit', 'package']);
+const PRICING_TYPES = new Set(['flat', 'perUnit']);
+const UNIT_TYPES = new Set(['item', 'table', 'chair', 'guest', 'hour']);
+
+function validLineItems(value) {
+  return Array.isArray(value) && value.length > 0 && value.length <= 100 && value.every((item) => item && typeof item.id === 'string' && item.id.length <= 200 && typeof item.name === 'string' && item.name.trim() && item.name.length <= 200 && PRICING_TYPES.has(item.pricingType) && UNIT_TYPES.has(item.unitType || 'item') && ['rate', 'quantity', 'includedQuantity'].every((field) => item[field] == null || item[field] === '' || Number.isFinite(Number(item[field]))) && (item.required == null || typeof item.required === 'boolean'));
+}
 
 function serializeOffering(offering) {
   return {
@@ -20,6 +26,8 @@ function serializeOffering(offering) {
     amount: offering.amount ?? '',
     unitCount: offering.unitCount ?? '',
     ratePerUnit: offering.ratePerUnit ?? '',
+    category: offering.category || '',
+    lineItems: offering.lineItems || [],
     createdAt: offering.createdAt,
     updatedAt: offering.updatedAt,
   };
@@ -33,6 +41,8 @@ function offeringData(body, partial = false) {
   for (const field of ['amount', 'unitCount', 'ratePerUnit']) {
     if (!partial || body[field] !== undefined) data[field] = body[field] === '' || body[field] == null ? null : String(body[field]);
   }
+  if (!partial || body.category !== undefined) data.category = body.category?.trim().slice(0, 100) || null;
+  if (!partial || body.lineItems !== undefined) data.lineItems = Array.isArray(body.lineItems) ? body.lineItems : [];
   return data;
 }
 
@@ -69,6 +79,7 @@ router.post('/', asyncHandler(async (req, res) => {
   if (!body.id?.trim()) return res.status(400).json({ error: 'id is required.' });
   if (!body.name?.trim()) return res.status(400).json({ error: 'Offering name is required.' });
   if (!TYPES.has(body.type)) return res.status(400).json({ error: 'Invalid offering type.' });
+  if (body.type === 'package' && !validLineItems(body.lineItems)) return res.status(400).json({ error: 'Package line items are invalid.' });
   const offering = await createWithPreservedId(prisma.offering, { id: body.id, accountId: req.membership.accountId, ...offeringData(body) }, req.membership.accountId);
   res.status(201).json({ offering: serializeOffering(offering) });
 }));
@@ -80,6 +91,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   const body = req.body || {};
   if (body.name !== undefined && !body.name?.trim()) return res.status(400).json({ error: 'Offering name is required.' });
   if (body.type !== undefined && !TYPES.has(body.type)) return res.status(400).json({ error: 'Invalid offering type.' });
+  if ((body.type === 'package' || existing.type === 'package') && body.lineItems !== undefined && !validLineItems(body.lineItems)) return res.status(400).json({ error: 'Package line items are invalid.' });
   const offering = await prisma.offering.update({ where: { id: existing.id }, data: offeringData(body, true) });
   res.json({ offering: serializeOffering(offering) });
 }));

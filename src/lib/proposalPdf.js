@@ -1,5 +1,5 @@
 import { formatCurrency as currency, formatEventDate, formatVenueLine, formatEventTime } from './format';
-import { computeOfferingTotal, computeOfferingsTotal } from './offerings';
+import { computeOfferingTotal, computeOfferingsTotal, packageLineSummary } from './offerings';
 import { lightenRgb } from './colorTheme';
 import { getDocumentStyle } from './documentLayouts';
 import { scaleFont, setFontStyle, drawLetterhead, drawHeaderRule, drawSectionBlock, getAutoTableStyle } from './documentPdfKit';
@@ -119,7 +119,7 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
       // see buildEnsembleOffering in OfferingPickerModal.jsx for why.
       const detailsText = o.type === 'ensemble' && o.instruments?.length
         ? o.instruments.map((inst) => `• ${inst}`).join('\n')
-        : o.details;
+        : o.type === 'package' ? [o.details, packageLineSummary(o)].filter(Boolean).join('\n') : o.details;
       return [o.name || 'Offering', detailsText ? `${valueLine}\n${detailsText}` : valueLine];
     });
     autoTable(doc, {

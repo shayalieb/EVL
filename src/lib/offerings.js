@@ -43,6 +43,16 @@ export async function syncCatalog(offerings, contractorGroups) {
 
 export function computeOfferingTotal(offering) {
   if (!offering) return 0;
+  if (offering.type === 'package') {
+    const base = Number(offering.amount) || 0;
+    return base + (offering.lineItems || []).reduce((sum, item) => {
+      if (item.selected === false) return sum;
+      const rate = Number(item.rate) || 0;
+      if (item.pricingType === 'flat') return sum + rate;
+      const chargeable = Math.max(0, (Number(item.quantity) || 0) - (Number(item.includedQuantity) || 0));
+      return sum + chargeable * rate;
+    }, 0);
+  }
   if (offering.type === 'perUnit') {
     return (Number(offering.unitCount) || 0) * (Number(offering.ratePerUnit) || 0);
   }
@@ -51,4 +61,15 @@ export function computeOfferingTotal(offering) {
 
 export function computeOfferingsTotal(offerings) {
   return (offerings || []).reduce((sum, o) => sum + computeOfferingTotal(o), 0);
+}
+
+export function packageLineSummary(offering) {
+  if (offering?.type !== 'package') return '';
+  return (offering.lineItems || []).filter((item) => item.selected !== false).map((item) => {
+    if (item.pricingType === 'flat') return `• ${item.name}`;
+    const quantity = Number(item.quantity) || 0;
+    const included = Number(item.includedQuantity) || 0;
+    const extra = Math.max(0, quantity - included);
+    return `• ${item.name}: ${quantity} ${item.unitType}${quantity === 1 ? '' : 's'}${included ? ` (${included} included${extra ? `, ${extra} additional` : ''})` : ''}`;
+  }).join('\n');
 }

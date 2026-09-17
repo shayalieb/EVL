@@ -7,13 +7,15 @@ import { attachMembership, effectivePermissions } from '../lib/membership.js';
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
 
-const OFFERING_TYPES = new Set(['general', 'perUnit']);
+const OFFERING_TYPES = new Set(['general', 'perUnit', 'package']);
 
 function validOffering(item) {
   return typeof item?.id === 'string' && !!item.id.trim()
     && typeof item?.name === 'string' && !!item.name.trim()
     && OFFERING_TYPES.has(item.type)
     && (item.details == null || typeof item.details === 'string')
+    && (item.category == null || typeof item.category === 'string')
+    && (item.lineItems == null || Array.isArray(item.lineItems))
     && ['amount', 'unitCount', 'ratePerUnit'].every((field) => item[field] == null || ['string', 'number'].includes(typeof item[field]));
 }
 
@@ -53,12 +55,16 @@ router.post('/sync', asyncHandler(async (req, res) => {
         amount: item.amount === '' || item.amount == null ? null : String(item.amount),
         unitCount: item.unitCount === '' || item.unitCount == null ? null : String(item.unitCount),
         ratePerUnit: item.ratePerUnit === '' || item.ratePerUnit == null ? null : String(item.ratePerUnit),
+        category: item.category?.trim() || null,
+        lineItems: item.lineItems || [],
       },
       update: {
         name: item.name.trim(), details: item.details?.trim() || null, type: item.type,
         amount: item.amount === '' || item.amount == null ? null : String(item.amount),
         unitCount: item.unitCount === '' || item.unitCount == null ? null : String(item.unitCount),
         ratePerUnit: item.ratePerUnit === '' || item.ratePerUnit == null ? null : String(item.ratePerUnit),
+        category: item.category?.trim() || null,
+        lineItems: item.lineItems || [],
       },
     })),
     ...contractorGroups.map((item) => prisma.contractorGroup.upsert({

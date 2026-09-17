@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import Logo from '../components/ui/Logo';
 import { getProposalResponseByToken, submitProposalResponse } from '../lib/proposalResponses';
 import { formatCurrency as currency, formatEventDate, formatVenueLine } from '../lib/format';
-import { computeOfferingTotal, computeOfferingsTotal } from '../lib/offerings';
+import { computeOfferingTotal, computeOfferingsTotal, packageLineSummary } from '../lib/offerings';
 
 const textareaClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -175,6 +175,7 @@ export default function ProposalRespondPage() {
                         {o.instruments.map((inst, idx) => <li key={idx}>{inst}</li>)}
                       </ul>
                     )}
+                    {o.type === 'package' && <div className="mt-0.5 whitespace-pre-line text-xs text-slate-400">{packageLineSummary(o)}</div>}
                   </div>
                 );
               })}
