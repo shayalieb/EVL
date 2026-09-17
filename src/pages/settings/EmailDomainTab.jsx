@@ -181,23 +181,6 @@ export default function EmailDomainTab() {
             </button>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <CapabilityStatus title="Sending" status={setupDomain.sendingStatus || setupDomain.status} readyText="Authenticated and ready" pendingText="SPF or DKIM still pending" />
-            <CapabilityStatus title="Reply tracking" status={setupDomain.receivingStatus} readyText="Inbound replies can be tracked" pendingText="Inbound routing is not ready" />
-          </div>
-          {domain.lastHealthCheckedAt && <p className="text-[11px] text-slate-400">DNS health last checked {new Date(domain.lastHealthCheckedAt).toLocaleString()}.</p>}
-
-          {(domain.sendingStatus === 'verified' || domain.status === 'verified') && (
-            <form onSubmit={handleTestEmail} className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
-              <label className="block text-xs font-semibold text-emerald-800">Send a test from {domain.domain}</label>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <input type="email" required value={testEmail} onChange={(event) => setTestEmail(event.target.value)} placeholder="you@example.com" className={`${inputClass} max-w-sm bg-white`} />
-                <button type="submit" disabled={testing} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{testing ? 'Sending…' : 'Send test email'}</button>
-              </div>
-              <p className="mt-2 text-xs text-emerald-700">After it arrives, reply to confirm the conversation returns to Contact History.</p>
-            </form>
-          )}
-
           {mode === 'subdomain' ? (
             <form onSubmit={handleCreateSubdomain} className="space-y-3">
               <div>
@@ -266,6 +249,23 @@ export default function EmailDomainTab() {
               <span data-testid="settings-email-domain-status-badge">{STATUS_LABEL[setupDomain.status] || setupDomain.status}</span>
             </Badge>
           </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <CapabilityStatus title="Sending" status={setupDomain.sendingStatus || setupDomain.status} readyText="Authenticated and ready" pendingText="SPF or DKIM still pending" />
+            <CapabilityStatus title="Reply tracking" status={setupDomain.receivingStatus} readyText="Inbound replies can be tracked" pendingText="Inbound routing is not ready" />
+          </div>
+          {domain.lastHealthCheckedAt && <p className="text-[11px] text-slate-400">DNS health last checked {new Date(domain.lastHealthCheckedAt).toLocaleString()}.</p>}
+
+          {(domain.sendingStatus === 'verified' || domain.status === 'verified') && (
+            <form onSubmit={handleTestEmail} className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+              <label className="block text-xs font-semibold text-emerald-800">Send a test from {domain.domain}</label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <input type="email" required value={testEmail} onChange={(event) => setTestEmail(event.target.value)} placeholder="you@example.com" className={`${inputClass} max-w-sm bg-white`} />
+                <button type="submit" disabled={testing} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{testing ? 'Sending…' : 'Send test email'}</button>
+              </div>
+              <p className="mt-2 text-xs text-emerald-700">After it arrives, reply to confirm the conversation returns to Contact History.</p>
+            </form>
+          )}
 
           {setupDomain.status !== 'verified' && (
             <>
