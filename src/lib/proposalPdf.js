@@ -119,7 +119,7 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
       // see buildEnsembleOffering in OfferingPickerModal.jsx for why.
       const detailsText = o.type === 'ensemble' && o.instruments?.length
         ? o.instruments.map((inst) => `• ${inst}`).join('\n')
-        : o.type === 'package' ? [o.details, packageLineSummary(o)].filter(Boolean).join('\n') : o.details;
+        : o.type === 'package' ? packageLineSummary(o) : o.details;
       return [o.name || 'Offering', detailsText ? `${valueLine}\n${detailsText}` : valueLine];
     });
     autoTable(doc, {

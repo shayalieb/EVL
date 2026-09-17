@@ -122,8 +122,9 @@ export default function OfferingModal({ open, onClose, offering, onSaved }) {
                 const patchLine = (patch) => update('lineItems', form.lineItems.map((line, i) => i === index ? { ...line, ...patch } : line));
                 return <div key={item.id} className="rounded-lg border border-slate-200 bg-white p-3 space-y-3">
                   <div className="flex gap-2"><input required value={item.name} onChange={(e) => patchLine({ name: e.target.value })} placeholder="Line item name" className={`${inputClass} flex-1`} /><button type="button" onClick={() => update('lineItems', form.lineItems.filter((_, i) => i !== index))} className="px-2 text-slate-300 hover:text-red-600" aria-label="Remove line item">✕</button></div>
-                  <div className="grid gap-2 sm:grid-cols-4">
+                  <div className="grid gap-2 sm:grid-cols-5">
                     <label className={labelClass}>Pricing<select value={item.pricingType} onChange={(e) => patchLine({ pricingType: e.target.value })} className={inputClass}><option value="flat">Flat</option><option value="perUnit">Per unit</option></select></label>
+                    <label className={labelClass}>QTY<input type="number" min="0" value={item.quantity ?? 1} onChange={(e) => patchLine({ quantity: e.target.value })} className={inputClass} /></label>
                     {item.pricingType === 'perUnit' && <><label className={labelClass}>Unit<select value={item.unitType} onChange={(e) => patchLine({ unitType: e.target.value })} className={inputClass}>{UNITS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className={labelClass}>Included<input type="number" min="0" value={item.includedQuantity} onChange={(e) => patchLine({ includedQuantity: e.target.value })} className={inputClass} /></label></>}
                     <label className={labelClass}>{item.pricingType === 'flat' ? 'Price' : 'Additional rate'}<MoneyInput value={item.rate} onChange={(value) => patchLine({ rate: value })} className={moneyInputClass} /></label>
                   </div>

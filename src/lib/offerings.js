@@ -66,10 +66,10 @@ export function computeOfferingsTotal(offerings) {
 export function packageLineSummary(offering) {
   if (offering?.type !== 'package') return '';
   return (offering.lineItems || []).filter((item) => item.selected !== false).map((item) => {
-    if (item.pricingType === 'flat') return `• ${item.name}`;
-    const quantity = Number(item.quantity) || 0;
+    const quantity = Math.max(0, Number(item.quantity) || 0);
+    if (item.pricingType === 'flat') return `QTY ${quantity || 1}  •  ${item.name}`;
     const included = Number(item.includedQuantity) || 0;
     const extra = Math.max(0, quantity - included);
-    return `• ${item.name}: ${quantity} ${item.unitType}${quantity === 1 ? '' : 's'}${included ? ` (${included} included${extra ? `, ${extra} additional` : ''})` : ''}`;
+    return `QTY ${quantity}  •  ${item.name}${included ? ` (${included} included${extra ? `, ${extra} additional` : ''})` : ''}`;
   }).join('\n');
 }
