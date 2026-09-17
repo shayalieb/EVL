@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { lineItemTotal } from '../src/routes/invoices.js';
 
-test('package totals include base, flat items, and units above the included quantity', () => {
+test('package totals use only the package price and ignore included or additional option details', () => {
   const total = lineItemTotal({
     type: 'package', amount: '1200', lineItems: [
       { pricingType: 'perUnit', quantity: 18, includedQuantity: 10, rate: 85, selected: true },
@@ -11,7 +11,7 @@ test('package totals include base, flat items, and units above the included quan
       { pricingType: 'flat', rate: 900, selected: true, excludedFromPrice: true },
     ],
   });
-  assert.equal(total, 2280);
+  assert.equal(total, 1200);
 });
 
 test('included package units never create a negative charge', () => {

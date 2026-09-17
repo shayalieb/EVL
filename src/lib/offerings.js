@@ -1,5 +1,6 @@
 import { apiFetch } from '../context/AuthContext';
 import { queryList } from './listQuery';
+import { formatCurrency as currency } from './format';
 
 export function queryOfferings(params) {
   return queryList('/offerings', 'offerings', params);
@@ -44,14 +45,7 @@ export async function syncCatalog(offerings, contractorGroups) {
 export function computeOfferingTotal(offering) {
   if (!offering) return 0;
   if (offering.type === 'package') {
-    const base = Number(offering.amount) || 0;
-    return base + (offering.lineItems || []).reduce((sum, item) => {
-      if (item.selected === false || item.excludedFromPrice) return sum;
-      const rate = Number(item.rate) || 0;
-      if (item.pricingType === 'flat') return sum + rate;
-      const chargeable = Math.max(0, (Number(item.quantity) || 0) - (Number(item.includedQuantity) || 0));
-      return sum + chargeable * rate;
-    }, 0);
+    return Number(offering.amount) || 0;
   }
   if (offering.type === 'perUnit') {
     return (Number(offering.unitCount) || 0) * (Number(offering.ratePerUnit) || 0);
@@ -63,14 +57,17 @@ export function computeOfferingsTotal(offerings) {
   return (offerings || []).reduce((sum, o) => sum + computeOfferingTotal(o), 0);
 }
 
-export function packageLineSummary(offering) {
+export function packageLineSummary(offering, { includeAdditional = true } = {}) {
   if (offering?.type !== 'package') return '';
-  return (offering.lineItems || []).filter((item) => item.selected !== false).map((item) => {
+  const selected = (offering.lineItems || []).filter((item) => item.selected !== false);
+  const included = selected.filter((item) => !item.excludedFromPrice).map((item) => `• ${item.name}`);
+  const additional = includeAdditional ? selected.filter((item) => item.excludedFromPrice).map((item) => {
     const quantity = Math.max(0, Number(item.quantity) || 0);
-    const suffix = item.excludedFromPrice ? ' — Additional, not included in package price' : '';
-    if (item.pricingType === 'flat') return `QTY ${quantity || 1}  •  ${item.name}${suffix}`;
-    const included = Number(item.includedQuantity) || 0;
-    const extra = Math.max(0, quantity - included);
-    return `QTY ${quantity}  •  ${item.name}${!item.excludedFromPrice && included ? ` (${included} included${extra ? `, ${extra} additional` : ''})` : ''}${suffix}`;
-  }).join('\n');
+    const rate = Number(item.rate) || 0;
+    const price = item.pricingType === 'perUnit'
+      ? `${quantity} × ${currency(rate)} = ${currency(quantity * rate)}`
+      : currency(rate);
+    return `• QTY ${quantity || 1}  ${item.name} — ${price}`;
+  }) : [];
+  return [included.join('\n'), additional.length ? `Additional options (not included in package price):\n${additional.join('\n')}` : ''].filter(Boolean).join('\n\n');
 }

@@ -81,7 +81,7 @@ async function buildInvoiceDoc({ businessInfo, client, event, lineItems, dueDate
     y += 10;
   } else {
     const itemRows = items.map((item) => [
-      [item.name || 'Item', item.details, packageLineSummary(item)].filter(Boolean).join('\n'),
+      [item.name || 'Item', item.details, packageLineSummary(item, { includeAdditional: false })].filter(Boolean).join('\n'),
       item.type === 'perUnit' ? String(item.unitCount ?? '') : '—',
       item.type === 'perUnit' ? currency(item.ratePerUnit) : '—',
       currency(computeOfferingTotal(item)),

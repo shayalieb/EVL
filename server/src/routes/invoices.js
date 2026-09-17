@@ -24,11 +24,7 @@ function frontendUrl() {
 // marks an invoice paid, without a second copy of this math.
 export function lineItemTotal(item) {
   if (item?.type === 'package') {
-    return (Number(item.amount) || 0) + (item.lineItems || []).reduce((sum, line) => {
-      if (line.selected === false || line.excludedFromPrice) return sum;
-      const rate = Number(line.rate) || 0;
-      return sum + (line.pricingType === 'flat' ? rate : Math.max(0, (Number(line.quantity) || 0) - (Number(line.includedQuantity) || 0)) * rate);
-    }, 0);
+    return Number(item.amount) || 0;
   }
   if (item?.type === 'perUnit') {
     return (Number(item.unitCount) || 0) * (Number(item.ratePerUnit) || 0);

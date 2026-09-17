@@ -123,7 +123,7 @@ export default function InvoiceDocument({
                   <td className="py-3 pr-4">
                     <div className="font-semibold text-slate-700">{item.name || 'Item'}</div>
                     {item.details && <div className="text-[0.75em] text-slate-400 mt-0.5">{item.details}</div>}
-                    {item.type === 'package' && packageLineSummary(item) && <div className="whitespace-pre-line text-[0.75em] text-slate-400 mt-0.5">{packageLineSummary(item)}</div>}
+                    {item.type === 'package' && packageLineSummary(item, { includeAdditional: false }) && <div className="whitespace-pre-line text-[0.75em] text-slate-400 mt-0.5">{packageLineSummary(item, { includeAdditional: false })}</div>}
                   </td>
                   <td className="py-3 text-right text-slate-500">{item.type === 'perUnit' ? item.unitCount : '—'}</td>
                   <td className="py-3 text-right text-slate-500">{item.type === 'perUnit' ? currency(item.ratePerUnit) : '—'}</td>
