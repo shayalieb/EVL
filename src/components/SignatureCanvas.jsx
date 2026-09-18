@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from 'react';
 export default function SignatureCanvas({ onChange, height = 160 }) {
   const canvasRef = useRef(null);
   const drawing = useRef(false);
+  const lastPoint = useRef(null);
+  const strokeLength = useRef(0);
   const [hasDrawn, setHasDrawn] = useState(false);
 
   useEffect(() => {
@@ -47,6 +49,7 @@ export default function SignatureCanvas({ onChange, height = 160 }) {
     e.preventDefault();
     drawing.current = true;
     const { x, y } = getPoint(e);
+    lastPoint.current = { x, y };
     const ctx = canvasRef.current.getContext('2d');
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -56,41 +59,54 @@ export default function SignatureCanvas({ onChange, height = 160 }) {
     if (!drawing.current) return;
     e.preventDefault();
     const { x, y } = getPoint(e);
+    if (lastPoint.current) strokeLength.current += Math.hypot(x - lastPoint.current.x, y - lastPoint.current.y);
+    lastPoint.current = { x, y };
     const ctx = canvasRef.current.getContext('2d');
     ctx.lineTo(x, y);
     ctx.stroke();
-    if (!hasDrawn) setHasDrawn(true);
+    if (!hasDrawn && strokeLength.current >= 8) setHasDrawn(true);
   }
 
   function stop() {
     if (!drawing.current) return;
     drawing.current = false;
-    onChange(canvasRef.current.toDataURL('image/png'));
+    lastPoint.current = null;
+    if (strokeLength.current >= 8) onChange(canvasRef.current.toDataURL('image/png'));
   }
 
   function handleClear() {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    strokeLength.current = 0;
+    lastPoint.current = null;
     setHasDrawn(false);
     onChange('');
   }
 
   return (
     <div>
-      <canvas
-        ref={canvasRef}
-        style={{ height, touchAction: 'none' }}
-        data-testid="signature-canvas"
-        className="w-full rounded-lg border border-slate-300 bg-white cursor-crosshair"
-        onMouseDown={start}
-        onMouseMove={move}
-        onMouseUp={stop}
-        onMouseLeave={stop}
-        onTouchStart={start}
-        onTouchMove={move}
-        onTouchEnd={stop}
-      />
+      <div className="relative">
+        <canvas
+          ref={canvasRef}
+          aria-label="Draw your signature here"
+          style={{ height, touchAction: 'none' }}
+          data-testid="signature-canvas"
+          className="w-full rounded-lg border border-slate-300 bg-white cursor-crosshair"
+          onMouseDown={start}
+          onMouseMove={move}
+          onMouseUp={stop}
+          onMouseLeave={stop}
+          onTouchStart={start}
+          onTouchMove={move}
+          onTouchEnd={stop}
+        />
+        {!hasDrawn && (
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <span className="select-none text-sm font-semibold uppercase tracking-[0.16em] text-slate-300">Draw signature here</span>
+          </div>
+        )}
+      </div>
       <div className="flex items-center justify-between mt-1.5">
         <span className="text-xs text-slate-400">Sign above with your mouse, trackpad, or finger</span>
         {hasDrawn && (
