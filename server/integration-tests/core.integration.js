@@ -260,7 +260,9 @@ test('a contract signing token can only record one concurrent signature', async 
     body: JSON.stringify({ email: 'client@example.com', signatureName, signatureImage: 'client-signature', consentAccepted: true }),
   });
   const responses = await Promise.all([submit('First'), submit('Second')]);
-  assert.deepEqual(responses.map((response) => response.status).sort(), [200, 409]);
+  // Completion rotates both share tokens before the losing request can
+  // replay the just-used link, so the loser sees an invalidated-link 404.
+  assert.deepEqual(responses.map((response) => response.status).sort(), [200, 404]);
 
   const updated = await prisma.contract.findUniqueOrThrow({ where: { id: contract.id } });
   assert.equal(updated.status, 'fully_signed');
