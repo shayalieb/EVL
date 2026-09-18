@@ -257,7 +257,7 @@ test('a contract signing token can only record one concurrent signature', async 
 
   const submit = (signatureName) => request(`/api/contract-sign/${token}/submit`, {
     method: 'POST',
-    body: JSON.stringify({ email: 'client@example.com', signatureName, signatureImage: 'client-signature' }),
+    body: JSON.stringify({ email: 'client@example.com', signatureName, signatureImage: 'client-signature', consentAccepted: true }),
   });
   const responses = await Promise.all([submit('First'), submit('Second')]);
   assert.deepEqual(responses.map((response) => response.status).sort(), [200, 409]);
