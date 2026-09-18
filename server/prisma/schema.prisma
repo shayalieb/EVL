@@ -1276,6 +1276,9 @@ model EmailDomain {
   domain         String    @unique
   isCustomDomain Boolean   @default(false)
   resendDomainId String    @unique
+  // Optional account-selected mailbox name. When blank, each message type
+  // keeps its descriptive address (contracts@, invoices@, etc.).
+  senderLocalPart String?
   status         String    @default("pending") // 'pending' | 'verified' | 'failed'
   dnsRecords     Json // Resend's returned record list — auto-applied (GoDaddy) or shown as instructions, per isCustomDomain
   verifiedAt     DateTime?

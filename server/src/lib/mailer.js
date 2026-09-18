@@ -46,7 +46,7 @@ function slugifyLocalPart(name) {
 export async function resolveFromHeader({ accountId, fromName, localPart }) {
   const domain = accountId ? await getVerifiedEmailDomain(accountId) : null;
   if (domain) {
-    const fromEmail = `${localPart || 'hello'}@${domain.domain}`;
+    const fromEmail = `${domain.senderLocalPart || localPart || 'hello'}@${domain.domain}`;
     return `${(fromName || 'GigWorks').trim()} <${fromEmail}>`;
   }
   // Only when RESEND_FROM_EMAIL is actually configured — the resend.dev

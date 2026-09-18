@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import Badge from '../../components/ui/Badge';
 import { useToast } from '../../components/ui/Toast';
-import { getEmailDomain, createEmailDomain, createCustomEmailDomain, verifyEmailDomain, replaceEmailDomain, cancelEmailDomainReplacement, removeEmailDomain, sendEmailDomainTest } from '../../lib/emailDomains';
+import { getEmailDomain, createEmailDomain, createCustomEmailDomain, verifyEmailDomain, replaceEmailDomain, cancelEmailDomainReplacement, removeEmailDomain, sendEmailDomainTest, updateEmailSenderAddress } from '../../lib/emailDomains';
 import { DNS_PROVIDERS, DNS_PROVIDER_GUIDANCE, getDnsRecordPurpose, getDnsRecordStatus } from '../../lib/emailDomainDns';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -24,10 +24,12 @@ export default function EmailDomainTab() {
   const [replacementDomain, setReplacementDomain] = useState('');
   const [testEmail, setTestEmail] = useState('');
   const [testing, setTesting] = useState(false);
+  const [senderLocalPart, setSenderLocalPart] = useState('hello');
+  const [savingSender, setSavingSender] = useState(false);
 
   function load() {
     getEmailDomain()
-      .then(({ domain: d, rootDomain: rd }) => { setDomain(d); setRootDomain(rd); })
+      .then(({ domain: d, rootDomain: rd }) => { setDomain(d); setRootDomain(rd); setSenderLocalPart(d?.senderLocalPart || 'hello'); })
       .catch((err) => setLoadError(err.message));
   }
 
@@ -127,6 +129,21 @@ export default function EmailDomainTab() {
       showToast(err.message, 'error');
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function handleSenderAddress(e) {
+    e.preventDefault();
+    setSavingSender(true);
+    try {
+      const updated = await updateEmailSenderAddress(senderLocalPart);
+      setDomain(updated);
+      setSenderLocalPart(updated.senderLocalPart || 'hello');
+      showToast(`Emails will now be sent from ${updated.senderLocalPart}@${updated.domain}`);
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setSavingSender(false);
     }
   }
 
@@ -255,6 +272,26 @@ export default function EmailDomainTab() {
             <CapabilityStatus title="Reply tracking" status={setupDomain.receivingStatus} readyText="Inbound replies can be tracked" pendingText="Inbound routing is not ready" />
           </div>
           {domain.lastHealthCheckedAt && <p className="text-[11px] text-slate-400">DNS health last checked {new Date(domain.lastHealthCheckedAt).toLocaleString()}.</p>}
+
+          <form onSubmit={handleSenderAddress} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <label className="block text-xs font-semibold text-slate-700">Sender email address</label>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <input
+                required
+                value={senderLocalPart}
+                onChange={(event) => setSenderLocalPart(event.target.value.toLowerCase())}
+                placeholder="hello"
+                aria-label="Sender email name"
+                data-testid="settings-email-domain-sender-local-part-input"
+                className={`${inputClass} max-w-[12rem] bg-white`}
+              />
+              <span className="text-sm text-slate-500">@{domain.domain}</span>
+              <button type="submit" disabled={savingSender} data-testid="settings-email-domain-save-sender-button" className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                {savingSender ? 'Saving…' : 'Save sender'}
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">Contracts, proposals, invoices, reminders, and other business emails will use this recognizable address after the domain is verified.</p>
+          </form>
 
           {(domain.sendingStatus === 'verified' || domain.status === 'verified') && (
             <form onSubmit={handleTestEmail} className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">

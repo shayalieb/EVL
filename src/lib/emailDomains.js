@@ -34,6 +34,11 @@ export async function removeEmailDomain() {
   await apiFetch('/email-domains', { method: 'DELETE' });
 }
 
+export async function updateEmailSenderAddress(localPart) {
+  const data = await apiFetch('/email-domains/sender-address', { method: 'PATCH', body: JSON.stringify({ localPart }) });
+  return data.domain;
+}
+
 export async function sendEmailDomainTest(to) {
   return apiFetch('/email-domains/test-email', { method: 'POST', body: JSON.stringify({ to }) });
 }

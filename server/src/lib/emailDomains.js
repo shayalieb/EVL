@@ -11,6 +11,7 @@ const RESERVED_SUBDOMAINS = new Set(['www', 'api', 'mail', 'admin', 'app', 'ns1'
 // Deliberately simple — just enough to reject obvious junk before an
 // external API call. A hostname with at least one dot and no spaces/@.
 const DOMAIN_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+const SENDER_LOCAL_PART_PATTERN = /^[a-z0-9](?:[a-z0-9._+-]{0,62}[a-z0-9])?$/;
 
 export function validateSubdomain(subdomain) {
   const value = (subdomain || '').trim().toLowerCase();
@@ -32,6 +33,14 @@ export function validateCustomDomain(domain) {
   }
   if (value === ROOT_DOMAIN || value.endsWith(`.${ROOT_DOMAIN}`)) {
     return { valid: false, error: `Use the "${ROOT_DOMAIN} subdomain" option above for a ${ROOT_DOMAIN} address instead.` };
+  }
+  return { valid: true, value };
+}
+
+export function validateSenderLocalPart(localPart) {
+  const value = (localPart || '').trim().toLowerCase();
+  if (!SENDER_LOCAL_PART_PATTERN.test(value) || value.includes('..')) {
+    return { valid: false, error: 'Use letters, numbers, periods, underscores, plus signs, or hyphens (for example: hello or bookings).' };
   }
   return { valid: true, value };
 }

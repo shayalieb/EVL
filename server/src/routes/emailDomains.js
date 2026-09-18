@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, requireRole } from '../lib/membership.js';
-import { provisionEmailDomain, provisionCustomEmailDomain, refreshEmailDomainStatus, getEmailDomain, startCustomEmailDomainReplacement, cancelEmailDomainReplacement, removeEmailDomain } from '../lib/emailDomains.js';
+import { provisionEmailDomain, provisionCustomEmailDomain, refreshEmailDomainStatus, getEmailDomain, startCustomEmailDomainReplacement, cancelEmailDomainReplacement, removeEmailDomain, validateSenderLocalPart } from '../lib/emailDomains.js';
 import { ROOT_DOMAIN } from '../lib/godaddyDns.js';
 import { normalizeValidEmail } from '../lib/emailAddress.js';
 import { resolveFromHeader, sendMail, buildActionEmailHtml } from '../lib/mailer.js';
@@ -70,6 +70,18 @@ router.delete('/replacement', requireRole('owner', 'admin'), asyncHandler(async 
 router.delete('/', requireRole('owner', 'admin'), asyncHandler(async (req, res) => {
   await removeEmailDomain(req.membership.accountId);
   res.status(204).end();
+}));
+
+router.patch('/sender-address', requireRole('owner', 'admin'), asyncHandler(async (req, res) => {
+  const existing = await getEmailDomain(req.membership.accountId);
+  if (!existing) return res.status(404).json({ error: 'Set up an email domain before choosing a sender address.' });
+  const result = validateSenderLocalPart(req.body?.localPart);
+  if (!result.valid) return res.status(400).json({ error: result.error });
+  const domain = await prisma.emailDomain.update({
+    where: { accountId: req.membership.accountId },
+    data: { senderLocalPart: result.value },
+  });
+  res.json({ domain });
 }));
 
 router.post('/test-email', requireRole('owner', 'admin'), asyncHandler(async (req, res) => {
