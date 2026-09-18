@@ -406,7 +406,7 @@ function ContractHistoryEntry({ contract }) {
 function ProposalHistoryEntry({ proposalResponse: pr }) {
   const [open, setOpen] = useState(false);
   const proposal = pr.snapshot?.proposal || {};
-  const statusLabel = pr.status === 'accepted' ? 'Accepted' : pr.status === 'revision_requested' ? 'Changes requested' : 'Sent';
+  const statusLabel = pr.status === 'accepted' ? 'Accepted' : pr.status === 'revision_requested' ? 'Changes requested' : pr.status === 'superseded' ? 'Superseded' : 'Sent';
   return (
     <div className="border border-slate-200 rounded-lg p-3" data-testid="booking-form-proposal-history-entry">
       <button type="button" onClick={() => setOpen((v) => !v)} className="w-full flex items-center justify-between gap-3 text-left">
@@ -615,6 +615,7 @@ export default function BookingFormPage() {
   const [lastOwnerSignLink, setLastOwnerSignLink] = useState('');
   const [ownerSignerName, setOwnerSignerName] = useState('');
   const [ownerSignatureImage, setOwnerSignatureImage] = useState('');
+  const [ownerConsentAccepted, setOwnerConsentAccepted] = useState(false);
   const [signingOwner, setSigningOwner] = useState(false);
   const [contractTerms, setContractTerms] = useState('');
 
@@ -1226,10 +1227,12 @@ export default function BookingFormPage() {
   }
 
   function buildContractSnapshot() {
+    const accepted = !revisionDraft && proposalResponse?.status === 'accepted' ? proposalResponse.snapshot : null;
+    const acceptedProposal = accepted?.proposal || {};
     return {
-      businessInfo,
-      client: client ? { firstName: client.firstName, lastName: client.lastName, email: client.email, phone: client.phone } : {},
-      booking: {
+      businessInfo: accepted?.businessInfo || businessInfo,
+      client: accepted?.client || (client ? { firstName: client.firstName, lastName: client.lastName, email: client.email, phone: client.phone } : {}),
+      booking: accepted?.booking || {
         eventType: form.eventType,
         eventDate: form.eventDate,
         venue: form.venue,
@@ -1240,9 +1243,9 @@ export default function BookingFormPage() {
         brideName: form.brideName,
         groomName: form.groomName,
       },
-      hours: contractHours,
-      lineItems: contractLineItems,
-      offerings: contractOfferings,
+      hours: accepted ? acceptedProposal.hours : contractHours,
+      lineItems: accepted ? (acceptedProposal.lineItems || []) : contractLineItems,
+      offerings: accepted ? (acceptedProposal.offerings || []) : contractOfferings,
       title: contractTitle,
       sections: contractSections,
       style: {
@@ -1641,19 +1644,14 @@ export default function BookingFormPage() {
     setContractHours(snapshot.hours || '');
     setContractLineItems(snapshot.lineItems || []);
     setContractOfferings(snapshot.offerings || []);
-    setContractTitle(snapshot.title || 'Event Contract');
+    const baseTitle = snapshot.title || 'Event Contract';
+    setContractTitle(contract.status === 'fully_signed' ? `${baseTitle} — Addendum` : `${baseTitle} — Replacement`);
     setContractSections(snapshot.sections || []);
-    // Signing a revision only binds the parties to *this* document — the
-    // original signature doesn't carry forward to changed terms. Stating
-    // supersession explicitly avoids ambiguity over whether unedited clauses
-    // from the original are still meant to apply.
     const originalDate = new Date(contract.sentAt || contract.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    // "Amends" rather than "supersedes in its entirety" — nothing from the
-    // original is silently dropped if it isn't restated below; only what's
-    // actually changed here takes effect. Safer default for a small change
-    // (e.g. adding a musician) than a full-reset framing would be.
-    const amendmentNotice = `This agreement (Version ${(contract.revisionNumber || 1) + 1}) amends the contract dated ${originalDate} to reflect the updated terms set forth herein. Except as expressly modified by this agreement, all other terms of the original agreement dated ${originalDate} remain in full force and effect.`;
-    setContractTerms(contract.terms ? `${amendmentNotice}\n\n${contract.terms}` : amendmentNotice);
+    const notice = contract.status === 'fully_signed'
+      ? `This addendum (Version ${(contract.revisionNumber || 1) + 1}) modifies the signed contract dated ${originalDate} only as stated below. All other terms of the signed contract remain in full force and effect. This addendum becomes effective only after both parties sign it.`
+      : `This replacement (Version ${(contract.revisionNumber || 1) + 1}) supersedes the prior unsigned contract version in full. Only this version may be signed.`;
+    setContractTerms(contract.terms ? `${notice}\n\n${contract.terms}` : notice);
     setContractRecipientEmail(contract.recipientEmail || '');
     setContractRecipientName(contract.recipientName || '');
     setContractSubmitAttempted(false);
@@ -1681,8 +1679,8 @@ export default function BookingFormPage() {
   }
 
   async function handleOwnerSign() {
-    if (!ownerSignerName.trim() || !ownerSignatureImage) {
-      showToast('Please type your name and draw your signature', 'error');
+    if (!ownerSignerName.trim() || !ownerSignatureImage || !ownerConsentAccepted) {
+      showToast('Please type your name, draw your signature, and accept the electronic signature consent', 'error');
       return;
     }
     setSigningOwner(true);
@@ -1690,6 +1688,7 @@ export default function BookingFormPage() {
       const updated = await ownerSignContract(contract.id, {
         signatureName: ownerSignerName.trim(),
         signatureImage: ownerSignatureImage,
+        consentAccepted: ownerConsentAccepted,
       });
       setContract(updated);
       showToast('Contract fully signed!');
@@ -2725,9 +2724,11 @@ export default function BookingFormPage() {
               {revisionDraft ? (
                 <div className="flex items-start justify-between gap-3 mb-1 flex-wrap">
                   <div>
-                    <h3 className={cardTitleClass}>Revise Contract</h3>
+                    <h3 className={cardTitleClass}>{revisionDraft.status === 'fully_signed' ? 'Create Contract Addendum' : 'Replace Unsigned Contract'}</h3>
                     <p className="text-sm text-slate-500 mb-5 max-w-xl">
-                      Sends a separate updated contract linked to version {revisionDraft.revisionNumber}. The original stays on record and remains binding except where this version expressly changes it.
+                      {revisionDraft.status === 'fully_signed'
+                        ? `Sends a separate addendum linked to signed version ${revisionDraft.revisionNumber}. The signed contract remains binding except for changes both parties sign in this addendum.`
+                        : `Sends a replacement linked to version ${revisionDraft.revisionNumber}. The prior unsigned version stays viewable for the record but can no longer be signed.`}
                     </p>
                   </div>
                   <button
@@ -2886,7 +2887,7 @@ export default function BookingFormPage() {
                   className={`${primaryButtonClass} disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2`}
                 >
                   {sendingContract && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
-                  {revisionDraft ? 'Send Revised Contract for Signature' : 'Send Contract for Signature'}
+                  {revisionDraft ? (revisionDraft.status === 'fully_signed' ? 'Send Addendum for Signature' : 'Send Replacement for Signature') : 'Send Contract for Signature'}
                 </button>
               </div>
               <div className="mt-4 max-w-sm">
@@ -3100,9 +3101,9 @@ export default function BookingFormPage() {
                 <h3 className={cardTitleClass}>Terms</h3>
                 <div className="whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600" data-testid="booking-form-contract-terms-readonly">{contract.terms || 'No additional terms.'}</div>
                 <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
-                  <p className="text-xs text-slate-400">{contract.clientSignedAt ? 'Locked after the client signed. This version is view-only.' : contract.status === 'superseded' ? 'This version was replaced and is view-only.' : 'Editing creates and sends a separate version linked to this contract.'}</p>
-                  {!contract.clientSignedAt && contract.status !== 'superseded' && (
-                    <button type="button" onClick={startContractRevision} data-testid="booking-form-contract-edit-version-button" className="px-4 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50">Edit &amp; Send New Version</button>
+                  <p className="text-xs text-slate-400">{contract.status === 'fully_signed' ? 'Locked and view-only. Changes require a separately signed addendum.' : contract.clientSignedAt ? 'Locked after the client signed. Complete or resolve this version before making changes.' : contract.status === 'superseded' ? 'This version was replaced and is view-only.' : 'Editing creates a replacement that supersedes this unsigned version.'}</p>
+                  {(!contract.clientSignedAt || contract.status === 'fully_signed') && contract.status !== 'superseded' && (
+                    <button type="button" onClick={startContractRevision} data-testid="booking-form-contract-edit-version-button" className="px-4 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50">{contract.status === 'fully_signed' ? 'Create Addendum' : 'Edit &amp; Send Replacement'}</button>
                   )}
                 </div>
               </div>
@@ -3147,10 +3148,14 @@ export default function BookingFormPage() {
                           <input value={ownerSignerName} onChange={(e) => setOwnerSignerName(e.target.value)} data-testid="booking-form-contract-owner-name-input" className={inputClass} />
                         </div>
                         <SignatureCanvas onChange={setOwnerSignatureImage} />
+                        <label className="flex items-start gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-3 text-xs leading-5 text-slate-700">
+                          <input type="checkbox" checked={ownerConsentAccepted} onChange={(event) => setOwnerConsentAccepted(event.target.checked)} data-testid="booking-form-contract-owner-consent-checkbox" className="mt-1 h-4 w-4" />
+                          <span>I have reviewed Contract Version {contract.revisionNumber || 1}, intend to sign it, consent to use electronic records and signatures for this transaction, and can access or download a copy. I understand I may request a paper copy from the sender.</span>
+                        </label>
                         <button
                           type="button"
                           onClick={handleOwnerSign}
-                          disabled={signingOwner}
+                          disabled={signingOwner || !ownerConsentAccepted}
                           data-testid="booking-form-contract-sign-button"
                           className={`${primaryButtonClass} disabled:opacity-60 flex items-center gap-2`}
                         >

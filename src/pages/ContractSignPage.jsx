@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import Logo from '../components/ui/Logo';
 import SubmitButton from '../components/ui/SubmitButton';
 import ContractDocument from '../components/ContractDocument';
-import { getContractByToken, viewContractByToken, submitContractSignature } from '../lib/contracts';
+import { viewContractByToken, submitContractSignature } from '../lib/contracts';
 import { generateContractPdf } from '../lib/contractPdf';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -18,29 +18,13 @@ export default function ContractSignPage() {
   const [verifiedEmail, setVerifiedEmail] = useState('');
   const [contract, setContract] = useState(null);
   const [error, setError] = useState('');
-  const [verifying, setVerifying] = useState(true);
+  const [verifying, setVerifying] = useState(false);
   const [signerName, setSignerName] = useState('');
   const [signatureImage, setSignatureImage] = useState('');
+  const [consentAccepted, setConsentAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const signHereRef = useRef(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getContractByToken(token)
-      .then((data) => {
-        if (!cancelled && data) {
-          setContract(data);
-        }
-      })
-      .catch(() => {
-        // Fallback to manual email verification if token lookup requires email
-      })
-      .finally(() => {
-        if (!cancelled) setVerifying(false);
-      });
-    return () => { cancelled = true; };
-  }, [token]);
 
   async function handleVerify(e) {
     e.preventDefault();
@@ -69,12 +53,18 @@ export default function ContractSignPage() {
       setError('Please type your full legal name.');
       return;
     }
+    if (!consentAccepted) {
+      signHereRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setError('Please accept the electronic signature consent before signing.');
+      return;
+    }
     setSubmitting(true);
     try {
       const data = await submitContractSignature(token, {
         email: verifiedEmail,
         signatureName: signerName.trim(),
         signatureImage,
+        consentAccepted,
       });
       setContract(data);
     } catch (err) {
@@ -185,6 +175,12 @@ export default function ContractSignPage() {
           onSignatureChange={setSignatureImage}
           signHereRef={signHereRef}
         />
+        {canSignNow && (
+          <label className="mt-4 flex items-start gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-slate-700">
+            <input type="checkbox" checked={consentAccepted} onChange={(event) => setConsentAccepted(event.target.checked)} data-testid="contract-sign-consent-checkbox" className="mt-1 h-4 w-4" />
+            <span>I have reviewed Contract Version {contract.revisionNumber || 1}, intend to sign it, consent to use electronic records and signatures for this transaction, and can access or download a copy. I understand I may request a paper copy from the sender.</span>
+          </label>
+        )}
       </div>
 
       {canSignNow && (
@@ -196,7 +192,7 @@ export default function ContractSignPage() {
             <button
               type="button"
               onClick={handleSignClick}
-              disabled={submitting}
+              disabled={submitting || !consentAccepted}
               data-testid="contract-sign-submit-button"
               className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-700 disabled:opacity-60 flex items-center justify-center gap-2"
             >

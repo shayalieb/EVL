@@ -47,10 +47,10 @@ export async function regenerateClientSignLink(contractId, expiration) {
   return apiFetch(`/contracts/${contractId}/regenerate-client-link`, { method: 'POST', body: JSON.stringify({ expiration }) });
 }
 
-export async function ownerSignContract(contractId, { signatureName, signatureImage }) {
+export async function ownerSignContract(contractId, { signatureName, signatureImage, consentAccepted }) {
   const data = await apiFetch(`/contracts/${contractId}/owner-sign`, {
     method: 'POST',
-    body: JSON.stringify({ signatureName, signatureImage }),
+    body: JSON.stringify({ signatureName, signatureImage, consentAccepted }),
   });
   return data.contract;
 }
@@ -70,10 +70,10 @@ export async function viewContractByToken(token, email) {
   return data.contract;
 }
 
-export async function submitContractSignature(token, { email, signatureName, signatureImage }) {
+export async function submitContractSignature(token, { email, signatureName, signatureImage, consentAccepted }) {
   const data = await apiFetch(`/contract-sign/${encodeURIComponent(token)}/submit`, {
     method: 'POST',
-    body: JSON.stringify({ email, signatureName, signatureImage }),
+    body: JSON.stringify({ email, signatureName, signatureImage, consentAccepted }),
   });
   return data.contract;
 }

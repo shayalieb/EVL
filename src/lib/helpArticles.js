@@ -296,7 +296,7 @@ export const HELP_CATEGORIES = [
             'If you handled it outside the app (printed it, handed it over in person), use the "…" menu\'s "Mark as Sent Manually" instead, with a short reason.',
           ] },
           { type: 'h', text: 'What the client sees' },
-          { type: 'p', text: 'The same pricing/details, plus two buttons: "Accept Proposal" or "Request Revision" (which requires a note explaining what to change). Either way, they can change their mind afterward via a link on the confirmation screen — and a revision request surfaces back to you as a red banner on both the Bookings list and the Proposal tab.' },
+          { type: 'p', text: 'The same pricing/details, plus two buttons: "Accept Proposal" or "Request Revision" (which requires a note explaining what to change). The response is final; if something changes, send a new proposal. A revision request surfaces as a red banner on both the Bookings list and the Proposal tab.' },
         ],
       },
       {

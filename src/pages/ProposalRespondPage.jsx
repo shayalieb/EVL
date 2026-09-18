@@ -21,10 +21,6 @@ export default function ProposalRespondPage() {
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
-  // Once already responded, the Accept/Request Revision bar hides behind
-  // the status banner's "changed your mind?" link rather than staying
-  // permanently visible — this flips it back on.
-  const [showActions, setShowActions] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,11 +37,6 @@ export default function ProposalRespondPage() {
     setRespondMode(mode);
   }
 
-  function handleChangeResponse() {
-    setShowActions(true);
-    setRespondMode(null);
-  }
-
   async function handleSubmit() {
     setSubmitError('');
     if (respondMode === 'revise' && !note.trim()) {
@@ -60,7 +51,6 @@ export default function ProposalRespondPage() {
       });
       setProposalResponse(updated);
       setRespondMode(null);
-      setShowActions(false);
     } catch (err) {
       setSubmitError(err.message || 'Failed to submit your response.');
     } finally {
@@ -93,6 +83,7 @@ export default function ProposalRespondPage() {
   const sections = (proposal.sections || []).filter((s) => s.title);
   const grandTotal = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0) + computeOfferingsTotal(offeringsList);
   const alreadyResponded = status === 'accepted' || status === 'revision_requested';
+  const superseded = status === 'superseded';
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-8 pb-28">
@@ -109,9 +100,7 @@ export default function ProposalRespondPage() {
           <div data-testid="proposal-respond-accepted-banner" className="mb-4 text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-4 py-3">
             <div className="font-semibold">You accepted this proposal{respondedAt ? ` on ${formatDateTime(respondedAt)}` : ''}.</div>
             {responseNote && <div className="mt-1 text-emerald-800">"{responseNote}"</div>}
-            <button type="button" onClick={handleChangeResponse} data-testid="proposal-respond-change-link" className="mt-2 text-xs font-semibold text-emerald-700 underline">
-              Changed your mind? Update your response
-            </button>
+            <div className="mt-2 text-xs">This response is final. Contact {businessInfo.name || 'the sender'} if anything needs to change.</div>
           </div>
         )}
         {status === 'revision_requested' && !respondMode && (
@@ -119,9 +108,12 @@ export default function ProposalRespondPage() {
             <div className="font-semibold">You requested changes{respondedAt ? ` on ${formatDateTime(respondedAt)}` : ''}.</div>
             {responseNote && <div className="mt-1 text-amber-800">"{responseNote}"</div>}
             <div className="mt-1 text-amber-600">We'll follow up once the proposal has been updated.</div>
-            <button type="button" onClick={handleChangeResponse} data-testid="proposal-respond-change-link" className="mt-2 text-xs font-semibold text-amber-700 underline">
-              Want to accept instead? Update your response
-            </button>
+            <div className="mt-2 text-xs">This response is final. Contact {businessInfo.name || 'the sender'} if anything needs to change.</div>
+          </div>
+        )}
+        {superseded && (
+          <div data-testid="proposal-respond-superseded-banner" className="mb-4 text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
+            A newer proposal replaced this version. It remains available for your records and can no longer be accepted or revised.
           </div>
         )}
 
@@ -200,6 +192,10 @@ export default function ProposalRespondPage() {
           ))}
         </div>
 
+        <div className="mt-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs leading-5 text-slate-500">
+          Accepting this proposal confirms your interest in these terms but does not create a binding service agreement. The booking becomes binding only after both parties sign the contract.
+        </div>
+
         {submitError && <div data-testid="proposal-respond-error-banner" className="mt-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{submitError}</div>}
 
         {respondMode && (
@@ -234,7 +230,7 @@ export default function ProposalRespondPage() {
         )}
       </div>
 
-      {!respondMode && (!alreadyResponded || showActions) && (
+      {!respondMode && !alreadyResponded && !superseded && (
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
           <div className="max-w-3xl mx-auto flex items-center justify-end gap-3">
             <button

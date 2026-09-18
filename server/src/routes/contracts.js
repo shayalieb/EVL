@@ -9,6 +9,7 @@ import { hashToken, generateToken } from '../lib/resetToken.js';
 import { withSerializableTransaction } from '../lib/serializableTransaction.js';
 import { normalizeValidEmail } from '../lib/emailAddress.js';
 import { resolveLinkExpiration, linkAvailability } from '../lib/linkExpiration.js';
+import { ESIGN_CONSENT_VERSION, buildDocumentHash, buildFinalRecord, requestEvidence } from '../lib/contractEvidence.js';
 
 const router = Router();
 
@@ -31,6 +32,8 @@ function serializeForOwner(contract) {
     snapshot: contract.snapshot,
     terms: contract.terms,
     status: contract.status,
+    documentType: contract.documentType,
+    documentHash: contract.documentHash,
     recipientEmail: contract.recipientEmail,
     recipientName: contract.recipientName,
     clientSignedAt: contract.clientSignedAt,
@@ -46,6 +49,8 @@ function serializeForOwner(contract) {
     log: contract.log,
     revisionNumber: contract.revisionNumber,
     previousContractId: contract.previousContractId,
+    completedAt: contract.completedAt,
+    finalRecordHash: contract.finalRecordHash,
   };
 }
 
@@ -55,6 +60,9 @@ function serializeForPublic(contract, role) {
     snapshot: contract.snapshot,
     terms: contract.terms,
     status: contract.status,
+    documentType: contract.documentType,
+    revisionNumber: contract.revisionNumber,
+    documentHash: contract.documentHash,
     recipientName: contract.recipientName,
     clientSignedAt: contract.clientSignedAt,
     clientSignatureName: contract.clientSignatureName,
@@ -62,6 +70,8 @@ function serializeForPublic(contract, role) {
     ownerSignedAt: contract.ownerSignedAt,
     ownerSignatureName: contract.ownerSignatureName,
     ownerSignatureImage: contract.ownerSignatureImage,
+    completedAt: contract.completedAt,
+    finalRecordHash: contract.finalRecordHash,
     expiresAt: role === 'client' ? contract.clientLinkExpiresAt : contract.ownerLinkExpiresAt,
   };
 }
@@ -127,6 +137,32 @@ function statusFor({ clientSigned, ownerSigned }) {
   return 'sent';
 }
 
+async function deliverCompletedContract(contract) {
+  const clientToken = generateToken();
+  const ownerToken = generateToken();
+  await prisma.contract.update({
+    where: { id: contract.id },
+    data: { clientTokenHash: hashToken(clientToken), ownerTokenHash: hashToken(ownerToken) },
+  });
+  const fromName = contract.snapshot?.businessInfo?.name || 'GigWorks';
+  const recipients = [
+    { to: contract.recipientEmail, url: `${frontendUrl()}/sign/${clientToken}`, name: contract.recipientName || 'there' },
+    { to: contract.ownerEmail, url: `${frontendUrl()}/sign/${ownerToken}`, name: fromName },
+  ];
+  await Promise.allSettled(recipients.map(async ({ to, url, name }) => sendMail({
+    from: await resolveFromHeader({ accountId: contract.accountId, fromName, localPart: 'contracts' }),
+    to,
+    subject: `Completed contract — ${fromName}`,
+    html: buildActionEmailHtml({
+      businessInfo: contract.snapshot?.businessInfo,
+      heading: 'Your completed contract is ready',
+      bodyHtml: `<p>Hi ${escapeHtml(name)},</p><p>Both parties have signed contract version ${contract.revisionNumber}. Use the secure link below to view it and download a PDF copy. GigWorks has preserved an integrity-checked completion record.</p>`,
+      buttonText: 'View completed contract',
+      buttonUrl: url,
+    }),
+  })));
+}
+
 router.post('/', asyncHandler(async (req, res) => {
   if (!effectivePermissions(req.membership).manageBookings) {
     return res.status(403).json({ error: 'Not authorized.' });
@@ -148,8 +184,8 @@ router.post('/', asyncHandler(async (req, res) => {
     if (!previousContract || previousContract.accountId !== req.membership.accountId || previousContract.bookingId !== bookingId) {
       return res.status(400).json({ error: 'Invalid contract to revise.' });
     }
-    if (previousContract.clientSignedAt) {
-      return res.status(409).json({ error: 'This contract is locked because the client has signed it.' });
+    if (previousContract.clientSignedAt && previousContract.status !== 'fully_signed') {
+      return res.status(409).json({ error: 'The client has signed this version. Complete or resolve it before creating another version.' });
     }
     if (previousContract.status === 'superseded') {
       return res.status(409).json({ error: 'This contract already has a newer version.' });
@@ -169,12 +205,17 @@ router.post('/', asyncHandler(async (req, res) => {
   // right away before the client even opens theirs.
   const ownerToken = generateToken();
   const sentAt = new Date();
+  const revisionNumber = previousContract ? previousContract.revisionNumber + 1 : 1;
+  const documentType = !previousContract ? 'contract' : previousContract.status === 'fully_signed' ? 'addendum' : 'replacement';
+  const documentHash = buildDocumentHash({ snapshot, terms, documentType, revisionNumber, previousContractId: previousContract?.id });
 
   const contract = await prisma.contract.create({
     data: {
       accountId: req.membership.accountId,
       bookingId,
       snapshot,
+      documentType,
+      documentHash,
       terms: terms || null,
       status: 'sent',
       recipientEmail: normalizedRecipientEmail,
@@ -185,7 +226,7 @@ router.post('/', asyncHandler(async (req, res) => {
       clientLinkExpiresAt: resolvedExpiration.expiresAt,
       ownerLinkExpiresAt: resolvedExpiration.expiresAt,
       sentAt,
-      revisionNumber: previousContract ? previousContract.revisionNumber + 1 : 1,
+      revisionNumber,
       previousContractId: previousContract ? previousContract.id : null,
       // Delivered outside GigWorks (printed, texted, signed in person,
       // etc.) skips the actual email below, but still gets sign tokens so
@@ -196,12 +237,12 @@ router.post('/', asyncHandler(async (req, res) => {
     },
   });
 
-  if (previousContract) {
+  if (previousContract && documentType === 'replacement') {
     await prisma.contract.update({
       where: { id: previousContract.id },
       data: {
         status: 'superseded',
-        log: withLogEntry(previousContract.log, { type: 'superseded', actorEmail: normalizedOwnerEmail, note: `Replaced by contract version ${contract.revisionNumber}.` }),
+        log: withLogEntry(previousContract.log, { type: 'superseded', actorEmail: normalizedOwnerEmail, note: `Superseded in full by unsigned replacement version ${contract.revisionNumber}.` }),
       },
     });
   }
@@ -242,9 +283,9 @@ router.post('/:id/owner-sign', asyncHandler(async (req, res) => {
   if (!effectivePermissions(req.membership).manageBookings) {
     return res.status(403).json({ error: 'Not authorized.' });
   }
-  const { signatureName, signatureImage } = req.body || {};
-  if (!signatureName?.trim() || !signatureImage) {
-    return res.status(400).json({ error: 'signatureName and signatureImage are required.' });
+  const { signatureName, signatureImage, consentAccepted } = req.body || {};
+  if (!signatureName?.trim() || !signatureImage || consentAccepted !== true) {
+    return res.status(400).json({ error: 'A name, drawn signature, and electronic-signature consent are required.' });
   }
 
   const contract = await prisma.contract.findUnique({ where: { id: req.params.id } });
@@ -259,16 +300,28 @@ router.post('/:id/owner-sign', asyncHandler(async (req, res) => {
   }
 
   const owner = await prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } });
-  const updated = await prisma.contract.update({
+  const evidence = requestEvidence(req);
+  const documentHash = contract.documentHash || buildDocumentHash(contract);
+  let updated = await prisma.contract.update({
     where: { id: contract.id },
     data: {
       ownerSignedAt: new Date(),
       ownerSignatureName: signatureName.trim(),
       ownerSignatureImage: signatureImage,
+      ownerConsentVersion: ESIGN_CONSENT_VERSION,
+      ownerSignedIp: evidence.ip,
+      ownerSignedUserAgent: evidence.userAgent,
+      documentHash,
       status: statusFor({ clientSigned: !!contract.clientSignedAt, ownerSigned: true }),
       log: withLogEntry(contract.log, { type: 'owner_signed', actorEmail: owner.email, note: null }),
     },
   });
+  if (updated.status === 'fully_signed') {
+    const completedAt = new Date();
+    const completed = buildFinalRecord({ ...updated, completedAt });
+    updated = await prisma.contract.update({ where: { id: updated.id }, data: { completedAt, finalRecord: completed.record, finalRecordHash: completed.hash } });
+    await deliverCompletedContract(updated);
+  }
   res.json({ contract: serializeForOwner(updated) });
 }));
 
@@ -361,7 +414,7 @@ async function findByToken(token, database = prisma) {
 }
 
 function rejectUnavailable(found, res) {
-  if (found.availability === 'active') return false;
+  if (found.availability === 'active' || found.contract.status === 'fully_signed') return false;
   res.status(410).json({ error: 'This contract link has expired. Please contact the sender for a new link.', reason: found.availability });
   return true;
 }
@@ -369,10 +422,7 @@ function rejectUnavailable(found, res) {
 publicContractsRouter.get('/:token', asyncHandler(async (req, res) => {
   const found = await findByToken(req.params.token);
   if (!found) return res.status(404).json({ error: 'This link is invalid or has expired.' });
-  if (rejectUnavailable(found, res)) return;
-
-  const { contract, role } = found;
-  res.json({ contract: serializeForPublic(contract, role) });
+  return res.status(401).json({ error: 'Confirm the email address this contract was sent to.', requiresEmail: true });
 }));
 
 publicContractsRouter.post('/:token/view', asyncHandler(async (req, res) => {
@@ -381,21 +431,21 @@ publicContractsRouter.post('/:token/view', asyncHandler(async (req, res) => {
   if (rejectUnavailable(found, res)) return;
 
   const { contract, role } = found;
-  const { email } = req.body || {};
-  if (email?.trim()) {
-    const expectedEmail = role === 'client' ? contract.recipientEmail : contract.ownerEmail;
-    if (expectedEmail && email.trim().toLowerCase() !== expectedEmail.toLowerCase()) {
-      return res.status(403).json({ error: "That email doesn't match this link." });
-    }
+  const normalizedEmail = normalizeValidEmail(req.body?.email);
+  if (!normalizedEmail) return res.status(400).json({ error: 'Enter the email address this contract was sent to.' });
+  const expectedEmail = role === 'client' ? contract.recipientEmail : contract.ownerEmail;
+  if (expectedEmail && normalizedEmail !== expectedEmail.toLowerCase()) {
+    return res.status(403).json({ error: "That email doesn't match this link." });
   }
 
   res.json({ contract: serializeForPublic(contract, role) });
 }));
 
 publicContractsRouter.post('/:token/submit', asyncHandler(async (req, res) => {
-  const { email, signatureName, signatureImage } = req.body || {};
-  if (!signatureName?.trim() || !signatureImage) {
-    return res.status(400).json({ error: 'Signature name and signature image are required.' });
+  const { email, signatureName, signatureImage, consentAccepted } = req.body || {};
+  const normalizedEmail = normalizeValidEmail(email);
+  if (!normalizedEmail || !signatureName?.trim() || !signatureImage || consentAccepted !== true) {
+    return res.status(400).json({ error: 'The matching email, full name, drawn signature, and electronic-signature consent are required.' });
   }
 
   const result = await withSerializableTransaction(prisma, async (tx) => {
@@ -405,22 +455,26 @@ publicContractsRouter.post('/:token/submit', asyncHandler(async (req, res) => {
 
     const { contract, role } = found;
     if (contract.status === 'superseded') return { error: { status: 409, message: 'This contract has been replaced by a newer version and can no longer be signed.' } };
-    if (email?.trim()) {
-      const expectedEmail = role === 'client' ? contract.recipientEmail : contract.ownerEmail;
-      if (expectedEmail && email.trim().toLowerCase() !== expectedEmail.toLowerCase()) {
-        return { error: { status: 403, message: "That email doesn't match this link." } };
-      }
+    const expectedEmail = role === 'client' ? contract.recipientEmail : contract.ownerEmail;
+    if (expectedEmail && normalizedEmail !== expectedEmail.toLowerCase()) {
+      return { error: { status: 403, message: "That email doesn't match this link." } };
     }
 
     const signedAt = role === 'client' ? contract.clientSignedAt : contract.ownerSignedAt;
     if (signedAt) return { error: { status: 409, message: "You've already signed this contract." } };
 
     const ownerAlreadySigned = !!contract.ownerSignedAt;
+    const evidence = requestEvidence(req);
+    const documentHash = contract.documentHash || buildDocumentHash(contract);
     const data = role === 'client'
       ? {
           clientSignedAt: new Date(),
           clientSignatureName: signatureName.trim(),
           clientSignatureImage: signatureImage,
+          clientConsentVersion: ESIGN_CONSENT_VERSION,
+          clientSignedIp: evidence.ip,
+          clientSignedUserAgent: evidence.userAgent,
+          documentHash,
           status: statusFor({ clientSigned: true, ownerSigned: ownerAlreadySigned }),
           log: withLogEntry(contract.log, { type: 'client_signed', actorEmail: contract.recipientEmail, note: null }),
         }
@@ -428,15 +482,25 @@ publicContractsRouter.post('/:token/submit', asyncHandler(async (req, res) => {
           ownerSignedAt: new Date(),
           ownerSignatureName: signatureName.trim(),
           ownerSignatureImage: signatureImage,
+          ownerConsentVersion: ESIGN_CONSENT_VERSION,
+          ownerSignedIp: evidence.ip,
+          ownerSignedUserAgent: evidence.userAgent,
+          documentHash,
           status: statusFor({ clientSigned: !!contract.clientSignedAt, ownerSigned: true }),
           log: withLogEntry(contract.log, { type: 'owner_signed', actorEmail: contract.ownerEmail, note: null }),
         };
-    const updated = await tx.contract.update({ where: { id: contract.id }, data });
+    let updated = await tx.contract.update({ where: { id: contract.id }, data });
+    if (updated.status === 'fully_signed') {
+      const completedAt = new Date();
+      const completed = buildFinalRecord({ ...updated, completedAt });
+      updated = await tx.contract.update({ where: { id: contract.id }, data: { completedAt, finalRecord: completed.record, finalRecordHash: completed.hash } });
+    }
     return { contract, role, ownerAlreadySigned, updated };
   });
 
   if (result.error) return res.status(result.error.status).json({ error: result.error.message });
   const { contract, role, ownerAlreadySigned, updated } = result;
+  if (updated.status === 'fully_signed' && updated.finalRecordHash) await deliverCompletedContract(updated);
 
   if (role === 'client') {
 

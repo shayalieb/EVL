@@ -46,15 +46,15 @@ model User {
 }
 
 model Account {
-  id                        String                     @id @default(cuid())
-  createdAt                 DateTime                   @default(now())
+  id                        String                      @id @default(cuid())
+  createdAt                 DateTime                    @default(now())
   disabledAt                DateTime? // set by a platform admin; blocks all account access when non-null
   // Auditability for the disable action above — who disabled it, and why.
   // All three (disabledAt/disabledReason/disabledById) are cleared together
   // when the account is re-enabled.
-  disabledReason            String?                    @db.Text
+  disabledReason            String?                     @db.Text
   disabledById              String?
-  disabledBy                User?                      @relation("AccountDisabledBy", fields: [disabledById], references: [id], onDelete: SetNull)
+  disabledBy                User?                       @relation("AccountDisabledBy", fields: [disabledById], references: [id], onDelete: SetNull)
   // Public self-signups (auth.js's POST /signup) require manual review
   // during the current probationary period — null blocks account access
   // the same way disabledAt does (see membership.js's attachMembership),
@@ -65,7 +65,7 @@ model Account {
   // they were never really "unreviewed" the way a cold self-signup is.
   approvedAt                DateTime?
   approvedById              String?
-  approvedBy                User?                      @relation("AccountApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedBy                User?                       @relation("AccountApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
   memberships               Membership[]
   emailThreads              EmailThread[]
   eventDocuments            EventDocument[]
@@ -145,8 +145,8 @@ model Account {
   // platform's Stripe account, never created with a {stripeAccount} option.
   // See server/src/lib/plans.js for the tier table and
   // server/src/routes/subscriptionWebhooks.js for what keeps this in sync.
-  stripeCustomerId          String?               @unique
-  stripeSubscriptionId      String?               @unique
+  stripeCustomerId          String?                   @unique
+  stripeSubscriptionId      String?                   @unique
   // Mirrors Stripe's own subscription status verbatim ('trialing' |
   // 'active' | 'past_due' | 'canceled' | 'unpaid' | 'incomplete' |
   // 'incomplete_expired'). Null means this account has never started a
@@ -163,14 +163,14 @@ model Account {
   trialEndsAt               DateTime?
   // Acquisition context, captured when the account is created so platform
   // admins can distinguish public signups from manually-created accounts.
-  signupSource              String                @default("admin") // 'public' | 'admin' | 'test'
+  signupSource              String                    @default("admin") // 'public' | 'admin' | 'test'
   signupPlan                String? // landing-page selection before checkout
   signupInterval            String? // 'month' | 'year'
   messagingProfile          MessagingProfile?
   quickBooksConnection      QuickBooksConnection?
   googleCalendarConnection  GoogleCalendarConnection?
   quickBooksPilot           QuickBooksPilot?
-  quickBooksAccessEnabled   Boolean               @default(false)
+  quickBooksAccessEnabled   Boolean                   @default(false)
   quickBooksAccessEnabledAt DateTime?
 
   // Design partner / test user program (server/src/lib/designPartnerAgreements.js).
@@ -742,11 +742,13 @@ model Contract {
 
   bookingId String // opaque localStorage id, same non-FK pattern as EventDocument.eventId
 
-  snapshot Json
+  snapshot     Json
+  documentType String  @default("contract") // 'contract' | 'replacement' | 'addendum'
+  documentHash String?
   // Frozen with the sent version. Changes create a linked Contract revision
   // so every document the client received remains an immutable record.
-  terms    String? @db.Text
-  status   String  @default("sent") // 'sent' | 'owner_signed' | 'client_signed' | 'fully_signed' | 'superseded'
+  terms        String? @db.Text
+  status       String  @default("sent") // 'sent' | 'owner_signed' | 'client_signed' | 'fully_signed' | 'superseded'
 
   recipientEmail String
   recipientName  String?
@@ -757,13 +759,23 @@ model Contract {
   clientLinkExpiresAt DateTime?
   ownerLinkExpiresAt  DateTime?
 
-  clientSignedAt       DateTime?
-  clientSignatureName  String?
-  clientSignatureImage String?   @db.Text
+  clientSignedAt        DateTime?
+  clientSignatureName   String?
+  clientSignatureImage  String?   @db.Text
+  clientConsentVersion  String?
+  clientSignedIp        String?
+  clientSignedUserAgent String?   @db.Text
 
-  ownerSignedAt       DateTime?
-  ownerSignatureName  String?
-  ownerSignatureImage String?   @db.Text
+  ownerSignedAt        DateTime?
+  ownerSignatureName   String?
+  ownerSignatureImage  String?   @db.Text
+  ownerConsentVersion  String?
+  ownerSignedIp        String?
+  ownerSignedUserAgent String?   @db.Text
+
+  completedAt     DateTime?
+  finalRecord     Json?
+  finalRecordHash String?
 
   sentAt    DateTime?
   createdAt DateTime  @default(now())
@@ -808,7 +820,7 @@ model ProposalResponse {
   bookingId String // opaque localStorage id, same non-FK pattern as Contract.bookingId
 
   snapshot Json
-  status   String @default("sent") // 'sent' | 'accepted' | 'revision_requested'
+  status   String @default("sent") // 'sent' | 'accepted' | 'revision_requested' | 'superseded'
 
   recipientEmail String
   recipientName  String?
@@ -1273,26 +1285,26 @@ model EmailDomain {
   accountId String  @unique
   account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
-  domain         String    @unique
-  isCustomDomain Boolean   @default(false)
-  resendDomainId String    @unique
+  domain          String    @unique
+  isCustomDomain  Boolean   @default(false)
+  resendDomainId  String    @unique
   // Optional account-selected mailbox name. When blank, each message type
   // keeps its descriptive address (contracts@, invoices@, etc.).
   senderLocalPart String?
-  status         String    @default("pending") // 'pending' | 'verified' | 'failed'
-  dnsRecords     Json // Resend's returned record list — auto-applied (GoDaddy) or shown as instructions, per isCustomDomain
-  verifiedAt     DateTime?
+  status          String    @default("pending") // 'pending' | 'verified' | 'failed'
+  dnsRecords      Json // Resend's returned record list — auto-applied (GoDaddy) or shown as instructions, per isCustomDomain
+  verifiedAt      DateTime?
 
   // A replacement is verified alongside the active domain. Mail keeps
   // using the active verified domain until the candidate is promoted.
-  pendingDomain         String?   @unique
-  pendingIsCustomDomain Boolean?
-  pendingResendDomainId String?   @unique
-  pendingStatus         String?
-  pendingDnsRecords     Json?
-  pendingCreatedAt      DateTime?
-  sendingStatus          String @default("pending")
-  receivingStatus        String @default("pending")
+  pendingDomain          String?   @unique
+  pendingIsCustomDomain  Boolean?
+  pendingResendDomainId  String?   @unique
+  pendingStatus          String?
+  pendingDnsRecords      Json?
+  pendingCreatedAt       DateTime?
+  sendingStatus          String    @default("pending")
+  receivingStatus        String    @default("pending")
   pendingSendingStatus   String?
   pendingReceivingStatus String?
   lastHealthCheckedAt    DateTime?
@@ -1588,13 +1600,13 @@ model Contractor {
   smsConsentedAt   DateTime?
   smsOptedOutAt    DateTime?
 
-  contractorType1 String?
-  contractorType2 String?
+  contractorType1        String?
+  contractorType2        String?
   // [{ id, name, price }] — small and tightly coupled to the contractor
   // itself, no need for its own table (unlike Guest, which is independently
   // queried/written by the public RSVP route).
-  pricingTiers    Json    @default("[]")
-  priceNotes      String? @db.Text
+  pricingTiers           Json    @default("[]")
+  priceNotes             String? @db.Text
   preferredPaymentMethod String?
   venmoHandle            String?
   zelleContact           String?

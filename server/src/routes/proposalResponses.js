@@ -109,8 +109,14 @@ router.post('/', asyncHandler(async (req, res) => {
   const token = generateToken();
   const sentAt = new Date();
 
-  const proposalResponse = await prisma.proposalResponse.create({
-    data: {
+  // Only the newest unanswered proposal may receive a response. Older
+  // versions remain available as an accurate view-only record.
+  const [, proposalResponse] = await prisma.$transaction([
+    prisma.proposalResponse.updateMany({
+      where: { accountId: req.membership.accountId, bookingId, status: 'sent' },
+      data: { status: 'superseded' },
+    }),
+    prisma.proposalResponse.create({ data: {
       accountId: req.membership.accountId,
       bookingId,
       snapshot,
@@ -124,8 +130,8 @@ router.post('/', asyncHandler(async (req, res) => {
       log: manual
         ? withLogEntry([], { type: 'manual_sent', actorEmail: normalizedOwnerEmail, note: reason.trim() })
         : withLogEntry([], { type: 'sent', actorEmail: normalizedOwnerEmail, note: null }),
-    },
-  });
+    } }),
+  ]);
 
   res.status(201).json({
     proposalResponse: serializeForOwner(proposalResponse),
