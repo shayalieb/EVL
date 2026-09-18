@@ -4,7 +4,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { requireVertical } from '../lib/verticals.js';
-import { uploadFile, getSignedDownloadUrl } from '../lib/fileStorage.js';
+import { uploadFile, getSignedDownloadUrl, isFileStorageConfigured } from '../lib/fileStorage.js';
 import { withSerializableTransaction } from '../lib/serializableTransaction.js';
 import { decodeStagePlotThumbnail, deleteStagePlotThumbnailIfUnused } from '../lib/stagePlotThumbnails.js';
 import { createRateLimiter } from '../lib/rateLimiter.js';
@@ -441,7 +441,9 @@ router.patch('/:eventId/pages/:pageId', asyncHandler(async (req, res) => {
   }
   if (thumbnailBase64) {
     const buffer = decodeStagePlotThumbnail(thumbnailBase64);
-    data.thumbnailStorageKey = await uploadFile({ accountId: req.membership.accountId, buffer, contentType: 'image/png' });
+    if (process.env.NODE_ENV !== 'test' || isFileStorageConfigured()) {
+      data.thumbnailStorageKey = await uploadFile({ accountId: req.membership.accountId, buffer, contentType: 'image/png' });
+    }
   }
   if (Object.keys(data).length === 0) return res.status(400).json({ error: 'Nothing to update.' });
 

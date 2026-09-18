@@ -17,6 +17,13 @@ function provider() {
   return (process.env.STORAGE_PROVIDER || 'supabase').trim().toLowerCase();
 }
 
+export function isFileStorageConfigured() {
+  if (provider() === 'railway') {
+    return Boolean(process.env.AWS_S3_BUCKET_NAME && process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY);
+  }
+  return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
 function hasSupabaseFallback() {
   return provider() === 'railway' && process.env.STORAGE_FALLBACK_SUPABASE === 'true';
 }
