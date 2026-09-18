@@ -129,7 +129,7 @@ export default function ContractSignPage() {
 
   const { role, status, snapshot } = contract;
   const alreadySigned = role === 'client' ? !!contract.clientSignedAt : !!contract.ownerSignedAt;
-  const canSignNow = !alreadySigned;
+  const canSignNow = !alreadySigned && status !== 'superseded';
   const clientSignature = toSignature(contract.clientSignatureName, contract.clientSignatureImage, contract.clientSignedAt);
   const ownerSignature = toSignature(contract.ownerSignatureName, contract.ownerSignatureImage, contract.ownerSignedAt);
 
@@ -160,6 +160,11 @@ export default function ContractSignPage() {
         {status === 'fully_signed' && (
           <div data-testid="contract-sign-fully-signed-banner" className="mb-4 text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
             This contract has been signed by both parties.
+          </div>
+        )}
+        {status === 'superseded' && (
+          <div data-testid="contract-sign-superseded-banner" className="mb-4 text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+            This contract remains available for your records, but a newer linked version replaced it. This version can no longer be signed.
           </div>
         )}
         {alreadySigned && status !== 'fully_signed' && (

@@ -21,7 +21,7 @@ import { uid } from '../lib/storage';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
 import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, bookingDocumentDownloadUrl } from '../lib/bookingDocuments';
 import { generateProposalPdf, generateProposalPdfAttachment, getProposalPdfDataUrl } from '../lib/proposalPdf';
-import { getContractForBooking, sendContract, ownerSignContract, updateContractTerms, addContractLogNote, regenerateClientSignLink, getContractHistory } from '../lib/contracts';
+import { getContractForBooking, sendContract, ownerSignContract, addContractLogNote, regenerateClientSignLink, getContractHistory } from '../lib/contracts';
 import { getProposalResponseForBooking, sendProposalResponseLink, getProposalResponseHistory } from '../lib/proposalResponses';
 import { listInquiryLinks } from '../lib/inquiryLinks';
 import { buildBookingMergePatch } from '../lib/applyInquiry';
@@ -164,6 +164,7 @@ const CONTRACT_LOG_LABELS = {
   owner_signed: 'You signed',
   client_signed: 'Client signed',
   terms_edited: 'Terms edited',
+  superseded: 'Replaced by newer version',
   client_link_regenerated: 'New client sign link generated',
   note: 'Note',
 };
@@ -366,9 +367,7 @@ function ContractHistoryEntry({ contract }) {
       <button type="button" onClick={() => setOpen((v) => !v)} className="w-full flex items-center justify-between gap-3 text-left">
         <div>
           <div className="text-sm font-semibold text-slate-700">Version {contract.revisionNumber}</div>
-          <div className="text-xs text-slate-400">
-            Sent {contract.sentAt ? new Date(contract.sentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'} · Superseded
-          </div>
+          <div className="text-xs text-slate-400">Sent {contract.sentAt ? new Date(contract.sentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'} · {contract.status === 'superseded' ? 'Replaced by a newer version' : contract.clientSignedAt ? 'Locked after client signature' : 'Sent'}</div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-sm font-bold text-slate-800">{currency(computeGrandTotal(snapshot.lineItems, snapshot.offerings))}</span>
@@ -533,7 +532,7 @@ export default function BookingFormPage() {
   const [docPendingDelete, setDocPendingDelete] = useState(null);
   const [sendingProposal, setSendingProposal] = useState(false);
   const [contract, setContract] = useState(null);
-  // The fully-signed contract currently being revised, or null. Non-null
+  // The sent, not-yet-client-signed contract currently being revised, or null. Non-null
   // reopens the composer (seeded from this contract's snapshot) instead of
   // the read-only signed view, without touching the contract state itself.
   const [revisionDraft, setRevisionDraft] = useState(null);
@@ -622,7 +621,6 @@ export default function BookingFormPage() {
   const client = clients.find((c) => c.id === form.clientId);
   const autoSaveSkipRef = useRef(true);
   const bookingSaveChainRef = useRef(Promise.resolve());
-  const termsSkipRef = useRef(true);
   const autoCreatedEventRef = useRef(false);
   // Background refreshes (e.g. the window-focus refetch in AuthContext) hand
   // back a brand-new `booking` object even when nothing changed, which would
@@ -830,34 +828,12 @@ export default function BookingFormPage() {
     setContractRecipientName((prev) => prev || `${client.firstName} ${client.lastName}`.trim());
   }, [client]);
 
-  // Terms rides along in the initial send payload before a contract exists,
-  // then switches to auto-saving via PATCH below — same field either way, so
-  // the prep-panel text carries straight through instead of being retyped.
-  // Keyed on the booking too (not just the contract) so switching to a
-  // different not-yet-sent booking clears stale prep-panel text.
+  // Terms rides along in the immutable send snapshot. Editing a sent
+  // contract starts a linked new version instead of mutating this value.
   useEffect(() => {
     setContractTerms(contract?.terms || '');
-    termsSkipRef.current = true;
-    // Intentionally keyed to identity, not contract.terms: the PATCH below
-    // replaces `contract` after each autosave. Reacting to that response
-    // would set termsSkipRef again and silently discard the next user edit.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [booking?.id, contract?.id]);
-
-  useEffect(() => {
-    if (!contract) return; // nothing to save to yet — value goes out with the send instead
-    if (termsSkipRef.current) { termsSkipRef.current = false; return; }
-    const timer = setTimeout(async () => {
-      try {
-        const updated = await updateContractTerms(contract.id, contractTerms);
-        setContract(updated);
-      } catch (err) {
-        showToast(err.message || 'Failed to save terms', 'error');
-      }
-    }, 800);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contractTerms]);
 
   // Title and custom sections work like a reusable template: before a
   // contract is sent they're loaded from (and kept in sync with) the
@@ -1650,7 +1626,7 @@ export default function BookingFormPage() {
     setContract(updated);
   }
 
-  // Reopens the composer seeded from a fully-signed contract's own snapshot
+  // Reopens the composer seeded from a sent contract's own snapshot
   // (not the live proposal, which may have drifted since) so the business
   // can add the new item and re-send for fresh signatures. These are all
   // plain local useState — not part of the autosaved booking form — so
@@ -2751,7 +2727,7 @@ export default function BookingFormPage() {
                   <div>
                     <h3 className={cardTitleClass}>Revise Contract</h3>
                     <p className="text-sm text-slate-500 mb-5 max-w-xl">
-                      Sends an updated contract for signature. The current signed version stays on record as version {revisionDraft.revisionNumber} — both parties will need to sign this one too.
+                      Sends a separate updated contract linked to version {revisionDraft.revisionNumber}. The original stays on record and remains binding except where this version expressly changes it.
                     </p>
                   </div>
                   <button
@@ -2878,7 +2854,7 @@ export default function BookingFormPage() {
                   data-testid="booking-form-contract-terms-textarea"
                   className={inputClass}
                 />
-                <p className="mt-1 text-xs text-slate-400">Stays editable after the contract is sent — everything else here locks.</p>
+                <p className="mt-1 text-xs text-slate-400">After sending, changes create a separate linked version. Once the client signs, the contract becomes view-only.</p>
               </div>
               <div className="flex gap-2">
                 <button
@@ -3107,7 +3083,7 @@ export default function BookingFormPage() {
                 {contract.revisionNumber > 1 && (
                   <CollapsibleSection
                     title="Contract History"
-                    subtitle={`Version ${contract.revisionNumber} of ${contract.revisionNumber} — earlier signed versions stay on record`}
+                    subtitle={`Version ${contract.revisionNumber} of ${contract.revisionNumber} — every sent version stays on record`}
                     defaultOpen={false}
                     testId="booking-form-contract-history-toggle"
                   >
@@ -3122,15 +3098,13 @@ export default function BookingFormPage() {
 
               <div className={cardClass}>
                 <h3 className={cardTitleClass}>Terms</h3>
-                <textarea
-                  rows={4}
-                  placeholder="e.g. Cancellation policy, payment schedule, rider requirements…"
-                  value={contractTerms}
-                  onChange={(e) => setContractTerms(e.target.value)}
-                  data-testid="booking-form-contract-terms-textarea"
-                  className={inputClass}
-                />
-                <p className="mt-1 text-xs text-slate-400">Editable any time, saves automatically.</p>
+                <div className="whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600" data-testid="booking-form-contract-terms-readonly">{contract.terms || 'No additional terms.'}</div>
+                <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+                  <p className="text-xs text-slate-400">{contract.clientSignedAt ? 'Locked after the client signed. This version is view-only.' : contract.status === 'superseded' ? 'This version was replaced and is view-only.' : 'Editing creates and sends a separate version linked to this contract.'}</p>
+                  {!contract.clientSignedAt && contract.status !== 'superseded' && (
+                    <button type="button" onClick={startContractRevision} data-testid="booking-form-contract-edit-version-button" className="px-4 py-2 rounded-lg border border-indigo-300 text-indigo-600 text-sm font-semibold hover:bg-indigo-50">Edit &amp; Send New Version</button>
+                  )}
+                </div>
               </div>
 
               {contract.status !== 'fully_signed' && (
@@ -3228,18 +3202,8 @@ export default function BookingFormPage() {
                     ) : (
                       <p className="text-xs text-slate-400">Setting up your event…</p>
                     )}
-                    <button
-                      type="button"
-                      onClick={startContractRevision}
-                      data-testid="booking-form-contract-create-revision-button"
-                      className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-semibold hover:bg-slate-50"
-                    >
-                      Create a Revision
-                    </button>
                   </div>
-                  <p className="text-xs text-slate-400 mt-2">
-                    Need to change something? This creates a new version for both of you to sign — the current one stays on record.
-                  </p>
+                  <p className="text-xs text-slate-400 mt-2">The client has signed, so this contract is locked and view-only.</p>
                 </div>
               )}
 

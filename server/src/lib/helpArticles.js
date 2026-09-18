@@ -315,7 +315,7 @@ export const HELP_CATEGORIES = [
         summary: 'Locking in terms and getting both sides to sign.',
         blocks: [
           { type: 'note', text: 'The Contract tab needs a proposal with pricing on it first — it\'ll show "Push to Proposal" or "Go to Proposal" until that exists.' },
-          { type: 'p', text: 'Once a priced proposal exists, "Move Proposal to Contract" appears. Terms are locked once sent — the pricing is copied from the Proposal (editable independently, without changing the Proposal itself), plus a Terms section that stays editable even after sending.' },
+          { type: 'p', text: 'Once a priced proposal exists, "Move Proposal to Contract" appears. Every sent contract stays available as a frozen record. Before the client signs, Edit & Send New Version creates a separate linked contract; after the client signs, that version is locked and view-only.' },
           { type: 'steps', items: [
             'Fill in the contract title, recipient, pricing, and terms.',
             'Click "Send Contract for Signature."',

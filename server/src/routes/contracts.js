@@ -148,8 +148,11 @@ router.post('/', asyncHandler(async (req, res) => {
     if (!previousContract || previousContract.accountId !== req.membership.accountId || previousContract.bookingId !== bookingId) {
       return res.status(400).json({ error: 'Invalid contract to revise.' });
     }
-    if (previousContract.status !== 'fully_signed') {
-      return res.status(400).json({ error: 'Only a fully signed contract can be revised.' });
+    if (previousContract.clientSignedAt) {
+      return res.status(409).json({ error: 'This contract is locked because the client has signed it.' });
+    }
+    if (previousContract.status === 'superseded') {
+      return res.status(409).json({ error: 'This contract already has a newer version.' });
     }
     const alreadyRevised = await prisma.contract.findFirst({ where: { previousContractId } });
     if (alreadyRevised) {
@@ -192,6 +195,16 @@ router.post('/', asyncHandler(async (req, res) => {
         : withLogEntry([], { type: 'sent', actorEmail: normalizedOwnerEmail, note: null }),
     },
   });
+
+  if (previousContract) {
+    await prisma.contract.update({
+      where: { id: previousContract.id },
+      data: {
+        status: 'superseded',
+        log: withLogEntry(previousContract.log, { type: 'superseded', actorEmail: normalizedOwnerEmail, note: `Replaced by contract version ${contract.revisionNumber}.` }),
+      },
+    });
+  }
 
   const signUrl = `${frontendUrl()}/sign/${clientToken}`;
   const ownerSignUrl = `${frontendUrl()}/sign/${ownerToken}`;
@@ -241,6 +254,9 @@ router.post('/:id/owner-sign', asyncHandler(async (req, res) => {
   if (contract.ownerSignedAt) {
     return res.status(400).json({ error: "You've already signed this contract." });
   }
+  if (contract.status === 'superseded') {
+    return res.status(409).json({ error: 'This contract has been replaced by a newer version.' });
+  }
 
   const owner = await prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } });
   const updated = await prisma.contract.update({
@@ -256,8 +272,8 @@ router.post('/:id/owner-sign', asyncHandler(async (req, res) => {
   res.json({ contract: serializeForOwner(updated) });
 }));
 
-// Terms is deliberately editable regardless of status — unlike the frozen
-// snapshot, it's meant to be touched up any time (before or after signing).
+// Sent contracts are immutable. Editing happens by creating a linked new
+// version so the exact document originally sent always remains viewable.
 router.patch('/:id/terms', asyncHandler(async (req, res) => {
   if (!effectivePermissions(req.membership).manageBookings) {
     return res.status(403).json({ error: 'Not authorized.' });
@@ -267,15 +283,8 @@ router.patch('/:id/terms', asyncHandler(async (req, res) => {
   if (!contract || contract.accountId !== req.membership.accountId) {
     return res.status(404).json({ error: 'Contract not found.' });
   }
-  const owner = await prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } });
-  const updated = await prisma.contract.update({
-    where: { id: contract.id },
-    data: {
-      terms: terms || null,
-      log: withLogEntry(contract.log, { type: 'terms_edited', actorEmail: owner.email, note: null }),
-    },
-  });
-  res.json({ contract: serializeForOwner(updated) });
+  void terms;
+  return res.status(409).json({ error: contract.clientSignedAt ? 'This contract is locked because the client has signed it.' : 'Create and send a new contract version to make changes.' });
 }));
 
 // Manual free-text log entries — same idea as a booking's Activity Log,
@@ -315,6 +324,9 @@ router.post('/:id/regenerate-client-link', asyncHandler(async (req, res) => {
   }
   if (contract.clientSignedAt) {
     return res.status(400).json({ error: 'The client has already signed this contract.' });
+  }
+  if (contract.status === 'superseded') {
+    return res.status(409).json({ error: 'This contract has been replaced by a newer version.' });
   }
   const owner = await prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } });
   const resolvedExpiration = resolveLinkExpiration(req.body?.expiration, { defaultPreset: '30_days' });
@@ -392,6 +404,7 @@ publicContractsRouter.post('/:token/submit', asyncHandler(async (req, res) => {
     if (found.availability !== 'active') return { error: { status: 410, message: 'This contract link has expired. Please contact the sender for a new link.' } };
 
     const { contract, role } = found;
+    if (contract.status === 'superseded') return { error: { status: 409, message: 'This contract has been replaced by a newer version and can no longer be signed.' } };
     if (email?.trim()) {
       const expectedEmail = role === 'client' ? contract.recipientEmail : contract.ownerEmail;
       if (expectedEmail && email.trim().toLowerCase() !== expectedEmail.toLowerCase()) {

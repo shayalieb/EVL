@@ -55,15 +55,6 @@ export async function ownerSignContract(contractId, { signatureName, signatureIm
   return data.contract;
 }
 
-// Editable at any point in the contract's lifecycle, independent of status.
-export async function updateContractTerms(contractId, terms) {
-  const data = await apiFetch(`/contracts/${contractId}/terms`, {
-    method: 'PATCH',
-    body: JSON.stringify({ terms }),
-  });
-  return data.contract;
-}
-
 // ---- Public (unauthenticated, token-based — used by ContractSignPage) ----
 
 export async function getContractByToken(token) {
