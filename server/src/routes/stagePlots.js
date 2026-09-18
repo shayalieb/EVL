@@ -441,7 +441,7 @@ router.patch('/:eventId/pages/:pageId', asyncHandler(async (req, res) => {
   }
   if (thumbnailBase64) {
     const buffer = decodeStagePlotThumbnail(thumbnailBase64);
-    if (process.env.NODE_ENV !== 'test' || isFileStorageConfigured()) {
+    if (!process.env.CI || isFileStorageConfigured()) {
       data.thumbnailStorageKey = await uploadFile({ accountId: req.membership.accountId, buffer, contentType: 'image/png' });
     }
   }

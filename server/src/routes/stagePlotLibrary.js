@@ -176,7 +176,7 @@ router.patch('/:id/pages/:pageId', asyncHandler(async (req, res) => {
     const buffer = decodeStagePlotThumbnail(thumbnailBase64);
     // Browser CI deliberately has no cloud-storage credentials. Keep testing
     // the real scene autosave there while production still requires storage.
-    if (process.env.NODE_ENV !== 'test' || isFileStorageConfigured()) {
+    if (!process.env.CI || isFileStorageConfigured()) {
       data.thumbnailStorageKey = await uploadFile({ accountId: req.membership.accountId, buffer, contentType: 'image/png' });
     }
   }
