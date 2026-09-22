@@ -17,7 +17,7 @@ function personName(person) {
 }
 
 function invoiceLabel(invoice) {
-  return invoice.recipientName || `Invoice #${invoice.number ?? '—'}`;
+  return invoice.recipientName || `Invoice #${invoice.displayNumber ?? invoice.number ?? '—'}`;
 }
 
 function toDateInputValue(date) {

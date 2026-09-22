@@ -96,7 +96,7 @@ export default function InvoicePayPage() {
     );
   }
 
-  const { number, snapshot, dueDate, memo, status, total, paidAmount, sentAt, createdAt, acceptPayment } = invoice;
+  const { number, displayNumber, snapshot, dueDate, memo, status, total, paidAmount, sentAt, createdAt, acceptPayment } = invoice;
   const remaining = total - (paidAmount || 0);
 
   async function handleDownloadPdf() {
@@ -111,9 +111,8 @@ export default function InvoicePayPage() {
         total,
         status,
         paidAmount,
-        number,
+        number: displayNumber || number,
         issueDate: sentAt || createdAt,
-        reference: `GW-I-${invoice.id}`,
       });
     } catch (err) {
       setError(err.message || 'Failed to generate PDF');
@@ -166,7 +165,7 @@ export default function InvoicePayPage() {
           total={total}
           status={status}
           paidAmount={paidAmount}
-          number={number}
+          number={displayNumber || number}
           issueDate={sentAt || createdAt}
         />
       </div>

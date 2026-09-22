@@ -744,6 +744,10 @@ model Contract {
 
   snapshot       Json
   documentNumber String? @unique
+  // Client-facing six-digit reference. documentNumber retains legacy values
+  // for signed-record integrity checks on contracts created before migration.
+  displayNumber  Int     @unique @default(dbgenerated("nextval('\"DocumentDisplayNumberSeq\"'::regclass)"))
+  rootDisplayNumber Int?
   rootContractId String?
   documentType   String  @default("contract") // 'contract' | 'replacement' | 'addendum'
   documentHash   String?
@@ -823,6 +827,7 @@ model ProposalResponse {
 
   snapshot       Json
   documentNumber String? @unique
+  displayNumber  Int     @unique @default(dbgenerated("nextval('\"DocumentDisplayNumberSeq\"'::regclass)"))
   status         String  @default("sent") // 'sent' | 'accepted' | 'revision_requested' | 'superseded'
 
   recipientEmail String
@@ -955,6 +960,7 @@ model Invoice {
   // time. Not DB-unique — editing it to fix/jump the sequence is expected,
   // and enforcing uniqueness would turn that into an error-prone edit.
   number        Int?
+  displayNumber Int @unique @default(dbgenerated("nextval('\"DocumentDisplayNumberSeq\"'::regclass)"))
   snapshot      Json // { businessInfo, client, lineItems: Offering[] }
   dueDate       DateTime?
   memo          String?   @db.Text

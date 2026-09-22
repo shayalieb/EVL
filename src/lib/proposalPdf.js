@@ -2,6 +2,7 @@ import { formatCurrency as currency, formatEventDate, formatVenueLine, formatEve
 import { computeOfferingTotal, computeOfferingsTotal, packageLineSummary } from './offerings';
 import { lightenRgb } from './colorTheme';
 import { getDocumentStyle } from './documentLayouts';
+import { documentReferenceLabel } from './documentReferences';
 import { scaleFont, setFontStyle, drawLetterhead, drawHeaderRule, drawSectionBlock, getAutoTableStyle } from './documentPdfKit';
 
 function todayLabel() {
@@ -38,7 +39,7 @@ async function buildProposalDoc({ booking, client, businessInfo, reference, issu
   if (reference) {
     doc.setFontSize(scaleFont(8, scale));
     doc.setTextColor(100);
-    doc.text(`Document ID: ${reference}`, marginX, y);
+    doc.text(`Document ID: ${documentReferenceLabel(reference)}`, marginX, y);
     y += 7;
   }
 

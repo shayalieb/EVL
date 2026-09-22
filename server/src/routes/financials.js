@@ -299,7 +299,7 @@ router.get('/reports', requireFinancialPermission('viewFinancials'), asyncHandle
     const booking = bookingById.get(invoice.bookingId);
     const client = booking?.clientId ? clientById.get(booking.clientId) : null;
     const overdueDays = dueDate && dueDate < asOf ? Math.max(0, Math.floor((asOf - dueDate) / 86400000)) : 0;
-    return { invoiceId: invoice.id, invoiceNumber: invoice.number, bookingId: invoice.bookingId, bookingName: booking?.eventName || 'Booking', clientName: client ? `${client.firstName} ${client.lastName}`.trim() : invoice.recipientName || 'Client', dueDate: invoice.dueDate, balance, overdueDays, bucket };
+    return { invoiceId: invoice.id, invoiceNumber: invoice.displayNumber, bookingId: invoice.bookingId, bookingName: booking?.eventName || 'Booking', clientName: client ? `${client.firstName} ${client.lastName}`.trim() : invoice.recipientName || 'Client', dueDate: invoice.dueDate, balance, overdueDays, bucket };
   }).filter(Boolean).sort((a, b) => b.overdueDays - a.overdueDays || b.balance - a.balance);
 
   const payables = [];
@@ -322,7 +322,7 @@ router.get('/reports', requireFinancialPermission('viewFinancials'), asyncHandle
 
   const qualityIssues = [];
   const invoicesWithoutDueDate = scopedInvoices.filter((invoice) => !invoice.dueDate && Math.max(0, invoiceTotal(invoice) - (Number(invoice.paidAmount) || 0)) > 0);
-  if (invoicesWithoutDueDate.length) qualityIssues.push({ id: 'invoice-due-date', severity: 'warning', count: invoicesWithoutDueDate.length, title: 'Open invoices missing due dates', detail: 'These balances remain current and cannot be aged accurately.', links: invoicesWithoutDueDate.slice(0, 5).map((invoice) => ({ label: `Invoice #${invoice.number ?? '—'}`, path: `/bookings/${invoice.bookingId}?tab=invoices` })) });
+  if (invoicesWithoutDueDate.length) qualityIssues.push({ id: 'invoice-due-date', severity: 'warning', count: invoicesWithoutDueDate.length, title: 'Open invoices missing due dates', detail: 'These balances remain current and cannot be aged accurately.', links: invoicesWithoutDueDate.slice(0, 5).map((invoice) => ({ label: `Invoice #${invoice.displayNumber ?? '—'}`, path: `/bookings/${invoice.bookingId}?tab=invoices` })) });
   if (incompleteEventCosts.size) qualityIssues.push({ id: 'contractor-rates', severity: 'warning', count: incompleteEventCosts.size, title: 'Events missing contractor rates', detail: 'Booking profit may be overstated until these rates are entered.', links: [...incompleteEventCosts].slice(0, 5).map((eventId) => ({ label: eventById.get(eventId)?.name || 'Event', path: `/events/${eventId}?tab=financials` })) });
   const undatedEvents = events.filter((event) => !event.eventDate);
   if (undatedEvents.length) qualityIssues.push({ id: 'event-dates', severity: 'info', count: undatedEvents.length, title: 'Events missing dates', detail: 'These events are excluded from date-filtered reports.', links: undatedEvents.slice(0, 5).map((event) => ({ label: event.name || 'Untitled event', path: `/events/${event.id}` })) });

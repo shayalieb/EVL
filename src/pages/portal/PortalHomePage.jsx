@@ -161,7 +161,7 @@ export default function PortalHomePage() {
                   {invoices.map((inv) => (
                     <div key={inv.id} data-testid="portal-invoice-row" className="flex items-center justify-between gap-3 border-b border-slate-100 last:border-0 pb-3 last:pb-0">
                       <div className="min-w-0">
-                        <div className="text-sm font-semibold text-slate-800">Invoice #{inv.number}</div>
+                        <div className="text-sm font-semibold text-slate-800">Invoice #{inv.displayNumber || inv.number}</div>
                         <div className="text-xs text-slate-400">{inv.dueDate ? `Due ${formatEventDate(inv.dueDate.slice(0, 10))}` : ''}</div>
                       </div>
                       <div className="text-right shrink-0">

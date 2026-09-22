@@ -4,7 +4,7 @@ import Logo from '../components/ui/Logo';
 import { getProposalResponseByToken, submitProposalResponse } from '../lib/proposalResponses';
 import { formatCurrency as currency, formatEventDate, formatVenueLine } from '../lib/format';
 import { computeOfferingTotal, computeOfferingsTotal, packageLineSummary } from '../lib/offerings';
-import { proposalReference } from '../lib/documentReferences';
+import { proposalReference, documentReferenceLabel } from '../lib/documentReferences';
 
 const textareaClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -94,7 +94,7 @@ export default function ProposalRespondPage() {
           <div>
             <div className="font-bold text-slate-800">{businessInfo.name || 'Event Proposal'}</div>
             <div className="text-xs text-slate-400">Proposal for {client.firstName} {client.lastName}</div>
-            <div className="break-all font-mono text-[11px] text-slate-500">{proposalReference(proposalResponse)}</div>
+            <div className="break-all font-mono text-[11px] text-slate-500">{documentReferenceLabel(proposalReference(proposalResponse))}</div>
           </div>
         </div>
 

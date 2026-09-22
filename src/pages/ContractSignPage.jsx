@@ -5,7 +5,7 @@ import SubmitButton from '../components/ui/SubmitButton';
 import ContractDocument from '../components/ContractDocument';
 import { viewContractByToken, submitContractSignature } from '../lib/contracts';
 import { generateContractPdf } from '../lib/contractPdf';
-import { contractReference } from '../lib/documentReferences';
+import { contractReference, documentReferenceLabel } from '../lib/documentReferences';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
@@ -84,6 +84,7 @@ export default function ContractSignPage() {
         clientSignature: toSignature(contract.clientSignatureName, contract.clientSignatureImage, contract.clientSignedAt),
         ownerSignature: toSignature(contract.ownerSignatureName, contract.ownerSignatureImage, contract.ownerSignedAt),
         reference: contractReference(contract),
+        relatedReference: contract.documentType === 'addendum' ? contract.rootDisplayNumber : null,
       });
     } finally {
       setDownloading(false);
@@ -134,7 +135,8 @@ export default function ContractSignPage() {
             <div>
               <div className="font-bold text-slate-800">{snapshot.businessInfo?.name || 'Event Contract'}</div>
               <div className="text-xs text-slate-400">Contract for {snapshot.client?.firstName} {snapshot.client?.lastName}</div>
-              <div className="break-all font-mono text-[11px] text-slate-500">{contractReference(contract)}</div>
+              <div className="break-all font-mono text-[11px] text-slate-500">{documentReferenceLabel(contractReference(contract))}</div>
+              {contract.documentType === 'addendum' && contract.rootDisplayNumber && <div className="text-xs text-slate-500">Addendum to contract #{contract.rootDisplayNumber}</div>}
             </div>
           </div>
           <button

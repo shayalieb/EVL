@@ -48,7 +48,7 @@ import { emptyLinkExpiration, serializeLinkExpiration, formatLinkExpiration } fr
 import { useAgencyBranding } from '../lib/useAgencyBranding';
 import { mergedProposalLog } from '../lib/proposalLog';
 import { draftProposal } from '../lib/assistant';
-import { contractReference, proposalReference } from '../lib/documentReferences';
+import { contractReference, proposalReference, invoiceReference, documentReferenceLabel } from '../lib/documentReferences';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -373,7 +373,8 @@ function SavedDocumentList({ kind, documents, history, openingId, onOpen }) {
               <div className="min-w-0">
                 <div className="text-sm font-semibold text-slate-800">{type}{isContract && record.revisionNumber > 1 ? ` · Version ${record.revisionNumber}` : ''}</div>
                 <div className="text-xs text-slate-500">{status} · Sent {record.sentAt ? new Date(record.sentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</div>
-                <div className="mt-1 break-all font-mono text-[11px] text-slate-500" title="Database document ID">{reference}</div>
+                <div className="mt-1 break-all font-mono text-[11px] text-slate-500" title="Document number">{documentReferenceLabel(reference)}</div>
+                {isContract && record.documentType === 'addendum' && record.rootDisplayNumber && <div className="text-xs text-slate-500">Addendum to contract #{record.rootDisplayNumber}</div>}
               </div>
               <button type="button" onClick={() => onOpen(kind, record)} disabled={openingId === record.id} className="shrink-0 rounded-lg border border-indigo-300 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50" data-testid={`booking-form-${kind}-view-pdf-button`}>
                 {openingId === record.id ? 'Opening…' : 'View PDF'}
@@ -1112,8 +1113,8 @@ export default function BookingFormPage() {
       const pdfAttachment = await generateProposalPdfAttachment({ booking: patch, client, businessInfo, reference: proposalReference(createdResponse), issuedAt: createdResponse.sentAt });
       await sendEmail({
         to: client.email,
-        subject: `Proposal ${proposalReference(createdResponse)} from ${fromName}`,
-        body: `<p>Hi ${client.firstName},</p><p>Please find attached proposal ${proposalReference(createdResponse)} for your event.</p><p><a href="${respondLink}">Click here to review and respond to the proposal</a></p><p>Let us know if you have any questions!</p><p>${fromName}</p>`,
+        subject: `Proposal ${documentReferenceLabel(proposalReference(createdResponse))} from ${fromName}`,
+        body: `<p>Hi ${client.firstName},</p><p>Please find attached proposal ${documentReferenceLabel(proposalReference(createdResponse))} for your event.</p><p><a href="${respondLink}">Click here to review and respond to the proposal</a></p><p>Let us know if you have any questions!</p><p>${fromName}</p>`,
         fromName,
         pdfAttachment,
       });
@@ -1391,7 +1392,7 @@ export default function BookingFormPage() {
         dueDate: newInvoiceDueDate,
         memo: newInvoiceMemo,
         status: 'draft',
-        number: newInvoiceNumber ? Number(newInvoiceNumber) : null,
+        number: editingInvoiceId ? invoices.find((inv) => inv.id === editingInvoiceId)?.displayNumber : null,
       });
     } catch (err) {
       showToast(err.message || 'Failed to generate PDF', 'error');
@@ -1410,9 +1411,8 @@ export default function BookingFormPage() {
         total: inv.total,
         status: inv.status,
         paidAmount: inv.paidAmount,
-        number: inv.number,
+        number: inv.displayNumber || inv.number,
         issueDate: inv.sentAt || inv.createdAt,
-        reference: `GW-I-${inv.id}`,
       });
     } catch (err) {
       showToast(err.message || 'Failed to generate PDF', 'error');
@@ -1663,6 +1663,7 @@ export default function BookingFormPage() {
           ? { name: contract.ownerSignatureName, image: contract.ownerSignatureImage, signedAt: contract.ownerSignedAt }
           : null,
         reference: contractReference(contract, contractHistory),
+        relatedReference: contract.documentType === 'addendum' ? contract.rootDisplayNumber : null,
       });
     } catch (err) {
       showToast(err.message || 'Failed to generate PDF', 'error');
@@ -1672,7 +1673,7 @@ export default function BookingFormPage() {
   async function openSavedDocument(kind, record) {
     setOpeningSavedDocument(record.id);
     try {
-      const reference = kind === 'contract' ? contractReference(record, contractHistory) : kind === 'proposal' ? proposalReference(record) : `GW-I-${record.id}`;
+      const reference = kind === 'contract' ? contractReference(record, contractHistory) : kind === 'proposal' ? proposalReference(record) : invoiceReference(record);
       const blob = kind === 'contract'
         ? await getContractPdfBlob({
             snapshot: record.snapshot,
@@ -1680,6 +1681,7 @@ export default function BookingFormPage() {
             clientSignature: record.clientSignedAt ? { name: record.clientSignatureName, image: record.clientSignatureImage, signedAt: record.clientSignedAt } : null,
             ownerSignature: record.ownerSignedAt ? { name: record.ownerSignatureName, image: record.ownerSignatureImage, signedAt: record.ownerSignedAt } : null,
             reference,
+            relatedReference: record.documentType === 'addendum' ? record.rootDisplayNumber : null,
           })
         : kind === 'proposal' ? await getProposalPdfBlob({
             booking: { ...record.snapshot.booking, proposal: record.snapshot.proposal },
@@ -1697,11 +1699,10 @@ export default function BookingFormPage() {
             total: record.total,
             status: record.status,
             paidAmount: record.paidAmount,
-            number: record.number,
+            number: record.displayNumber || record.number,
             issueDate: record.sentAt || record.createdAt,
-            reference,
           });
-      const title = kind === 'invoice' ? `Invoice #${record.number ?? '—'} · ${reference}` : `${kind === 'contract' ? 'Contract' : 'Proposal'} · ${reference}`;
+      const title = kind === 'invoice' ? `Invoice ${documentReferenceLabel(reference)}` : `${kind === 'contract' ? (record.documentType === 'addendum' ? 'Addendum' : 'Contract') : 'Proposal'} ${documentReferenceLabel(reference)}`;
       setSavedDocumentPreview({ url: URL.createObjectURL(blob), filename: `${reference}.pdf`, title });
     } catch (err) {
       showToast(err.message || 'Could not open the document', 'error');
@@ -3365,7 +3366,7 @@ export default function BookingFormPage() {
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-5 max-w-3xl">
                       <div>
-                        <label className={labelClass}>Invoice #</label>
+                        <label className={labelClass}>Internal invoice sequence</label>
                         <input
                           type="number"
                           min="1"
@@ -3375,6 +3376,7 @@ export default function BookingFormPage() {
                           data-testid="booking-form-invoice-number-input"
                           className={inputClass}
                         />
+                        <p className="mt-1 text-xs text-slate-500">The six-digit client ID is assigned when you save.</p>
                       </div>
                       <div>
                         <label className={labelClass}>Recipient Email *</label>
@@ -3516,7 +3518,7 @@ export default function BookingFormPage() {
                           dueDate={newInvoiceDueDate}
                           memo={newInvoiceMemo}
                           status="draft"
-                          number={newInvoiceNumber ? Number(newInvoiceNumber) : null}
+                          number={editingInvoiceId ? invoices.find((inv) => inv.id === editingInvoiceId)?.displayNumber : null}
                         />
                       </div>
                     </Modal>
@@ -3549,12 +3551,12 @@ export default function BookingFormPage() {
                               <div className="flex items-center gap-2 mb-1">
                                 <Badge color={statusMeta.color}>{statusMeta.label}</Badge>
                                 {inv.acceptPayment === false && <Badge color="#94a3b8">No online payment</Badge>}
-                                {inv.number != null && <span className="text-xs font-semibold text-slate-400">#{inv.number}</span>}
+                                {inv.displayNumber != null && <span className="text-xs font-semibold text-slate-600">#{inv.displayNumber}</span>}
                                 <span className="text-sm font-bold text-slate-800">
                                   {inv.status === 'partial' ? `${currency(inv.paidAmount)} of ${currency(inv.total)}` : currency(inv.total)}
                                 </span>
                               </div>
-                              <div className="mb-1 break-all font-mono text-[11px] text-slate-400">GW-I-{inv.id}</div>
+                              {!inv.displayNumber && <div className="mb-1 break-all font-mono text-[11px] text-slate-400">{invoiceReference(inv)}</div>}
                               <div className="text-xs text-slate-400">
                                 {inv.recipientName || inv.recipientEmail}
                                 {inv.dueDate && ` · Due ${formatEventDate(inv.dueDate.slice(0, 10))}`}

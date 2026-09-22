@@ -3,6 +3,7 @@ import { computeOfferingTotal, computeOfferingsTotal, packageLineSummary } from 
 import { lightenRgb } from './colorTheme';
 import { getDocumentStyle } from './documentLayouts';
 import { loadImageDimensions, scaleFont, setFontStyle, drawLetterhead, drawHeaderRule, drawSectionBlock, getAutoTableStyle } from './documentPdfKit';
+import { documentReferenceLabel } from './documentReferences';
 
 function signatureBlock(signature) {
   if (signature?.signedAt) {
@@ -13,7 +14,7 @@ function signatureBlock(signature) {
 
 // jsPDF pulls in html2canvas/DOMPurify (~450KB) even though we only use its
 // plain drawing API — lazy-load it so that weight isn't in the main bundle.
-async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignature, reference }) {
+async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignature, reference, relatedReference }) {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable'),
@@ -38,7 +39,13 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
   if (reference) {
     doc.setFontSize(scaleFont(8, scale));
     doc.setTextColor(100);
-    doc.text(`Document ID: ${reference}`, pageWidth / 2, y, { align: 'center' });
+    doc.text(`Document ID: ${documentReferenceLabel(reference)}`, pageWidth / 2, y, { align: 'center' });
+    y += 7;
+  }
+  if (relatedReference) {
+    doc.setFontSize(scaleFont(8, scale));
+    doc.setTextColor(100);
+    doc.text(`Addendum to contract ${documentReferenceLabel(relatedReference)}`, pageWidth / 2, y, { align: 'center' });
     y += 7;
   }
 
@@ -224,7 +231,7 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
     if (reference) {
       doc.setFontSize(scaleFont(8, scale));
       doc.setTextColor(100);
-      doc.text(`Document ID: ${reference}`, pageWidth - marginX, 20, { align: 'right' });
+      doc.text(`Document ID: ${documentReferenceLabel(reference)}`, pageWidth - marginX, 20, { align: 'right' });
     }
     sigY = 30;
   }

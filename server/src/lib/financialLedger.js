@@ -18,7 +18,7 @@ export async function recordInvoicePayment({ db = prisma, invoice, previousPaidA
       clientId: booking?.clientId || null,
       category: deltaCents > 0 ? 'client_payment' : 'payment_adjustment',
       amountCents: deltaCents,
-      description: `${deltaCents > 0 ? 'Payment received' : 'Payment correction'} · Invoice #${invoice.number ?? invoice.id}`,
+      description: `${deltaCents > 0 ? 'Payment received' : 'Payment correction'} · Invoice #${invoice.displayNumber ?? invoice.number ?? invoice.id}`,
       occurredAt: occurredAt ? new Date(occurredAt) : new Date(),
       sourceType,
       sourceId: sourceId || randomUUID(),

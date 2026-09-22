@@ -130,7 +130,7 @@ async function createInvoiceReminders(thresholdsByAccount) {
   // query here just narrows to "overdue at all" (dueDate in the past).
   const candidates = await prisma.invoice.findMany({
     where: { status: { in: ['sent', 'partial'] }, dueDate: { lt: new Date() } },
-    select: { id: true, accountId: true, number: true, recipientName: true, dueDate: true },
+    select: { id: true, accountId: true, displayNumber: true, recipientName: true, dueDate: true },
   });
   if (!candidates.length) return;
 
@@ -150,9 +150,9 @@ async function createInvoiceReminders(thresholdsByAccount) {
       createdByUserId,
       relatedType: 'invoice',
       relatedId: invoice.id,
-      relatedName: invoice.recipientName || `Invoice #${invoice.number}`,
+      relatedName: invoice.recipientName || `Invoice #${invoice.displayNumber}`,
       ruleKey: INVOICE_RULE_KEY,
-      note: `Invoice #${invoice.number}${invoice.recipientName ? ` for ${invoice.recipientName}` : ''} is overdue (was due ${invoice.dueDate.toISOString().slice(0, 10)}).`,
+      note: `Invoice #${invoice.displayNumber}${invoice.recipientName ? ` for ${invoice.recipientName}` : ''} is overdue (was due ${invoice.dueDate.toISOString().slice(0, 10)}).`,
     });
   }
   await createAutoReminders(toCreate);

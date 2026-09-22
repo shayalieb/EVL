@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { nextDocumentDisplayNumber } from '../lib/documentDisplayNumber.js';
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -27,6 +28,7 @@ function serializeForOwner(pr) {
   return {
     id: pr.id,
     documentNumber: pr.documentNumber,
+    displayNumber: pr.displayNumber,
     bookingId: pr.bookingId,
     snapshot: pr.snapshot,
     status: pr.status,
@@ -45,6 +47,7 @@ function serializeForPublic(pr) {
   return {
     id: pr.id,
     documentNumber: pr.documentNumber,
+    displayNumber: pr.displayNumber,
     snapshot: pr.snapshot,
     status: pr.status,
     recipientName: pr.recipientName,
@@ -112,6 +115,7 @@ router.post('/', asyncHandler(async (req, res) => {
   const token = generateToken();
   const sentAt = new Date();
   const id = randomUUID();
+  const displayNumber = await nextDocumentDisplayNumber();
 
   // Only the newest unanswered proposal may receive a response. Older
   // versions remain available as an accurate view-only record.
@@ -122,7 +126,8 @@ router.post('/', asyncHandler(async (req, res) => {
     }),
     prisma.proposalResponse.create({ data: {
       id,
-      documentNumber: `GW-P-${id}`,
+      documentNumber: String(displayNumber),
+      displayNumber,
       accountId: req.membership.accountId,
       bookingId,
       snapshot,

@@ -104,7 +104,7 @@ export function quickBooksInvoicePayload({ invoice, customerId, serviceItemId, b
     const amount = item.type === 'perUnit' ? quantity * (Number(item.ratePerUnit) || 0) : Number(item.amount) || 0;
     return { Amount: Number(amount.toFixed(2)), Description: [item.name, item.details].filter(Boolean).join(' — ') || 'Gig services', DetailType: 'SalesItemLineDetail', SalesItemLineDetail: { ItemRef: { value: serviceItemId }, Qty: quantity, UnitPrice: Number((amount / quantity).toFixed(2)), ...(groupReference?.type === 'class' ? { ClassRef: { value: groupReference.id } } : {}) } };
   }).filter((line) => line.Amount > 0);
-  return { CustomerRef: { value: customerId }, DocNumber: invoice.number ? String(invoice.number) : undefined, TxnDate: isoDate(invoice.sentAt || invoice.createdAt), DueDate: isoDate(invoice.dueDate), PrivateNote: invoice.memo || undefined, Line: lines, ...(groupReference?.type === 'location' ? { DepartmentRef: { value: groupReference.id } } : {}), ...(booking?.eventName ? { CustomerMemo: { value: booking.eventName } } : {}) };
+  return { CustomerRef: { value: customerId }, DocNumber: invoice.displayNumber ? String(invoice.displayNumber) : invoice.number ? String(invoice.number) : undefined, TxnDate: isoDate(invoice.sentAt || invoice.createdAt), DueDate: isoDate(invoice.dueDate), PrivateNote: invoice.memo || undefined, Line: lines, ...(groupReference?.type === 'location' ? { DepartmentRef: { value: groupReference.id } } : {}), ...(booking?.eventName ? { CustomerMemo: { value: booking.eventName } } : {}) };
 }
 
 export function quickBooksPaymentPayload({ transaction, customerId, quickBooksInvoiceId }) {

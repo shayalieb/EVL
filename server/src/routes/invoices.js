@@ -9,6 +9,7 @@ import { paidCheckoutSessionMatchesInvoice } from '../lib/invoicePaymentVerifica
 import { getStripeClient } from '../lib/stripe.js';
 import { normalizeValidEmail } from '../lib/emailAddress.js';
 import { recordInvoicePayment } from '../lib/financialLedger.js';
+import { nextDocumentDisplayNumber } from '../lib/documentDisplayNumber.js';
 
 const router = Router();
 
@@ -40,6 +41,7 @@ function serializeForOwner(invoice) {
     id: invoice.id,
     bookingId: invoice.bookingId,
     number: invoice.number,
+    displayNumber: invoice.displayNumber,
     snapshot: invoice.snapshot,
     dueDate: invoice.dueDate,
     memo: invoice.memo,
@@ -64,6 +66,7 @@ function serializeForPublic(invoice) {
   return {
     id: invoice.id,
     number: invoice.number,
+    displayNumber: invoice.displayNumber,
     snapshot: invoice.snapshot,
     dueDate: invoice.dueDate,
     memo: invoice.memo,
@@ -129,12 +132,14 @@ router.post('/', asyncHandler(async (req, res) => {
   const normalizedOwnerEmail = normalizeValidEmail(owner?.email);
   if (!normalizedOwnerEmail) return res.status(400).json({ error: 'Your account needs a valid owner email address before invoices can be created.' });
   const usedNumber = parsePositiveInt(number) ?? account.nextInvoiceNumber;
+  const displayNumber = await nextDocumentDisplayNumber();
 
   const invoice = await prisma.invoice.create({
     data: {
       accountId: req.membership.accountId,
       bookingId,
       number: usedNumber,
+      displayNumber,
       snapshot,
       dueDate: dueDate ? new Date(dueDate) : null,
       memo: memo || null,
@@ -250,11 +255,11 @@ router.post('/:id/send', asyncHandler(async (req, res) => {
     await sendMail({
       from: await resolveFromHeader({ accountId: req.membership.accountId, fromName, localPart: 'invoices' }),
       to: invoice.recipientEmail,
-      subject: `Invoice for ${totalLabel} from ${fromName}`,
+      subject: `Invoice #${invoice.displayNumber} for ${totalLabel} from ${fromName}`,
       html: buildActionEmailHtml({
         businessInfo: invoice.snapshot?.businessInfo,
         heading: 'You have a new invoice',
-        bodyHtml: `<p>Hi ${escapeHtml(invoice.recipientName) || 'there'},</p><p>You have a new invoice for ${totalLabel}${invoice.dueDate ? ` due ${new Date(invoice.dueDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}` : ''}.</p>`,
+        bodyHtml: `<p>Hi ${escapeHtml(invoice.recipientName) || 'there'},</p><p>Invoice #${invoice.displayNumber} for ${totalLabel}${invoice.dueDate ? ` is due ${new Date(invoice.dueDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}` : ''}.</p>`,
         buttonText: 'Click here to view and pay your invoice',
         buttonUrl: payUrl,
       }),

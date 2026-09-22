@@ -10,6 +10,7 @@ import { withSerializableTransaction } from '../lib/serializableTransaction.js';
 import { normalizeValidEmail } from '../lib/emailAddress.js';
 import { resolveLinkExpiration, linkAvailability } from '../lib/linkExpiration.js';
 import { ESIGN_CONSENT_VERSION, buildDocumentHash, buildFinalRecord, requestEvidence } from '../lib/contractEvidence.js';
+import { nextDocumentDisplayNumber } from '../lib/documentDisplayNumber.js';
 
 const router = Router();
 
@@ -29,6 +30,8 @@ function serializeForOwner(contract) {
   return {
     id: contract.id,
     documentNumber: contract.documentNumber,
+    displayNumber: contract.displayNumber,
+    rootDisplayNumber: contract.rootDisplayNumber,
     bookingId: contract.bookingId,
     snapshot: contract.snapshot,
     terms: contract.terms,
@@ -61,6 +64,8 @@ function serializeForPublic(contract, role) {
     role,
     id: contract.id,
     documentNumber: contract.documentNumber,
+    displayNumber: contract.displayNumber,
+    rootDisplayNumber: contract.rootDisplayNumber,
     snapshot: contract.snapshot,
     terms: contract.terms,
     status: contract.status,
@@ -169,11 +174,11 @@ async function deliverCompletedContract(contract) {
   await Promise.allSettled(recipients.map(async ({ to, url, name }) => sendMail({
     from: await resolveFromHeader({ accountId: contract.accountId, fromName, localPart: 'contracts' }),
     to,
-    subject: `Completed contract ${contract.documentNumber || contract.id} — ${fromName}`,
+    subject: `Completed contract #${contract.displayNumber} — ${fromName}`,
     html: buildActionEmailHtml({
       businessInfo: contract.snapshot?.businessInfo,
       heading: 'Your completed contract is ready',
-      bodyHtml: `<p>Hi ${escapeHtml(name)},</p><p>Both parties have signed contract ${escapeHtml(contract.documentNumber || contract.id)}. Use the secure link below to view it and download a PDF copy. GigWorks has preserved an integrity-checked completion record.</p>`,
+      bodyHtml: `<p>Hi ${escapeHtml(name)},</p><p>Both parties have signed contract #${contract.displayNumber}. Use the secure link below to view it and download a PDF copy. GigWorks has preserved an integrity-checked completion record.</p>`,
       buttonText: 'View completed contract',
       buttonUrl: url,
     }),
@@ -227,7 +232,9 @@ router.post('/', asyncHandler(async (req, res) => {
   const documentHash = buildDocumentHash({ snapshot, terms, documentType, revisionNumber, previousContractId: previousContract?.id });
   const id = randomUUID();
   const rootContractId = previousContract?.rootContractId || previousContract?.id || id;
-  const documentNumber = `GW-C-${rootContractId}-${documentType === 'addendum' ? 'A' : 'V'}${revisionNumber}`;
+  const displayNumber = await nextDocumentDisplayNumber();
+  const rootDisplayNumber = previousContract?.rootDisplayNumber || previousContract?.displayNumber || displayNumber;
+  const documentNumber = String(displayNumber);
 
   const contract = await prisma.contract.create({
     data: {
@@ -237,6 +244,8 @@ router.post('/', asyncHandler(async (req, res) => {
       snapshot,
       rootContractId,
       documentNumber,
+      displayNumber,
+      rootDisplayNumber,
       documentType,
       documentHash,
       terms: terms || null,
@@ -284,11 +293,11 @@ router.post('/', asyncHandler(async (req, res) => {
       await sendMail({
         from: await resolveFromHeader({ accountId: req.membership.accountId, fromName, localPart: 'contracts' }),
         to: normalizedRecipientEmail,
-        subject: `Contract ${documentNumber} for your event — ${fromName}`,
+        subject: `${documentType === 'addendum' ? 'Addendum' : 'Contract'} #${displayNumber} for your event — ${fromName}`,
         html: buildActionEmailHtml({
           businessInfo: snapshot.businessInfo,
           heading: 'Your contract is ready',
-          bodyHtml: `<p>Hi ${escapeHtml(recipientName) || 'there'},</p><p>Contract ${escapeHtml(documentNumber)} is ready to review and sign. This link is unique to you — please don't forward it.</p>`,
+          bodyHtml: `<p>Hi ${escapeHtml(recipientName) || 'there'},</p><p>${documentType === 'addendum' ? `Addendum #${displayNumber} to contract #${rootDisplayNumber}` : `Contract #${displayNumber}`} is ready to review and sign. This link is unique to you — please don't forward it.</p>`,
           buttonText: 'Click here to view and sign your contract',
           buttonUrl: signUrl,
         }),

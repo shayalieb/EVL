@@ -3,6 +3,7 @@
 // resolved back to the exact stored document without a separate counter.
 export function contractReference(contract, history = []) {
   if (!contract?.id) return '';
+  if (contract.displayNumber) return String(contract.displayNumber);
   if (contract.documentNumber) return contract.documentNumber;
   const byId = new Map(history.map((item) => [item.id, item]));
   let root = contract;
@@ -15,5 +16,13 @@ export function contractReference(contract, history = []) {
 }
 
 export function proposalReference(proposal) {
-  return proposal?.documentNumber || (proposal?.id ? `GW-P-${proposal.id}` : '');
+  return proposal?.displayNumber ? String(proposal.displayNumber) : proposal?.documentNumber || (proposal?.id ? `GW-P-${proposal.id}` : '');
+}
+
+export function invoiceReference(invoice) {
+  return invoice?.displayNumber ? String(invoice.displayNumber) : invoice?.id ? `GW-I-${invoice.id}` : '';
+}
+
+export function documentReferenceLabel(reference) {
+  return /^\d{6}$/.test(String(reference || '')) ? `#${reference}` : reference;
 }

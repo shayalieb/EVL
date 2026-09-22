@@ -2776,7 +2776,7 @@ export default function EventFormPage() {
                       className="w-full flex items-center justify-between gap-3 text-sm px-3 py-2 rounded-lg border border-slate-100 bg-slate-50/60 hover:bg-slate-100/60 text-left"
                     >
                       <div className="min-w-0 truncate">
-                        <span className="font-medium text-slate-700">{inv.recipientName || `Invoice #${inv.number ?? '—'}`}</span>
+                        <span className="font-medium text-slate-700">{inv.recipientName || `Invoice #${inv.displayNumber ?? inv.number ?? '—'}`}</span>
                         {inv.dueDate && <span className="text-xs text-slate-400 ml-1.5">Due {formatEventDate(inv.dueDate.slice(0, 10))}</span>}
                       </div>
                       <div className="flex items-center gap-3 shrink-0">

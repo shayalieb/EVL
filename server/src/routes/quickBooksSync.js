@@ -108,7 +108,7 @@ router.get('/preview', asyncHandler(async (req, res) => {
     const invoiceLink = linkByKey.get(`invoice:${invoice.id}`);
     const eligible = ['sent', 'partial', 'paid'].includes(invoice.status);
     const status = invoiceLink?.status === 'synced' ? 'synced' : invoiceLink?.status === 'needs_review' ? 'mismatch' : invoiceLink?.status === 'failed' ? 'failed' : !eligible ? 'not_eligible' : !client ? 'missing_client' : customerLink?.status !== 'synced' ? 'needs_customer' : readiness.ready ? 'ready' : 'setup_required';
-    return { id: invoice.id, number: invoice.number, bookingName: booking?.eventName || 'Untitled booking', client: client ? { id: client.id, name: `${client.firstName} ${client.lastName}`.trim(), email: client.email } : null, total: (invoice.snapshot?.lineItems || []).reduce((sum, item) => sum + (item.type === 'perUnit' ? (Number(item.unitCount) || 0) * (Number(item.ratePerUnit) || 0) : Number(item.amount) || 0), 0), invoiceStatus: invoice.status, syncStatus: status, error: invoiceLink?.lastError || null, quickBooksId: invoiceLink?.quickBooksId || null };
+    return { id: invoice.id, number: invoice.displayNumber, bookingName: booking?.eventName || 'Untitled booking', client: client ? { id: client.id, name: `${client.firstName} ${client.lastName}`.trim(), email: client.email } : null, total: (invoice.snapshot?.lineItems || []).reduce((sum, item) => sum + (item.type === 'perUnit' ? (Number(item.unitCount) || 0) * (Number(item.ratePerUnit) || 0) : Number(item.amount) || 0), 0), invoiceStatus: invoice.status, syncStatus: status, error: invoiceLink?.lastError || null, quickBooksId: invoiceLink?.quickBooksId || null };
   }) });
 }));
 
@@ -406,7 +406,7 @@ router.post('/invoices/:invoiceId/sync', asyncHandler(async (req, res) => {
   if (customerLink?.status !== 'synced') return res.status(409).json({ error: 'Match or create the QuickBooks customer first.' });
   const existing = await prisma.quickBooksEntityLink.findUnique({ where: { accountId_entityType_localId: { accountId, entityType: 'invoice', localId: invoice.id } } });
   if (existing?.status === 'synced') return res.json({ link: existing });
-  const link = existing || await prisma.quickBooksEntityLink.create({ data: { accountId, entityType: 'invoice', localId: invoice.id, displayName: `Invoice #${invoice.number || invoice.id}`, status: 'pending' } });
+  const link = existing || await prisma.quickBooksEntityLink.create({ data: { accountId, entityType: 'invoice', localId: invoice.id, displayName: `Invoice #${invoice.displayNumber || invoice.id}`, status: 'pending' } });
   const { connection, accessToken } = await connectionContext(accountId);
   const mappings = connection.accountingMappings || {};
   const groupId = mappings.groupMappings?.[booking.groupId];
