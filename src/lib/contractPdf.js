@@ -209,9 +209,25 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
     y += termsLines.length * 5 + 6;
   }
 
-  // Signatures — always on their own section near the bottom of the page,
-  // regardless of how much content preceded it.
-  const sigY = Math.max(y + 6, 235);
+  // Keep the rule, both signature images, and the signer labels together.
+  // A long offering or terms section can otherwise push this block below
+  // the physical page boundary, where the PDF viewer clips it.
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const sigImgH = 16;
+  const sigBlockHeight = 10 + 4 + sigImgH + 4 + 7;
+  let sigY = Math.max(y + 6, 235);
+  if (sigY + sigBlockHeight > pageHeight - 14) {
+    doc.addPage();
+    doc.setFontSize(scaleFont(12, scale));
+    doc.setTextColor(30);
+    doc.text('Signatures', marginX, 20);
+    if (reference) {
+      doc.setFontSize(scaleFont(8, scale));
+      doc.setTextColor(100);
+      doc.text(`Document ID: ${reference}`, pageWidth - marginX, 20, { align: 'right' });
+    }
+    sigY = 30;
+  }
   doc.setDrawColor(...accentRgb);
   doc.setLineWidth(0.6);
   doc.line(marginX, sigY, pageWidth - marginX, sigY);
@@ -228,14 +244,19 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
   doc.text('BUSINESS SIGNATURE', rightX, sigLabelY);
   sigLabelY += 4;
 
-  const sigImgH = 16;
   if (clientSignature?.image) {
     const dims = await loadImageDimensions(clientSignature.image);
-    if (dims) doc.addImage(clientSignature.image, 'PNG', leftX, sigLabelY, sigImgH * (dims.width / dims.height), sigImgH);
+    if (dims) {
+      const imageHeight = Math.min(sigImgH, colWidth * (dims.height / dims.width));
+      doc.addImage(clientSignature.image, 'PNG', leftX, sigLabelY, imageHeight * (dims.width / dims.height), imageHeight);
+    }
   }
   if (ownerSignature?.image) {
     const dims = await loadImageDimensions(ownerSignature.image);
-    if (dims) doc.addImage(ownerSignature.image, 'PNG', rightX, sigLabelY, sigImgH * (dims.width / dims.height), sigImgH);
+    if (dims) {
+      const imageHeight = Math.min(sigImgH, colWidth * (dims.height / dims.width));
+      doc.addImage(ownerSignature.image, 'PNG', rightX, sigLabelY, imageHeight * (dims.width / dims.height), imageHeight);
+    }
   }
   sigLabelY += sigImgH + 4;
 
