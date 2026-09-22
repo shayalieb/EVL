@@ -2237,7 +2237,7 @@ export default function BookingFormPage() {
         <div className={activeTab === 'proposal' ? 'space-y-6' : 'hidden'}>
           <SavedDocumentList
             kind="proposal"
-            documents={[...proposalHistory.filter((item) => item.bookingId === booking?.id && item.id !== proposalResponse?.id), ...(proposalResponse?.bookingId === booking?.id ? [proposalResponse] : [])].sort((a, b) => new Date(b.createdAt || b.sentAt) - new Date(a.createdAt || a.sentAt))}
+            documents={[...proposalHistory.filter((item) => item.bookingId === booking?.id && item.id !== proposalResponse?.id), ...(booking && proposalResponse?.bookingId === booking.id ? [proposalResponse] : [])].sort((a, b) => new Date(b.createdAt || b.sentAt) - new Date(a.createdAt || a.sentAt))}
             history={proposalHistory}
             openingId={openingSavedDocument}
             onOpen={openSavedDocument}
@@ -2653,7 +2653,7 @@ export default function BookingFormPage() {
         <div className={activeTab === 'contract' ? 'space-y-6' : 'hidden'}>
           <SavedDocumentList
             kind="contract"
-            documents={[...contractHistory.filter((item) => item.bookingId === booking?.id && item.id !== contract?.id), ...(contract?.bookingId === booking?.id ? [contract] : [])].sort((a, b) => new Date(b.createdAt || b.sentAt) - new Date(a.createdAt || a.sentAt))}
+            documents={[...contractHistory.filter((item) => item.bookingId === booking?.id && item.id !== contract?.id), ...(booking && contract?.bookingId === booking.id ? [contract] : [])].sort((a, b) => new Date(b.createdAt || b.sentAt) - new Date(a.createdAt || a.sentAt))}
             history={contractHistory}
             openingId={openingSavedDocument}
             onOpen={openSavedDocument}
