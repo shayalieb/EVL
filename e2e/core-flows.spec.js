@@ -84,10 +84,9 @@ test('proposal recipient reviews and accepts a proposal', async ({ page }) => {
 
 test('contract and invoice recipients can open protected documents', async ({ page }) => {
   await page.goto(`/sign/${E2E.contractToken}`);
-  if (await page.getByTestId('contract-sign-email-input').isVisible()) {
-    await page.getByTestId('contract-sign-email-input').fill('client@e2e.test');
-    await page.getByTestId('contract-sign-verify-submit-button').click();
-  }
+  await expect(page.getByTestId('contract-sign-email-input')).toBeVisible();
+  await page.getByTestId('contract-sign-email-input').fill('client@e2e.test');
+  await page.getByTestId('contract-sign-verify-submit-button').click();
   await expect(page.getByText('These are the E2E contract terms.')).toBeVisible();
   await expect(page.getByTestId('contract-sign-submit-button')).toBeVisible();
 
