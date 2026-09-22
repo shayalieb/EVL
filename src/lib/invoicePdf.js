@@ -15,7 +15,7 @@ const STATUS_LABELS = {
 // invoice meta, bill-to/event/due-date row, line items, totals, memo,
 // footer) so the PDF matches what the composer preview and the public pay
 // page show on-screen.
-async function buildInvoiceDoc({ businessInfo, client, event, lineItems, dueDate, memo, total, status, paidAmount, number, issueDate }) {
+async function buildInvoiceDoc({ businessInfo, client, event, lineItems, dueDate, memo, total, status, paidAmount, number, issueDate, reference }) {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable'),
@@ -50,6 +50,12 @@ async function buildInvoiceDoc({ businessInfo, client, event, lineItems, dueDate
   const statusLabel = status ? STATUS_LABELS[status] : null;
   doc.text([numberLabel, statusLabel].filter(Boolean).join('   ·   '), titleX, y, { align });
   y += 10;
+  if (reference) {
+    doc.setFontSize(scaleFont(8, scale));
+    doc.setTextColor(140);
+    doc.text(`Document ID: ${reference}`, titleX, y - 3, { align });
+    y += 5;
+  }
 
   const colWidth = (pageWidth - marginX * 2) / 3;
   const eventLine = event ? [event.type, event.date ? formatEventDate(event.date) : null].filter(Boolean).join(' · ') : '';
@@ -152,4 +158,9 @@ export async function generateInvoicePdf(args) {
 export async function getInvoicePdfDataUrl(args) {
   const { doc } = await buildInvoiceDoc(args);
   return doc.output('datauristring');
+}
+
+export async function getInvoicePdfBlob(args) {
+  const { doc } = await buildInvoiceDoc(args);
+  return doc.output('blob');
 }

@@ -27,7 +27,7 @@ import { listInquiryLinks } from '../lib/inquiryLinks';
 import { buildBookingMergePatch } from '../lib/applyInquiry';
 import { listInvoices, createInvoice, updateInvoice, sendInvoice, markInvoicePayment, sendReceipt, voidInvoice, getNextInvoiceInfo } from '../lib/invoices';
 import { generateContractPdf, getContractPdfDataUrl, getContractPdfBlob } from '../lib/contractPdf';
-import { generateInvoicePdf } from '../lib/invoicePdf';
+import { generateInvoicePdf, getInvoicePdfBlob } from '../lib/invoicePdf';
 import { sendEmail } from '../lib/email/send';
 import { formatCurrency as currency, formatEventDate, formatVenueLine, formatEventTime, formatEmailInput, formatPhoneNumber } from '../lib/format';
 import { FileIcon } from '../components/ui/icons';
@@ -1412,6 +1412,7 @@ export default function BookingFormPage() {
         paidAmount: inv.paidAmount,
         number: inv.number,
         issueDate: inv.sentAt || inv.createdAt,
+        reference: `GW-I-${inv.id}`,
       });
     } catch (err) {
       showToast(err.message || 'Failed to generate PDF', 'error');
@@ -1671,7 +1672,7 @@ export default function BookingFormPage() {
   async function openSavedDocument(kind, record) {
     setOpeningSavedDocument(record.id);
     try {
-      const reference = kind === 'contract' ? contractReference(record, contractHistory) : proposalReference(record);
+      const reference = kind === 'contract' ? contractReference(record, contractHistory) : kind === 'proposal' ? proposalReference(record) : `GW-I-${record.id}`;
       const blob = kind === 'contract'
         ? await getContractPdfBlob({
             snapshot: record.snapshot,
@@ -1680,14 +1681,28 @@ export default function BookingFormPage() {
             ownerSignature: record.ownerSignedAt ? { name: record.ownerSignatureName, image: record.ownerSignatureImage, signedAt: record.ownerSignedAt } : null,
             reference,
           })
-        : await getProposalPdfBlob({
+        : kind === 'proposal' ? await getProposalPdfBlob({
             booking: { ...record.snapshot.booking, proposal: record.snapshot.proposal },
             client: record.snapshot.client,
             businessInfo: record.snapshot.businessInfo,
             reference,
             issuedAt: record.sentAt || record.createdAt,
+          }) : await getInvoicePdfBlob({
+            businessInfo: record.snapshot?.businessInfo,
+            client: record.snapshot?.client,
+            event: record.snapshot?.event,
+            lineItems: record.snapshot?.lineItems,
+            dueDate: record.dueDate,
+            memo: record.memo,
+            total: record.total,
+            status: record.status,
+            paidAmount: record.paidAmount,
+            number: record.number,
+            issueDate: record.sentAt || record.createdAt,
+            reference,
           });
-      setSavedDocumentPreview({ url: URL.createObjectURL(blob), filename: `${reference}.pdf`, title: `${kind === 'contract' ? 'Contract' : 'Proposal'} · ${reference}` });
+      const title = kind === 'invoice' ? `Invoice #${record.number ?? '—'} · ${reference}` : `${kind === 'contract' ? 'Contract' : 'Proposal'} · ${reference}`;
+      setSavedDocumentPreview({ url: URL.createObjectURL(blob), filename: `${reference}.pdf`, title });
     } catch (err) {
       showToast(err.message || 'Could not open the document', 'error');
     } finally {
@@ -3511,7 +3526,7 @@ export default function BookingFormPage() {
 
               {invoices.length > 0 && (
                 <div className={cardClass}>
-                  <h3 className={cardTitleClass}>Invoice History</h3>
+                  <h3 className={cardTitleClass}>Invoice documents</h3>
                   <div className="space-y-3">
                     {invoices.map((inv) => {
                       const statusMeta = {
@@ -3539,6 +3554,7 @@ export default function BookingFormPage() {
                                   {inv.status === 'partial' ? `${currency(inv.paidAmount)} of ${currency(inv.total)}` : currency(inv.total)}
                                 </span>
                               </div>
+                              <div className="mb-1 break-all font-mono text-[11px] text-slate-400">GW-I-{inv.id}</div>
                               <div className="text-xs text-slate-400">
                                 {inv.recipientName || inv.recipientEmail}
                                 {inv.dueDate && ` · Due ${formatEventDate(inv.dueDate.slice(0, 10))}`}
@@ -3583,6 +3599,15 @@ export default function BookingFormPage() {
                                   Copy Pay Link
                                 </button>
                               )}
+                              <button
+                                type="button"
+                                onClick={() => openSavedDocument('invoice', inv)}
+                                disabled={openingSavedDocument === inv.id}
+                                data-testid="booking-form-invoice-view-pdf-button"
+                                className="px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-700 text-xs font-semibold hover:bg-indigo-50 disabled:opacity-50"
+                              >
+                                {openingSavedDocument === inv.id ? 'Opening…' : 'View PDF'}
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => handleDownloadExistingInvoice(inv)}

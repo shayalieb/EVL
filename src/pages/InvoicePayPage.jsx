@@ -113,6 +113,7 @@ export default function InvoicePayPage() {
         paidAmount,
         number,
         issueDate: sentAt || createdAt,
+        reference: `GW-I-${invoice.id}`,
       });
     } catch (err) {
       setError(err.message || 'Failed to generate PDF');
