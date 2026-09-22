@@ -20,13 +20,13 @@ import { useToast } from '../components/ui/Toast';
 import { uid } from '../lib/storage';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
 import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, bookingDocumentDownloadUrl } from '../lib/bookingDocuments';
-import { generateProposalPdf, generateProposalPdfAttachment, getProposalPdfDataUrl } from '../lib/proposalPdf';
+import { generateProposalPdf, generateProposalPdfAttachment, getProposalPdfDataUrl, getProposalPdfBlob } from '../lib/proposalPdf';
 import { getContractForBooking, getContractDocumentsForBooking, sendContract, ownerSignContract, addContractLogNote, regenerateClientSignLink } from '../lib/contracts';
 import { getProposalResponseForBooking, sendProposalResponseLink, getProposalResponseHistory } from '../lib/proposalResponses';
 import { listInquiryLinks } from '../lib/inquiryLinks';
 import { buildBookingMergePatch } from '../lib/applyInquiry';
 import { listInvoices, createInvoice, updateInvoice, sendInvoice, markInvoicePayment, sendReceipt, voidInvoice, getNextInvoiceInfo } from '../lib/invoices';
-import { generateContractPdf, getContractPdfDataUrl } from '../lib/contractPdf';
+import { generateContractPdf, getContractPdfDataUrl, getContractPdfBlob } from '../lib/contractPdf';
 import { generateInvoicePdf } from '../lib/invoicePdf';
 import { sendEmail } from '../lib/email/send';
 import { formatCurrency as currency, formatEventDate, formatVenueLine, formatEventTime, formatEmailInput, formatPhoneNumber } from '../lib/format';
@@ -483,6 +483,9 @@ export default function BookingFormPage() {
   const [contractHistory, setContractHistory] = useState([]);
   const [savedDocumentPreview, setSavedDocumentPreview] = useState(null);
   const [openingSavedDocument, setOpeningSavedDocument] = useState('');
+  useEffect(() => () => {
+    if (savedDocumentPreview?.url) URL.revokeObjectURL(savedDocumentPreview.url);
+  }, [savedDocumentPreview]);
   const [proposalResponse, setProposalResponse] = useState(null);
   const [proposalHistory, setProposalHistory] = useState([]);
   const [proposalLinkExpiration, setProposalLinkExpiration] = useState(() => emptyLinkExpiration('14_days'));
@@ -1669,22 +1672,22 @@ export default function BookingFormPage() {
     setOpeningSavedDocument(record.id);
     try {
       const reference = kind === 'contract' ? contractReference(record, contractHistory) : proposalReference(record);
-      const url = kind === 'contract'
-        ? await getContractPdfDataUrl({
+      const blob = kind === 'contract'
+        ? await getContractPdfBlob({
             snapshot: record.snapshot,
             terms: record.terms,
             clientSignature: record.clientSignedAt ? { name: record.clientSignatureName, image: record.clientSignatureImage, signedAt: record.clientSignedAt } : null,
             ownerSignature: record.ownerSignedAt ? { name: record.ownerSignatureName, image: record.ownerSignatureImage, signedAt: record.ownerSignedAt } : null,
             reference,
           })
-        : await getProposalPdfDataUrl({
+        : await getProposalPdfBlob({
             booking: { ...record.snapshot.booking, proposal: record.snapshot.proposal },
             client: record.snapshot.client,
             businessInfo: record.snapshot.businessInfo,
             reference,
             issuedAt: record.sentAt || record.createdAt,
           });
-      setSavedDocumentPreview({ url, title: `${kind === 'contract' ? 'Contract' : 'Proposal'} · ${reference}` });
+      setSavedDocumentPreview({ url: URL.createObjectURL(blob), filename: `${reference}.pdf`, title: `${kind === 'contract' ? 'Contract' : 'Proposal'} · ${reference}` });
     } catch (err) {
       showToast(err.message || 'Could not open the document', 'error');
     } finally {
@@ -3707,6 +3710,11 @@ export default function BookingFormPage() {
       />
 
       <Modal open={!!savedDocumentPreview} onClose={() => setSavedDocumentPreview(null)} title={savedDocumentPreview?.title || 'Saved document'} widthClass="max-w-5xl" bodyClassName="p-0">
+        {savedDocumentPreview?.url && <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-4 py-2 text-sm">
+          <span className="text-slate-500">If the preview is blank:</span>
+          <a href={savedDocumentPreview.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-indigo-700 hover:underline">Open PDF in a new tab</a>
+          <a href={savedDocumentPreview.url} download={savedDocumentPreview.filename} className="font-semibold text-indigo-700 hover:underline">Download PDF</a>
+        </div>}
         {savedDocumentPreview?.url && <iframe title={savedDocumentPreview.title} src={savedDocumentPreview.url} className="h-[calc(100dvh-4.75rem)] w-full border-0 sm:h-[75vh]" data-testid="booking-form-saved-document-frame" />}
       </Modal>
 

@@ -178,6 +178,11 @@ export async function getProposalPdfDataUrl(args) {
   return doc.output('datauristring');
 }
 
+export async function getProposalPdfBlob(args) {
+  const { doc } = await buildProposalDoc(args);
+  return doc.output('blob');
+}
+
 // Returns the same PDF as a base64 string so it can be sent as an email
 // attachment without a round-trip through document storage.
 export async function generateProposalPdfAttachment(args) {

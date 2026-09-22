@@ -258,3 +258,8 @@ export async function getContractPdfDataUrl(args) {
   const { doc } = await buildContractDoc(args);
   return doc.output('datauristring');
 }
+
+export async function getContractPdfBlob(args) {
+  const { doc } = await buildContractDoc(args);
+  return doc.output('blob');
+}
