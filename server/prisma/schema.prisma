@@ -742,13 +742,15 @@ model Contract {
 
   bookingId String // opaque localStorage id, same non-FK pattern as EventDocument.eventId
 
-  snapshot     Json
-  documentType String  @default("contract") // 'contract' | 'replacement' | 'addendum'
-  documentHash String?
+  snapshot       Json
+  documentNumber String? @unique
+  rootContractId String?
+  documentType   String  @default("contract") // 'contract' | 'replacement' | 'addendum'
+  documentHash   String?
   // Frozen with the sent version. Changes create a linked Contract revision
   // so every document the client received remains an immutable record.
-  terms        String? @db.Text
-  status       String  @default("sent") // 'sent' | 'owner_signed' | 'client_signed' | 'fully_signed' | 'superseded'
+  terms          String? @db.Text
+  status         String  @default("sent") // 'sent' | 'owner_signed' | 'client_signed' | 'fully_signed' | 'superseded'
 
   recipientEmail String
   recipientName  String?
@@ -819,8 +821,9 @@ model ProposalResponse {
 
   bookingId String // opaque localStorage id, same non-FK pattern as Contract.bookingId
 
-  snapshot Json
-  status   String @default("sent") // 'sent' | 'accepted' | 'revision_requested' | 'superseded'
+  snapshot       Json
+  documentNumber String? @unique
+  status         String  @default("sent") // 'sent' | 'accepted' | 'revision_requested' | 'superseded'
 
   recipientEmail String
   recipientName  String?

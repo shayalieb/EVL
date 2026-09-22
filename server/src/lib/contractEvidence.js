@@ -24,6 +24,8 @@ export function buildFinalRecord(contract) {
   const record = {
     recordVersion: '2026-09-18-v1',
     contractId: contract.id,
+    documentNumber: contract.documentNumber,
+    rootContractId: contract.rootContractId,
     documentType: contract.documentType,
     revisionNumber: contract.revisionNumber,
     previousContractId: contract.previousContractId,

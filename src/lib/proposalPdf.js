@@ -10,7 +10,7 @@ function todayLabel() {
 
 // jsPDF pulls in html2canvas/DOMPurify (~450KB) even though we only use its
 // plain drawing API — lazy-load it so that weight isn't in the main bundle.
-async function buildProposalDoc({ booking, client, businessInfo }) {
+async function buildProposalDoc({ booking, client, businessInfo, reference, issuedAt }) {
   const hours = booking.proposal?.hours;
   const lineItems = booking.proposal?.lineItems || [];
   const offeringsList = booking.proposal?.offerings || [];
@@ -33,8 +33,14 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
   doc.text('Event Proposal', marginX, y);
   doc.setFontSize(scaleFont(10, scale));
   doc.setTextColor(110);
-  doc.text(todayLabel(), pageWidth - marginX, y, { align: 'right' });
+  doc.text(issuedAt ? formatEventDate(new Date(issuedAt).toISOString().slice(0, 10)) : todayLabel(), pageWidth - marginX, y, { align: 'right' });
   y += 12;
+  if (reference) {
+    doc.setFontSize(scaleFont(8, scale));
+    doc.setTextColor(100);
+    doc.text(`Document ID: ${reference}`, marginX, y);
+    y += 7;
+  }
 
   doc.setFontSize(scaleFont(10, scale));
   doc.setTextColor(140);
@@ -156,7 +162,7 @@ async function buildProposalDoc({ booking, client, businessInfo }) {
   doc.text(`Thank you for considering ${businessInfo?.name || 'us'} for your event!`, marginX, Math.max(y + 4, 280));
 
   const clientLabel = client ? `${client.firstName}-${client.lastName}` : 'Client';
-  const filename = `Proposal-${clientLabel}.pdf`.replace(/\s+/g, '-');
+  const filename = `${reference || 'Proposal'}-${clientLabel}.pdf`.replace(/\s+/g, '-');
   return { doc, filename };
 }
 

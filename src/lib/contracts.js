@@ -12,6 +12,11 @@ export async function listContracts() {
   return data.contracts;
 }
 
+export async function getContractDocumentsForBooking(bookingId) {
+  const data = await apiFetch(`/contracts/documents?bookingId=${encodeURIComponent(bookingId)}`);
+  return data.contracts;
+}
+
 // `manual`+`reason`: skips the actual outbound email and logs a
 // 'manual_sent' entry with the reason instead of 'sent' — for contracts
 // delivered outside GigWorks (printed, texted, signed in person, etc.).

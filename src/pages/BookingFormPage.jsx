@@ -21,7 +21,7 @@ import { uid } from '../lib/storage';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
 import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, bookingDocumentDownloadUrl } from '../lib/bookingDocuments';
 import { generateProposalPdf, generateProposalPdfAttachment, getProposalPdfDataUrl } from '../lib/proposalPdf';
-import { getContractForBooking, sendContract, ownerSignContract, addContractLogNote, regenerateClientSignLink, getContractHistory } from '../lib/contracts';
+import { getContractForBooking, getContractDocumentsForBooking, sendContract, ownerSignContract, addContractLogNote, regenerateClientSignLink } from '../lib/contracts';
 import { getProposalResponseForBooking, sendProposalResponseLink, getProposalResponseHistory } from '../lib/proposalResponses';
 import { listInquiryLinks } from '../lib/inquiryLinks';
 import { buildBookingMergePatch } from '../lib/applyInquiry';
@@ -48,6 +48,7 @@ import { emptyLinkExpiration, serializeLinkExpiration, formatLinkExpiration } fr
 import { useAgencyBranding } from '../lib/useAgencyBranding';
 import { mergedProposalLog } from '../lib/proposalLog';
 import { draftProposal } from '../lib/assistant';
+import { contractReference, proposalReference } from '../lib/documentReferences';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -355,89 +356,32 @@ function CollapsibleSection({ title, subtitle, defaultOpen, badge, children, cla
   );
 }
 
-// One prior version inside "Contract History" — a compact read-only summary
-// of that version's frozen snapshot (deposit/price included, since
-// buildContractSnapshot() already captures those at send time), expandable
-// on demand rather than always shown inline.
-function ContractHistoryEntry({ contract }) {
-  const [open, setOpen] = useState(false);
-  const snapshot = contract.snapshot || {};
+function SavedDocumentList({ kind, documents, history, openingId, onOpen }) {
+  if (!documents.length) return null;
+  const isContract = kind === 'contract';
   return (
-    <div className="border border-slate-200 rounded-lg p-3" data-testid="booking-form-contract-history-entry">
-      <button type="button" onClick={() => setOpen((v) => !v)} className="w-full flex items-center justify-between gap-3 text-left">
-        <div>
-          <div className="text-sm font-semibold text-slate-700">Version {contract.revisionNumber}</div>
-          <div className="text-xs text-slate-400">Sent {contract.sentAt ? new Date(contract.sentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'} · {contract.status === 'superseded' ? 'Replaced by a newer version' : contract.clientSignedAt ? 'Locked after client signature' : 'Sent'}</div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-sm font-bold text-slate-800">{currency(computeGrandTotal(snapshot.lineItems, snapshot.offerings))}</span>
-          <span className={`text-slate-400 text-xs transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
-        </div>
-      </button>
-      {open && (
-        <div className="mt-3 pt-3 border-t border-slate-100 space-y-1 text-sm">
-          {(snapshot.lineItems || []).map((item) => (
-            <div key={item.id} className="flex justify-between text-slate-600">
-              <span>{item.name}</span>
-              <span className="font-medium">{currency(item.amount)}</span>
+    <div className={cardClass} data-testid={`booking-form-${kind}-documents`}>
+      <h3 className="text-base font-bold text-slate-800 mb-1">{isContract ? 'Contract documents' : 'Proposal documents'}</h3>
+      <p className="text-xs text-slate-500 mb-4">Every sent version remains on record. Open a PDF to view its saved details{isContract ? ' and signatures' : ''}.</p>
+      <div className="space-y-3">
+        {documents.map((record) => {
+          const reference = isContract ? contractReference(record, history) : proposalReference(record);
+          const type = isContract ? (record.documentType === 'addendum' ? 'Addendum' : record.documentType === 'replacement' ? 'Replacement contract' : 'Original contract') : 'Proposal';
+          const status = isContract ? (record.status === 'fully_signed' ? 'Signed by both parties · view only' : record.status === 'superseded' ? 'Superseded · view only' : record.clientSignedAt ? 'Client signed · view only' : 'Awaiting signatures') : (record.status === 'accepted' ? 'Accepted' : record.status === 'revision_requested' ? 'Changes requested' : record.status === 'superseded' ? 'Superseded · view only' : 'Sent');
+          return (
+            <div key={record.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" data-testid={`booking-form-${kind}-document-row`}>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-slate-800">{type}{isContract && record.revisionNumber > 1 ? ` · Version ${record.revisionNumber}` : ''}</div>
+                <div className="text-xs text-slate-500">{status} · Sent {record.sentAt ? new Date(record.sentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</div>
+                <div className="mt-1 break-all font-mono text-[11px] text-slate-500" title="Database document ID">{reference}</div>
+              </div>
+              <button type="button" onClick={() => onOpen(kind, record)} disabled={openingId === record.id} className="shrink-0 rounded-lg border border-indigo-300 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50" data-testid={`booking-form-${kind}-view-pdf-button`}>
+                {openingId === record.id ? 'Opening…' : 'View PDF'}
+              </button>
             </div>
-          ))}
-          {(snapshot.offerings || []).map((o) => (
-            <div key={o.id} className="flex justify-between text-slate-600">
-              <span>{o.name}</span>
-              <span className="font-medium">{currency(computeOfferingTotal(o))}</span>
-            </div>
-          ))}
-          {snapshot.booking?.depositAmount != null && (
-            <div className="flex justify-between text-slate-500 pt-1 mt-1 border-t border-slate-100">
-              <span>Deposit</span>
-              <span className="font-medium">{currency(snapshot.booking.depositAmount)}</span>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// One prior response inside "Proposal History" — mirrors ContractHistoryEntry
-// above, using proposal's own snapshot shape (snapshot.proposal.lineItems/
-// offerings rather than the top-level fields Contract's snapshot uses).
-function ProposalHistoryEntry({ proposalResponse: pr }) {
-  const [open, setOpen] = useState(false);
-  const proposal = pr.snapshot?.proposal || {};
-  const statusLabel = pr.status === 'accepted' ? 'Accepted' : pr.status === 'revision_requested' ? 'Changes requested' : pr.status === 'superseded' ? 'Superseded' : 'Sent';
-  return (
-    <div className="border border-slate-200 rounded-lg p-3" data-testid="booking-form-proposal-history-entry">
-      <button type="button" onClick={() => setOpen((v) => !v)} className="w-full flex items-center justify-between gap-3 text-left">
-        <div>
-          <div className="text-sm font-semibold text-slate-700">
-            {pr.sentAt ? new Date(pr.sentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
-          </div>
-          <div className="text-xs text-slate-400">{statusLabel}</div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-sm font-bold text-slate-800">{currency(computeGrandTotal(proposal.lineItems, proposal.offerings))}</span>
-          <span className={`text-slate-400 text-xs transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
-        </div>
-      </button>
-      {open && (
-        <div className="mt-3 pt-3 border-t border-slate-100 space-y-1 text-sm">
-          {(proposal.lineItems || []).map((item) => (
-            <div key={item.id} className="flex justify-between text-slate-600">
-              <span>{item.name}</span>
-              <span className="font-medium">{currency(item.amount)}</span>
-            </div>
-          ))}
-          {(proposal.offerings || []).map((o) => (
-            <div key={o.id} className="flex justify-between text-slate-600">
-              <span>{o.name}</span>
-              <span className="font-medium">{currency(computeOfferingTotal(o))}</span>
-            </div>
-          ))}
-          {pr.responseNote && <div className="text-slate-500 italic pt-1">"{pr.responseNote}"</div>}
-        </div>
-      )}
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -537,6 +481,8 @@ export default function BookingFormPage() {
   // the read-only signed view, without touching the contract state itself.
   const [revisionDraft, setRevisionDraft] = useState(null);
   const [contractHistory, setContractHistory] = useState([]);
+  const [savedDocumentPreview, setSavedDocumentPreview] = useState(null);
+  const [openingSavedDocument, setOpeningSavedDocument] = useState('');
   const [proposalResponse, setProposalResponse] = useState(null);
   const [proposalHistory, setProposalHistory] = useState([]);
   const [proposalLinkExpiration, setProposalLinkExpiration] = useState(() => emptyLinkExpiration('14_days'));
@@ -771,13 +717,12 @@ export default function BookingFormPage() {
     return () => { cancelled = true; };
   }, [booking]);
 
-  // Only fetched once a contract has actually been revised.
   useEffect(() => {
-    if (!contract || contract.revisionNumber <= 1) { setContractHistory([]); return; }
+    if (!booking) { setContractHistory([]); return; }
     let cancelled = false;
-    getContractHistory(contract.id).then((list) => { if (!cancelled) setContractHistory(list); }).catch(() => {});
+    getContractDocumentsForBooking(booking.id).then((list) => { if (!cancelled) setContractHistory(list); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [contract]);
+  }, [booking, contract?.id]);
 
   // Seeds the new-invoice composer from the client and the current proposal
   // each time a different booking loads — same idea as the contract prep
@@ -1083,7 +1028,7 @@ export default function BookingFormPage() {
     const { patch, promise } = persistBooking();
     promise.catch((err) => showToast(err.message || 'Failed to save changes.', 'error'));
     try {
-      await generateProposalPdf({ booking: patch, client, businessInfo });
+      await generateProposalPdf({ booking: patch, client, businessInfo, reference: 'DRAFT — Not sent' });
     } catch (err) {
       showToast(err.message || 'Failed to generate PDF', 'error');
     }
@@ -1102,7 +1047,7 @@ export default function BookingFormPage() {
     try {
       const { patch, promise } = persistBooking();
       promise.catch((err) => showToast(err.message || 'Failed to save changes.', 'error'));
-      const url = await getProposalPdfDataUrl({ booking: patch, client, businessInfo });
+      const url = await getProposalPdfDataUrl({ booking: patch, client, businessInfo, reference: 'DRAFT — Not sent' });
       setProposalPreviewUrl(url);
       setShowProposalPreview(true);
     } catch (err) {
@@ -1126,6 +1071,7 @@ export default function BookingFormPage() {
         notes: patch.notes,
         depositAmount: patch.depositAmount,
         depositDueDate: patch.depositDueDate,
+        depositPaid: patch.depositPaid,
         brideName: patch.brideName,
         groomName: patch.groomName,
       },
@@ -1160,11 +1106,11 @@ export default function BookingFormPage() {
         expiration: serializeLinkExpiration(proposalLinkExpiration),
       });
       setProposalResponse(createdResponse);
-      const pdfAttachment = await generateProposalPdfAttachment({ booking: patch, client, businessInfo });
+      const pdfAttachment = await generateProposalPdfAttachment({ booking: patch, client, businessInfo, reference: proposalReference(createdResponse), issuedAt: createdResponse.sentAt });
       await sendEmail({
         to: client.email,
-        subject: `Proposal from ${fromName}`,
-        body: `<p>Hi ${client.firstName},</p><p>Please find attached our proposal for your event.</p><p><a href="${respondLink}">Click here to review and respond to the proposal</a></p><p>Let us know if you have any questions!</p><p>${fromName}</p>`,
+        subject: `Proposal ${proposalReference(createdResponse)} from ${fromName}`,
+        body: `<p>Hi ${client.firstName},</p><p>Please find attached proposal ${proposalReference(createdResponse)} for your event.</p><p><a href="${respondLink}">Click here to review and respond to the proposal</a></p><p>Let us know if you have any questions!</p><p>${fromName}</p>`,
         fromName,
         pdfAttachment,
       });
@@ -1544,6 +1490,7 @@ export default function BookingFormPage() {
         expiration: serializeLinkExpiration(contractLinkExpiration),
         clientSignature: null,
         ownerSignature: null,
+        reference: 'DRAFT — Not sent',
       });
       setContractPreviewUrl(url);
       setShowContractPreview(true);
@@ -1711,9 +1658,37 @@ export default function BookingFormPage() {
         ownerSignature: contract.ownerSignedAt
           ? { name: contract.ownerSignatureName, image: contract.ownerSignatureImage, signedAt: contract.ownerSignedAt }
           : null,
+        reference: contractReference(contract, contractHistory),
       });
     } catch (err) {
       showToast(err.message || 'Failed to generate PDF', 'error');
+    }
+  }
+
+  async function openSavedDocument(kind, record) {
+    setOpeningSavedDocument(record.id);
+    try {
+      const reference = kind === 'contract' ? contractReference(record, contractHistory) : proposalReference(record);
+      const url = kind === 'contract'
+        ? await getContractPdfDataUrl({
+            snapshot: record.snapshot,
+            terms: record.terms,
+            clientSignature: record.clientSignedAt ? { name: record.clientSignatureName, image: record.clientSignatureImage, signedAt: record.clientSignedAt } : null,
+            ownerSignature: record.ownerSignedAt ? { name: record.ownerSignatureName, image: record.ownerSignatureImage, signedAt: record.ownerSignedAt } : null,
+            reference,
+          })
+        : await getProposalPdfDataUrl({
+            booking: { ...record.snapshot.booking, proposal: record.snapshot.proposal },
+            client: record.snapshot.client,
+            businessInfo: record.snapshot.businessInfo,
+            reference,
+            issuedAt: record.sentAt || record.createdAt,
+          });
+      setSavedDocumentPreview({ url, title: `${kind === 'contract' ? 'Contract' : 'Proposal'} · ${reference}` });
+    } catch (err) {
+      showToast(err.message || 'Could not open the document', 'error');
+    } finally {
+      setOpeningSavedDocument('');
     }
   }
 
@@ -2260,6 +2235,13 @@ export default function BookingFormPage() {
         </div>
 
         <div className={activeTab === 'proposal' ? 'space-y-6' : 'hidden'}>
+          <SavedDocumentList
+            kind="proposal"
+            documents={[...proposalHistory.filter((item) => item.bookingId === booking?.id && item.id !== proposalResponse?.id), ...(proposalResponse?.bookingId === booking?.id ? [proposalResponse] : [])].sort((a, b) => new Date(b.createdAt || b.sentAt) - new Date(a.createdAt || a.sentAt))}
+            history={proposalHistory}
+            openingId={openingSavedDocument}
+            onOpen={openSavedDocument}
+          />
           {!booking ? (
             <div className={cardClass}>
               <p className="text-sm text-slate-400 text-center py-8">Save this booking first, then you can push it to a proposal.</p>
@@ -2553,7 +2535,7 @@ export default function BookingFormPage() {
                         data-testid="booking-form-proposal-download-button"
                         className="block w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
                       >
-                        Download PDF
+                        Download Draft PDF
                       </button>
                       <button
                         type="button"
@@ -2641,20 +2623,6 @@ export default function BookingFormPage() {
                   onAddNote={handleAddProposalLogNote}
                   testIdPrefix="booking-form-proposal-log"
                 />
-                {proposalHistory.filter((pr) => pr.id !== proposalResponse?.id).length > 0 && (
-                  <CollapsibleSection
-                    title="Proposal History"
-                    subtitle="Earlier sent versions of this proposal"
-                    defaultOpen={false}
-                    testId="booking-form-proposal-history-toggle"
-                  >
-                    <div className="space-y-3">
-                      {proposalHistory.filter((pr) => pr.id !== proposalResponse?.id).map((pr) => (
-                        <ProposalHistoryEntry key={pr.id} proposalResponse={pr} />
-                      ))}
-                    </div>
-                  </CollapsibleSection>
-                )}
               </div>
 
               {(form.proposal.offerings || []).length > 0 && (
@@ -2683,6 +2651,13 @@ export default function BookingFormPage() {
         </div>
 
         <div className={activeTab === 'contract' ? 'space-y-6' : 'hidden'}>
+          <SavedDocumentList
+            kind="contract"
+            documents={[...contractHistory.filter((item) => item.bookingId === booking?.id && item.id !== contract?.id), ...(contract?.bookingId === booking?.id ? [contract] : [])].sort((a, b) => new Date(b.createdAt || b.sentAt) - new Date(a.createdAt || a.sentAt))}
+            history={contractHistory}
+            openingId={openingSavedDocument}
+            onOpen={openSavedDocument}
+          />
           {!booking ? (
             <div className={cardClass}>
               <p className="text-sm text-slate-400 text-center py-8">Save this booking first, then you can move it to a contract.</p>
@@ -3081,20 +3056,6 @@ export default function BookingFormPage() {
                   </div>
                 </CollapsibleSection>
 
-                {contract.revisionNumber > 1 && (
-                  <CollapsibleSection
-                    title="Contract History"
-                    subtitle={`Version ${contract.revisionNumber} of ${contract.revisionNumber} — every sent version stays on record`}
-                    defaultOpen={false}
-                    testId="booking-form-contract-history-toggle"
-                  >
-                    <div className="space-y-3">
-                      {contractHistory.filter((c) => c.id !== contract.id).map((prior) => (
-                        <ContractHistoryEntry key={prior.id} contract={prior} />
-                      ))}
-                    </div>
-                  </CollapsibleSection>
-                )}
               </div>
 
               <div className={cardClass}>
@@ -3744,6 +3705,10 @@ export default function BookingFormPage() {
         title="Booking History"
         entries={booking?.history}
       />
+
+      <Modal open={!!savedDocumentPreview} onClose={() => setSavedDocumentPreview(null)} title={savedDocumentPreview?.title || 'Saved document'} widthClass="max-w-5xl" bodyClassName="p-0">
+        {savedDocumentPreview?.url && <iframe title={savedDocumentPreview.title} src={savedDocumentPreview.url} className="h-[calc(100dvh-4.75rem)] w-full border-0 sm:h-[75vh]" data-testid="booking-form-saved-document-frame" />}
+      </Modal>
 
       {booking && (
         <SendInquiryLinkModal

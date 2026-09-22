@@ -28,6 +28,7 @@ function withLogEntry(existingLog, entry) {
 function serializeForOwner(contract) {
   return {
     id: contract.id,
+    documentNumber: contract.documentNumber,
     bookingId: contract.bookingId,
     snapshot: contract.snapshot,
     terms: contract.terms,
@@ -49,6 +50,7 @@ function serializeForOwner(contract) {
     log: contract.log,
     revisionNumber: contract.revisionNumber,
     previousContractId: contract.previousContractId,
+    rootContractId: contract.rootContractId,
     completedAt: contract.completedAt,
     finalRecordHash: contract.finalRecordHash,
   };
@@ -57,6 +59,8 @@ function serializeForOwner(contract) {
 function serializeForPublic(contract, role) {
   return {
     role,
+    id: contract.id,
+    documentNumber: contract.documentNumber,
     snapshot: contract.snapshot,
     terms: contract.terms,
     status: contract.status,
@@ -103,6 +107,19 @@ router.get('/', asyncHandler(async (req, res) => {
     orderBy: { createdAt: 'desc' },
   });
   res.json({ contract: contract ? serializeForOwner(contract) : null });
+}));
+
+// All contracts ever sent for a booking, including independent historical
+// roots as well as replacements and addenda. The contract tab uses this for
+// its permanent document stack; /:id/history remains the linked-chain view.
+router.get('/documents', asyncHandler(async (req, res) => {
+  const bookingId = String(req.query.bookingId || '').trim();
+  if (!bookingId) return res.status(400).json({ error: 'bookingId is required.' });
+  const contracts = await prisma.contract.findMany({
+    where: { accountId: req.membership.accountId, bookingId },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+  });
+  res.json({ contracts: contracts.map(serializeForOwner) });
 }));
 
 // Walks previousContractId back from the given contract to build the full
@@ -152,11 +169,11 @@ async function deliverCompletedContract(contract) {
   await Promise.allSettled(recipients.map(async ({ to, url, name }) => sendMail({
     from: await resolveFromHeader({ accountId: contract.accountId, fromName, localPart: 'contracts' }),
     to,
-    subject: `Completed contract — ${fromName}`,
+    subject: `Completed contract ${contract.documentNumber || contract.id} — ${fromName}`,
     html: buildActionEmailHtml({
       businessInfo: contract.snapshot?.businessInfo,
       heading: 'Your completed contract is ready',
-      bodyHtml: `<p>Hi ${escapeHtml(name)},</p><p>Both parties have signed contract version ${contract.revisionNumber}. Use the secure link below to view it and download a PDF copy. GigWorks has preserved an integrity-checked completion record.</p>`,
+      bodyHtml: `<p>Hi ${escapeHtml(name)},</p><p>Both parties have signed contract ${escapeHtml(contract.documentNumber || contract.id)}. Use the secure link below to view it and download a PDF copy. GigWorks has preserved an integrity-checked completion record.</p>`,
       buttonText: 'View completed contract',
       buttonUrl: url,
     }),
@@ -208,12 +225,18 @@ router.post('/', asyncHandler(async (req, res) => {
   const revisionNumber = previousContract ? previousContract.revisionNumber + 1 : 1;
   const documentType = !previousContract ? 'contract' : previousContract.status === 'fully_signed' ? 'addendum' : 'replacement';
   const documentHash = buildDocumentHash({ snapshot, terms, documentType, revisionNumber, previousContractId: previousContract?.id });
+  const id = randomUUID();
+  const rootContractId = previousContract?.rootContractId || previousContract?.id || id;
+  const documentNumber = `GW-C-${rootContractId}-${documentType === 'addendum' ? 'A' : 'V'}${revisionNumber}`;
 
   const contract = await prisma.contract.create({
     data: {
+      id,
       accountId: req.membership.accountId,
       bookingId,
       snapshot,
+      rootContractId,
+      documentNumber,
       documentType,
       documentHash,
       terms: terms || null,
@@ -261,11 +284,11 @@ router.post('/', asyncHandler(async (req, res) => {
       await sendMail({
         from: await resolveFromHeader({ accountId: req.membership.accountId, fromName, localPart: 'contracts' }),
         to: normalizedRecipientEmail,
-        subject: `Contract for your event — ${fromName}`,
+        subject: `Contract ${documentNumber} for your event — ${fromName}`,
         html: buildActionEmailHtml({
           businessInfo: snapshot.businessInfo,
           heading: 'Your contract is ready',
-          bodyHtml: `<p>Hi ${escapeHtml(recipientName) || 'there'},</p><p>Your contract is ready to review and sign. This link is unique to you — please don't forward it.</p>`,
+          bodyHtml: `<p>Hi ${escapeHtml(recipientName) || 'there'},</p><p>Contract ${escapeHtml(documentNumber)} is ready to review and sign. This link is unique to you — please don't forward it.</p>`,
           buttonText: 'Click here to view and sign your contract',
           buttonUrl: signUrl,
         }),

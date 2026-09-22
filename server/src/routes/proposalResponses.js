@@ -26,6 +26,7 @@ function withLogEntry(existingLog, entry) {
 function serializeForOwner(pr) {
   return {
     id: pr.id,
+    documentNumber: pr.documentNumber,
     bookingId: pr.bookingId,
     snapshot: pr.snapshot,
     status: pr.status,
@@ -42,6 +43,8 @@ function serializeForOwner(pr) {
 
 function serializeForPublic(pr) {
   return {
+    id: pr.id,
+    documentNumber: pr.documentNumber,
     snapshot: pr.snapshot,
     status: pr.status,
     recipientName: pr.recipientName,
@@ -108,6 +111,7 @@ router.post('/', asyncHandler(async (req, res) => {
   if (!normalizedOwnerEmail) return res.status(400).json({ error: 'Your account needs a valid owner email address before proposals can be created.' });
   const token = generateToken();
   const sentAt = new Date();
+  const id = randomUUID();
 
   // Only the newest unanswered proposal may receive a response. Older
   // versions remain available as an accurate view-only record.
@@ -117,6 +121,8 @@ router.post('/', asyncHandler(async (req, res) => {
       data: { status: 'superseded' },
     }),
     prisma.proposalResponse.create({ data: {
+      id,
+      documentNumber: `GW-P-${id}`,
       accountId: req.membership.accountId,
       bookingId,
       snapshot,

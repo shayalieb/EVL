@@ -13,7 +13,7 @@ function signatureBlock(signature) {
 
 // jsPDF pulls in html2canvas/DOMPurify (~450KB) even though we only use its
 // plain drawing API — lazy-load it so that weight isn't in the main bundle.
-async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignature }) {
+async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignature, reference }) {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable'),
@@ -35,6 +35,12 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
   doc.setTextColor(20);
   doc.text(snapshot.title || 'Event Contract', pageWidth / 2, y, { align: 'center' });
   y += 10;
+  if (reference) {
+    doc.setFontSize(scaleFont(8, scale));
+    doc.setTextColor(100);
+    doc.text(`Document ID: ${reference}`, pageWidth / 2, y, { align: 'center' });
+    y += 7;
+  }
 
   // Compact, centered block: "BETWEEN" label, party names with "AND"
   // between them on one line (sized/weighted to match, not a stray tiny
@@ -239,7 +245,7 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
   doc.text(signatureBlock(ownerSignature), rightX, sigLabelY);
 
   const clientLabel = client?.firstName ? `${client.firstName}-${client.lastName || ''}` : 'Client';
-  const filename = `Contract-${clientLabel}.pdf`.replace(/\s+/g, '-');
+  const filename = `${reference || 'Contract'}-${clientLabel}.pdf`.replace(/\s+/g, '-');
   return { doc, filename };
 }
 
