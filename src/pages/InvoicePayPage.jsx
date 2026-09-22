@@ -105,6 +105,7 @@ export default function InvoicePayPage() {
         businessInfo: snapshot.businessInfo,
         client: snapshot.client,
         event: snapshot.event,
+        contractReference: snapshot.contractReference,
         lineItems: snapshot.lineItems,
         dueDate,
         memo,
@@ -159,6 +160,7 @@ export default function InvoicePayPage() {
           businessInfo={snapshot.businessInfo}
           client={snapshot.client}
           event={snapshot.event}
+          contractReference={snapshot.contractReference}
           lineItems={snapshot.lineItems}
           dueDate={dueDate}
           memo={memo}

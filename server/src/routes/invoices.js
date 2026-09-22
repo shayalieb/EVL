@@ -259,7 +259,7 @@ router.post('/:id/send', asyncHandler(async (req, res) => {
       html: buildActionEmailHtml({
         businessInfo: invoice.snapshot?.businessInfo,
         heading: 'You have a new invoice',
-        bodyHtml: `<p>Hi ${escapeHtml(invoice.recipientName) || 'there'},</p><p>Invoice #${invoice.displayNumber} for ${totalLabel}${invoice.dueDate ? ` is due ${new Date(invoice.dueDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}` : ''}.</p>`,
+        bodyHtml: `<p>Hi ${escapeHtml(invoice.recipientName) || 'there'},</p><p>Invoice #${invoice.displayNumber} for ${totalLabel}${invoice.dueDate ? ` is due ${new Date(invoice.dueDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}` : ''}.</p>${invoice.snapshot?.contractReference ? `<p>For signed contract #${escapeHtml(invoice.snapshot.contractReference)}.</p>` : ''}${invoice.memo ? `<p>${escapeHtml(invoice.memo)}</p>` : ''}`,
         buttonText: 'Click here to view and pay your invoice',
         buttonUrl: payUrl,
       }),

@@ -32,7 +32,7 @@ function ruleStyle(rule, accent) {
 // frozen snapshot) — same rendering either way, so what the business
 // previews is exactly what the client will see.
 export default function InvoiceDocument({
-  businessInfo, client, event, lineItems, dueDate, memo, total,
+  businessInfo, client, event, contractReference, lineItems, dueDate, memo, total,
   status, paidAmount, number, issueDate,
 }) {
   const items = lineItems || [];
@@ -101,6 +101,8 @@ export default function InvoiceDocument({
           <div className="text-[0.875em] text-slate-700">{dueDate ? formatEventDate(dueDate.slice(0, 10)) : 'Due on receipt'}</div>
         </div>
       </div>
+
+      {contractReference && <div className="mb-5 rounded-lg bg-slate-50 px-3 py-2 text-[0.75em] font-medium text-slate-600">For signed contract #{contractReference}</div>}
 
       {items.length === 0 ? (
         <div className="text-[0.875em] text-slate-400 border border-dashed border-slate-200 rounded-lg px-3 py-4 text-center mb-6">

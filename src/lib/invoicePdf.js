@@ -15,7 +15,7 @@ const STATUS_LABELS = {
 // invoice meta, bill-to/event/due-date row, line items, totals, memo,
 // footer) so the PDF matches what the composer preview and the public pay
 // page show on-screen.
-async function buildInvoiceDoc({ businessInfo, client, event, lineItems, dueDate, memo, total, status, paidAmount, number, issueDate, reference }) {
+async function buildInvoiceDoc({ businessInfo, client, event, contractReference, lineItems, dueDate, memo, total, status, paidAmount, number, issueDate, reference }) {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable'),
@@ -79,6 +79,13 @@ async function buildInvoiceDoc({ businessInfo, client, event, lineItems, dueDate
   doc.setTextColor(110);
   if (client?.email) doc.text(client.email, marginX, y);
   y += 10;
+
+  if (contractReference) {
+    doc.setFontSize(scaleFont(9, scale));
+    doc.setTextColor(80);
+    doc.text(`For signed contract #${contractReference}`, marginX, y);
+    y += 9;
+  }
 
   if (items.length === 0) {
     doc.setFontSize(scaleFont(10, scale));

@@ -12,6 +12,7 @@ export const E2E = {
   contractToken: 'e2e-contract-token',
   invoiceToken: 'e2e-invoice-token',
   portalToken: 'e2e-portal-token',
+  signedBookingId: 'e2e-signed-invoice-booking',
 };
 
 export async function seedE2e() {
@@ -44,4 +45,19 @@ export async function seedE2e() {
   await prisma.proposalResponse.create({ data: { accountId: account.id, bookingId: 'recipient-booking', snapshot, status: 'sent', tokenHash: hash(E2E.proposalToken), recipientEmail: 'client@e2e.test', recipientName: 'Casey Client', ownerEmail: E2E.email } });
   await prisma.contract.create({ data: { accountId: account.id, bookingId: 'recipient-booking', snapshot, terms: 'These are the E2E contract terms.', status: 'sent', clientTokenHash: hash(E2E.contractToken), recipientEmail: 'client@e2e.test', recipientName: 'Casey Client', ownerEmail: E2E.email } });
   await prisma.invoice.create({ data: { accountId: account.id, bookingId: 'recipient-booking', snapshot: { ...snapshot, event: snapshot.booking, lineItems: [{ name: 'Service', amount: 500 }] }, status: 'sent', acceptPayment: false, recipientEmail: 'client@e2e.test', recipientName: 'Casey Client', ownerEmail: E2E.email, payTokenHash: hash(E2E.invoiceToken), sentAt: new Date() } });
+  await prisma.booking.create({ data: {
+    id: E2E.signedBookingId, accountId: account.id, clientId: client.id, eventName: 'Casey Wedding',
+    eventType: 'Wedding', eventDate: '2027-01-01', depositAmount: 999,
+    venue: { name: 'Unsaved New Venue' },
+    proposal: { lineItems: [{ name: 'Outdated proposal service', amount: 100 }], offerings: [], sections: [] },
+  } });
+  await prisma.contract.create({ data: {
+    accountId: account.id, bookingId: E2E.signedBookingId, status: 'fully_signed',
+    recipientEmail: 'client@e2e.test', recipientName: 'Casey Client', ownerEmail: E2E.email,
+    snapshot: {
+      businessInfo: snapshot.businessInfo, client: snapshot.client,
+      booking: { eventType: 'Wedding', eventDate: '2026-12-15', venue: { name: 'Contract Hall' }, depositAmount: 200, depositDueDate: '2026-11-01' },
+      lineItems: [{ name: 'Legacy performance', amount: 300 }], offerings: [{ name: 'Lighting package', type: 'general', amount: 400 }],
+    },
+  } });
 }

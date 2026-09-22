@@ -49,6 +49,7 @@ import { useAgencyBranding } from '../lib/useAgencyBranding';
 import { mergedProposalLog } from '../lib/proposalLog';
 import { draftProposal } from '../lib/assistant';
 import { contractReference, proposalReference, invoiceReference, documentReferenceLabel } from '../lib/documentReferences';
+import { invoiceContextFromContract, invoicePreset } from '../lib/invoicePrefill';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 const labelClass = 'block text-xs font-semibold text-slate-500 mb-1';
@@ -728,10 +729,7 @@ export default function BookingFormPage() {
     return () => { cancelled = true; };
   }, [booking, contract?.id]);
 
-  // Seeds the new-invoice composer from the client and the current proposal
-  // each time a different booking loads — same idea as the contract prep
-  // panel above, so the invoice starts out billing everything that was
-  // proposed and the user trims/adds from there.
+  // Initialize once per booking; autosaves should never wipe invoice edits.
   useEffect(() => {
     if (!booking) return;
     setEditingInvoiceId(null);
@@ -745,10 +743,24 @@ export default function BookingFormPage() {
       const defaults = { number: String(number), memo: memo || '' };
       setInvoiceDefaults(defaults);
       setNewInvoiceNumber(defaults.number);
-      setNewInvoiceMemo(defaults.memo);
     }).catch(() => {});
     return () => { cancelled = true; };
-  }, [booking]);
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [booking?.id]);
+
+  useEffect(() => {
+    if (contract?.status !== 'fully_signed' || !booking || editingInvoiceId) return;
+    const context = invoiceContextFromContract(contract, booking, client, businessInfo);
+    const preset = invoicePreset(context, 'full');
+    setNewInvoiceOfferings(preset.lineItems);
+    setNewInvoiceDueDate(preset.dueDate);
+    setNewInvoiceMemo(preset.memo);
+    setNewInvoiceRecipientEmail(context.recipientEmail);
+    setNewInvoiceRecipientName(context.recipientName);
+    setNewInvoicePrefillKind('full');
+    // Re-seed on a different signed document, not on each unsaved form edit.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [contract?.id, contract?.status, booking?.id]);
 
   useEffect(() => {
     if (!client) return;
@@ -1209,10 +1221,18 @@ export default function BookingFormPage() {
   // Same frozen-snapshot idea as buildContractSnapshot above, minus the
   // booking/hours/title/sections fields an invoice doesn't need.
   function buildInvoiceSnapshot() {
+    const editing = editingInvoiceId ? invoices.find((invoice) => invoice.id === editingInvoiceId) : null;
+    const source = editing?.snapshot || (contract?.status === 'fully_signed'
+      ? invoiceContextFromContract(contract, booking, client, businessInfo)
+      : null);
+    const billTo = source?.client || (client ? { firstName: client.firstName, lastName: client.lastName, email: client.email, phone: client.phone } : {});
+    const enteredName = newInvoiceRecipientName.trim();
+    const [firstName, ...rest] = enteredName.split(/\s+/);
     return {
-      businessInfo,
-      client: client ? { firstName: client.firstName, lastName: client.lastName, email: client.email, phone: client.phone } : {},
-      event: { type: form.eventType, date: form.eventDate, venue: formatVenueLine(form.venue) },
+      businessInfo: source?.businessInfo || businessInfo,
+      client: { ...billTo, ...(enteredName && enteredName !== [billTo.firstName, billTo.lastName].filter(Boolean).join(' ') ? { firstName, lastName: rest.join(' ') } : {}), email: newInvoiceRecipientEmail.trim() || billTo.email },
+      event: source?.event || { type: form.eventType, date: form.eventDate, venue: formatVenueLine(form.venue) },
+      contractReference: source?.contractReference || source?.reference || null,
       lineItems: newInvoiceOfferings,
     };
   }
@@ -1236,14 +1256,23 @@ export default function BookingFormPage() {
     setInvoiceSubmitAttempted(false);
   }
 
-  // Advances the sticky number by one (ready for the next invoice) and
-  // carries the just-used memo forward as-is — called right after a
-  // successful create/update, mirroring the server's own forward-only sync.
+  // Prepare the next invoice after saving this one, using the amount still
+  // available under the signed contract rather than reusing the old memo.
   function applyInvoiceDefaultsAfterSave(invoice) {
     const defaults = { number: String((invoice.number || 0) + 1), memo: invoice.memo || '' };
     setInvoiceDefaults(defaults);
     setNewInvoiceNumber(defaults.number);
-    setNewInvoiceMemo(defaults.memo);
+    const context = invoiceContextFromContract(contract, booking, client, businessInfo);
+    const invoiced = [invoice, ...invoices.filter((item) => item.id !== invoice.id)]
+      .filter((item) => item.status !== 'void')
+      .reduce((sum, item) => sum + (item.total || 0), 0);
+    const preset = context.total > invoiced ? invoicePreset(context, 'final', invoiced) : null;
+    setNewInvoiceOfferings(preset?.lineItems || []);
+    setNewInvoiceMemo(preset?.memo || '');
+    setNewInvoiceDueDate(preset?.dueDate || '');
+    setNewInvoicePrefillKind(preset ? 'final' : null);
+    setNewInvoiceRecipientEmail(context.recipientEmail);
+    setNewInvoiceRecipientName(context.recipientName);
   }
 
   function handleEditInvoiceClick(inv) {
@@ -1260,11 +1289,27 @@ export default function BookingFormPage() {
 
   function handleCancelEditInvoice() {
     resetInvoiceComposer();
-    setNewInvoiceOfferings(booking.proposal?.offerings || []);
-    setNewInvoiceRecipientEmail(client?.email || '');
-    setNewInvoiceRecipientName(client ? `${client.firstName} ${client.lastName}`.trim() : '');
+    const context = invoiceContextFromContract(contract, booking, client, businessInfo);
+    const preset = invoicePreset(context, 'full');
+    setNewInvoiceOfferings(preset.lineItems);
+    setNewInvoiceRecipientEmail(context.recipientEmail);
+    setNewInvoiceRecipientName(context.recipientName);
     setNewInvoiceNumber(invoiceDefaults.number);
-    setNewInvoiceMemo(invoiceDefaults.memo);
+    setNewInvoiceMemo(preset.memo);
+    setNewInvoicePrefillKind('full');
+  }
+
+  function applySignedInvoicePreset(kind) {
+    const context = invoiceContextFromContract(contract, booking, client, businessInfo);
+    const preset = invoicePreset(context, kind, alreadyInvoiced);
+    resetInvoiceComposer();
+    setNewInvoiceOfferings(preset.lineItems);
+    setNewInvoiceDueDate(preset.dueDate);
+    setNewInvoiceMemo(preset.memo);
+    setNewInvoiceRecipientEmail(context.recipientEmail);
+    setNewInvoiceRecipientName(context.recipientName);
+    setNewInvoicePrefillKind(kind);
+    setActiveTab('invoices');
   }
 
   // Pre-fills a fresh invoice from the Deposit fields on Booking Info and
@@ -1272,45 +1317,20 @@ export default function BookingFormPage() {
   // deposit note into a real, collectible invoice instead of leaving it a
   // manual honor-system checkbox.
   function handleCreateDepositInvoice() {
-    resetInvoiceComposer();
-    setNewInvoiceOfferings([
-      { id: uid('offitem'), name: 'Deposit', details: '', type: 'general', amount: Number(form.depositAmount) || 0, unitCount: '', ratePerUnit: '' },
-    ]);
-    setNewInvoiceDueDate(form.depositDueDate || '');
-    setNewInvoiceMemo(`Deposit for ${eventLabel}`);
-    setNewInvoiceRecipientEmail(client?.email || '');
-    setNewInvoiceRecipientName(client ? `${client.firstName} ${client.lastName}`.trim() : '');
-    setNewInvoicePrefillKind('deposit');
-    setActiveTab('invoices');
+    applySignedInvoicePreset('deposit');
   }
 
   // Sibling to handleCreateDepositInvoice — used instead when the business
   // skips a deposit and bills the whole event in one shot.
   function handleCreateFullInvoice() {
-    resetInvoiceComposer();
-    setNewInvoiceOfferings([
-      { id: uid('offitem'), name: 'Full Event Balance', details: '', type: 'general', amount: grandTotal, unitCount: '', ratePerUnit: '' },
-    ]);
-    setNewInvoiceMemo(`Full balance for ${eventLabel}`);
-    setNewInvoiceRecipientEmail(client?.email || '');
-    setNewInvoiceRecipientName(client ? `${client.firstName} ${client.lastName}`.trim() : '');
-    setNewInvoicePrefillKind('full');
-    setActiveTab('invoices');
+    applySignedInvoicePreset('full');
   }
 
   // Used once something (a deposit, or any other invoice) has already been
   // invoiced — pre-fills whatever's left of the grand total rather than
   // making the business do that math by hand.
   function handleCreateFinalInvoice() {
-    resetInvoiceComposer();
-    setNewInvoiceOfferings([
-      { id: uid('offitem'), name: 'Final Payment', details: '', type: 'general', amount: Math.max(remainingBalance, 0), unitCount: '', ratePerUnit: '' },
-    ]);
-    setNewInvoiceMemo(`Final payment for ${eventLabel}`);
-    setNewInvoiceRecipientEmail(client?.email || '');
-    setNewInvoiceRecipientName(client ? `${client.firstName} ${client.lastName}`.trim() : '');
-    setNewInvoicePrefillKind('final');
-    setActiveTab('invoices');
+    applySignedInvoicePreset('final');
   }
 
   async function handleSaveInvoiceDraft() {
@@ -1384,10 +1404,12 @@ export default function BookingFormPage() {
 
   async function handleDownloadInvoice() {
     try {
+      const preview = buildInvoiceSnapshot();
       await generateInvoicePdf({
-        businessInfo,
-        client,
-        event: { type: form.eventType, date: form.eventDate, venue: formatVenueLine(form.venue) },
+        businessInfo: preview.businessInfo,
+        client: preview.client,
+        event: preview.event,
+        contractReference: preview.contractReference,
         lineItems: newInvoiceOfferings,
         dueDate: newInvoiceDueDate,
         memo: newInvoiceMemo,
@@ -1405,6 +1427,7 @@ export default function BookingFormPage() {
         businessInfo: inv.snapshot?.businessInfo,
         client: inv.snapshot?.client,
         event: inv.snapshot?.event,
+        contractReference: inv.snapshot?.contractReference,
         lineItems: inv.snapshot?.lineItems,
         dueDate: inv.dueDate,
         memo: inv.memo,
@@ -1693,6 +1716,7 @@ export default function BookingFormPage() {
             businessInfo: record.snapshot?.businessInfo,
             client: record.snapshot?.client,
             event: record.snapshot?.event,
+            contractReference: record.snapshot?.contractReference,
             lineItems: record.snapshot?.lineItems,
             dueDate: record.dueDate,
             memo: record.memo,
@@ -1777,7 +1801,9 @@ export default function BookingFormPage() {
   // change after signing); otherwise the proposal's still-live pricing is
   // the best number available. Used to size a percentage deposit and to
   // work out what's left to invoice after a deposit/full invoice goes out.
-  const grandTotal = contract
+  const grandTotal = contract?.status === 'fully_signed'
+    ? computeGrandTotal(contract.snapshot?.lineItems, contract.snapshot?.offerings)
+    : contract
     ? computeGrandTotal(contractLineItems, contractOfferings)
     : computeGrandTotal(form.proposal?.lineItems, form.proposal?.offerings);
 
@@ -1796,12 +1822,7 @@ export default function BookingFormPage() {
 
   const alreadyInvoiced = invoices.filter((inv) => inv.status !== 'void').reduce((sum, inv) => sum + (inv.total || 0), 0);
   const remainingBalance = grandTotal - alreadyInvoiced;
-  // Used to make quick-created invoice memos self-explanatory (e.g. "Deposit
-  // for Test Event on Dec 15, 2026") instead of a bare "Deposit" that doesn't
-  // say which event/booking — or which date — it's for.
-  const eventLabel = [form.eventName || form.eventType || 'your event', form.eventDate ? `on ${formatEventDate(form.eventDate)}` : null]
-    .filter(Boolean)
-    .join(' ');
+  const invoicePreviewSnapshot = buildInvoiceSnapshot();
 
   const canConvert = booking && !booking.convertedEventId;
 
@@ -3324,10 +3345,10 @@ export default function BookingFormPage() {
                       <button
                         type="button"
                         onClick={handleCreateDepositInvoice}
-                        disabled={!booking || !form.depositAmount || contract?.status !== 'fully_signed'}
+                        disabled={!booking || !invoiceContextFromContract(contract, booking, client, businessInfo).depositAmount || grandTotal <= 0 || contract?.status !== 'fully_signed'}
                         title={
                           !booking ? 'Save this booking first'
-                            : !form.depositAmount ? 'Enter a deposit amount first'
+                            : !invoiceContextFromContract(contract, booking, client, businessInfo).depositAmount ? 'Set a deposit in the contract first'
                             : contract?.status !== 'fully_signed' ? 'Available once the contract is fully signed'
                             : undefined
                         }
@@ -3360,24 +3381,25 @@ export default function BookingFormPage() {
               ) : (
                 <>
                   <div className={cardClass}>
-                    <h3 className={cardTitleClass}>{editingInvoiceId ? 'Edit Draft Invoice' : 'New Invoice'}</h3>
-                    <p className="text-sm text-slate-500 mb-5 max-w-xl">
-                      Paid online via Stripe, straight into your own connected account — see Settings → Billing to connect one first.
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-5 max-w-3xl">
-                      <div>
-                        <label className={labelClass}>Internal invoice sequence</label>
-                        <input
-                          type="number"
-                          min="1"
-                          step="1"
-                          value={newInvoiceNumber}
-                          onChange={(e) => setNewInvoiceNumber(e.target.value)}
-                          data-testid="booking-form-invoice-number-input"
-                          className={inputClass}
-                        />
-                        <p className="mt-1 text-xs text-slate-500">The six-digit client ID is assigned when you save.</p>
+                    <h3 className={cardTitleClass}>{editingInvoiceId ? 'Edit Invoice Draft' : 'Create Invoice'}</h3>
+                    {!editingInvoiceId && contract?.status === 'fully_signed' && (
+                      <div className="mb-5 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
+                        <p className="text-sm font-semibold text-slate-800">Based on signed contract #{contractReference(contract)}</p>
+                        <p className="mt-1 text-xs text-slate-600">Contract total {currency(grandTotal)} · Already invoiced {currency(alreadyInvoiced)} · Available to invoice {currency(Math.max(remainingBalance, 0))}</p>
+                        <div className="mt-3 flex flex-wrap gap-2" aria-label="Choose invoice amount">
+                          {alreadyInvoiced === 0 && invoiceContextFromContract(contract, booking, client, businessInfo).depositAmount > 0 && (
+                            <button type="button" onClick={handleCreateDepositInvoice} className={`rounded-lg px-3 py-2 text-sm font-semibold ${newInvoicePrefillKind === 'deposit' ? 'bg-indigo-600 text-white' : 'border border-indigo-200 bg-white text-indigo-700'}`}>Deposit</button>
+                          )}
+                          {alreadyInvoiced === 0 && (
+                            <button type="button" onClick={handleCreateFullInvoice} className={`rounded-lg px-3 py-2 text-sm font-semibold ${newInvoicePrefillKind === 'full' ? 'bg-indigo-600 text-white' : 'border border-indigo-200 bg-white text-indigo-700'}`}>Full contract</button>
+                          )}
+                          {alreadyInvoiced > 0 && remainingBalance > 0 && (
+                            <button type="button" onClick={handleCreateFinalInvoice} className={`rounded-lg px-3 py-2 text-sm font-semibold ${newInvoicePrefillKind === 'final' ? 'bg-indigo-600 text-white' : 'border border-indigo-200 bg-white text-indigo-700'}`}>Remaining balance</button>
+                          )}
+                        </div>
                       </div>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5 max-w-3xl">
                       <div>
                         <label className={labelClass}>Recipient Email *</label>
                         <input
@@ -3400,18 +3422,26 @@ export default function BookingFormPage() {
                         <input type="date" value={newInvoiceDueDate} onChange={(e) => setNewInvoiceDueDate(e.target.value)} data-testid="booking-form-invoice-due-date-input" className={inputClass} />
                       </div>
                     </div>
+                    <details className="mb-5 max-w-2xl text-sm text-slate-500">
+                      <summary className="cursor-pointer font-medium">Invoice settings</summary>
+                      <div className="mt-3 max-w-xs">
+                        <label className={labelClass}>Internal invoice sequence</label>
+                        <input type="number" min="1" step="1" value={newInvoiceNumber} onChange={(e) => setNewInvoiceNumber(e.target.value)} data-testid="booking-form-invoice-number-input" className={inputClass} />
+                        <p className="mt-1 text-xs">The six-digit client ID is assigned when you save.</p>
+                      </div>
+                    </details>
                     <div className="max-w-2xl mb-5">
                       {newInvoicePrefillKind === 'deposit' ? (
-                        <p className="text-xs text-slate-400 mb-3">
-                          Pre-filled from the Deposit fields on Booking Info — edit freely, this won't change those fields.
+                        <p className="text-xs text-slate-500 mb-3">
+                          This deposit is credited toward the signed contract total. Its description tells the client what it covers.
                         </p>
                       ) : newInvoicePrefillKind === 'full' ? (
                         <p className="text-xs text-slate-400 mb-3">
-                          Pre-filled with the full event balance — edit freely.
+                          All services and prices come from the signed contract. Review before sending.
                         </p>
                       ) : newInvoicePrefillKind === 'final' ? (
                         <p className="text-xs text-slate-400 mb-3">
-                          Pre-filled with what's left after prior invoices — edit freely.
+                          Contract total less amounts already invoiced. Review prior invoices before sending.
                         </p>
                       ) : !editingInvoiceId && booking.proposal?.offerings?.length > 0 && (
                         <p className="text-xs text-slate-400 mb-3">
@@ -3434,7 +3464,7 @@ export default function BookingFormPage() {
                       <label className={labelClass}>Memo</label>
                       <textarea
                         rows={2}
-                        placeholder="Shown at the bottom of the invoice — carries over to future invoices until changed"
+                        placeholder="Optional note shown at the bottom of this invoice"
                         value={newInvoiceMemo}
                         onChange={(e) => setNewInvoiceMemo(e.target.value)}
                         data-testid="booking-form-invoice-memo-textarea"
@@ -3511,9 +3541,10 @@ export default function BookingFormPage() {
                     <Modal open={showInvoicePreview} onClose={() => setShowInvoicePreview(false)} title="Invoice Preview" widthClass="max-w-2xl">
                       <div data-testid="booking-form-invoice-preview-container" className="overflow-x-auto">
                         <InvoiceDocument
-                          businessInfo={businessInfo}
-                          client={client}
-                          event={{ type: form.eventType, date: form.eventDate, venue: formatVenueLine(form.venue) }}
+                          businessInfo={invoicePreviewSnapshot.businessInfo}
+                          client={invoicePreviewSnapshot.client}
+                          event={invoicePreviewSnapshot.event}
+                          contractReference={invoicePreviewSnapshot.contractReference}
                           lineItems={newInvoiceOfferings}
                           dueDate={newInvoiceDueDate}
                           memo={newInvoiceMemo}

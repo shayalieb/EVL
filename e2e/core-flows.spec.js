@@ -99,6 +99,21 @@ test('contract and invoice recipients can open protected documents', async ({ pa
   await expect(page.getByTestId('invoice-pay-download-pdf-button')).toBeVisible();
 });
 
+test('invoice starts with signed contract services and explains the deposit', async ({ page }) => {
+  await signIn(page);
+  await page.goto(`/bookings/${E2E.signedBookingId}?tab=invoices`);
+  await expect(page.getByText('Legacy performance').first()).toBeVisible();
+  await expect(page.getByText('Lighting package').first()).toBeVisible();
+  await expect(page.getByText('Outdated proposal service')).toHaveCount(0);
+  await expect(page.getByText('Contract total $700.00')).toBeVisible();
+  await page.getByRole('button', { name: 'Deposit', exact: true }).click();
+  await expect(page.getByTestId('booking-form-invoice-due-date-input')).toHaveValue('2026-11-01');
+  await expect(page.getByTestId('booking-form-invoice-memo-textarea')).toHaveValue(/part of the \$700.00 contract total/);
+  await page.getByTestId('booking-form-invoice-preview-button').click();
+  await expect(page.getByText('Contract Hall')).toBeVisible();
+  await expect(page.getByText('Deposit toward event services')).toBeVisible();
+});
+
 test('client enters the portal through a single-use magic link', async ({ page }) => {
   await page.goto(`/portal/verify?token=${E2E.portalToken}`);
   await expect(page).toHaveURL(/\/portal$/);
