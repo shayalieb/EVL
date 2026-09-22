@@ -2729,22 +2729,6 @@ export default function BookingFormPage() {
                 </button>
               </div>
             </div>
-          ) : !contract && (form.proposal.offerings || []).length === 0 ? (
-            <div className={cardClass}>
-              <p className="text-sm text-slate-500 text-center pt-8 pb-4 max-w-md mx-auto">
-                This booking's proposal doesn't have any pricing yet — add at least one item there before moving it to a contract.
-              </p>
-              <div className="flex justify-center pb-8">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('proposal')}
-                  data-testid="booking-form-contract-finish-proposal-button"
-                  className={primaryButtonClass}
-                >
-                  Go to Proposal
-                </button>
-              </div>
-            </div>
           ) : (!contract || revisionDraft) ? (
             <div className={cardClass}>
               {revisionDraft ? (
