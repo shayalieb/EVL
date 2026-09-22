@@ -35,7 +35,7 @@ import SignatureCanvas from '../components/SignatureCanvas';
 import MoneyInput from '../components/ui/MoneyInput';
 import { useSavingIndicator } from '../components/ui/SavingIndicator';
 import OfferingPickerModal from '../components/OfferingPickerModal';
-import { computeOfferingTotal, computeOfferingsTotal } from '../lib/offerings';
+import { computeOfferingTotal, computeOfferingsTotal, packageLineSummary } from '../lib/offerings';
 import { DEFAULT_ACCENT_COLOR } from '../lib/colorTheme';
 import { isWedding } from '../lib/eventType';
 import { pipelineSteps, proposalStatusInfo, contractStatusInfo } from '../lib/bookingPipeline';
@@ -768,9 +768,8 @@ export default function BookingFormPage() {
     setNewInvoiceRecipientName((prev) => prev || `${client.firstName} ${client.lastName}`.trim());
   }, [client]);
 
-  // Seeds the contract-prep panel from the current proposal each time a
-  // different booking loads — only relevant before a contract exists, since
-  // the panel is hidden once one has been sent.
+  // Seed once per booking; background saves must not erase package choices
+  // made in the contract editor.
   useEffect(() => {
     if (!booking) return;
     setContractHours(booking.proposal?.hours || '');
@@ -782,7 +781,20 @@ export default function BookingFormPage() {
     setLastOwnerSignLink('');
     setOwnerSignerName('');
     setOwnerSignatureImage('');
-  }, [booking]);
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [booking?.id]);
+
+  // An accepted proposal is the starting point for contract editing. The
+  // contract editor may then change package selections before sending.
+  useEffect(() => {
+    if (!booking || contract || revisionDraft || proposalResponse?.status !== 'accepted') return;
+    const accepted = proposalResponse.snapshot?.proposal || {};
+    setContractHours(accepted.hours || '');
+    setContractLineItems(accepted.lineItems || []);
+    setContractOfferings(accepted.offerings || []);
+    // Only a different accepted document should reset user edits in the editor.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [booking?.id, contract?.id, proposalResponse?.id, proposalResponse?.status, revisionDraft]);
 
   useEffect(() => {
     if (!client) return;
@@ -1190,7 +1202,6 @@ export default function BookingFormPage() {
 
   function buildContractSnapshot() {
     const accepted = !revisionDraft && proposalResponse?.status === 'accepted' ? proposalResponse.snapshot : null;
-    const acceptedProposal = accepted?.proposal || {};
     return {
       businessInfo: accepted?.businessInfo || businessInfo,
       client: accepted?.client || (client ? { firstName: client.firstName, lastName: client.lastName, email: client.email, phone: client.phone } : {}),
@@ -1205,9 +1216,9 @@ export default function BookingFormPage() {
         brideName: form.brideName,
         groomName: form.groomName,
       },
-      hours: accepted ? acceptedProposal.hours : contractHours,
-      lineItems: accepted ? (acceptedProposal.lineItems || []) : contractLineItems,
-      offerings: accepted ? (acceptedProposal.offerings || []) : contractOfferings,
+      hours: contractHours,
+      lineItems: contractLineItems,
+      offerings: contractOfferings,
       title: contractTitle,
       sections: contractSections,
       style: {
@@ -3067,9 +3078,12 @@ export default function BookingFormPage() {
                             </div>
                           ))}
                           {(contract.snapshot.offerings || []).map((o) => (
-                            <div key={o.id} className="flex justify-between text-slate-600">
-                              <span>{o.name}</span>
-                              <span className="font-medium">{currency(computeOfferingTotal(o))}</span>
+                            <div key={o.id} className="text-slate-600">
+                              <div className="flex justify-between">
+                                <span>{o.name}</span>
+                                <span className="font-medium">{currency(computeOfferingTotal(o))}</span>
+                              </div>
+                              {o.type === 'package' && packageLineSummary(o) && <div className="ml-3 whitespace-pre-line text-xs text-slate-500">{packageLineSummary(o)}</div>}
                             </div>
                           ))}
                           <div className="flex justify-between font-bold text-slate-800 pt-1 mt-1 border-t border-slate-100">

@@ -13,6 +13,7 @@ export const E2E = {
   invoiceToken: 'e2e-invoice-token',
   portalToken: 'e2e-portal-token',
   signedBookingId: 'e2e-signed-invoice-booking',
+  acceptedPackageBookingId: 'e2e-accepted-package-booking',
 };
 
 export async function seedE2e() {
@@ -59,5 +60,22 @@ export async function seedE2e() {
       booking: { eventType: 'Wedding', eventDate: '2026-12-15', venue: { name: 'Contract Hall' }, depositAmount: 200, depositDueDate: '2026-11-01' },
       lineItems: [{ name: 'Legacy performance', amount: 300 }], offerings: [{ name: 'Lighting package', type: 'general', amount: 400 }],
     },
+  } });
+  const packageOffering = {
+    id: 'e2e-package', name: 'Stage flowers', type: 'package', amount: 500, details: 'Floral stage arrangement',
+    lineItems: [
+      { id: 'e2e-included', name: 'Roses', selected: true, required: true, excludedFromPrice: false },
+      { id: 'e2e-optional', name: 'Extra table flowers', selected: true, required: false, excludedFromPrice: true, pricingType: 'perUnit', unitType: 'table', quantity: 1, rate: 25 },
+    ],
+  };
+  await prisma.booking.create({ data: {
+    id: E2E.acceptedPackageBookingId, accountId: account.id, clientId: client.id,
+    eventName: 'Package Contract Test', eventType: 'Wedding', eventDate: '2026-12-21',
+    proposal: { hours: '4', lineItems: [], offerings: [], sections: [] },
+  } });
+  await prisma.proposalResponse.create({ data: {
+    accountId: account.id, bookingId: E2E.acceptedPackageBookingId, status: 'accepted',
+    snapshot: { ...snapshot, proposal: { hours: '4', lineItems: [], offerings: [packageOffering], sections: [] } },
+    recipientEmail: 'client@e2e.test', recipientName: 'Casey Client', ownerEmail: E2E.email,
   } });
 }

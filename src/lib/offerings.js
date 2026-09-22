@@ -65,9 +65,9 @@ export function packageLineSummary(offering, { includeAdditional = true } = {}) 
     const quantity = Math.max(0, Number(item.quantity) || 0);
     const rate = Number(item.rate) || 0;
     const price = item.pricingType === 'perUnit'
-      ? `${quantity} × ${currency(rate)} = ${currency(quantity * rate)}`
-      : currency(rate);
+      ? `${currency(rate)} per ${item.unitType || 'item'}; ${currency(quantity * rate)} if selected`
+      : `${currency(rate)} if selected`;
     return `• QTY ${quantity || 1}  ${item.name} — ${price}`;
   }) : [];
-  return [included.join('\n'), additional.length ? `Additional options (not included in package price):\n${additional.join('\n')}` : ''].filter(Boolean).join('\n\n');
+  return [offering.details, included.join('\n'), additional.length ? `Optional add-ons for later selection (not billed in this contract):\n${additional.join('\n')}` : ''].filter(Boolean).join('\n\n');
 }

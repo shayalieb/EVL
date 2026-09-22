@@ -114,6 +114,21 @@ test('invoice starts with signed contract services and explains the deposit', as
   await expect(page.getByText('Deposit toward event services')).toBeVisible();
 });
 
+test('edited package add-ons remain in the contract without changing its total', async ({ page }) => {
+  await signIn(page);
+  await page.goto(`/bookings/${E2E.acceptedPackageBookingId}?tab=contract`);
+  await expect(page.getByTestId('booking-form-offering-name-input')).toHaveValue('Stage flowers');
+  await page.getByTestId('booking-form-offering-row').getByLabel('QTY').fill('3');
+  await expect(page.getByTestId('booking-form-contract-pricing-toggle')).toContainText('$500.00');
+  await page.getByTestId('booking-form-contract-send-button').click();
+  await expect(page.getByTestId('booking-form-contract-what-was-sent-toggle')).toBeVisible();
+  await page.getByTestId('booking-form-contract-what-was-sent-toggle').click();
+  await expect(page.getByText('Optional add-ons for later selection (not billed in this contract):')).toBeVisible();
+  await expect(page.getByText(/QTY 3.*Extra table flowers/)).toBeVisible();
+  await expect(page.getByText('Grand Total').last()).toBeVisible();
+  await expect(page.getByText('$500.00').last()).toBeVisible();
+});
+
 test('client enters the portal through a single-use magic link', async ({ page }) => {
   await page.goto(`/portal/verify?token=${E2E.portalToken}`);
   await expect(page).toHaveURL(/\/portal$/);
