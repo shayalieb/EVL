@@ -102,9 +102,9 @@ test('contract and invoice recipients can open protected documents', async ({ pa
 test('invoice starts with signed contract services and explains the deposit', async ({ page }) => {
   await signIn(page);
   await page.goto(`/bookings/${E2E.signedBookingId}?tab=invoices`);
-  await expect(page.getByText('Legacy performance').first()).toBeVisible();
-  await expect(page.getByText('Lighting package').first()).toBeVisible();
-  await expect(page.getByText('Outdated proposal service')).toHaveCount(0);
+  await expect(page.getByTestId('booking-form-offering-name-input').first()).toHaveValue('Legacy performance');
+  await expect(page.getByTestId('booking-form-offering-name-input').nth(1)).toHaveValue('Lighting package');
+  await expect(page.getByTestId('booking-form-offering-name-input')).toHaveCount(2);
   await expect(page.getByText('Contract total $700.00')).toBeVisible();
   await page.getByRole('button', { name: 'Deposit', exact: true }).click();
   await expect(page.getByTestId('booking-form-invoice-due-date-input')).toHaveValue('2026-11-01');
