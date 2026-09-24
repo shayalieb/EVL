@@ -1,3 +1,4 @@
+import { syncNotificationAutomations } from './notificationAutomation.js';
 import { prisma } from './prisma.js';
 import { withBackgroundJobLease } from './backgroundJobLease.js';
 
@@ -120,39 +121,6 @@ async function createEventReminders(thresholdsByAccount) {
       relatedName: event.name || 'Untitled event',
       ruleKey: EVENT_RULE_KEY,
       note: `${event.name || 'This event'} is on ${event.eventDate} and still has an unconfirmed vendor.`,
-    });
-  }
-  await createAutoReminders(toCreate);
-}
-
-async function createInvoiceReminders(thresholdsByAccount) {
-  // Precise per-account threshold filtering happens below, in JS — the DB
-  // query here just narrows to "overdue at all" (dueDate in the past).
-  const candidates = await prisma.invoice.findMany({
-    where: { status: { in: ['sent', 'partial'] }, dueDate: { lt: new Date() } },
-    select: { id: true, accountId: true, displayNumber: true, recipientName: true, dueDate: true },
-  });
-  if (!candidates.length) return;
-
-  const accountIds = [...new Set(candidates.map((i) => i.accountId))];
-  const ownerUserIdsByAccount = await getOwnerUserIdsByAccount(accountIds);
-
-  const toCreate = [];
-  const now = Date.now();
-  for (const invoice of candidates) {
-    const days = thresholdFor(thresholdsByAccount, invoice.accountId, 'invoiceOverdueDays');
-    const overdueDays = (now - invoice.dueDate.getTime()) / (24 * 60 * 60 * 1000);
-    if (overdueDays < days) continue;
-    const createdByUserId = ownerUserIdsByAccount.get(invoice.accountId);
-    if (!createdByUserId) continue; // no owner membership found — nothing sane to send from
-    toCreate.push({
-      accountId: invoice.accountId,
-      createdByUserId,
-      relatedType: 'invoice',
-      relatedId: invoice.id,
-      relatedName: invoice.recipientName || `Invoice #${invoice.displayNumber}`,
-      ruleKey: INVOICE_RULE_KEY,
-      note: `Invoice #${invoice.displayNumber}${invoice.recipientName ? ` for ${invoice.recipientName}` : ''} is overdue (was due ${invoice.dueDate.toISOString().slice(0, 10)}).`,
     });
   }
   await createAutoReminders(toCreate);
@@ -488,7 +456,7 @@ export async function tick() {
       const thresholdsByAccount = await getThresholdsByAccount(allAccountIds);
 
       await createEventReminders(thresholdsByAccount);
-      await createInvoiceReminders(thresholdsByAccount);
+      await syncNotificationAutomations();
       await createDepositReminders(thresholdsByAccount);
       await createContractReminders(thresholdsByAccount);
       await createFollowUpReminders(thresholdsByAccount);

@@ -22,6 +22,7 @@ export function relatedRecordPath(reminder) {
     case 'contractor': return `/contractors?open=${reminder.relatedId}`;
     case 'venue': return `/venues?open=${reminder.relatedId}`;
     case 'event': return `/events/${reminder.relatedId}`;
+    case 'inquiry': return '/bookings';
     case 'booking': return `/bookings/${reminder.relatedId}`;
     // Not an actual reminder-linkable type in practice (reminders point at
     // business records, not help content) — added here anyway since this

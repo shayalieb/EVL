@@ -1,3 +1,4 @@
+import { notificationSettings } from '../lib/notificationRules.js';
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -44,7 +45,9 @@ router.get('/', asyncHandler(async (req, res) => {
     },
     orderBy: { remindAt: 'asc' },
   });
-  res.json({ reminders });
+  const accountData = await prisma.accountData.findUnique({ where: { accountId: req.membership.accountId } });
+  const settings = notificationSettings(accountData?.data?.reminderSettings);
+  res.json({ reminders: reminders.filter((r) => r.ruleKey !== 'invoice-open-client' && (r.ruleKey !== 'inquiry-awaiting-review' || settings.inquiryReminderEnabled)) });
 }));
 
 router.post('/', asyncHandler(async (req, res) => {

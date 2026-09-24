@@ -1,3 +1,4 @@
+import { syncInquiryNotification, INQUIRY_RULE } from '../lib/notificationAutomation.js';
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
@@ -320,6 +321,7 @@ router.post('/:id/apply', asyncHandler(async (req, res) => {
     link = await tx.inquiryLink.update({ where: { id: link.id }, data: {
       status: 'applied', appliedAt: new Date(), appliedBookingId: booking.id, appliedClientId: clientId, response: { ...response, email: normalizedEmail },
     } });
+    await tx.reminder.updateMany({ where: { accountId: link.accountId, relatedId: link.id, ruleKey: INQUIRY_RULE }, data: { completedAt: new Date(), emailEnabled: false } });
     return { link, bookingId: booking.id, clientId, repeated: false };
   });
   if (result.error) return res.status(result.status).json({ error: result.error });
@@ -345,7 +347,10 @@ router.delete('/:id', asyncHandler(async (req, res) => {
   if (link.isReusable) {
     return res.status(400).json({ error: "The reusable inquiry link can't be deleted — use Regenerate instead." });
   }
-  await prisma.inquiryLink.delete({ where: { id: link.id } });
+  await prisma.$transaction([
+    prisma.reminder.updateMany({ where: { accountId: link.accountId, relatedId: link.id, ruleKey: INQUIRY_RULE }, data: { completedAt: new Date(), emailEnabled: false } }),
+    prisma.inquiryLink.delete({ where: { id: link.id } }),
+  ]);
   res.json({ ok: true });
 }));
 
@@ -465,28 +470,12 @@ publicInquiryLinksRouter.post('/:token/submit', asyncHandler(async (req, res) =>
     updated = await prisma.inquiryLink.findUniqueOrThrow({ where: { id: link.id } });
   }
 
-  // Best-effort nudge to the owner — the in-app "new inquiry response"
-  // indicator on the Bookings page is the real notification, this is just
-  // a heads-up if they're not looking at the app right now.
-  const accountData = await prisma.accountData.findUnique({ where: { accountId: link.accountId } });
-  const businessInfo = accountData?.data?.businessInfo || {};
-  const fromName = businessInfo.name || 'GigWorks';
+  // Persist delivery for the scheduler so transient mail failures are retried.
+  // The rule scan also repairs this if notification creation fails after submission.
   try {
-    await sendMail({
-      from: await resolveFromHeader({ accountId: link.accountId, fromName, localPart: 'inquiries' }),
-      to: updated.ownerEmail,
-      subject: `New inquiry response — ${firstName.trim()} ${lastName.trim()}`,
-      html: buildActionEmailHtml({
-        businessInfo,
-        heading: 'New inquiry response',
-        bodyHtml: `<p>${escapeHtml(firstName.trim())} ${escapeHtml(lastName.trim())} just filled out an inquiry form. Review it and apply it to create the booking.</p>`,
-        buttonText: 'Click here to review it in GigWorks',
-        buttonUrl: `${frontendUrl()}/bookings`,
-      }),
-    });
+    await syncInquiryNotification(updated);
   } catch (err) {
-    // best effort — the in-app indicator is the real notification
-    console.error(`Failed to email inquiry-response notification for link ${link.id}:`, err);
+    console.error(`Failed to queue inquiry notification ${updated.id}:`, err);
   }
 
   res.json({ ok: true });

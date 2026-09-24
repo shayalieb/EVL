@@ -1,3 +1,4 @@
+import { notificationDeliveryAllowed, INQUIRY_RULE } from './notificationAutomation.js';
 import { prisma } from './prisma.js';
 import { mapWithConcurrency } from './concurrency.js';
 import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from './mailer.js';
@@ -21,6 +22,10 @@ function formatRemindAt(date, timeZone) {
 // SetNulls Reminder.createdByUserId — see the schema). Returns null only
 // when neither exists, which should be rare (every account has an owner).
 async function resolveRecipient(reminder) {
+  if (reminder.ruleKey === 'invoice-open-client') {
+    const invoice = await prisma.invoice.findFirst({ where: { id: reminder.relatedId, accountId: reminder.accountId } });
+    return invoice?.recipientEmail || null;
+  }
   if (reminder.createdByUser?.email) return reminder.createdByUser.email;
   const ownerMembership = await prisma.membership.findFirst({
     where: { accountId: reminder.accountId, role: 'owner' },
@@ -51,10 +56,11 @@ async function sendReminderEmail(reminder) {
   await sendMail({
     from: await resolveFromHeader({ accountId: reminder.accountId, fromName, localPart: 'reminders' }),
     to,
-    subject: `Reminder: ${reminder.note.slice(0, 80)}`,
+    subject: `${reminder.ruleKey === INQUIRY_RULE ? 'New inquiry' : 'Reminder'}: ${reminder.note.slice(0, 80)}`,
     html: buildActionEmailHtml({
       businessInfo,
-      heading: 'Reminder',
+      heading: reminder.ruleKey === INQUIRY_RULE ? 'New inquiry response' : 'Reminder',
+      ...(reminder.ruleKey === INQUIRY_RULE ? { buttonText: 'Review inquiry', buttonUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/bookings` } : {}),
       bodyHtml: `${relatedLine}<p>${escapeHtml(reminder.note)}</p><p style="color:#94a3b8;">Was due ${escapeHtml(formatRemindAt(reminder.remindAt, reminder.emailTimeZone))}</p>`,
     }),
   });
@@ -96,12 +102,18 @@ export async function tick() {
         where: {
           id: reminder.id,
           emailSentAt: null,
+          emailEnabled: true,
+          completedAt: null,
           OR: [{ emailClaimedAt: null }, { emailClaimedAt: { lt: staleBefore } }],
         },
         data: { emailClaimedAt: new Date(), emailAttemptCount: { increment: 1 } },
       });
       if (claim.count === 0) return; // another instance claimed it first this tick
 
+      if (!await notificationDeliveryAllowed(reminder)) {
+        await prisma.reminder.update({ where: { id: reminder.id }, data: { emailClaimedAt: null, emailEnabled: false } });
+        return;
+      }
       const sent = await sendReminderEmail(reminder);
       if (sent) {
         await prisma.reminder.update({
