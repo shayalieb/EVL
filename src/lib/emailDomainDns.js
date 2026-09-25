@@ -21,6 +21,7 @@ export function getDnsRecordPurpose(record = {}) {
   if (name.includes('_domainkey') || value.includes('dkim')) return { title: 'DKIM authentication', description: 'Signs outgoing mail so recipients can verify it came from your domain.' };
   if (name.includes('_dmarc')) return { title: 'DMARC policy', description: 'Tells receiving mail systems how to handle messages that fail authentication.' };
   if (value.includes('v=spf1')) return { title: 'SPF authorization', description: 'Authorizes the sending service to send mail for this subdomain.' };
+  if (type === 'MX' && (value.includes('inbound-smtp') || String(record.record || '').toLowerCase() === 'receiving')) return { title: 'Inbox receiving', description: 'Delivers incoming emails and replies for this domain to your GigWorks Inbox.' };
   if (type === 'MX') return { title: 'Return-path routing', description: 'Routes delivery reports and supports sending-domain alignment.' };
   return { title: 'Domain verification', description: 'Proves control of the domain to the sending service.' };
 }

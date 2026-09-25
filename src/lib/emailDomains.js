@@ -42,3 +42,8 @@ export async function updateEmailSenderAddress(localPart) {
 export async function sendEmailDomainTest(to) {
   return apiFetch('/email-domains/test-email', { method: 'POST', body: JSON.stringify({ to }) });
 }
+
+export async function enableEmailDomainReceiving() {
+  const data = await apiFetch('/email-domains/enable-receiving', { method: 'POST' });
+  return data.domain;
+}

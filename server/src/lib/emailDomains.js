@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from './prisma.js';
-import { createResendDomain, verifyResendDomain, deleteResendDomain } from './resendDomains.js';
+import { createResendDomain, verifyResendDomain, deleteResendDomain, enableResendDomainReceiving } from './resendDomains.js';
 import { addDnsRecords, ROOT_DOMAIN } from './godaddyDns.js';
 import { analyzeEmailDomainRecords } from './emailDomainHealth.js';
 
@@ -238,4 +238,20 @@ export async function getEmailDomain(accountId) {
 export async function getVerifiedEmailDomain(accountId) {
   const domain = await prisma.emailDomain.findUnique({ where: { accountId } });
   return domain?.sendingStatus === 'verified' || domain?.status === 'verified' ? domain : null;
+}
+
+// Existing custom domains may predate receiving support. Generate their
+// inbound DNS records on explicit request; the customer publishes them.
+export async function enableCustomDomainReceiving(accountId) {
+  const existing = await getEmailDomain(accountId);
+  if (!existing) throw Object.assign(new Error('Connect your domain first.'), { status: 404 });
+  const pending = !!existing.pendingResendDomainId;
+  if (!(pending ? existing.pendingIsCustomDomain : existing.isCustomDomain)) {
+    throw Object.assign(new Error('This action is for domains you own.'), { status: 400 });
+  }
+  const { dnsRecords } = await enableResendDomainReceiving(pending ? existing.pendingResendDomainId : existing.resendDomainId);
+  const health = analyzeEmailDomainRecords(dnsRecords);
+  return prisma.emailDomain.update({ where: { accountId }, data: pending ? {
+    pendingDnsRecords: dnsRecords, pendingSendingStatus: health.sendingStatus, pendingReceivingStatus: health.receivingStatus,
+  } : { dnsRecords, ...health, lastHealthCheckedAt: new Date() } });
 }

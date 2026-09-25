@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, requireRole } from '../lib/membership.js';
-import { provisionEmailDomain, provisionCustomEmailDomain, refreshEmailDomainStatus, getEmailDomain, startCustomEmailDomainReplacement, cancelEmailDomainReplacement, removeEmailDomain, validateSenderLocalPart } from '../lib/emailDomains.js';
+import { enableCustomDomainReceiving, provisionEmailDomain, provisionCustomEmailDomain, refreshEmailDomainStatus, getEmailDomain, startCustomEmailDomainReplacement, cancelEmailDomainReplacement, removeEmailDomain, validateSenderLocalPart } from '../lib/emailDomains.js';
 import { ROOT_DOMAIN } from '../lib/godaddyDns.js';
 import { normalizeValidEmail } from '../lib/emailAddress.js';
 import { resolveFromHeader, resolveReplyDomain, sendMail, buildActionEmailHtml } from '../lib/mailer.js';
@@ -40,6 +40,15 @@ router.post('/custom-domain', requireRole('owner', 'admin'), asyncHandler(async 
   try {
     const created = await provisionCustomEmailDomain(req.membership.accountId, domain);
     res.status(201).json({ domain: created });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+}));
+
+router.post('/enable-receiving', requireRole('owner', 'admin'), asyncHandler(async (req, res) => {
+  try {
+    res.json({ domain: await enableCustomDomainReceiving(req.membership.accountId) });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     throw err;

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import Badge from '../../components/ui/Badge';
 import { useToast } from '../../components/ui/Toast';
-import { getEmailDomain, createEmailDomain, createCustomEmailDomain, verifyEmailDomain, replaceEmailDomain, cancelEmailDomainReplacement, removeEmailDomain, sendEmailDomainTest, updateEmailSenderAddress } from '../../lib/emailDomains';
+import { enableEmailDomainReceiving, getEmailDomain, createEmailDomain, createCustomEmailDomain, verifyEmailDomain, replaceEmailDomain, cancelEmailDomainReplacement, removeEmailDomain, sendEmailDomainTest, updateEmailSenderAddress } from '../../lib/emailDomains';
 import { DNS_PROVIDERS, DNS_PROVIDER_GUIDANCE, getDnsRecordPurpose, getDnsRecordStatus } from '../../lib/emailDomainDns';
 
 const inputClass = 'w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
@@ -16,7 +16,7 @@ export default function EmailDomainTab() {
   const [domain, setDomain] = useState(null);
   const [rootDomain, setRootDomain] = useState('gigworks.io');
   const [loadError, setLoadError] = useState('');
-  const [mode, setMode] = useState('subdomain'); // 'subdomain' | 'custom'
+  const [mode, setMode] = useState('custom'); // 'subdomain' | 'custom'
   const [subdomain, setSubdomain] = useState('');
   const [customDomain, setCustomDomain] = useState('');
   const [creating, setCreating] = useState(false);
@@ -57,12 +57,21 @@ export default function EmailDomainTab() {
     try {
       const created = await createCustomEmailDomain(customDomain);
       setDomain(created);
-      showToast('Domain registered — add the DNS records below to verify it');
+      showToast('Domain added — connect the DNS records below to enable sending and Inbox');
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
       setCreating(false);
     }
+  }
+
+  async function handleEnableReceiving() {
+    setChecking(true);
+    try {
+      setDomain(await enableEmailDomainReceiving());
+      showToast('Receiving records are ready — add the Inbox receiving record at your DNS provider');
+    } catch (err) { showToast(err.message, 'error'); }
+    finally { setChecking(false); }
   }
 
   async function handleCheckStatus() {
@@ -176,10 +185,15 @@ export default function EmailDomainTab() {
       <div>
         <h3 className="text-sm font-bold text-slate-700 mb-1">Email Domain</h3>
         <p className="text-sm text-slate-500">
-          Send contracts, invoices, inquiries, reminders, and contractor emails from your own address instead of the shared default — either a subdomain we set up for you, or a domain you already own.
+          Connect your own domain to send contractor emails, contracts, invoices, and reminders, and receive emails in your shared GigWorks Inbox. You keep your domain with your current provider.
         </p>
       </div>
 
+      {!domain && <ol className="list-decimal pl-5 space-y-2 text-sm text-slate-600">
+        <li>Connect a domain you own, such as <strong>mail.yourcompany.com</strong>.</li>
+        <li>Add the displayed DNS records at your domain provider, then check status.</li>
+        <li>Choose your sender address and send a test. Reply to it to confirm Inbox works.</li>
+      </ol>}
       {testResult?.threadId && <p className="text-sm text-indigo-700 mb-4"><Link to={`/inbox?thread=${encodeURIComponent(testResult.threadId)}`}>Open test conversation →</Link>{!testResult.replyTrackingActive && ' — sending works; receiving still needs configuration.'}</p>}
       {!domain ? (
         <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
@@ -231,7 +245,7 @@ export default function EmailDomainTab() {
           ) : (
             <form onSubmit={handleCreateCustom} className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1">Sending subdomain</label>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Email domain or subdomain</label>
                 <input
                   required
                   value={customDomain}
@@ -253,7 +267,7 @@ export default function EmailDomainTab() {
                 data-testid="settings-email-domain-create-custom-button"
                 className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
               >
-                {creating ? 'Registering…' : 'Register Domain'}
+                {creating ? 'Connecting…' : 'Connect my domain'}
               </button>
             </form>
           )}
@@ -273,8 +287,14 @@ export default function EmailDomainTab() {
 
           <div className="grid gap-3 sm:grid-cols-2">
             <CapabilityStatus title="Sending" status={setupDomain.sendingStatus || setupDomain.status} readyText="Authenticated and ready" pendingText="SPF or DKIM still pending" />
-            <CapabilityStatus title="Reply tracking" status={setupDomain.receivingStatus} readyText="Inbound replies can be tracked" pendingText="Inbound routing is not ready" />
+            <CapabilityStatus title="Inbox & replies" status={setupDomain.receivingStatus} readyText="Ready to receive emails and replies" pendingText="Inbound routing is not ready" />
           </div>
+          {setupDomain.isCustomDomain && !setupDomain.dnsRecords?.some((r) => String(r.value || '').includes('inbound-smtp')) && (
+            <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-3 text-sm text-indigo-800">
+              <p>This domain needs receiving records before new emails can reach Inbox. Use a dedicated subdomain if your main domain already receives email elsewhere.</p>
+              <button type="button" disabled={checking} onClick={handleEnableReceiving} className="mt-2 rounded-lg bg-indigo-600 px-3 py-2 text-white disabled:opacity-50">{checking ? 'Preparing…' : 'Set up Inbox receiving'}</button>
+            </div>
+          )}
           {domain.lastHealthCheckedAt && <p className="text-[11px] text-slate-400">DNS health last checked {new Date(domain.lastHealthCheckedAt).toLocaleString()}.</p>}
 
           <form onSubmit={handleSenderAddress} className="rounded-xl border border-slate-200 bg-slate-50 p-4">

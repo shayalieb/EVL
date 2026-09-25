@@ -8,9 +8,11 @@ import { getResendClient } from './resend.js';
 // id and its full DNS record list.
 export async function createResendDomain(fullDomainName) {
   const resend = getResendClient();
-  const { data, error } = await resend.domains.create({
+  // The installed SDK drops capabilities from domains.create; use its raw
+  // authenticated transport to preserve both capabilities.
+  const { data, error } = await resend.post('/domains', {
     name: fullDomainName,
-    capabilities: { sending: true, receiving: true },
+    capabilities: { sending: 'enabled', receiving: 'enabled' },
   });
   if (error) throw new Error(error.message || 'Failed to create Resend domain.');
   return { resendDomainId: data.id, dnsRecords: data.records };
@@ -37,4 +39,13 @@ export async function deleteResendDomain(resendDomainId) {
   const resend = getResendClient();
   const { error } = await resend.domains.remove(resendDomainId);
   if (error) throw new Error(error.message || 'Failed to remove Resend domain.');
+}
+
+export async function enableResendDomainReceiving(resendDomainId) {
+  const resend = getResendClient();
+  const { error } = await resend.patch(`/domains/${encodeURIComponent(resendDomainId)}`, {
+    capabilities: { sending: 'enabled', receiving: 'enabled' },
+  });
+  if (error) throw new Error(error.message || 'Could not enable receiving.');
+  return getResendDomainStatus(resendDomainId);
 }

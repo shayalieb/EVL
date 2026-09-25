@@ -621,6 +621,31 @@ test('security: multipart replies enforce CSRF and attachment limits before call
   assert.equal((await request('/api/inbox', { cookie, headers: { origin: 'https://evil.example' } })).status, 403);
 });
 
+test('custom domain receiving setup is account scoped and restricted to administrators', async () => {
+  const { getResendClient } = await import('../src/lib/resend.js');
+  process.env.RESEND_API_KEY ||= 're_inbox_test';
+  const provider = getResendClient();
+  const originalPatch = provider.patch;
+  const originalGet = provider.get;
+  const owner = await createIdentity({ email: 'domain-setup@example.com' });
+  const member = await createIdentity({ email: 'domain-member@example.com', accountId: owner.account.id, role: 'member' });
+  await prisma.emailDomain.create({ data: { accountId: owner.account.id, domain: 'mail.customer.test', isCustomDomain: true, resendDomainId: 'owned-domain', status: 'verified', sendingStatus: 'verified', receivingStatus: 'not_configured', dnsRecords: [] } });
+  const calls = [];
+  provider.patch = async (path, body) => { calls.push({ path, body }); return { data: { id: 'owned-domain' } }; };
+  provider.get = async () => ({ data: { status: 'verified', records: [{ type: 'TXT', value: 'dkim', status: 'verified' }, { type: 'MX', value: 'inbound-smtp.us-east-1.amazonaws.com', status: 'pending' }] } });
+  try {
+    assert.equal((await request('/api/email-domains/enable-receiving', { cookie: await login(member), method: 'POST' })).status, 403);
+    assert.equal(calls.length, 0);
+    const result = await request('/api/email-domains/enable-receiving', { cookie: await login(owner), method: 'POST', body: JSON.stringify({ resendDomainId: 'foreign-domain' }) });
+    assert.equal(result.status, 200);
+    assert.equal(calls[0].path, '/domains/owned-domain');
+    const updated = (await result.json()).domain;
+    assert.equal(updated.sendingStatus, 'verified');
+    assert.equal(updated.receivingStatus, 'pending');
+    assert.equal(updated.dnsRecords.length, 2);
+  } finally { provider.patch = originalPatch; provider.get = originalGet; }
+});
+
 test('a redelivered Stripe checkout webhook does not apply invoice payment twice', async () => {
   const identity = await createIdentity({ email: 'stripe@example.com' });
   await prisma.account.update({

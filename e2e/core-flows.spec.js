@@ -230,3 +230,22 @@ test('security: hostile inbox HTML cannot execute scripts or load tracking image
   expect(externalRequests).toEqual([]);
   await expect(page.locator('iframe, img[src*="attacker.invalid"], [onload], [onerror]')).toHaveCount(0);
 });
+
+test('customers connect their own email domain and see Inbox DNS instructions', async ({ page }) => {
+  await signIn(page);
+  let domain = null;
+  await page.route('**/api/email-domains', (route) => route.fulfill({ json: { domain, rootDomain: 'gigworks.io' } }));
+  await page.route('**/api/email-domains/custom-domain', async (route) => {
+    expect(route.request().postDataJSON().domain).toBe('mail.customer.test');
+    domain = { domain: 'mail.customer.test', isCustomDomain: true, status: 'pending', sendingStatus: 'pending', receivingStatus: 'pending', dnsRecords: [{ type: 'TXT', name: 'resend._domainkey.mail', value: 'public-dkim-key', status: 'pending' }, { type: 'MX', name: 'mail', value: 'inbound-smtp.us-east-1.amazonaws.com', priority: 10, status: 'pending' }] };
+    await route.fulfill({ json: { domain } });
+  });
+  await page.goto('/settings?tab=emailDomain');
+  await expect(page.getByTestId('settings-email-domain-customdomain-input')).toBeVisible();
+  await page.getByTestId('settings-email-domain-customdomain-input').fill('mail.customer.test');
+  await page.getByRole('button', { name: 'Connect my domain', exact: true }).click();
+  await expect(page.getByText('mail.customer.test', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Inbox receiving', exact: true })).toBeVisible();
+  await expect(page.getByText('inbound-smtp.us-east-1.amazonaws.com', { exact: true })).toBeVisible();
+  await expect(page.getByText('Inbox & replies', { exact: true })).toBeVisible();
+});
