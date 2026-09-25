@@ -189,7 +189,8 @@ export default function ProposalRespondPage() {
           {sections.map((section) => (
             <div key={section.id}>
               <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">{section.title}</div>
-              <p className="text-sm text-slate-600 whitespace-pre-wrap">{section.text}</p>
+              {section.value && <p className="text-sm font-medium text-slate-800 whitespace-pre-wrap mb-1">{section.value}</p>}
+              {section.text && <p className="text-sm text-slate-600 whitespace-pre-wrap">{section.text}</p>}
             </div>
           ))}
         </div>
