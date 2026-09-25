@@ -74,6 +74,9 @@ async function login(identity, cookie) {
     body: JSON.stringify({ email: identity.user.email, password: identity.password }),
   });
   assert.equal(response.status, 200);
+  // fetch resolves at headers; wait for the response to finish so the
+  // session-store save has completed before sending an authenticated request.
+  await response.arrayBuffer();
   return responseCookies(response);
 }
 
@@ -260,9 +263,11 @@ test('a contract signing token can only record one concurrent signature', async 
     body: JSON.stringify({ email: 'client@example.com', signatureName, signatureImage: 'client-signature', consentAccepted: true }),
   });
   const responses = await Promise.all([submit('First'), submit('Second')]);
-  // Completion rotates both share tokens before the losing request can
-  // replay the just-used link, so the loser sees an invalidated-link 404.
-  assert.deepEqual(responses.map((response) => response.status).sort(), [200, 404]);
+  // The loser can observe either an already-signed snapshot (409) or the
+  // rotated token (404); exactly one signature must still be recorded.
+  const statuses = responses.map((response) => response.status).sort();
+  assert.equal(statuses[0], 200);
+  assert.ok([404, 409].includes(statuses[1]));
 
   const updated = await prisma.contract.findUniqueOrThrow({ where: { id: contract.id } });
   assert.equal(updated.status, 'fully_signed');
