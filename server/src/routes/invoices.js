@@ -253,6 +253,7 @@ router.post('/:id/send', asyncHandler(async (req, res) => {
   let emailError = null;
   try {
     await sendMail({
+      tracking: { accountId: invoice.accountId, bookingId: invoice.bookingId },
       from: await resolveFromHeader({ accountId: req.membership.accountId, fromName, localPart: 'invoices' }),
       to: invoice.recipientEmail,
       subject: `Invoice #${invoice.displayNumber} for ${totalLabel} from ${fromName}`,
@@ -383,6 +384,7 @@ router.post('/:id/send-receipt', asyncHandler(async (req, res) => {
   let emailError = null;
   try {
     await sendMail({
+      tracking: { accountId: invoice.accountId, bookingId: invoice.bookingId },
       from: await resolveFromHeader({ accountId: req.membership.accountId, fromName, localPart: 'invoices' }),
       to: invoice.recipientEmail,
       subject: `Receipt for ${totalLabel} from ${fromName}`,

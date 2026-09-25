@@ -175,3 +175,58 @@ test('keyboard users can skip navigation and contain focus inside a modal', asyn
   await expect(dialog).toBeHidden();
   await expect(page.getByTestId('reminders-add-button')).toBeFocused();
 });
+
+test('shared inbox reads, links, replies with attachments, and archives a conversation', async ({ page }) => {
+  await signIn(page);
+  await page.getByRole('link', { name: /Inbox/ }).click();
+  await expect(page.getByRole('heading', { name: 'Inbox', exact: true })).toBeVisible();
+  await expect(page.getByText('hello@mail.e2e.test')).toBeVisible();
+  await page.getByRole('button', { name: /client@e2e.test.*Details for our wedding/ }).click();
+  await expect(page.getByText('Can we confirm the arrival time?')).toBeVisible();
+  await expect(page.getByRole('button', { name: /venue-notes.txt/ })).toBeVisible();
+  await expect(page.getByLabel('Linked client')).toHaveValue('e2e-client');
+  await expect(page.getByLabel('Linked booking').locator('option', { hasText: 'Casey Wedding' })).toBeAttached();
+  await page.getByLabel('Linked booking').selectOption(E2E.signedBookingId);
+  await expect(page.getByRole('link', { name: 'Open booking' })).toHaveAttribute('href', `/bookings/${E2E.signedBookingId}`);
+  await page.route('**/api/inbox/e2e-inbox-thread/reply', async (route) => {
+    expect(route.request().headers()['x-csrf-token']).toBeTruthy();
+    expect(route.request().postData()).toContain('We will arrive at 5 PM.');
+    expect(route.request().postData()).toContain('schedule.txt');
+    await route.fulfill({ json: { ok: true, replyTrackingActive: true } });
+  });
+  await page.getByLabel('Reply message').fill('We will arrive at 5 PM.');
+  await page.locator('input[type=file]').setInputFiles({ name: 'schedule.txt', mimeType: 'text/plain', buffer: Buffer.from('Schedule') });
+  await page.getByRole('button', { name: 'Send reply' }).click();
+  await expect(page.getByLabel('Reply message')).toHaveValue('');
+  await page.getByRole('button', { name: 'Archive', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Restore', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Archived', exact: true }).click();
+  await expect(page.getByRole('button', { name: /client@e2e.test.*Details for our wedding/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Restore', exact: true }).click();
+  await page.getByRole('button', { name: 'All', exact: true }).click();
+  await expect(page.getByRole('button', { name: /client@e2e.test.*Details for our wedding/ })).toBeVisible();
+  await expectNoPageOverflow(page);
+  await page.screenshot({ path: '/tmp/evl-inbox-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectNoPageOverflow(page);
+  await page.screenshot({ path: '/tmp/evl-inbox-mobile.png', fullPage: true });
+});
+
+test('security: hostile inbox HTML cannot execute scripts or load tracking images', async ({ page }) => {
+  await signIn(page);
+  const externalRequests = [];
+  page.on('request', (request) => { if (request.url().includes('attacker.invalid')) externalRequests.push(request.url()); });
+  await page.route('**/api/inbox/e2e-inbox-thread', async (route) => {
+    const response = await route.fetch();
+    const data = await response.json();
+    data.thread.messages[0].body = '<p>Security test message</p><script>window.__inboxXss = true</script><img src="https://attacker.invalid/pixel" onerror="window.__inboxXss = true"><svg onload="window.__inboxXss = true"></svg><a href="javascript:window.__inboxXss=true">Unsafe link</a><iframe src="https://attacker.invalid/frame"></iframe>';
+    await route.fulfill({ response, json: data });
+  });
+  await page.goto('/inbox');
+  await page.getByRole('button', { name: /client@e2e.test.*Details for our wedding/ }).click();
+  await expect(page.getByText('Security test message')).toBeVisible();
+  await expect(page.getByText('Unsafe link')).not.toHaveAttribute('href');
+  expect(await page.evaluate(() => window.__inboxXss)).toBeUndefined();
+  expect(externalRequests).toEqual([]);
+  await expect(page.locator('iframe, img[src*="attacker.invalid"], [onload], [onerror]')).toHaveCount(0);
+});

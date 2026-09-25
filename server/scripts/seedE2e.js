@@ -37,6 +37,12 @@ export async function seedE2e() {
   const client = await prisma.client.create({ data: { id: 'e2e-client', accountId: account.id, firstName: 'Casey', lastName: 'Client', email: 'client@e2e.test' } });
   await prisma.clientPortalToken.create({ data: { clientId: client.id, tokenHash: hash(E2E.portalToken), expiresAt: new Date(Date.now() + 3_600_000) } });
 
+  await prisma.emailDomain.create({ data: { accountId: account.id, domain: 'mail.e2e.test', resendDomainId: 'e2e-inbox-domain', dnsRecords: [], status: 'verified', sendingStatus: 'verified', receivingStatus: 'verified' } });
+  await prisma.inboxThread.create({ data: {
+    id: 'e2e-inbox-thread', accountId: account.id, contactEmail: 'client@e2e.test', subject: 'Details for our wedding', clientId: client.id, replyAlias: 'inbox+e2e-inbox-thread@mail.e2e.test',
+    messages: { create: { direction: 'inbound', fromAddress: 'client@e2e.test', toAddress: 'hello@mail.e2e.test', subject: 'Details for our wedding', body: '<p>Can we confirm the arrival time?</p>', deliveryStatus: 'received', attachments: { create: { filename: 'venue-notes.txt', contentType: 'text/plain', size: 15, data: Buffer.from('Venue notes') } } } },
+  } });
+
   const snapshot = {
     businessInfo: { name: 'E2E Events', email: E2E.email },
     client: { firstName: 'Casey', lastName: 'Client', email: 'client@e2e.test' },

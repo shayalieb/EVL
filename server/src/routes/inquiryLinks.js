@@ -49,6 +49,7 @@ async function emailInquiryLink({ accountId, recipientEmail, recipientName, inqu
   const businessInfo = accountData?.data?.businessInfo || {};
   const fromName = businessInfo.name || 'GigWorks';
   await sendMail({
+    tracking: { accountId },
     from: await resolveFromHeader({ accountId, fromName, localPart: 'inquiries' }),
     to: recipientEmail,
     subject: `Tell us about your event — ${fromName}`,

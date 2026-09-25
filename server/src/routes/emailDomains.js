@@ -5,7 +5,7 @@ import { attachMembership, requireRole } from '../lib/membership.js';
 import { provisionEmailDomain, provisionCustomEmailDomain, refreshEmailDomainStatus, getEmailDomain, startCustomEmailDomainReplacement, cancelEmailDomainReplacement, removeEmailDomain, validateSenderLocalPart } from '../lib/emailDomains.js';
 import { ROOT_DOMAIN } from '../lib/godaddyDns.js';
 import { normalizeValidEmail } from '../lib/emailAddress.js';
-import { resolveFromHeader, sendMail, buildActionEmailHtml } from '../lib/mailer.js';
+import { resolveFromHeader, resolveReplyDomain, sendMail, buildActionEmailHtml } from '../lib/mailer.js';
 import { prisma } from '../lib/prisma.js';
 
 const router = Router();
@@ -92,10 +92,15 @@ router.post('/test-email', requireRole('owner', 'admin'), asyncHandler(async (re
   const accountData = await prisma.accountData.findUnique({ where: { accountId: req.membership.accountId } });
   const businessInfo = accountData?.data?.businessInfo || {};
   const from = await resolveFromHeader({ accountId: req.membership.accountId, fromName: businessInfo.name || 'GigWorks', localPart: 'hello' });
-  const { error } = await sendMail({ from, to, subject: 'GigWorks branded email test', html: buildActionEmailHtml({ businessInfo, bodyHtml: '<p>Your branded sending domain is working.</p><p>Reply to this message to test reply tracking.</p>' }) });
+  const replyDomain = await resolveReplyDomain(req.membership.accountId);
+  const { error, inboxThreadId, replyTrackingActive } = await sendMail({
+    from, to, subject: 'GigWorks branded email test',
+    tracking: { accountId: req.membership.accountId },
+    html: buildActionEmailHtml({ businessInfo, bodyHtml: `<p>Your branded sending domain is working.</p>${replyDomain ? '<p>Reply to this email, then open Inbox in GigWorks to confirm your reply arrived.</p>' : '<p>Receiving is not configured yet. Verify the receiving records in Email Domain settings before testing replies.</p>'}` }),
+  });
   if (error) return res.status(502).json({ error: error.message || 'Test email failed.' });
   await prisma.emailDomain.update({ where: { accountId: req.membership.accountId }, data: { lastTestEmailAt: new Date() } });
-  res.json({ ok: true });
+  res.json({ ok: true, threadId: inboxThreadId, replyTrackingActive });
 }));
 
 export default router;

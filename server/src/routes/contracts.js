@@ -172,6 +172,7 @@ async function deliverCompletedContract(contract) {
     { to: contract.ownerEmail, url: `${frontendUrl()}/sign/${ownerToken}`, name: fromName },
   ];
   await Promise.allSettled(recipients.map(async ({ to, url, name }) => sendMail({
+    tracking: { accountId: contract.accountId, bookingId: contract.bookingId },
     from: await resolveFromHeader({ accountId: contract.accountId, fromName, localPart: 'contracts' }),
     to,
     subject: `Completed contract #${contract.displayNumber} — ${fromName}`,
@@ -291,6 +292,7 @@ router.post('/', asyncHandler(async (req, res) => {
     // resend route.
     try {
       await sendMail({
+        tracking: { accountId: req.membership.accountId, bookingId },
         from: await resolveFromHeader({ accountId: req.membership.accountId, fromName, localPart: 'contracts' }),
         to: normalizedRecipientEmail,
         subject: `${documentType === 'addendum' ? 'Addendum' : 'Contract'} #${displayNumber} for your event — ${fromName}`,
@@ -557,6 +559,7 @@ publicContractsRouter.post('/:token/submit', asyncHandler(async (req, res) => {
       const ownerSignUrl = `${frontendUrl()}/sign/${ownerToken}`;
       try {
         await sendMail({
+          tracking: { accountId: contract.accountId, bookingId: contract.bookingId },
           from: await resolveFromHeader({ accountId: contract.accountId, fromName, localPart: 'contracts' }),
           to: contract.ownerEmail,
           subject: `${contract.recipientName || contract.recipientEmail} signed your contract — your signature is next`,

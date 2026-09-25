@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import * as Sentry from '@sentry/react'
+import { scrubTelemetryEvent } from './lib/securityPrivacy.js'
 import './index.css'
 import App from './App.jsx'
 
@@ -12,6 +13,8 @@ Sentry.init({
   environment: import.meta.env.MODE,
   release: import.meta.env.VITE_RELEASE_SHA,
   sendDefaultPii: false,
+  beforeSend: scrubTelemetryEvent,
+  beforeSendTransaction: scrubTelemetryEvent,
   integrations: [Sentry.browserTracingIntegration()],
   // Light performance sampling — this is a small internal-tools app, not
   // high-traffic, so no need to sample down further than this.

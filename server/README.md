@@ -33,7 +33,7 @@ No deploy config files needed — Railway auto-detects Node via
    and `REDIS_URL` = `${{Redis.REDIS_URL}}` (reference variables),
    `SESSION_SECRET` (long random string), `NODE_ENV=production`,
    `EXTRA_CLIENT_ORIGINS` (comma-separated deployed frontend origins,
-   localhost is always allowed automatically), `FRONTEND_URL` (the deployed
+   localhost is allowed automatically only outside production), `FRONTEND_URL` (the deployed
    frontend's base URL, used to build password-reset/invite email links),
    `SUPPORT_NOTIFICATION_EMAIL` (where new support messages notify the
    platform admin). Leave `PORT` unset.
@@ -94,3 +94,30 @@ Some websites do not publish this structured information and require manual
 entry. Robots exclusions are respected; blocked/unavailable sites are not
 bypassed. Imports validate public IPv4 DNS and pin the connection, validate each
 redirect, cap response size/time, and do not execute page scripts.
+
+## Shared business inbox
+
+The shared inbox migration adds `InboxThread`, `InboxMessage`, and
+`InboxAttachment`. Deploy the migration before running the updated API; the
+normal Railway start command applies it automatically. No existing contractor
+conversation records are migrated or removed.
+
+Receiving uses the existing signed `/api/webhooks/resend` endpoint and the
+`email.received` event. Configure `RESEND_WEBHOOK_SECRET` and a Resend API key
+with access to received email bodies and attachments. Accounts receive new mail
+on their verified Email Domain; tracked replies can also use the platform's
+`RESEND_INBOUND_DOMAIN`. Do not change the customer's existing primary mailbox
+MX records when connecting a dedicated GigWorks subdomain.
+
+Only members with booking-management permission can read or reply in Inbox.
+New mail creates an unread notification and optionally emails the owner.
+Provider webhook retries are deduplicated, unknown shared-domain addresses are
+not assigned to accounts, and HTML is sanitized before storage/display.
+Attachments are downloaded on demand from the provider; outbound reply files
+are saved with the conversation (three files, 5 MB each). Secure sign/pay links
+are omitted from stored outbound message bodies.
+
+Verify setup through Settings → Email Domain → Send a test, then reply and
+open the returned conversation. The test reports sending-only configurations
+without claiming replies are active. Existing Google/Outlook mailboxes are not
+synchronized by this feature.

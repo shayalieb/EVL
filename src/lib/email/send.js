@@ -1,8 +1,8 @@
 import { apiFetch } from '../../context/AuthContext';
 
-export async function sendEmail({ to, subject, body, fromName, replyTo, pdfAttachment, inlineImages, wide }) {
+export async function sendEmail({ to, subject, body, fromName, replyTo, pdfAttachment, inlineImages, wide, bookingId }) {
   return apiFetch('/email/send', {
     method: 'POST',
-    body: JSON.stringify({ to, subject, body, fromName, replyTo, pdfAttachment, inlineImages, wide }),
+    body: JSON.stringify({ to, subject, body, fromName, replyTo, pdfAttachment, inlineImages, wide, bookingId }),
   });
 }

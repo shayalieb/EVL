@@ -205,7 +205,7 @@ router.post('/bulk-email', bulkEmailLimiter, asyncHandler(async (req, res) => {
   }
 
   const results = await Promise.allSettled(
-    withEmail.map((c) => sendMail({ from, to: c.email, subject, html }).then((r) => {
+    withEmail.map((c) => sendMail({ from, to: c.email, subject, html, tracking: { accountId: req.membership.accountId } }).then((r) => {
       if (r.error) throw new Error(r.error.message || 'Failed to send.');
       return c;
     }))
@@ -386,6 +386,7 @@ router.post('/:id/calendar-link/email', asyncHandler(async (req, res) => {
   const calendarLink = `${frontendUrl()}/gigs/${link.publicToken}`;
 
   await sendMail({
+    tracking: { accountId: req.membership.accountId },
     from: await resolveFromHeader({ accountId: req.membership.accountId, fromName, localPart: 'gigs' }),
     to: recipientEmail,
     subject: `Your gig calendar — ${fromName}`,

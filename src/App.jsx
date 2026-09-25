@@ -34,6 +34,7 @@ const BookingFormPage = lazy(() => import('./pages/BookingFormPage'));
 const EventsPage = lazy(() => import('./pages/EventsPage'));
 const EventFormPage = lazy(() => import('./pages/EventFormPage'));
 const EmailTemplatesPage = lazy(() => import('./pages/EmailTemplatesPage'));
+const InboxPage = lazy(() => import('./pages/InboxPage'));
 const RemindersPage = lazy(() => import('./pages/RemindersPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const HelpPage = lazy(() => import('./pages/HelpPage'));
@@ -227,6 +228,7 @@ function AppRoutes() {
         <Route path="events" element={<EventsPage />} />
         <Route path="events/new" element={<EventFormPage />} />
         <Route path="events/:eventId" element={<EventFormPage />} />
+        <Route path="inbox" element={<PermissionGate permission="manageBookings"><InboxPage /></PermissionGate>} />
         <Route path="reminders" element={<RemindersPage />} />
         <Route path="email-templates" element={<EmailTemplatesPage />} />
         <Route path="settings" element={<SettingsPage />} />

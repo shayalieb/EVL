@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import inboxRouter from './routes/inbox.js';
 import * as Sentry from '@sentry/node';
 import express from 'express';
 import compression from 'compression';
@@ -67,6 +68,7 @@ import { startEmailDomainHealthScheduler } from './lib/emailDomainHealthSchedule
 import { ensureCsrfCookie } from './lib/csrf.js';
 import { asyncHandler } from './lib/asyncHandler.js';
 import { validateRuntimeConfig } from './lib/runtimeConfig.js';
+import { safeLogPath, scrubTelemetryEvent } from './lib/securityPrivacy.js';
 import { requestContext, securityHeaders } from './lib/httpOperations.js';
 import { closeRedis, pingRedis } from './lib/rateLimiter.js';
 import { releaseInfo } from './lib/releaseInfo.js';
@@ -82,6 +84,8 @@ Sentry.init({
   environment: process.env.NODE_ENV || 'development',
   release: process.env.RELEASE_SHA || process.env.RAILWAY_GIT_COMMIT_SHA,
   sendDefaultPii: false,
+  beforeSend: scrubTelemetryEvent,
+  beforeSendTransaction: scrubTelemetryEvent,
   // Light performance sampling — this is a small internal-tools API, not a
   // high-traffic service, so no need to sample down further than this.
   tracesSampleRate: 0.1,
@@ -114,7 +118,7 @@ app.use(cors({
   origin(origin, callback) {
     if (!origin) return callback(null, true);
     const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-    if (isLocalhost || extraOrigins.includes(origin)) return callback(null, true);
+    if ((isLocalhost && process.env.NODE_ENV !== 'production') || extraOrigins.includes(origin)) return callback(null, true);
     callback(new CorsOriginError());
   },
   credentials: true,
@@ -239,6 +243,7 @@ app.use('/api/agency-groups', agencyGroupsRouter);
 app.use('/api/email/threads', emailThreadsRouter);
 app.use('/api/messaging', messagingRouter);
 app.use('/api/email', emailRouter);
+app.use('/api/inbox', inboxRouter);
 app.use('/api/documents', eventDocumentsRouter);
 // Public/unauthenticated — a band member clicks this from an emailed Set
 // List, not while logged into the app. See routes/eventDocuments.js.
@@ -331,9 +336,9 @@ app.use((err, req, res, next) => {
     type: 'request_error',
     requestId: req.requestId,
     method: req.method,
-    path: req.path,
-    error: err instanceof Error ? err.message : String(err),
-    stack: err instanceof Error ? err.stack : undefined,
+    path: safeLogPath(req.path),
+    error: err instanceof Error ? err.name : 'UnknownError',
+    code: typeof err.code === 'string' && /^[A-Z0-9_]+$/.test(err.code) ? err.code : undefined,
   }));
   res.status(500).json({ error: 'Something went wrong. Please try again.' });
 });

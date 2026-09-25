@@ -23,7 +23,9 @@
     "backfill:share-token-hash": "node scripts/backfillShareTokenHash.js",
     "backfill:email-ai-classification": "node scripts/backfillEmailAiClassification.js",
     "cleanup:contractor-due-dates": "node scripts/cleanupInvalidContractorDueDates.js",
-    "setup:billing-plans": "node scripts/setupBillingPlans.js"
+    "setup:billing-plans": "node scripts/setupBillingPlans.js",
+    "test:security": "node --test test/security*.test.js",
+    "test:security:integration": "node --test --test-name-pattern=\"security:\" integration-tests/*.integration.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",

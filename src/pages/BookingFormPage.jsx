@@ -1136,6 +1136,7 @@ export default function BookingFormPage() {
       setProposalResponse(createdResponse);
       const pdfAttachment = await generateProposalPdfAttachment({ booking: patch, client, businessInfo, reference: proposalReference(createdResponse), issuedAt: createdResponse.sentAt });
       await sendEmail({
+        bookingId: booking.id,
         to: client.email,
         subject: `Proposal ${documentReferenceLabel(proposalReference(createdResponse))} from ${fromName}`,
         body: `<p>Hi ${client.firstName},</p><p>Please find attached proposal ${documentReferenceLabel(proposalReference(createdResponse))} for your event.</p><p><a href="${respondLink}">Click here to review and respond to the proposal</a></p><p>Let us know if you have any questions!</p><p>${fromName}</p>`,

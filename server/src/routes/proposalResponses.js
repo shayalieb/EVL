@@ -210,6 +210,7 @@ async function notifyOwner(pr, { status, note }) {
   try {
     const fromName = pr.snapshot?.businessInfo?.name || 'GigWorks';
     await sendMail({
+      tracking: { accountId: pr.accountId, bookingId: pr.bookingId },
       from: await resolveFromHeader({ accountId: pr.accountId, fromName, localPart: 'proposals' }),
       to: pr.ownerEmail,
       subject: `${clientLabel} ${actionLabel}`,

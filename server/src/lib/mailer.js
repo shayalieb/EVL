@@ -174,30 +174,45 @@ export function buildInlineImageAttachments(inlineImages) {
 
 // Throws if RESEND_API_KEY isn't configured — callers catch and respond 503,
 // matching the existing lazy-init behavior in resend.js.
-export async function sendMail({ from, to, subject, html, replyTo, headers, attachments }) {
+export async function sendMail({ from, to, subject, html, replyTo, headers, attachments, tracking }) {
   const resend = getResendClient();
   const finalHtml = typeof html === 'object' && html !== null ? html.toString() : html;
   const embeddedAttachments = (typeof html === 'object' && html !== null && Array.isArray(html.attachments)) ? html.attachments : [];
   const finalAttachments = [...(attachments || []), ...embeddedAttachments];
 
-  const result = await withTimeout(resend.emails.send({
-    from,
-    to,
-    subject,
-    html: finalHtml,
-    ...(replyTo ? { replyTo } : {}),
-    ...(headers ? { headers } : {}),
-    ...(finalAttachments.length ? { attachments: finalAttachments } : {}),
-  }), SEND_TIMEOUT_MS, 'Resend email send');
+  const inbox = tracking ? await import('./inboxMail.js') : null;
+  const prepared = inbox ? await inbox.prepareInboxMail({ tracking, from, to, subject, html: finalHtml }) : null;
+  let result;
+  try {
+    result = await withTimeout(resend.emails.send({
+      from,
+      to,
+      subject,
+      html: finalHtml,
+      ...((prepared?.replyTo || replyTo) ? { replyTo: prepared?.replyTo || replyTo } : {}),
+      ...((prepared?.headers || headers) ? { headers: { ...headers, ...prepared?.headers } } : {}),
+      ...(finalAttachments.length ? { attachments: finalAttachments } : {}),
+    }), SEND_TIMEOUT_MS, 'Resend email send');
+  } catch (error) {
+    if (prepared) await inbox.failInboxMail(prepared).catch(() => {});
+    throw error;
+  }
 
   // Resend reports API/provider rejections as a resolved { error } result.
   // Throwing here gives every caller one consistent failure contract and
   // prevents workflows from recording a rejected email as successfully sent.
   if (result?.error) {
+    if (prepared) await inbox.failInboxMail(prepared).catch(() => {});
     const error = new Error(result.error.message || 'The email provider rejected this message.');
     error.code = result.error.name || result.error.statusCode || 'email_provider_error';
     error.providerError = result.error;
     throw error;
+  }
+  if (prepared) {
+    // A provider-accepted message must not be resent because history failed.
+    await inbox.finishInboxMail(prepared, result).catch((error) => console.error('Failed to finalize inbox delivery:', error));
+    result.inboxThreadId = prepared.threadId;
+    result.replyTrackingActive = !!prepared.replyTo;
   }
   return result;
 }

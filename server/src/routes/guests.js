@@ -238,6 +238,7 @@ publicRsvpRouter.post('/:token', rsvpSubmitLimiter, asyncHandler(async (req, res
     if (ownerEmail) {
       const fromName = businessInfo.name || 'GigWorks';
       await sendMail({
+        tracking: { accountId: link.accountId, eventId: link.eventId },
         from: await resolveFromHeader({ accountId: link.accountId, fromName, localPart: 'rsvp' }),
         to: ownerEmail,
         subject: `New RSVP — ${guest.name}${event?.name ? ` for ${event.name}` : ''}`,

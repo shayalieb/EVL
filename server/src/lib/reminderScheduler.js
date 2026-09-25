@@ -40,6 +40,11 @@ async function resolveRecipient(reminder) {
 // getting logged on every tick until the underlying account state is fixed,
 // rather than either lying about it or retrying invisibly forever.
 async function sendReminderEmail(reminder) {
+  if (reminder.ruleKey === 'inbox-unread') {
+    const pending = await prisma.inboxMessage.count({ where: { threadId: reminder.relatedId, direction: 'inbound', readAt: null, thread: { accountId: reminder.accountId, archivedAt: null } } });
+    const settings = await prisma.accountData.findUnique({ where: { accountId: reminder.accountId } });
+    if (!pending || settings?.data?.inboxSettings?.emailNotifications === false) return true;
+  }
   const to = await resolveRecipient(reminder);
   if (!to) {
     console.error(`Reminder ${reminder.id} (account ${reminder.accountId}) has no resolvable recipient — creator has no email and no owner membership has one either. Skipping.`);
@@ -53,15 +58,18 @@ async function sendReminderEmail(reminder) {
     ? `<p><strong>${escapeHtml(RELATED_TYPE_LABELS[reminder.relatedType] || 'Related')}:</strong> ${escapeHtml(reminder.relatedName)}</p>`
     : '';
 
+  const invoice = reminder.relatedType === 'invoice' ? await prisma.invoice.findFirst({ where: { id: reminder.relatedId, accountId: reminder.accountId }, select: { bookingId: true } }) : null;
   await sendMail({
+    ...(reminder.ruleKey !== 'inbox-unread' ? { tracking: { accountId: reminder.accountId, bookingId: invoice?.bookingId || (reminder.relatedType === 'booking' ? reminder.relatedId : undefined) } } : {}),
     from: await resolveFromHeader({ accountId: reminder.accountId, fromName, localPart: 'reminders' }),
     to,
     subject: `${reminder.ruleKey === INQUIRY_RULE ? 'New inquiry' : 'Reminder'}: ${reminder.note.slice(0, 80)}`,
     html: buildActionEmailHtml({
       businessInfo,
+      ...(reminder.ruleKey === 'inbox-unread' ? { buttonText: 'Open inbox', buttonUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/inbox?thread=${encodeURIComponent(reminder.relatedId)}` } : {}),
       heading: reminder.ruleKey === INQUIRY_RULE ? 'New inquiry response' : 'Reminder',
       ...(reminder.ruleKey === INQUIRY_RULE ? { buttonText: 'Review inquiry', buttonUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/bookings` } : {}),
-      bodyHtml: `${relatedLine}<p>${escapeHtml(reminder.note)}</p><p style="color:#94a3b8;">Was due ${escapeHtml(formatRemindAt(reminder.remindAt, reminder.emailTimeZone))}</p>`,
+      bodyHtml: `${relatedLine}<p>${escapeHtml(reminder.note)}</p>${reminder.ruleKey === 'inbox-unread' ? '' : `<p style="color:#94a3b8;">Was due ${escapeHtml(formatRemindAt(reminder.remindAt, reminder.emailTimeZone))}</p>`}`,
     }),
   });
   return true;

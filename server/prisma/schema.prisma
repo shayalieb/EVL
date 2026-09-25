@@ -68,6 +68,7 @@ model Account {
   approvedBy                User?                       @relation("AccountApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
   memberships               Membership[]
   emailThreads              EmailThread[]
+  inboxThreads              InboxThread[]
   eventDocuments            EventDocument[]
   bookingDocuments          BookingDocument[]
   contracts                 Contract[]
@@ -2252,4 +2253,55 @@ model WebsiteReviewRequest {
 
   @@index([status, createdAt])
   @@index([recipientEmail])
+}
+
+// Shared business inbox, separate from event-specific contractor status threads.
+model InboxThread {
+  id            String @id @default(cuid())
+  accountId     String
+  account       Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  contactEmail  String
+  subject       String
+  bookingId     String?
+  clientId      String?
+  contractorId  String?
+  eventId       String?
+  replyAlias    String? @unique
+  replyAliases  String[] @default([])
+  archivedAt    DateTime?
+  lastMessageAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+  messages      InboxMessage[]
+  @@index([accountId, lastMessageAt])
+  @@index([accountId, contactEmail, bookingId])
+}
+
+model InboxMessage {
+  id                String @id @default(cuid())
+  threadId          String
+  thread            InboxThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  direction         String
+  fromAddress       String
+  toAddress         String
+  subject           String
+  body              String @db.Text
+  providerMessageId String? @unique
+  internetMessageId String?
+  deliveryStatus    String @default("queued")
+  readAt            DateTime?
+  createdAt         DateTime @default(now())
+  attachments       InboxAttachment[]
+  @@index([threadId, createdAt])
+}
+
+model InboxAttachment {
+  id                   String @id @default(cuid())
+  messageId            String
+  message              InboxMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  filename             String
+  contentType          String
+  size                 Int
+  providerAttachmentId String?
+  data                 Bytes?
+  @@index([messageId])
 }

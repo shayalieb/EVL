@@ -1,3 +1,5 @@
+import { inboundAddresses } from '../lib/inboxContent.js';
+import { resolveInboxTarget, receiveInboxMail } from '../lib/inboxReceiving.js';
 import { Router } from 'express';
 import { Webhook } from 'svix';
 import sanitizeHtml from 'sanitize-html';
@@ -84,7 +86,7 @@ function senderAddress(value) {
 
 async function fetchFullEmail(emailId) {
   const resend = getResendClient();
-  const { data, error } = await resend.get(`/emails/receiving/${emailId}`);
+  const { data, error } = await resend.get(`/emails/receiving/${encodeURIComponent(emailId)}`);
   if (error || !data) throw new Error(error?.message || 'Received email body was unavailable.');
   return data;
 }
@@ -93,26 +95,18 @@ async function fetchFullEmail(emailId) {
 // owner when an admin replies in Settings > Support. Any reply landing on
 // that alias is assumed to be from that thread's account — the alias is
 // never shared beyond the one notification email it was generated for.
-async function handleSupportReply(res, rawId, event) {
+async function handleSupportReply(res, rawId, event, full) {
   const thread = await prisma.supportThread.findUnique({
     where: { id: rawId },
     include: { account: { include: { memberships: true } } },
   });
-  if (!thread) {
-    console.warn(`Resend inbound webhook: no support thread found for id ${rawId}`);
+  if (!thread || !inboundAddresses(event.data).includes(thread.replyToAlias?.toLowerCase())) {
+    console.warn('Resend inbound webhook: no matching support reply alias');
     return res.json({ ok: true });
   }
   // No session on an inbound email — attribute the message to the account
   // owner, since the reply alias is only ever handed to them.
   const owner = thread.account.memberships.find((m) => m.role === 'owner');
-
-  let full;
-  try {
-    full = await fetchFullEmail(event.data.email_id);
-  } catch (err) {
-    console.error('Failed to fetch received email body:', err);
-    return res.status(503).json({ error: 'Could not retrieve the received email yet.' });
-  }
 
   try {
     await prisma.supportMessage.create({
@@ -179,6 +173,7 @@ router.post('/resend', asyncHandler(async (req, res) => {
     };
     const update = deliveryUpdates[event.type];
     if (update && event.data?.email_id) {
+      await prisma.inboxMessage.updateMany({ where: { providerMessageId: event.data.email_id }, data: { deliveryStatus: update.deliveryStatus } });
       await prisma.emailMessage.updateMany({
         where: { OR: [{ providerMessageId: event.data.email_id }, { resendMessageId: event.data.email_id }] },
         data: update,
@@ -187,29 +182,34 @@ router.post('/resend', asyncHandler(async (req, res) => {
     return res.json({ ok: true });
   }
 
-  const threadId = extractThreadId([...(event.data.to || []), ...(event.data.received_for || [])]);
+  // Resolve routing against the provider's delivery envelope, including when
+  // it is only present on the fetched message rather than the webhook.
+  let full;
+  try { full = await fetchFullEmail(event.data.email_id); }
+  catch { return res.status(503).json({ error: 'Could not retrieve the received email yet.' }); }
+  if (inboundAddresses({ received_for: full.received_for }).length) {
+    event.data = { ...event.data, received_for: full.received_for };
+  }
+  const inboxTarget = await resolveInboxTarget(event.data);
+  if (inboxTarget) {
+    await receiveInboxMail(inboxTarget, full, event.data);
+    return res.json({ ok: true });
+  }
+
+  const threadId = extractThreadId(inboundAddresses(event.data));
   if (!threadId) {
-    console.warn('Resend inbound webhook: no reply alias found in', event.data.to, event.data.received_for);
+    console.warn('Resend inbound webhook: no matching reply destination');
     return res.json({ ok: true });
   }
 
   if (threadId.startsWith('support-')) {
-    return handleSupportReply(res, threadId.slice('support-'.length), event);
+    return handleSupportReply(res, threadId.slice('support-'.length), event, full);
   }
 
   const thread = await prisma.emailThread.findUnique({ where: { id: threadId } });
-  if (!thread) {
-    console.warn(`Resend inbound webhook: no thread found for id ${threadId}`);
+  if (!thread || !inboundAddresses(event.data).includes(thread.replyToAlias?.toLowerCase())) {
+    console.warn('Resend inbound webhook: no matching contractor reply alias');
     return res.json({ ok: true });
-  }
-
-  let full;
-  try {
-    full = await fetchFullEmail(event.data.email_id);
-  } catch (err) {
-    console.error('Failed to fetch received email body:', err);
-    // A 5xx asks Resend to retry instead of permanently dropping the reply.
-    return res.status(503).json({ error: 'Could not retrieve the received email yet.' });
   }
 
   const { storedBody, plainReply } = cleanReplyContent(full);
@@ -224,7 +224,7 @@ router.post('/resend', asyncHandler(async (req, res) => {
   // Best-effort — a classifier failure (no API key yet, no credits, rate
   // limit, network error) should never block storing the reply itself.
   let aiClassification = null;
-  if (verifiedContractorSender) {
+  if (verifiedContractorSender && full?.authentication?.dmarc === 'pass') {
     try {
       aiClassification = await classifyContractorReply({
         replyText: plainReply,

@@ -61,6 +61,7 @@ router.post('/:eventId/email', asyncHandler(async (req, res) => {
   const bandName = businessInfo.name || 'the band';
   try {
     await sendMail({
+      tracking: { accountId: event.accountId, eventId: event.id },
       from: await resolveFromHeader({ accountId: event.accountId, fromName: bandName, localPart: 'events' }),
       to: email,
       subject: `${event.name || 'Your event'} — requests and preparation details`,

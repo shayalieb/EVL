@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, apiFetch } from '../context/AuthContext';
 import { useAgencyGroup } from '../context/AgencyGroupContext';
 import Logo from '../components/ui/Logo';
 import { BellIcon, SparkleIcon } from '../components/ui/icons';
@@ -19,6 +19,7 @@ const NAV_GROUPS = [
       { to: '/bookings', label: 'Bookings', icon: '🤝' },
       { to: '/events', label: 'Events', icon: '📅' },
       { to: '/financials', label: 'Financials', icon: '💵', permission: 'viewFinancials' },
+      { to: '/inbox', label: 'Inbox', icon: '✉️', permission: 'manageBookings' },
       { to: '/reminders', label: 'Reminders', icon: '🔔' },
     ],
   },
@@ -52,6 +53,7 @@ export default function AppLayout() {
   const [designPartnerNoticeDismissed, setDesignPartnerNoticeDismissed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [inboxUnread, setInboxUnread] = useState(0);
   const [reminders, setReminders] = useState([]);
   const [bellOpen, setBellOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
@@ -60,6 +62,16 @@ export default function AppLayout() {
   const [trainingProgress, setTrainingProgress] = useState([]);
   const [trainingLoaded, setTrainingLoaded] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!can('manageBookings')) return;
+    let active = true;
+    const load = () => apiFetch('/inbox/summary').then((data) => { if (active) setInboxUnread(data.unreadCount); }).catch(() => {});
+    load();
+    const timer = setInterval(load, 60000);
+    window.addEventListener('inbox-changed', load);
+    return () => { active = false; clearInterval(timer); window.removeEventListener('inbox-changed', load); };
+  }, [can]);
 
   useEffect(() => {
     let cancelled = false;
@@ -394,6 +406,7 @@ export default function AppLayout() {
                   >
                     <span aria-hidden="true">{item.icon}</span>
                     {item.label}
+                    {item.to === '/inbox' && inboxUnread > 0 && <span className="ml-auto rounded-full bg-indigo-600 text-white px-2 text-xs">{inboxUnread}</span>}
                   </NavLink>
                 ))}
               </div>

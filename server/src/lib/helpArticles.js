@@ -587,6 +587,18 @@ export const HELP_CATEGORIES = [
     title: 'Staying on Top of Things',
     articles: [
       {
+        id: 'shared-inbox',
+        title: 'Shared Inbox and email replies',
+        summary: 'Receive business email, reply with attachments, and connect conversations to clients and bookings.',
+        blocks: [
+          { type: 'p', text: 'Inbox is shared by owners, admins, and team members with booking-management permission. It shows new messages sent to your verified receiving domain and replies to business emails sent by GigWorks. Event-specific contractor conversations remain in Contact History.' },
+          { type: 'p', text: 'To receive new emails, open Settings → Email Domain, choose your domain, and verify its receiving records. Inbox displays an address you can share. Use a dedicated subdomain to preserve mail delivered to your existing Google or Microsoft inbox.' },
+          { type: 'p', text: 'Select a conversation to read it, reply, download attachments, or link a client and booking. Known sender addresses are matched to a client when there is exactly one match; a booking is linked automatically only when that client has exactly one active booking. You can correct these links. Replies can include up to three files of 5 MB each.' },
+          { type: 'p', text: 'Unread counts appear in the navigation and conversation list. Reading messages clears their notification. Archive removes a conversation from the main list; a new incoming reply brings it back. The account owner can receive email notifications, controlled by the checkbox at the top of Inbox.' },
+          { type: 'p', text: 'Send a test from Email Domain settings, reply to it, then use Open test conversation to confirm delivery. If receiving is unavailable, the test reports that explicitly. This connects GigWorks email; it does not sync an existing Gmail or Outlook mailbox.' },
+        ],
+      },
+      {
         id: 'reminders',
         title: 'Reminders',
         summary: 'Manual and recurring follow-ups, plus the conditions GigWorks watches automatically.',

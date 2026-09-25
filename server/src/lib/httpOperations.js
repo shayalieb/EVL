@@ -1,3 +1,4 @@
+import { safeLogPath } from './securityPrivacy.js';
 import { randomUUID } from 'node:crypto';
 
 const SAFE_REQUEST_ID = /^[A-Za-z0-9._:-]{1,80}$/;
@@ -10,6 +11,7 @@ function requestLogSampleRate() {
 
 export function securityHeaders(req, res, next) {
   res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+  res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -25,7 +27,7 @@ export function requestContext(req, res, next) {
   req.requestId = supplied && SAFE_REQUEST_ID.test(supplied) ? supplied : randomUUID();
   res.setHeader('X-Request-ID', req.requestId);
   const startedAt = process.hrtime.bigint();
-  const path = new URL(req.originalUrl || req.url, 'http://localhost').pathname;
+  const path = safeLogPath(new URL(req.originalUrl || req.url, 'http://localhost').pathname);
 
   res.on('finish', () => {
     const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;

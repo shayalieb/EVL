@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import Badge from '../../components/ui/Badge';
 import { useToast } from '../../components/ui/Toast';
@@ -11,6 +12,7 @@ const STATUS_COLOR = { pending: '#eab308', verified: '#22c55e', failed: '#ef4444
 
 export default function EmailDomainTab() {
   const { showToast } = useToast();
+  const [testResult, setTestResult] = useState(null);
   const [domain, setDomain] = useState(null);
   const [rootDomain, setRootDomain] = useState('gigworks.io');
   const [loadError, setLoadError] = useState('');
@@ -123,8 +125,9 @@ export default function EmailDomainTab() {
     e.preventDefault();
     setTesting(true);
     try {
-      await sendEmailDomainTest(testEmail);
-      showToast('Test email sent — reply to it to confirm reply tracking');
+      const result = await sendEmailDomainTest(testEmail);
+      setTestResult(result);
+      showToast(result.replyTrackingActive ? 'Test sent — reply and check your Inbox' : 'Test sent — receiving must be configured before testing replies');
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -177,6 +180,7 @@ export default function EmailDomainTab() {
         </p>
       </div>
 
+      {testResult?.threadId && <p className="text-sm text-indigo-700 mb-4"><Link to={`/inbox?thread=${encodeURIComponent(testResult.threadId)}`}>Open test conversation →</Link>{!testResult.replyTrackingActive && ' — sending works; receiving still needs configuration.'}</p>}
       {!domain ? (
         <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
           <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold w-fit">
@@ -300,7 +304,7 @@ export default function EmailDomainTab() {
                 <input type="email" required value={testEmail} onChange={(event) => setTestEmail(event.target.value)} placeholder="you@example.com" className={`${inputClass} max-w-sm bg-white`} />
                 <button type="submit" disabled={testing} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{testing ? 'Sending…' : 'Send test email'}</button>
               </div>
-              <p className="mt-2 text-xs text-emerald-700">After it arrives, reply to confirm the conversation returns to Contact History.</p>
+              <p className="mt-2 text-xs text-emerald-700">When receiving is configured, reply to confirm the conversation appears in Inbox.</p>
             </form>
           )}
 

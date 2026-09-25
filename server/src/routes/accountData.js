@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -43,8 +44,20 @@ router.put('/', asyncHandler(async (req, res) => {
     return res.status(403).json({ error: 'Not authorized.' });
   }
   const { data, version } = req.body || {};
-  if (typeof data !== 'object' || data === null) {
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
     return res.status(400).json({ error: 'data is required.' });
+  }
+
+  // Template editors submit the full cached blob, but may only change
+  // template fields. Validate against the stored snapshot before writing.
+  if (!permissions.manageSettings) {
+    const existing = await prisma.accountData.findUnique({ where: { accountId: req.membership.accountId } });
+    const allowed = new Set(['emailTemplates', 'proposalTemplates', 'contractTemplates']);
+    const previous = existing?.data || {};
+    const keys = new Set([...Object.keys(previous), ...Object.keys(data)]);
+    if ([...keys].some((key) => !allowed.has(key) && !isDeepStrictEqual(previous[key], data[key]))) {
+      return res.status(403).json({ error: 'Settings changes require settings permission.' });
+    }
   }
 
   if (version === null || version === undefined) {
