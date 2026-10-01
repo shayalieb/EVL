@@ -66,6 +66,7 @@ const ReviewSubmissionPage = lazy(() => import('./pages/ReviewSubmissionPage'));
 const PublicStagePlotPage = lazy(() => import('./pages/PublicStagePlotPage'));
 const PublicRunOfShowPage = lazy(() => import('./pages/PublicRunOfShowPage'));
 const ImportDataPage = lazy(() => import('./pages/ImportDataPage'));
+const SeoLandingPage = lazy(() => import('./pages/SeoLandingPage'));
 
 // The marketing site lives at the exact root path, which otherwise sits
 // inside this same route tree (see AppRoutes' `path="/"` below) — checking
@@ -193,6 +194,13 @@ function AppRoutes() {
       <Route path="/terms" element={<TermsOfServicePage />} />
       <Route path="/privacy" element={<PrivacyPolicyPage />} />
       <Route path="/cookies" element={<CookiePolicyPage />} />
+      <Route path="/band-management-software" element={<SeoLandingPage />} />
+      <Route path="/entertainment-agency-software" element={<SeoLandingPage />} />
+      <Route path="/dj-booking-software" element={<SeoLandingPage />} />
+      <Route path="/musician-scheduling-software" element={<SeoLandingPage />} />
+      <Route path="/contractor-management-software" element={<SeoLandingPage />} />
+      <Route path="/stage-plot-software" element={<SeoLandingPage />} />
+      <Route path="/proposal-contract-invoice-software" element={<SeoLandingPage />} />
       <Route path="/review/:token" element={<ReviewSubmissionPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/sign/:token" element={<ContractSignPage />} />

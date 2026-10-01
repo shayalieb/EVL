@@ -25,16 +25,24 @@ publicLandingRouter.get('/config', asyncHandler(async (req, res) => {
 
 publicLandingRouter.get('/sitemap.xml', asyncHandler(async (_req, res) => {
   const config = await getWebsiteConfig();
+  const lastmod = '2026-10-01';
   const urls = [
-    ['https://www.gigworks.io/', 'monthly', '1.0'],
+    'https://www.gigworks.io/',
+    'https://www.gigworks.io/band-management-software',
+    'https://www.gigworks.io/entertainment-agency-software',
+    'https://www.gigworks.io/dj-booking-software',
+    'https://www.gigworks.io/musician-scheduling-software',
+    'https://www.gigworks.io/contractor-management-software',
+    'https://www.gigworks.io/stage-plot-software',
+    'https://www.gigworks.io/proposal-contract-invoice-software',
     ...(config.testimonials?.enabled && config.testimonials.reviews?.length
-      ? [['https://www.gigworks.io/customer-stories', 'monthly', '0.7']]
+      ? ['https://www.gigworks.io/customer-stories']
       : []),
-    ['https://www.gigworks.io/privacy', 'yearly', '0.3'],
-    ['https://www.gigworks.io/terms', 'yearly', '0.3'],
-    ['https://www.gigworks.io/cookies', 'yearly', '0.3'],
+    'https://www.gigworks.io/privacy',
+    'https://www.gigworks.io/terms',
+    'https://www.gigworks.io/cookies',
   ];
-  const entries = urls.map(([loc, changefreq, priority]) => `  <url>\n    <loc>${loc}</loc>\n    <changefreq>${changefreq}</changefreq>\n    <priority>${priority}</priority>\n  </url>`).join('\n');
+  const entries = urls.map((loc) => `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${lastmod}</lastmod>\n  </url>`).join('\n');
   res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries}\n</urlset>\n`);
 }));
 

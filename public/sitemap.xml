@@ -1,23 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://www.gigworks.io/</loc>
-    <changefreq>monthly</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>https://www.gigworks.io/privacy</loc>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
-  </url>
-  <url>
-    <loc>https://www.gigworks.io/terms</loc>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
-  </url>
-  <url>
-    <loc>https://www.gigworks.io/cookies</loc>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
-  </url>
+  <url><loc>https://www.gigworks.io/</loc><lastmod>2026-10-01</lastmod></url>
+  <url><loc>https://www.gigworks.io/band-management-software</loc><lastmod>2026-10-01</lastmod></url>
+  <url><loc>https://www.gigworks.io/entertainment-agency-software</loc><lastmod>2026-10-01</lastmod></url>
+  <url><loc>https://www.gigworks.io/dj-booking-software</loc><lastmod>2026-10-01</lastmod></url>
+  <url><loc>https://www.gigworks.io/musician-scheduling-software</loc><lastmod>2026-10-01</lastmod></url>
+  <url><loc>https://www.gigworks.io/contractor-management-software</loc><lastmod>2026-10-01</lastmod></url>
+  <url><loc>https://www.gigworks.io/stage-plot-software</loc><lastmod>2026-10-01</lastmod></url>
+  <url><loc>https://www.gigworks.io/proposal-contract-invoice-software</loc><lastmod>2026-10-01</lastmod></url>
+  <url><loc>https://www.gigworks.io/privacy</loc><lastmod>2026-10-01</lastmod></url>
+  <url><loc>https://www.gigworks.io/terms</loc><lastmod>2026-10-01</lastmod></url>
+  <url><loc>https://www.gigworks.io/cookies</loc><lastmod>2026-10-01</lastmod></url>
 </urlset>

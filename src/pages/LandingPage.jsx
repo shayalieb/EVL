@@ -493,8 +493,11 @@ export default function LandingPage({ previewConfig } = {}) {
                   {hero?.eyebrow || 'For bands, DJs & orchestras booking out a roster'}
                 </span>
                 <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-white leading-[1.1] max-w-3xl mx-auto lg:mx-0">
-                  {hero?.headline || 'Built by a musician who spent 20 years chasing confirmations instead of chasing gigs.'}
+                  Booking and management software for live entertainment businesses
                 </h1>
+                <p className="mt-4 text-base font-semibold text-white/90 max-w-2xl mx-auto lg:mx-0">
+                  {hero?.headline || 'Built by a musician who spent 20 years chasing confirmations instead of chasing gigs.'}
+                </p>
                 <p className="mt-5 text-lg text-indigo-200 max-w-2xl mx-auto lg:mx-0">
                   {hero?.description || "GigWorks is the business software for entertainment agencies and bandleaders who book out multiple musicians — proposals, contracts, and invoicing for your clients, the day-of details connected to who's actually on the gig, and AI that reads contractor replies and drafts your proposals so less of it lands on you."}
                 </p>

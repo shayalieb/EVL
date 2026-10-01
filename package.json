@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build && node scripts/generateSeoPages.js",
     "check:bundle": "node scripts/checkBundleSize.js",
+    "check:seo": "node scripts/checkSeoBuild.js",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "lint": "oxlint --deny-warnings",
     "test:e2e": "playwright test",

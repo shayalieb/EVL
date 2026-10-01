@@ -1,18 +1,11 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { HOME_SEO as HOME, LEGAL_SEO_PAGES, SEO_PAGE_BY_PATH, SITE_URL, SOCIAL_IMAGE } from '../lib/seoPages';
 
-const SITE_URL = 'https://www.gigworks.io';
-const HOME = {
-  title: 'GigWorks — Business Software for Bands, DJs & Orchestras',
-  description: 'Run bookings, proposals, contracts, invoices, contractor staffing, stage plots, and set lists in one connected workspace.',
-  path: '/',
-};
 const PUBLIC_PAGES = {
   '/': HOME,
-  '/customer-stories': { title: 'Customer Stories | GigWorks', description: 'See how entertainment businesses use GigWorks to coordinate bookings, contractors, payments, and event production.', path: '/customer-stories' },
-  '/privacy': { title: 'Privacy Policy | GigWorks', description: 'Learn how GigWorks collects, uses, protects, and retains account and business information.', path: '/privacy' },
-  '/terms': { title: 'Terms of Service | GigWorks', description: 'Read the terms governing access to and use of the GigWorks entertainment-business platform.', path: '/terms' },
-  '/cookies': { title: 'Cookie Policy | GigWorks', description: 'Learn how GigWorks uses essential cookies and local browser storage.', path: '/cookies' },
+  ...Object.fromEntries(Object.entries(LEGAL_SEO_PAGES).map(([path, page]) => [path, { ...page, path }])),
+  ...SEO_PAGE_BY_PATH,
 };
 
 function upsertMeta(selector, attributes) {
@@ -39,6 +32,12 @@ export default function SeoMetadata() {
     upsertMeta('meta[property="og:title"]', { property: 'og:title', content: metadata.title });
     upsertMeta('meta[property="og:description"]', { property: 'og:description', content: metadata.description });
     upsertMeta('meta[property="og:url"]', { property: 'og:url', content: canonical });
+    upsertMeta('meta[property="og:image"]', { property: 'og:image', content: SOCIAL_IMAGE });
+    upsertMeta('meta[property="og:image:alt"]', { property: 'og:image:alt', content: 'GigWorks live entertainment booking and management software' });
+    upsertMeta('meta[name="twitter:card"]', { name: 'twitter:card', content: 'summary_large_image' });
+    upsertMeta('meta[name="twitter:title"]', { name: 'twitter:title', content: metadata.title });
+    upsertMeta('meta[name="twitter:description"]', { name: 'twitter:description', content: metadata.description });
+    upsertMeta('meta[name="twitter:image"]', { name: 'twitter:image', content: SOCIAL_IMAGE });
 
     let canonicalLink = document.head.querySelector('link[rel="canonical"]');
     if (!canonicalLink) {
