@@ -1,3 +1,4 @@
+import { clientReferenceError } from '../lib/ownedReferences.js';
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -196,6 +197,7 @@ router.post('/', asyncHandler(async (req, res) => {
     if (rest[field] !== undefined) data[field] = rest[field];
   }
   if (data.groupId && !await prisma.agencyGroup.findFirst({ where: { id: data.groupId, accountId: req.membership.accountId, active: true } })) return res.status(400).json({ error: 'Invalid managed group.' });
+  { const referenceError = await clientReferenceError(req.membership.accountId, data.clientId); if (referenceError) return res.status(400).json({ error: referenceError }); }
   // groupId is a real foreign key (unlike clientId's loose-string pattern
   // elsewhere in this schema) — an empty string isn't "no group" to Postgres
   // the way it is to the check above, and fails the constraint outright.
@@ -231,6 +233,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     if (req.body?.[field] !== undefined) data[field] = req.body[field];
   }
   if (data.groupId && !await prisma.agencyGroup.findFirst({ where: { id: data.groupId, accountId: req.membership.accountId, active: true } })) return res.status(400).json({ error: 'Invalid managed group.' });
+  { const referenceError = await clientReferenceError(req.membership.accountId, data.clientId, existing.clientId); if (referenceError) return res.status(400).json({ error: referenceError }); }
   if (data.groupId === '') data.groupId = null;
 
   const booking = await prisma.booking.update({ where: { id: existing.id }, data });

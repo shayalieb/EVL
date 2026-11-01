@@ -1,3 +1,4 @@
+import { bookingReferenceError } from '../lib/ownedReferences.js';
 import { syncInquiryNotification, INQUIRY_RULE } from '../lib/notificationAutomation.js';
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
@@ -86,6 +87,8 @@ router.post('/', asyncHandler(async (req, res) => {
   const normalizedRecipientEmail = recipientEmail?.trim() ? normalizeValidEmail(recipientEmail) : null;
   if (!normalizedOwnerEmail) return res.status(400).json({ error: 'Your account needs a valid owner email address before inquiry links can be created.' });
   if (recipientEmail?.trim() && !normalizedRecipientEmail) return res.status(400).json({ error: 'Enter a valid recipient email address.' });
+  const bookingError = await bookingReferenceError(req.membership.accountId, bookingId);
+  if (bookingError) return res.status(400).json({ error: bookingError });
   const token = generateToken();
 
   const link = await prisma.inquiryLink.create({

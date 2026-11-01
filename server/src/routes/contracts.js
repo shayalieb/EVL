@@ -1,3 +1,4 @@
+import { bookingReferenceError } from '../lib/ownedReferences.js';
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
@@ -201,6 +202,7 @@ router.post('/', asyncHandler(async (req, res) => {
   const resolvedExpiration = resolveLinkExpiration(expiration, { defaultPreset: '30_days' });
   if (resolvedExpiration.error) return res.status(400).json({ error: resolvedExpiration.error });
 
+  { const referenceError = await bookingReferenceError(req.membership.accountId, bookingId); if (referenceError) return res.status(400).json({ error: referenceError }); }
   let previousContract = null;
   if (previousContractId) {
     previousContract = await prisma.contract.findUnique({ where: { id: previousContractId } });

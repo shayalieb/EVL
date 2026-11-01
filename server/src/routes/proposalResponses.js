@@ -1,3 +1,4 @@
+import { bookingReferenceError } from '../lib/ownedReferences.js';
 import { randomUUID } from 'node:crypto';
 import { nextDocumentDisplayNumber } from '../lib/documentDisplayNumber.js';
 import { Router } from 'express';
@@ -109,6 +110,7 @@ router.post('/', asyncHandler(async (req, res) => {
   const resolvedExpiration = resolveLinkExpiration(expiration, { defaultPreset: '14_days' });
   if (resolvedExpiration.error) return res.status(400).json({ error: resolvedExpiration.error });
 
+  { const referenceError = await bookingReferenceError(req.membership.accountId, bookingId); if (referenceError) return res.status(400).json({ error: referenceError }); }
   const owner = await prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } });
   const normalizedOwnerEmail = normalizeValidEmail(owner?.email);
   if (!normalizedOwnerEmail) return res.status(400).json({ error: 'Your account needs a valid owner email address before proposals can be created.' });

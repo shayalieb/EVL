@@ -1,3 +1,4 @@
+import { ownsEvent } from '../lib/ownedReferences.js';
 import { Router } from 'express';
 import { createRateLimiter } from '../lib/rateLimiter.js';
 import { prisma } from '../lib/prisma.js';
@@ -51,6 +52,7 @@ router.post('/', asyncHandler(async (req, res) => {
   const { eventId, name, email, phone, partySize, rsvpStatus, notes } = req.body || {};
   if (!eventId) return res.status(400).json({ error: 'eventId is required.' });
   if (!name?.trim()) return res.status(400).json({ error: 'Guest name is required.' });
+  if (!await ownsEvent(req.membership.accountId, eventId)) return res.status(404).json({ error: 'Event not found.' });
 
   const guest = await prisma.guest.create({
     data: {
@@ -117,6 +119,7 @@ router.delete('/:id', asyncHandler(async (req, res) => {
 router.get('/rsvp-link', asyncHandler(async (req, res) => {
   const { eventId } = req.query;
   if (!eventId) return res.status(400).json({ error: 'eventId is required.' });
+  if (!await ownsEvent(req.membership.accountId, eventId)) return res.status(404).json({ error: 'Event not found.' });
 
   let link = await prisma.eventRsvpLink.findUnique({
     where: { accountId_eventId: { accountId: req.membership.accountId, eventId } },
@@ -138,6 +141,7 @@ router.post('/rsvp-link/regenerate', asyncHandler(async (req, res) => {
   }
   const { eventId } = req.body || {};
   if (!eventId) return res.status(400).json({ error: 'eventId is required.' });
+  if (!await ownsEvent(req.membership.accountId, eventId)) return res.status(404).json({ error: 'Event not found.' });
 
   const token = generateToken();
   const link = await prisma.eventRsvpLink.upsert({
@@ -211,6 +215,9 @@ publicRsvpRouter.post('/:token', rsvpSubmitLimiter, asyncHandler(async (req, res
   const { name, email, phone, partySize, attending, notes } = req.body || {};
   if (!name?.trim()) return res.status(400).json({ error: 'Name is required.' });
   if (attending !== true && attending !== false) return res.status(400).json({ error: 'Please let us know if you can make it.' });
+  // The page above only serves an event its own account owns; accepting a response
+  // must hold to the same rule, or a link pointing elsewhere files guests against it.
+  if (!await ownsEvent(link.accountId, link.eventId)) return res.status(404).json({ error: 'This event could not be found.' });
 
   const guest = await prisma.guest.create({
     data: {
@@ -232,7 +239,7 @@ publicRsvpRouter.post('/:token', rsvpSubmitLimiter, asyncHandler(async (req, res
   try {
     const accountData = await prisma.accountData.findUnique({ where: { accountId: link.accountId } });
     const businessInfo = accountData?.data?.businessInfo || {};
-    const event = await prisma.event.findUnique({ where: { id: link.eventId } });
+    const event = await prisma.event.findFirst({ where: { id: link.eventId, accountId: link.accountId } });
     const ownerMembership = await prisma.membership.findFirst({ where: { accountId: link.accountId, role: 'owner' }, include: { user: true } });
     const ownerEmail = ownerMembership?.user?.email;
     if (ownerEmail) {

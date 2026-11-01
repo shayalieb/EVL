@@ -1,3 +1,4 @@
+import { relatedRecordError } from '../lib/ownedReferences.js';
 import { notificationSettings } from '../lib/notificationRules.js';
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
@@ -64,6 +65,7 @@ router.post('/', asyncHandler(async (req, res) => {
   if (recurrence && recurrenceEndsAt && new Date(recurrenceEndsAt) < new Date(remindAt)) {
     return res.status(400).json({ error: 'Repeat end date cannot be before the first reminder.' });
   }
+  { const referenceError = await relatedRecordError(req.membership.accountId, relatedType, relatedId); if (referenceError) return res.status(400).json({ error: referenceError }); }
   const reminder = await prisma.reminder.create({
     data: {
       accountId: req.membership.accountId,
@@ -90,6 +92,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   }
 
   const { relatedType, relatedId, relatedName, note, remindAt, emailEnabled, emailTimeZone, recurrenceFrequency, recurrenceEndsAt } = req.body || {};
+  { const referenceError = await relatedRecordError(req.membership.accountId, relatedType !== undefined ? relatedType : existing.relatedType, relatedId !== undefined ? relatedId : existing.relatedId, existing); if (referenceError) return res.status(400).json({ error: referenceError }); }
   const data = {};
   if (relatedType !== undefined) data.relatedType = relatedType || null;
   if (relatedId !== undefined) data.relatedId = relatedId || null;

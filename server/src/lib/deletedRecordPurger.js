@@ -23,33 +23,33 @@ function cutoffDate() {
 // by hand. StagePlot/FloorPlan are the exception: their own child tables
 // (StagePlotPage/Channel, FloorPlanPage) DO have real onDelete: Cascade FKs
 // back to them, so deleting the StagePlot/FloorPlan row is enough there.
-async function purgeEvent({ id: eventId }) {
+async function purgeEvent({ id: eventId, accountId }) {
   const thumbnails = await prisma.stagePlotPage.findMany({
-    where: { stagePlot: { eventId } },
+    where: { stagePlot: { eventId, accountId } },
     select: { thumbnailStorageKey: true },
   });
   await prisma.$transaction([
-    prisma.emailThread.deleteMany({ where: { eventId } }),
-    prisma.eventDocument.deleteMany({ where: { eventId } }),
-    prisma.stagePlot.deleteMany({ where: { eventId } }),
-    prisma.floorPlan.deleteMany({ where: { eventId } }),
-    prisma.guest.deleteMany({ where: { eventId } }),
-    prisma.eventRsvpLink.deleteMany({ where: { eventId } }),
+    prisma.emailThread.deleteMany({ where: { eventId, accountId } }),
+    prisma.eventDocument.deleteMany({ where: { eventId, accountId } }),
+    prisma.stagePlot.deleteMany({ where: { eventId, accountId } }),
+    prisma.floorPlan.deleteMany({ where: { eventId, accountId } }),
+    prisma.guest.deleteMany({ where: { eventId, accountId } }),
+    prisma.eventRsvpLink.deleteMany({ where: { eventId, accountId } }),
     // A converted booking points at this event via convertedEventId — null
     // it out rather than leave a dead link (BookingFormPage/BookingsPage
     // render a "View Event" button off this field).
-    prisma.booking.updateMany({ where: { convertedEventId: eventId }, data: { convertedEventId: null } }),
+    prisma.booking.updateMany({ where: { convertedEventId: eventId, accountId }, data: { convertedEventId: null } }),
     prisma.event.delete({ where: { id: eventId } }),
   ]);
   await Promise.all(thumbnails.map((page) => deleteStagePlotThumbnailIfUnused(page.thumbnailStorageKey)));
 }
 
-async function purgeBooking({ id: bookingId }) {
+async function purgeBooking({ id: bookingId, accountId }) {
   await prisma.$transaction([
-    prisma.bookingDocument.deleteMany({ where: { bookingId } }),
-    prisma.contract.deleteMany({ where: { bookingId } }),
-    prisma.inquiryLink.deleteMany({ where: { bookingId } }),
-    prisma.invoice.deleteMany({ where: { bookingId } }),
+    prisma.bookingDocument.deleteMany({ where: { bookingId, accountId } }),
+    prisma.contract.deleteMany({ where: { bookingId, accountId } }),
+    prisma.inquiryLink.deleteMany({ where: { bookingId, accountId } }),
+    prisma.invoice.deleteMany({ where: { bookingId, accountId } }),
     prisma.booking.delete({ where: { id: bookingId } }),
   ]);
 }
@@ -64,8 +64,8 @@ export async function tick() {
     await withBackgroundJobLease('deleted-record-purger', async () => {
       const before = cutoffDate();
       const [events, bookings] = await Promise.all([
-        prisma.event.findMany({ where: { deletedAt: { not: null, lt: before } }, select: { id: true }, orderBy: { deletedAt: 'asc' }, take: PURGE_BATCH_SIZE }),
-        prisma.booking.findMany({ where: { deletedAt: { not: null, lt: before } }, select: { id: true }, orderBy: { deletedAt: 'asc' }, take: PURGE_BATCH_SIZE }),
+        prisma.event.findMany({ where: { deletedAt: { not: null, lt: before } }, select: { id: true, accountId: true }, orderBy: { deletedAt: 'asc' }, take: PURGE_BATCH_SIZE }),
+        prisma.booking.findMany({ where: { deletedAt: { not: null, lt: before } }, select: { id: true, accountId: true }, orderBy: { deletedAt: 'asc' }, take: PURGE_BATCH_SIZE }),
       ]);
 
       for (const event of events) {

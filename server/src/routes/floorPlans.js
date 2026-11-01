@@ -1,3 +1,4 @@
+import { ownsEvent } from '../lib/ownedReferences.js';
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -33,6 +34,9 @@ router.get('/:eventId', asyncHandler(async (req, res) => {
   });
 
   if (!plan) {
+    // Provision only for an event this account owns (stagePlots.js does the same),
+    // so the route can't mint rows for another account's — or a made-up — event id.
+    if (!await ownsEvent(accountId, eventId)) return res.status(404).json({ error: 'Event not found.' });
     plan = await prisma.floorPlan.create({
       data: {
         accountId,

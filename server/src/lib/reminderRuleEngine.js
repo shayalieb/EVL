@@ -170,20 +170,26 @@ async function createContractReminders(thresholdsByAccount) {
   });
   if (!events.length) return;
 
-  const bookings = await prisma.booking.findMany({
+  // bookingId on a contract is an opaque string, so a document is only trusted
+  // when it belongs to the same account as the booking it names — otherwise a
+  // contract forged in another account could mask this account's real one.
+  const eventAccountById = new Map(events.map((e) => [e.id, e.accountId]));
+  const bookings = (await prisma.booking.findMany({
     where: { convertedEventId: { in: events.map((e) => e.id) } },
-    select: { id: true, convertedEventId: true },
-  });
+    select: { id: true, convertedEventId: true, accountId: true },
+  })).filter((b) => eventAccountById.get(b.convertedEventId) === b.accountId);
   if (!bookings.length) return;
   const bookingIdByEventId = new Map(bookings.map((b) => [b.convertedEventId, b.id]));
+  const bookingAccountById = new Map(bookings.map((b) => [b.id, b.accountId]));
 
   const contracts = await prisma.contract.findMany({
-    where: { bookingId: { in: bookings.map((b) => b.id) } },
-    select: { bookingId: true, status: true, sentAt: true, createdAt: true },
+    where: { bookingId: { in: bookings.map((b) => b.id) }, accountId: { in: [...new Set(bookings.map((b) => b.accountId))] } },
+    select: { bookingId: true, accountId: true, status: true, sentAt: true, createdAt: true },
     orderBy: [{ sentAt: 'desc' }, { createdAt: 'desc' }],
   });
   const latestContractByBookingId = new Map();
   for (const c of contracts) {
+    if (c.accountId !== bookingAccountById.get(c.bookingId)) continue;
     if (!latestContractByBookingId.has(c.bookingId)) latestContractByBookingId.set(c.bookingId, c);
   }
 
@@ -275,15 +281,19 @@ async function createEventNotCompletedReminders(thresholdsByAccount) {
 // client-side for its own revision-request banner/badges, replicated here
 // since a resend creates a new ProposalResponse row rather than overwriting
 // the old one (see that model's schema comment).
-async function latestProposalResponseByBookingId(bookingIds) {
+// accountByBookingId, when given, restricts the result to proposals owned by
+// the same account as the booking they name (bookingId is an opaque string, so
+// another account's proposal could otherwise masquerade as this booking's).
+async function latestProposalResponseByBookingId(bookingIds, accountByBookingId = null) {
   if (!bookingIds.length) return new Map();
   const rows = await prisma.proposalResponse.findMany({
-    where: { bookingId: { in: bookingIds } },
-    select: { bookingId: true, status: true, sentAt: true, createdAt: true, recipientName: true, recipientEmail: true },
+    where: { bookingId: { in: bookingIds }, ...(accountByBookingId ? { accountId: { in: [...new Set(accountByBookingId.values())] } } : {}) },
+    select: { bookingId: true, accountId: true, status: true, sentAt: true, createdAt: true, recipientName: true, recipientEmail: true },
     orderBy: [{ sentAt: 'desc' }, { createdAt: 'desc' }],
   });
   const latest = new Map();
   for (const r of rows) {
+    if (accountByBookingId && r.accountId !== accountByBookingId.get(r.bookingId)) continue;
     if (!latest.has(r.bookingId)) latest.set(r.bookingId, r);
   }
   return latest;
@@ -293,18 +303,20 @@ async function createProposalNoResponseReminders(thresholdsByAccount) {
   const cutoffCandidates = await prisma.proposalResponse.findMany({
     where: { status: 'sent', sentAt: { lt: new Date() } },
     select: { bookingId: true, accountId: true },
-    distinct: ['bookingId'],
+    distinct: ['accountId', 'bookingId'],
   });
   if (!cutoffCandidates.length) return;
 
-  const bookings = await prisma.booking.findMany({
+  // A proposal only counts toward a booking in its own account.
+  const sentPairs = new Set(cutoffCandidates.map((c) => `${c.accountId}:${c.bookingId}`));
+  const bookings = (await prisma.booking.findMany({
     where: { id: { in: cutoffCandidates.map((c) => c.bookingId) }, deletedAt: null, completedAt: null, convertedEventId: null },
     select: { id: true, accountId: true, eventName: true },
-  });
+  })).filter((b) => sentPairs.has(`${b.accountId}:${b.id}`));
   if (!bookings.length) return;
   const bookingById = new Map(bookings.map((b) => [b.id, b]));
 
-  const latestByBookingId = await latestProposalResponseByBookingId(bookings.map((b) => b.id));
+  const latestByBookingId = await latestProposalResponseByBookingId(bookings.map((b) => b.id), new Map(bookings.map((b) => [b.id, b.accountId])));
   const accountIds = [...new Set(bookings.map((b) => b.accountId))];
   const ownerUserIdsByAccount = await getOwnerUserIdsByAccount(accountIds);
 

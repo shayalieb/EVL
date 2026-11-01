@@ -1,3 +1,4 @@
+import { bookingReferenceError } from '../lib/ownedReferences.js';
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -125,6 +126,7 @@ router.post('/', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'bookingId, a valid recipient email, and snapshot are required.' });
   }
 
+  { const referenceError = await bookingReferenceError(req.membership.accountId, bookingId); if (referenceError) return res.status(400).json({ error: referenceError }); }
   const [owner, account] = await Promise.all([
     prisma.user.findUnique({ where: { id: req.session.userId }, select: { email: true } }),
     prisma.account.findUnique({ where: { id: req.membership.accountId } }),

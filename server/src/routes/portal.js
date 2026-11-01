@@ -191,7 +191,9 @@ router.get('/invoices', asyncHandler(async (req, res) => {
   if (!bookingIds.length) return res.json({ invoices: [] });
 
   const invoices = await prisma.invoice.findMany({
-    where: { bookingId: { in: bookingIds }, status: { not: 'draft' } },
+    // accountId matters: bookingId is an opaque string, so an invoice from another
+    // account that merely names one of these bookings must never be shown here.
+    where: { accountId: req.clientAuth.accountId, bookingId: { in: bookingIds }, status: { not: 'draft' } },
     orderBy: { createdAt: 'desc' },
   });
   res.json({

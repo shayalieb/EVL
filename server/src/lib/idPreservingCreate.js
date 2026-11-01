@@ -13,6 +13,9 @@ export async function createWithPreservedId(delegate, data, accountId) {
     if (err.code === 'P2002') {
       const existing = await delegate.findUnique({ where: { id: data.id } });
       if (existing?.accountId === accountId) return existing;
+      // The id belongs to someone else's record (or another unique value
+      // clashed). Say so plainly instead of surfacing a database error.
+      throw Object.assign(new Error('This record conflicts with an existing one.'), { status: 409, expose: true });
     }
     throw err;
   }

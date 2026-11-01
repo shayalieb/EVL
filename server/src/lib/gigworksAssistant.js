@@ -384,7 +384,7 @@ async function runTool(name, input, accountId) {
       orderBy: { eventDate: 'asc' },
       take: 25,
     });
-    const clients = await prisma.client.findMany({ where: { id: { in: bookings.map((b) => b.clientId).filter(Boolean) } }, select: { id: true, firstName: true, lastName: true } });
+    const clients = await prisma.client.findMany({ where: { accountId, id: { in: bookings.map((b) => b.clientId).filter(Boolean) } }, select: { id: true, firstName: true, lastName: true } });
     const clientById = new Map(clients.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()]));
     return bookings.map((b) => ({ id: b.id, eventName: b.eventName, eventDate: b.eventDate, eventType: b.eventType, status: b.bookingStatus, client: clientById.get(b.clientId) || null }));
   }

@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { attachMembership, effectivePermissions } from '../lib/membership.js';
+import { contractorReferencesError } from '../lib/ownedReferences.js';
 import { createWithPreservedId } from '../lib/idPreservingCreate.js';
 import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPageResponse } from '../lib/pagination.js';
 
@@ -51,6 +52,7 @@ router.post('/', asyncHandler(async (req, res) => {
   if (!body.id?.trim()) return res.status(400).json({ error: 'id is required.' });
   if (!body.name?.trim()) return res.status(400).json({ error: 'Ensemble name is required.' });
   if (!Array.isArray(body.contractorIds) || body.contractorIds.some((id) => typeof id !== 'string')) return res.status(400).json({ error: 'contractorIds must be an array of IDs.' });
+  { const referenceError = await contractorReferencesError(req.membership.accountId, body.contractorIds); if (referenceError) return res.status(400).json({ error: referenceError }); }
   const group = await createWithPreservedId(prisma.contractorGroup, { id: body.id, accountId: req.membership.accountId, ...groupData(body) }, req.membership.accountId);
   res.status(201).json({ contractorGroup: serializeGroup(group) });
 }));
@@ -62,6 +64,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   const body = req.body || {};
   if (body.name !== undefined && !body.name?.trim()) return res.status(400).json({ error: 'Ensemble name is required.' });
   if (body.contractorIds !== undefined && (!Array.isArray(body.contractorIds) || body.contractorIds.some((id) => typeof id !== 'string'))) return res.status(400).json({ error: 'contractorIds must be an array of IDs.' });
+  { const referenceError = await contractorReferencesError(req.membership.accountId, body.contractorIds, existing.contractorIds); if (referenceError) return res.status(400).json({ error: referenceError }); }
   const group = await prisma.contractorGroup.update({ where: { id: existing.id }, data: groupData(body, true) });
   res.json({ contractorGroup: serializeGroup(group) });
 }));
