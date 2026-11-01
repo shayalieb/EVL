@@ -10,7 +10,7 @@
     "dev": "node --watch src/index.js",
     "build": "prisma generate",
     "test": "node --test",
-    "test:integration": "node --test integration-tests/*.integration.js",
+    "test:integration": "node --test --test-concurrency=1 integration-tests/*.integration.js",
     "test:load": "node scripts/loadTest.js",
     "test:smoke": "node scripts/smokeTest.js",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
@@ -25,7 +25,8 @@
     "cleanup:contractor-due-dates": "node scripts/cleanupInvalidContractorDueDates.js",
     "setup:billing-plans": "node scripts/setupBillingPlans.js",
     "test:security": "node --test test/security*.test.js",
-    "test:security:integration": "node --test --test-name-pattern=\"security:\" integration-tests/*.integration.js"
+    "test:security:integration": "node --test --test-concurrency=1 --test-name-pattern=\"security:\" integration-tests/*.integration.js",
+    "test:tenant-bleed": "node --test integration-tests/tenantBleed.sweep.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",
