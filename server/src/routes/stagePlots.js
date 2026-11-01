@@ -147,7 +147,8 @@ router.post('/:eventId/share', asyncHandler(async (req, res) => {
 router.post('/:eventId/share/publish', asyncHandler(async (req, res) => {
   if (!effectivePermissions(req.membership).manageEvents) return res.status(403).json({ error: 'Not authorized.' });
   const current = await prisma.stagePlot.findUnique({ where: { accountId_eventId: { accountId: req.membership.accountId, eventId: req.params.eventId } }, include: { share: true } });
-  if (!current?.share || linkAvailability(current.share) !== 'active') return res.status(409).json({ error: 'Create or reactivate a share link before publishing an update.' });
+  if (!current) return res.status(404).json({ error: 'Stage plot not found.' });
+  if (!current.share || linkAvailability(current.share) !== 'active') return res.status(409).json({ error: 'Create or reactivate a share link before publishing an update.' });
   const result = await publishRevision({ accountId: req.membership.accountId, eventId: req.params.eventId, userId: req.session.userId, note: req.body?.note });
   if (!result) return res.status(404).json({ error: 'Stage plot not found.' });
   res.status(201).json({ share: serializeShare(result.share), revision: revisionSummary(result.revision), hasUnpublishedChanges: false });
@@ -519,9 +520,9 @@ router.delete('/:eventId/pages/:pageId', asyncHandler(async (req, res) => {
   }
   const plot = await loadOwnedPlot(req.membership.accountId, req.params.eventId);
   if (!plot) return res.status(404).json({ error: 'Stage plot not found.' });
-  if (plot.pages.length <= 1) return res.status(400).json({ error: 'A stage plot needs at least one page.' });
   const page = plot.pages.find((p) => p.id === req.params.pageId);
   if (!page) return res.status(404).json({ error: 'Page not found.' });
+  if (plot.pages.length <= 1) return res.status(400).json({ error: 'A stage plot needs at least one page.' });
 
   const elementIds = (page.scene?.elements || []).map((e) => e.id).filter(Boolean);
   let deletedChannelIds = [];

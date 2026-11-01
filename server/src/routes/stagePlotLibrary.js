@@ -226,9 +226,9 @@ router.delete('/:id/pages/:pageId', asyncHandler(async (req, res) => {
   if (!canManage(req)) return res.status(403).json({ error: 'Not authorized.' });
   const item = await loadOwnedItem(req.membership.accountId, req.params.id);
   if (!item) return res.status(404).json({ error: 'Saved stage plot not found.' });
-  if (item.pages.length <= 1) return res.status(400).json({ error: 'A stage plot needs at least one page.' });
   const page = item.pages.find((p) => p.id === req.params.pageId);
   if (!page) return res.status(404).json({ error: 'Page not found.' });
+  if (item.pages.length <= 1) return res.status(400).json({ error: 'A stage plot needs at least one page.' });
 
   const elementIds = (page.scene?.elements || []).map((e) => e.id).filter(Boolean);
   let deletedChannelIds = [];

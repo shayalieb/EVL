@@ -29,7 +29,12 @@ function close(candidate) {
   return new Promise((resolve, reject) => candidate.close((err) => (err ? reject(err) : resolve())));
 }
 
+// Set by a test that runs several subtests against one shared seed (the
+// per-test reset below would otherwise wipe it between subtests).
+let preserveDatabaseBetweenSubtests = false;
+
 async function resetDatabase() {
+  if (preserveDatabaseBetweenSubtests) return;
   await prisma.$executeRawUnsafe(
     'TRUNCATE TABLE "User", "Account", "Session", "BackgroundJobLease", "WaitlistEntry" RESTART IDENTITY CASCADE',
   );
@@ -696,4 +701,279 @@ test('a redelivered Stripe checkout webhook does not apply invoice payment twice
   const afterSecond = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
   assert.equal(afterSecond.paidAmount, 125);
   assert.equal(afterSecond.paidAt.getTime(), afterFirst.paidAt.getTime());
+});
+
+// ---------------------------------------------------------------------------
+// Stage plot tenant isolation. Account A owns a fully populated plot, library
+// template and published share; account B is a different tenant. Every B
+// request below targets A's real ids and must be refused without changing a
+// byte of A's data.
+// ---------------------------------------------------------------------------
+
+// The login limiter keys on the client address (the app trusts one proxy hop),
+// and the rest of this file already spends most of the shared 127.0.0.1 budget.
+// Each identity here logs in from its own documentation-range address instead,
+// leaving the limiter itself untouched.
+let isolatedClientCounter = 0;
+async function loginFromOwnAddress(identity) {
+  isolatedClientCounter += 1;
+  const response = await request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'x-forwarded-for': `198.51.100.${isolatedClientCounter}` },
+    body: JSON.stringify({ email: identity.user.email, password: identity.password }),
+  });
+  assert.equal(response.status, 200);
+  await response.arrayBuffer();
+  return responseCookies(response);
+}
+
+async function seedStagePlotTenant(label) {
+  const identity = await createIdentity({ email: `${label}-owner@example.com` });
+  await prisma.account.update({ where: { id: identity.account.id }, data: { vertical: 'band_orchestra' } });
+  const eventId = `${label}-event`;
+  const otherEventId = `${label}-event-2`;
+  await prisma.event.createMany({ data: [
+    { id: eventId, accountId: identity.account.id, name: `${label} gig` },
+    { id: otherEventId, accountId: identity.account.id, name: `${label} second gig` },
+  ] });
+  const cookie = await loginFromOwnAddress(identity);
+  const call = async (method, path, body, withCookie = cookie) => {
+    const response = await request(path, { method, cookie: withCookie, body: body === undefined ? undefined : JSON.stringify(body) });
+    const text = await response.text();
+    let json = null;
+    try { json = JSON.parse(text); } catch { /* non-JSON body */ }
+    return { status: response.status, json, text };
+  };
+
+  const plot = (await call('GET', `/api/stage-plots/${eventId}`)).json.stagePlot;
+  const pageId = plot.pages[0].id;
+  await prisma.stagePlotPage.update({ where: { id: pageId }, data: { scene: { elements: [{ id: `${label}-el`, layerId: 'l' }], layers: [{ id: 'l' }] }, thumbnailStorageKey: `${label}/thumb.png` } });
+  const channel = (await call('POST', `/api/stage-plots/${eventId}/channels`, { source: `${label} vocal`, musicianName: 'Private Name', elementId: `${label}-el` })).json.channel;
+  const channel2 = (await call('POST', `/api/stage-plots/${eventId}/channels`, { source: `${label} bass` })).json.channel;
+  const backline = (await call('POST', `/api/stage-plots/${eventId}/backline-items`, { item: `${label} amp` })).json.item;
+  const share = await call('POST', `/api/stage-plots/${eventId}/share`, { note: `${label} v1` });
+  const token = share.json.share.url.split('/stage-plot/')[1];
+
+  const library = (await call('POST', '/api/stage-plot-library', { name: `${label} template` })).json.stagePlot;
+  const libraryPageId = (await prisma.stagePlotLibraryPage.findFirstOrThrow({ where: { libraryItemId: library.id } })).id;
+  const libraryChannel = (await call('POST', `/api/stage-plot-library/${library.id}/channels`, { source: `${label} lib vocal` })).json.channel;
+  const libraryChannel2 = (await call('POST', `/api/stage-plot-library/${library.id}/channels`, { source: `${label} lib bass` })).json.channel;
+  const libraryBackline = (await call('POST', `/api/stage-plot-library/${library.id}/backline-items`, { item: `${label} lib amp` })).json.item;
+
+  return { identity, cookie, call, eventId, otherEventId, pageId, channel, channel2, backline, token, libraryId: library.id, libraryPageId, libraryChannel, libraryChannel2, libraryBackline };
+}
+
+async function snapshotStagePlotData(accountId) {
+  const [plots, libraries, shares, revisions] = await Promise.all([
+    prisma.stagePlot.findMany({ where: { accountId }, include: { pages: true, channels: true, backlineItems: true }, orderBy: { id: 'asc' } }),
+    prisma.stagePlotLibraryItem.findMany({ where: { accountId }, include: { pages: true, channels: true, backlineItems: true }, orderBy: { id: 'asc' } }),
+    prisma.stagePlotShare.findMany({ where: { stagePlot: { accountId } }, orderBy: { id: 'asc' } }),
+    prisma.stagePlotRevision.findMany({ where: { stagePlot: { accountId } }, orderBy: { id: 'asc' } }),
+  ]);
+  const normalize = (rows) => JSON.parse(JSON.stringify(rows));
+  const sort = (rows) => rows.map((row) => ({ ...row }));
+  return normalize({ plots: sort(plots), libraries: sort(libraries), shares, revisions });
+}
+
+// One login per tenant for the whole group: the login rate limiter allows 20
+// attempts per 15 minutes per address, and this file already uses most of them.
+test('stage plot tenant isolation', async (t) => {
+  preserveDatabaseBetweenSubtests = true;
+  try {
+  const a = await seedStagePlotTenant('iso-a');
+  const b = await seedStagePlotTenant('iso-b');
+  const memberIdentity = await createIdentity({ email: 'iso-viewer@example.com', role: 'member', permissions: { manageEvents: false }, accountId: a.identity.account.id });
+  const memberCookie = await loginFromOwnAddress(memberIdentity);
+
+  await t.test('another account cannot read or change any event plot resource', async () => {
+  const before = await snapshotStagePlotData(a.identity.account.id);
+  const e = `/api/stage-plots/${a.eventId}`;
+
+  const attempts = [
+    ['GET', e],
+    ['GET', `${e}/share`],
+    ['POST', `${e}/share`, { note: 'hijack' }],
+    ['POST', `${e}/share/publish`, { note: 'hijack' }],
+    ['POST', `${e}/share/revisions/1/restore`],
+    ['DELETE', `${e}/share`],
+    ['POST', `${e}/apply-library/${b.libraryId}`, { mode: 'replace' }],
+    ['POST', `${e}/apply-library/${a.libraryId}`, { mode: 'replace' }],
+    ['POST', `${e}/ai-items`, { prompt: '4 drum mics' }],
+    ['POST', `${e}/ai-items/confirm`, { items: [{ listType: 'channel', source: 'Injected' }] }],
+    ['PATCH', `${e}/pages/${a.pageId}`, { name: 'Defaced', scene: { elements: [] } }],
+    ['GET', `${e}/pages/${a.pageId}/thumbnail`],
+    ['POST', `${e}/pages`, { name: 'Injected page' }],
+    ['DELETE', `${e}/pages/${a.pageId}`],
+    ['POST', `${e}/channels`, { source: 'Injected channel' }],
+    ['POST', `${e}/channels/reorder`, { orderedIds: [a.channel2.id, a.channel.id] }],
+    ['PATCH', `${e}/channels/${a.channel.id}`, { source: 'Defaced', musicianName: 'Defaced' }],
+    ['DELETE', `${e}/channels/${a.channel.id}`],
+    ['POST', `${e}/backline-items`, { item: 'Injected backline' }],
+    ['PATCH', `${e}/backline-items/${a.backline.id}`, { item: 'Defaced' }],
+    ['DELETE', `${e}/backline-items/${a.backline.id}`],
+    // A's child ids addressed through B's own event path
+    ['PATCH', `/api/stage-plots/${b.eventId}/channels/${a.channel.id}`, { source: 'Defaced via own event' }],
+    ['DELETE', `/api/stage-plots/${b.eventId}/channels/${a.channel.id}`],
+    ['PATCH', `/api/stage-plots/${b.eventId}/backline-items/${a.backline.id}`, { item: 'Defaced via own event' }],
+    ['DELETE', `/api/stage-plots/${b.eventId}/backline-items/${a.backline.id}`],
+    ['PATCH', `/api/stage-plots/${b.eventId}/pages/${a.pageId}`, { name: 'Defaced via own event' }],
+    ['GET', `/api/stage-plots/${b.eventId}/pages/${a.pageId}/thumbnail`],
+    ['DELETE', `/api/stage-plots/${b.eventId}/pages/${a.pageId}`],
+    ['POST', `/api/stage-plots/${b.eventId}/apply-library/${a.libraryId}`, { mode: 'append' }],
+  ];
+
+  for (const [method, path, body] of attempts) {
+    const res = await b.call(method, path, body);
+    assert.equal(res.status, 404, `${method} ${path} should be 404 for another tenant, got ${res.status}: ${res.text}`);
+    assert.ok(!res.text.includes('iso-a'), `${method} ${path} leaked tenant A data: ${res.text}`);
+    assert.ok(!res.text.includes('Private Name'), `${method} ${path} leaked a musician name`);
+  }
+
+  assert.deepEqual(await snapshotStagePlotData(a.identity.account.id), before, 'tenant A’s stage plot data changed');
+  const bPlot = await b.call('GET', `/api/stage-plots/${b.eventId}`);
+  assert.equal(bPlot.json.stagePlot.channels.length, 2, 'tenant B’s own plot must be unaffected by the refused cross-tenant apply');
+  assert.ok(bPlot.json.stagePlot.channels.every((c) => c.source.startsWith('iso-b')));
+  });
+
+  await t.test('another account cannot read or change any library template', async () => {
+  const before = await snapshotStagePlotData(a.identity.account.id);
+  const l = `/api/stage-plot-library/${a.libraryId}`;
+
+  const attempts = [
+    ['GET', l],
+    ['PATCH', l, { name: 'Defaced' }],
+    ['DELETE', l],
+    ['PATCH', `${l}/pages/${a.libraryPageId}`, { name: 'Defaced', scene: { elements: [] } }],
+    ['POST', `${l}/pages`, { name: 'Injected page' }],
+    ['DELETE', `${l}/pages/${a.libraryPageId}`],
+    ['POST', `${l}/channels`, { source: 'Injected channel' }],
+    ['POST', `${l}/channels/reorder`, { orderedIds: [a.libraryChannel2.id, a.libraryChannel.id] }],
+    ['PATCH', `${l}/channels/${a.libraryChannel.id}`, { source: 'Defaced' }],
+    ['DELETE', `${l}/channels/${a.libraryChannel.id}`],
+    ['POST', `${l}/backline-items`, { item: 'Injected backline' }],
+    ['PATCH', `${l}/backline-items/${a.libraryBackline.id}`, { item: 'Defaced' }],
+    ['DELETE', `${l}/backline-items/${a.libraryBackline.id}`],
+    // A's children through B's own template path
+    ['PATCH', `/api/stage-plot-library/${b.libraryId}/channels/${a.libraryChannel.id}`, { source: 'Defaced via own template' }],
+    ['DELETE', `/api/stage-plot-library/${b.libraryId}/channels/${a.libraryChannel.id}`],
+    ['PATCH', `/api/stage-plot-library/${b.libraryId}/backline-items/${a.libraryBackline.id}`, { item: 'Defaced via own template' }],
+    ['DELETE', `/api/stage-plot-library/${b.libraryId}/backline-items/${a.libraryBackline.id}`],
+    ['PATCH', `/api/stage-plot-library/${b.libraryId}/pages/${a.libraryPageId}`, { name: 'Defaced via own template' }],
+    ['DELETE', `/api/stage-plot-library/${b.libraryId}/pages/${a.libraryPageId}`],
+    // copying A's live event into B's library
+    ['POST', `/api/stage-plot-library/from-event/${a.eventId}`, { name: 'Stolen copy' }],
+  ];
+  for (const [method, path, body] of attempts) {
+    const res = await b.call(method, path, body);
+    assert.equal(res.status, 404, `${method} ${path} should be 404 for another tenant, got ${res.status}: ${res.text}`);
+    assert.ok(!res.text.includes('iso-a'), `${method} ${path} leaked tenant A data: ${res.text}`);
+  }
+
+  const list = await b.call('GET', '/api/stage-plot-library?pageSize=50');
+  assert.equal(list.status, 200);
+  assert.deepEqual(list.json.stagePlotLibrary.map((item) => item.id), [b.libraryId], 'library list must only show the caller’s templates');
+  const search = await b.call('GET', '/api/stage-plot-library?search=iso-a');
+  assert.equal(search.json.stagePlotLibrary.length, 0, 'search must not reach another tenant’s templates');
+
+  assert.deepEqual(await snapshotStagePlotData(a.identity.account.id), before, 'tenant A’s library data changed');
+  assert.equal(await prisma.stagePlotLibraryItem.count({ where: { accountId: b.identity.account.id } }), 1, 'a refused from-event copy must not create a template for B');
+  });
+
+  await t.test('share links are bound to their own plot and obey revocation', async () => {
+
+  const publicView = await request(`/api/public/stage-plots/${a.token}`);
+  assert.equal(publicView.status, 200);
+  const body = await publicView.json();
+  assert.equal(body.stagePlot.event.name, 'iso-a gig');
+  assert.ok(body.stagePlot.channels.some((c) => c.source === 'iso-a vocal'));
+  const text = JSON.stringify(body);
+  assert.ok(!text.includes('iso-b'), 'a share link must never include another tenant’s data');
+  assert.ok(!text.includes(a.identity.account.id), 'the public payload must not expose internal account ids');
+  assert.ok(!text.includes('thumbnailStorageKey') && !text.includes('iso-a/thumb.png'), 'storage keys must not be exposed publicly');
+
+  // B cannot revoke, rotate or replace A's link; the link keeps working.
+  for (const [method, path, payload] of [
+    ['DELETE', `/api/stage-plots/${a.eventId}/share`],
+    ['POST', `/api/stage-plots/${a.eventId}/share`, { note: 'rotate' }],
+    ['POST', `/api/stage-plots/${a.eventId}/share/publish`, { note: 'x' }],
+  ]) {
+    assert.equal((await b.call(method, path, payload)).status, 404);
+  }
+  assert.equal((await request(`/api/public/stage-plots/${a.token}`)).status, 200);
+
+  // B's token never resolves to A's plot and vice versa.
+  const bView = await (await request(`/api/public/stage-plots/${b.token}`)).json();
+  assert.equal(bView.stagePlot.event.name, 'iso-b gig');
+  assert.equal((await request(`/api/public/stage-plots/${a.token}x`)).status, 404);
+  // Tokens are stored hashed, so the raw token is not recoverable from the database.
+  const stored = await prisma.stagePlotShare.findMany({ where: { stagePlot: { accountId: a.identity.account.id } } });
+  assert.ok(stored.every((row) => row.tokenHash && row.tokenHash !== a.token));
+
+  // The owner's revocation takes effect immediately.
+  assert.equal((await a.call('DELETE', `/api/stage-plots/${a.eventId}/share`)).status, 200);
+  assert.equal((await request(`/api/public/stage-plots/${a.token}`)).status, 410);
+  assert.equal((await request(`/api/public/stage-plots/${b.token}`)).status, 200, 'revoking A’s link must not affect B’s');
+  });
+
+  await t.test('data cannot be pulled or pushed across tenants through a library template', async () => {
+  const beforeA = await snapshotStagePlotData(a.identity.account.id);
+
+  // B cannot pull A's template into B's own event ...
+  const pull = await b.call('POST', `/api/stage-plots/${b.eventId}/apply-library/${a.libraryId}`, { mode: 'append' });
+  assert.equal(pull.status, 404);
+  // ... nor push B's template into A's event.
+  const push = await b.call('POST', `/api/stage-plots/${a.eventId}/apply-library/${b.libraryId}`, { mode: 'replace' });
+  assert.equal(push.status, 404);
+  assert.deepEqual(await snapshotStagePlotData(a.identity.account.id), beforeA);
+
+  // Within one tenant it still works and the copy shares no row ids with the template.
+  const own = await a.call('POST', `/api/stage-plots/${a.otherEventId}/apply-library/${a.libraryId}`, { mode: 'append' });
+  assert.equal(own.status, 200);
+  const copied = own.json.stagePlot;
+  assert.ok(copied.channels.length >= 2);
+  const templateIds = new Set([a.libraryChannel.id, a.libraryChannel2.id, a.libraryBackline.id, a.libraryPageId]);
+  assert.ok([...copied.channels, ...copied.backlineItems, ...copied.pages].every((row) => !templateIds.has(row.id)));
+
+  // A child id from a sibling event of the SAME tenant is not addressable through another event's path.
+  const crossEvent = await a.call('PATCH', `/api/stage-plots/${a.otherEventId}/channels/${a.channel.id}`, { source: 'wrong event' });
+  assert.equal(crossEvent.status, 404);
+  assert.equal((await prisma.stagePlotChannel.findUniqueOrThrow({ where: { id: a.channel.id } })).source, 'iso-a vocal');
+  });
+
+  await t.test('restricted members of the same account can read but not write, and unauthenticated callers get nothing', async () => {
+  const before = await snapshotStagePlotData(a.identity.account.id);
+  const e = `/api/stage-plots/${a.eventId}`;
+
+  assert.equal((await a.call('GET', e, undefined, memberCookie)).status, 200);
+  for (const [method, path, payload] of [
+    ['POST', `${e}/share`, {}],
+    ['POST', `${e}/share/publish`, {}],
+    ['DELETE', `${e}/share`],
+    ['PATCH', `${e}/pages/${a.pageId}`, { name: 'x' }],
+    ['POST', `${e}/pages`, {}],
+    ['DELETE', `${e}/pages/${a.pageId}`],
+    ['POST', `${e}/channels`, { source: 'x' }],
+    ['PATCH', `${e}/channels/${a.channel.id}`, { source: 'x' }],
+    ['DELETE', `${e}/channels/${a.channel.id}`],
+    ['POST', `${e}/backline-items`, { item: 'x' }],
+    ['DELETE', `${e}/backline-items/${a.backline.id}`],
+    ['POST', `${e}/apply-library/${a.libraryId}`, {}],
+    ['POST', `${e}/ai-items/confirm`, { items: [{ listType: 'channel', source: 'x' }] }],
+  ]) {
+    const res = await a.call(method, path, payload, memberCookie);
+    assert.equal(res.status, 403, `${method} ${path} should be 403 for a member without manageEvents, got ${res.status}`);
+  }
+  assert.deepEqual(await snapshotStagePlotData(a.identity.account.id), before);
+
+  for (const [method, path] of [
+    ['GET', e], ['GET', `${e}/share`], ['GET', '/api/stage-plot-library'], ['GET', `/api/stage-plot-library/${a.libraryId}`],
+    ['PATCH', `${e}/pages/${a.pageId}`], ['DELETE', `${e}/share`],
+  ]) {
+    const res = await request(path, { method, body: method === 'PATCH' ? '{}' : undefined });
+    assert.equal(res.status, 401, `${method} ${path} must require login`);
+  }
+  });
+  } finally {
+    preserveDatabaseBetweenSubtests = false;
+  }
 });
