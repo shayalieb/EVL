@@ -26,7 +26,9 @@
     "setup:billing-plans": "node scripts/setupBillingPlans.js",
     "test:security": "node --test test/security*.test.js",
     "test:security:integration": "node --test --test-concurrency=1 --test-name-pattern=\"security:\" integration-tests/*.integration.js",
-    "test:tenant-bleed": "node --test integration-tests/tenantBleed.sweep.js"
+    "test:tenant-bleed": "node --test integration-tests/tenantBleed.sweep.js",
+    "test:security-sweep": "node --test integration-tests/securityFuzz.sweep.js",
+    "test:security:full": "npm run test:security && npm run test:security:integration && npm run test:security-sweep && npm run test:tenant-bleed"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",
