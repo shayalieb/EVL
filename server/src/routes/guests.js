@@ -1,5 +1,6 @@
 import { ownsEvent } from '../lib/ownedReferences.js';
 import { Router } from 'express';
+import { viewGuard } from '../lib/viewAccess.js';
 import { createRateLimiter } from '../lib/rateLimiter.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -34,6 +35,7 @@ function serializeGuest(g) {
 // ---- Authenticated (owner-side) ----
 
 router.use(requireAuth, asyncHandler(attachMembership), requireVertical('party_planning'));
+router.use(viewGuard('viewEvents'));
 
 router.get('/', asyncHandler(async (req, res) => {
   const { eventId } = req.query;

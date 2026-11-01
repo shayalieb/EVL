@@ -13,7 +13,27 @@ export const PERMISSION_KEYS = [
   'viewFinancials',
   'recordFinancialTransactions',
   'exportFinancialReports',
+  // Read access per area. The manage* permissions above only gate changes, so without these every
+  // member could read all of an account's clients, contractors, bookings and so on.
+  'viewClients',
+  'viewContractors',
+  'viewBookings',
+  'viewEvents',
+  'viewVenues',
+  'viewOfferings',
 ];
+
+export const VIEW_KEYS = ['viewClients', 'viewContractors', 'viewBookings', 'viewEvents', 'viewVenues', 'viewOfferings'];
+
+// Managing something means seeing the records it depends on: you cannot book a client you cannot see.
+export const IMPLIED_VIEWS = {
+  manageClients: ['viewClients'],
+  manageContractors: ['viewContractors'],
+  manageVenues: ['viewVenues'],
+  manageOfferings: ['viewOfferings'],
+  manageBookings: ['viewBookings', 'viewClients', 'viewVenues', 'viewOfferings'],
+  manageEvents: ['viewEvents', 'viewClients', 'viewVenues', 'viewContractors', 'viewOfferings'],
+};
 
 export function emptyPermissions() {
   return Object.fromEntries(PERMISSION_KEYS.map((k) => [k, false]));
@@ -34,6 +54,11 @@ export function sanitizePermissions(input) {
   for (const key of ['viewFinancials', 'recordFinancialTransactions', 'exportFinancialReports']) {
     if (input?.[key] === undefined) safe[key] = !!input?.manageBookings;
   }
+  // Members saved before the view switches existed could read everything. Keep that until an owner
+  // turns a switch off, so nobody loses access just because this shipped.
+  for (const key of VIEW_KEYS) {
+    if (input?.[key] === undefined) safe[key] = true;
+  }
   return safe;
 }
 
@@ -42,7 +67,13 @@ export function sanitizePermissions(input) {
 export function effectivePermissions(membership) {
   if (!membership) return emptyPermissions();
   if (membership.role === 'owner' || membership.role === 'admin') return allPermissions();
-  return sanitizePermissions(membership.permissions);
+  const safe = sanitizePermissions(membership.permissions);
+  // Applied here, not when saving, so what an owner chose is kept and removing a manage permission
+  // later does not leave views switched on that nobody asked for.
+  for (const [manageKey, views] of Object.entries(IMPLIED_VIEWS)) {
+    if (safe[manageKey]) for (const view of views) safe[view] = true;
+  }
+  return safe;
 }
 
 // Users created before Accounts/Memberships existed have no Membership row.

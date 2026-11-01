@@ -29,7 +29,9 @@ function serializeMember(m) {
     lastName: m.user.lastName,
     email: m.user.email,
     role: m.role,
-    permissions: effectivePermissions(m),
+    // What the owner chose (used by the toggles) and what actually applies once implied views are added.
+    permissions: sanitizePermissions(m.permissions),
+    effectivePermissions: effectivePermissions(m),
     createdAt: m.createdAt,
     invitation: invite ? {
       status: linkAvailability({ expiresAt: invite.expiresAt, revokedAt: invite.revokedAt, usedAt: invite.usedAt, singleUse: true }),

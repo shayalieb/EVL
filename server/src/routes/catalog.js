@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { viewGuard } from '../lib/viewAccess.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -6,6 +7,7 @@ import { attachMembership, effectivePermissions } from '../lib/membership.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
+router.use(viewGuard('viewOfferings'));
 
 const OFFERING_TYPES = new Set(['general', 'perUnit', 'package']);
 

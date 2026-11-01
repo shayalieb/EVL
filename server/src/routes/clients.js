@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { viewGuard } from '../lib/viewAccess.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -9,6 +10,7 @@ import { normalizeValidEmail } from '../lib/emailAddress.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
+router.use(viewGuard('viewClients'));
 
 function normalizedClientFields({ firstName, lastName, email, phone }) {
   const emailNormalized = String(email || '').trim().toLowerCase() || null;

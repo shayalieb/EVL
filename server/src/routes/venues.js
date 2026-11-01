@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { viewGuard } from '../lib/viewAccess.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -13,6 +14,7 @@ import { createRateLimiter } from '../lib/rateLimiter.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
+router.use(viewGuard('viewVenues'));
 
 router.get('/lookup', createRateLimiter('venue-lookup', { windowMs: 60000, limit: 20 }), asyncHandler(async (req, res) => {
   res.set('Cache-Control', 'no-store');

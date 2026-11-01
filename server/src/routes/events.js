@@ -1,5 +1,6 @@
 import { clientReferenceError, contractorReferencesError, assignedContractorIds } from '../lib/ownedReferences.js';
 import { Router } from 'express';
+import { viewGuard } from '../lib/viewAccess.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -13,6 +14,7 @@ import { preserveClientPrepRequests } from '../lib/prepForms.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
+router.use(viewGuard('viewEvents'));
 
 export function validateEventSetLists(setLists) {
   if (!Array.isArray(setLists) || setLists.length > 25) return 'setLists must contain no more than 25 lists.';

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { viewGuard } from '../lib/viewAccess.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -10,6 +11,7 @@ const CATEGORIES = ['proposal', 'contract'];
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
+router.use(viewGuard('viewBookings'));
 
 // Reading follows the same rules as the rest of the booking data; adding, copying or deleting
 // a file is a change to the booking, so it needs the same permission as editing it.

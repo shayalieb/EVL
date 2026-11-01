@@ -1,6 +1,7 @@
 import { bookingReferenceError } from '../lib/ownedReferences.js';
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
+import { viewGuard } from '../lib/viewAccess.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -89,6 +90,7 @@ function serializeForPublic(contract, role) {
 // ---- Authenticated (owner-side) ----
 
 router.use(requireAuth, asyncHandler(attachMembership));
+router.use(viewGuard('viewBookings'));
 
 // bookingId scopes to that one booking's most recent contract (existing
 // shape: a single `contract`, possibly null). Omitting it returns every

@@ -1,5 +1,6 @@
 import { ownsEvent } from '../lib/ownedReferences.js';
 import { Router } from 'express';
+import { viewGuard } from '../lib/viewAccess.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -9,6 +10,7 @@ import { uploadFile, getSignedDownloadUrl } from '../lib/fileStorage.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership), requireVertical('party_planning'));
+router.use(viewGuard('viewEvents'));
 
 function serializePlan(plan) {
   return {

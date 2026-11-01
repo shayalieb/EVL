@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { viewGuard } from '../lib/viewAccess.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -19,6 +20,7 @@ import { buildStagePlotSnapshot, stagePlotContentUpdatedAt, summarizeStagePlotRe
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership), requireVertical('band_orchestra'));
+router.use(viewGuard('viewEvents'));
 
 // Per-account, not per-IP — same reasoning as assistant.js's assistantLimiter.
 const stagePlotAiLimiter = createRateLimiter('stage-plot-ai', {

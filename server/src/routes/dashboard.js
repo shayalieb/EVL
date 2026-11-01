@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { attachMembership } from '../lib/membership.js';
+import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { invoiceTotal } from './invoices.js';
 
 const router = Router();
@@ -65,7 +65,7 @@ router.get('/', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Invalid managed group.' });
   }
   const groupFilter = groupId ? { groupId } : {};
-  const [events, bookings, clients, contractors, invoices, accountData] = await Promise.all([
+  const [allEvents, allBookings, allClients, allContractors, allInvoices, accountData] = await Promise.all([
     prisma.event.findMany({
       where: { accountId, deletedAt: null, ...groupFilter },
       select: { id: true, name: true, eventDate: true, eventStatus: true, clientId: true, completedAt: true, noOutsideContractorsNeeded: true, contractorBookings: true },
@@ -76,6 +76,13 @@ router.get('/', asyncHandler(async (req, res) => {
     prisma.invoice.findMany({ where: { accountId }, select: { id: true, bookingId: true, number: true, snapshot: true, dueDate: true, status: true, recipientName: true, paidAmount: true } }),
     prisma.accountData.findUnique({ where: { accountId }, select: { data: true } }),
   ]);
+  // The dashboard summarises records across areas, so each part only counts what this member may view.
+  const permissions = effectivePermissions(req.membership);
+  const events = permissions.viewEvents ? allEvents : [];
+  const bookings = permissions.viewBookings ? allBookings : [];
+  const clients = permissions.viewClients ? allClients : [];
+  const contractors = permissions.viewContractors ? allContractors : [];
+  const invoices = permissions.viewBookings ? allInvoices : [];
   const scopedBookingIds = new Set(bookings.map((booking) => booking.id));
   const scopedInvoices = groupId ? invoices.filter((invoice) => scopedBookingIds.has(invoice.bookingId)) : invoices;
   const eventStatuses = accountData?.data?.eventStatuses || [];
@@ -156,7 +163,7 @@ router.get('/', asyncHandler(async (req, res) => {
   financialGigs.sort((a, b) => b.margin - a.margin);
 
   res.json({ dashboard: {
-    isFreshAccount: bookings.length === 0 && events.length === 0 && clients.length === 0,
+    isFreshAccount: allBookings.length === 0 && allEvents.length === 0 && allClients.length === 0,
     counts: { events: events.length, clients: clients.length, contractors: contractors.length },
     stats: {
       upcomingCount: upcoming.length,

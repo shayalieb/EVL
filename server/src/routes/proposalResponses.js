@@ -2,6 +2,7 @@ import { bookingReferenceError } from '../lib/ownedReferences.js';
 import { randomUUID } from 'node:crypto';
 import { nextDocumentDisplayNumber } from '../lib/documentDisplayNumber.js';
 import { Router } from 'express';
+import { viewGuard } from '../lib/viewAccess.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -61,6 +62,7 @@ function serializeForPublic(pr) {
 // ---- Authenticated (owner-side) ----
 
 router.use(requireAuth, asyncHandler(attachMembership));
+router.use(viewGuard('viewBookings'));
 
 // Reading is open to the team; sending or withdrawing a proposal needs booking permission, like invoices.
 router.use((req, res, next) => {

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { viewGuard } from '../lib/viewAccess.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -8,6 +9,7 @@ import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPage
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
+router.use(viewGuard('viewOfferings'));
 
 const TYPES = new Set(['general', 'perUnit', 'package']);
 const PRICING_TYPES = new Set(['flat', 'perUnit']);

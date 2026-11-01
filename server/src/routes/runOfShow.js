@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { viewGuard } from '../lib/viewAccess.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -10,6 +11,7 @@ import { linkAvailability, resolveLinkExpiration } from '../lib/linkExpiration.j
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership), requireVertical('band_orchestra'));
+router.use(viewGuard('viewEvents'));
 
 function shareUrl(token) {
   return `${process.env.FRONTEND_URL || 'http://localhost:5173'}/run-of-show/${token}`;

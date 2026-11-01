@@ -222,20 +222,20 @@ function AppRoutes() {
         <Route path="home" element={<HomePage />} />
         <Route path="agency/groups" element={<AgencyGroupsPage />} />
         <Route path="financials" element={<PermissionGate permission="viewFinancials"><FinancialsPage /></PermissionGate>} />
-        <Route path="contractors" element={<ContractorsPage />} />
-        <Route path="clients" element={<ClientsPage />} />
-        <Route path="venues" element={<VenuesPage />} />
-        <Route path="offerings" element={<OfferingsPage />} />
+        <Route path="contractors" element={<PermissionGate permission="viewContractors"><ContractorsPage /></PermissionGate>} />
+        <Route path="clients" element={<PermissionGate permission="viewClients"><ClientsPage /></PermissionGate>} />
+        <Route path="venues" element={<PermissionGate permission="viewVenues"><VenuesPage /></PermissionGate>} />
+        <Route path="offerings" element={<PermissionGate permission="viewOfferings"><OfferingsPage /></PermissionGate>} />
         <Route path="set-lists" element={<VerticalGate vertical="band_orchestra"><SetListLibraryPage /></VerticalGate>} />
         <Route path="stage-plot-library" element={<VerticalGate vertical="band_orchestra"><StagePlotLibraryPage /></VerticalGate>} />
         <Route path="stage-plot-library/:libraryItemId" element={<VerticalGate vertical="band_orchestra"><StagePlotLibraryEditorPage /></VerticalGate>} />
         <Route path="run-of-show-library" element={<VerticalGate vertical="band_orchestra"><RunOfShowLibraryPage /></VerticalGate>} />
-        <Route path="bookings" element={<BookingsPage />} />
-        <Route path="bookings/new" element={<BookingFormPage />} />
-        <Route path="bookings/:bookingId" element={<BookingFormPage />} />
-        <Route path="events" element={<EventsPage />} />
-        <Route path="events/new" element={<EventFormPage />} />
-        <Route path="events/:eventId" element={<EventFormPage />} />
+        <Route path="bookings" element={<PermissionGate permission="viewBookings"><BookingsPage /></PermissionGate>} />
+        <Route path="bookings/new" element={<PermissionGate permission="viewBookings"><BookingFormPage /></PermissionGate>} />
+        <Route path="bookings/:bookingId" element={<PermissionGate permission="viewBookings"><BookingFormPage /></PermissionGate>} />
+        <Route path="events" element={<PermissionGate permission="viewEvents"><EventsPage /></PermissionGate>} />
+        <Route path="events/new" element={<PermissionGate permission="viewEvents"><EventFormPage /></PermissionGate>} />
+        <Route path="events/:eventId" element={<PermissionGate permission="viewEvents"><EventFormPage /></PermissionGate>} />
         <Route path="inbox" element={<PermissionGate permission="manageBookings"><InboxPage /></PermissionGate>} />
         <Route path="reminders" element={<RemindersPage />} />
         <Route path="email-templates" element={<EmailTemplatesPage />} />

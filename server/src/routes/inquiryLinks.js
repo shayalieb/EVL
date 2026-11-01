@@ -2,6 +2,7 @@ import { bookingReferenceError } from '../lib/ownedReferences.js';
 import { syncInquiryNotification, INQUIRY_RULE } from '../lib/notificationAutomation.js';
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
+import { viewGuard } from '../lib/viewAccess.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -67,6 +68,7 @@ async function emailInquiryLink({ accountId, recipientEmail, recipientName, inqu
 // ---- Authenticated (owner-side) ----
 
 router.use(requireAuth, asyncHandler(attachMembership));
+router.use(viewGuard('viewBookings'));
 
 router.get('/', asyncHandler(async (req, res) => {
   const { status, bookingId } = req.query;

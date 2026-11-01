@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { viewGuard } from '../lib/viewAccess.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -8,6 +9,7 @@ import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPage
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
+router.use(viewGuard('viewEvents'));
 
 function canManage(req) {
   return effectivePermissions(req.membership).manageEvents;

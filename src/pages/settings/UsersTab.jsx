@@ -24,10 +24,28 @@ const PERMISSION_FIELDS = [
   { key: 'viewFinancials', label: 'View Financials' },
   { key: 'recordFinancialTransactions', label: 'Record Financial Transactions' },
   { key: 'exportFinancialReports', label: 'Export Financial Reports' },
+  { key: 'viewClients', label: 'View Clients' },
+  { key: 'viewContractors', label: 'View Contractors' },
+  { key: 'viewBookings', label: 'View Bookings, Proposals, Contracts & Invoices' },
+  { key: 'viewEvents', label: 'View Events' },
+  { key: 'viewVenues', label: 'View Venues' },
+  { key: 'viewOfferings', label: 'View Offerings' },
 ];
 
+// Managing an area, or an area that depends on it, always includes seeing it. Mirrors IMPLIED_VIEWS on the server.
+const VIEW_IMPLIED_BY = {
+  viewClients: ['manageClients', 'manageBookings', 'manageEvents'],
+  viewContractors: ['manageContractors', 'manageEvents'],
+  viewBookings: ['manageBookings'],
+  viewEvents: ['manageEvents'],
+  viewVenues: ['manageVenues', 'manageBookings', 'manageEvents'],
+  viewOfferings: ['manageOfferings', 'manageBookings', 'manageEvents'],
+};
+const impliedView = (key, permissions) => !!VIEW_IMPLIED_BY[key]?.some((manageKey) => permissions[manageKey]);
+
+// New members start able to see everything (as members always could); an owner narrows it by unticking.
 function emptyPermissions() {
-  return Object.fromEntries(PERMISSION_FIELDS.map((p) => [p.key, false]));
+  return Object.fromEntries(PERMISSION_FIELDS.map((p) => [p.key, p.key.startsWith('view') && p.key !== 'viewFinancials']));
 }
 
 export default function UsersTab() {
@@ -191,7 +209,9 @@ export default function UsersTab() {
                         <label key={p.key} className="flex items-center gap-1 text-xs text-slate-500">
                           <input
                             type="checkbox"
-                            checked={!!m.permissions[p.key]}
+                            checked={!!m.permissions[p.key] || impliedView(p.key, m.permissions)}
+                            disabled={impliedView(p.key, m.permissions)}
+                            title={impliedView(p.key, m.permissions) ? 'Included because this member can manage something that needs it' : undefined}
                             onChange={(e) => handlePermissionToggle(m, p.key, e.target.checked)}
                             data-testid="settings-users-row-permission-checkbox"
                           />
@@ -310,7 +330,8 @@ function AddMemberModal({ open, onClose, onAdded }) {
               <label key={p.key} className="flex items-center gap-2 text-sm text-slate-600">
                 <input
                   type="checkbox"
-                  checked={permissions[p.key]}
+                  checked={permissions[p.key] || impliedView(p.key, permissions)}
+                  disabled={impliedView(p.key, permissions)}
                   onChange={(e) => setPermissions((prev) => ({ ...prev, [p.key]: e.target.checked }))}
                   data-testid="settings-users-add-permission-checkbox"
                 />

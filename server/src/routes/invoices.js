@@ -1,5 +1,6 @@
 import { bookingReferenceError } from '../lib/ownedReferences.js';
 import { Router } from 'express';
+import { viewGuard } from '../lib/viewAccess.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -89,6 +90,7 @@ function serializeForPublic(invoice) {
 // separately; day-to-day invoicing isn't.
 
 router.use(requireAuth, asyncHandler(attachMembership));
+router.use(viewGuard('viewBookings'));
 
 // bookingId is optional — omit it for the account's full invoice list (used
 // by HomePage's Overdue Invoices panel), or pass it to scope to one

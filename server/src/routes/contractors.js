@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { viewGuard } from '../lib/viewAccess.js';
 import { createRateLimiter } from '../lib/rateLimiter.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -12,6 +13,7 @@ import { normalizeValidEmail } from '../lib/emailAddress.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
+router.use(viewGuard('viewContractors'));
 const PAYMENT_METHODS = new Set(['ach', 'check', 'cash', 'wire', 'venmo', 'zelle', 'other']);
 
 function frontendUrl() {

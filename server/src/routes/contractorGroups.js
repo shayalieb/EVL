@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { viewGuard } from '../lib/viewAccess.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -9,6 +10,7 @@ import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPage
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
+router.use(viewGuard('viewContractors'));
 
 function serializeGroup(group) {
   return { id: group.id, name: group.name, contractorIds: group.contractorIds, price: group.price ?? '', createdAt: group.createdAt, updatedAt: group.updatedAt };

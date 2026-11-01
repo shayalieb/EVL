@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { viewGuard } from '../lib/viewAccess.js';
 import { createRateLimiter } from '../lib/rateLimiter.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -11,6 +12,7 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
+router.use(viewGuard('viewEvents'));
 
 // Reading follows the same rules as the rest of the event data; adding, copying or deleting
 // a file is a change to the event, so it needs the same permission as editing it.
