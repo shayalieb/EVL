@@ -243,6 +243,11 @@ function BusinessInfoTab() {
         <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} data-testid="settings-business-email-input" className={inputClass} />
       </div>
       <div>
+        <label className={labelClass}>Payment Instructions</label>
+        <textarea rows={3} value={form.paymentInstructions || ''} onChange={(e) => setForm((f) => ({ ...f, paymentInstructions: e.target.value }))} data-testid="settings-business-payment-instructions-input" className={inputClass} placeholder="e.g. Pay by check to Acme Events, or Venmo @acme-events" />
+        <p className="mt-1 text-xs text-slate-400">Printed on invoices that are not paid online, so clients know how to pay you.</p>
+      </div>
+      <div>
         <label className={labelClass}>Brand Accent Color</label>
         <ColorPicker value={form.accentColor} onChange={(c) => setForm((f) => ({ ...f, accentColor: c }))} />
         <p className="mt-1 text-xs text-slate-400">Used for separators, headings, and table accents on proposals, contracts, prep sheets, and invoices — pick from the palette or click the wheel for any custom color.</p>

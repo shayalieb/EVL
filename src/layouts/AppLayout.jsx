@@ -197,7 +197,7 @@ export default function AppLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen sm:h-[100dvh] bg-slate-50 flex flex-col">
       <a href="#main-content" onClick={() => requestAnimationFrame(() => document.getElementById('main-content')?.focus())} className="fixed left-3 top-3 z-[100] -translate-y-20 focus:translate-y-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-lg">
         Skip to main content
       </a>
@@ -214,7 +214,7 @@ export default function AppLayout() {
             ☰
           </button>
           <Link to={pathFor('/home')} className="flex items-center gap-3">
-            <Logo className="h-14 w-auto" />
+            <Logo className="h-9 sm:h-14 w-auto" />
             {currentUser?.businessInfo?.logo && (
               <>
                 <span className="h-8 w-px bg-slate-200" aria-hidden="true" />
@@ -367,7 +367,7 @@ export default function AppLayout() {
         <nav
           id="primary-navigation"
           aria-label="Primary navigation"
-          className={`${mobileNavOpen ? 'block' : 'hidden'} sm:block w-full sm:w-56 shrink-0 border-r border-slate-200 bg-white sm:min-h-0`}
+          className={`${mobileNavOpen ? 'block' : 'hidden'} sm:block w-full sm:w-56 shrink-0 border-r border-slate-200 bg-white sm:min-h-0 sm:overflow-y-auto`}
         >
           <div className="p-3 space-y-4">
             {isAgency && (
@@ -392,7 +392,7 @@ export default function AppLayout() {
             )}
             {navGroups.map((group) => (
               <div key={group.label} className="space-y-1">
-                <div className="px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">{group.label}</div>
+                <div className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{group.label}</div>
                 {group.items.map((item) => (
                   <NavLink
                     key={item.to}

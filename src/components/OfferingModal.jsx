@@ -16,7 +16,7 @@ const blankLine = () => ({ id: uid('pkg'), name: '', pricingType: 'flat', unitTy
 const emptyForm = { name: '', details: '', type: 'general', amount: '', unitCount: '', ratePerUnit: '', category: '', lineItems: [] };
 
 export default function OfferingModal({ open, onClose, offering, onSaved }) {
-  const { addOffering, updateOffering } = useData();
+  const { addOffering, updateOffering, offerings } = useData();
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -73,6 +73,9 @@ export default function OfferingModal({ open, onClose, offering, onSaved }) {
         <div>
           <label className={labelClass}>Offering Name *</label>
           <input required autoFocus value={form.name} onChange={(e) => update('name', e.target.value)} data-testid="offering-modal-name-input" className={inputClass} />
+          {(offerings || []).some((item) => item.id !== offering?.id && String(item.name || '').trim().toLowerCase() === form.name.trim().toLowerCase() && form.name.trim()) && (
+            <p className="mt-1 text-xs text-amber-700" data-testid="offering-modal-duplicate-name-warning">You already have an offering with this name. You can still save it, but proposals will list two with the same name.</p>
+          )}
         </div>
 
         <div>

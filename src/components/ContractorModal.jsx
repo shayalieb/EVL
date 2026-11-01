@@ -231,14 +231,14 @@ export default function ContractorModal({ open, onClose, contractor }) {
                 <option value="">Not specified</option><option value="ach">ACH</option><option value="check">Check</option><option value="venmo">Venmo</option><option value="zelle">Zelle</option><option value="cash">Cash</option><option value="wire">Wire</option><option value="other">Other</option>
               </select>
             </div>
-            <div>
+            {(form.preferredPaymentMethod === 'venmo' || form.venmoHandle) && <div>
               <label className={labelClass}>Venmo username</label>
               <input value={form.venmoHandle} onChange={(e) => update('venmoHandle', e.target.value.replace(/^@/, ''))} placeholder="username" className={inputClass} data-testid="contractor-modal-venmo-input" />
-            </div>
-            <div>
+            </div>}
+            {(form.preferredPaymentMethod === 'zelle' || form.zelleContact) && <div>
               <label className={labelClass}>Zelle email or phone</label>
               <input value={form.zelleContact} onChange={(e) => update('zelleContact', e.target.value)} placeholder="name@example.com or phone" className={inputClass} data-testid="contractor-modal-zelle-input" />
-            </div>
+            </div>}
           </div>
         </div>
 

@@ -243,7 +243,8 @@ async function notifyOwner(pr, { status, note }) {
             ? `${clientLabel} ${actionLabel}${note ? `: "${note}"` : '.'}`
             : `${clientLabel} ${actionLabel}: "${note}"`,
           remindAt: new Date(),
-          emailEnabled: true,
+          // The direct email below is the one heads-up; a second "Reminder:" email for the same event was a duplicate.
+          emailEnabled: false,
         },
       });
     }

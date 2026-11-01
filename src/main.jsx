@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import * as Sentry from '@sentry/react'
 import { scrubTelemetryEvent } from './lib/securityPrivacy.js'
 import './index.css'
+import { startAssociatingLabels } from './lib/associateLabels.js'
 import App from './App.jsx'
 
 // No-ops safely with no DSN set — nothing breaks locally or before
@@ -66,6 +67,8 @@ function ErrorFallback() {
     </div>
   );
 }
+
+startAssociatingLabels()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

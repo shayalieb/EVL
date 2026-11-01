@@ -420,7 +420,7 @@ export default function RemindersPage() {
                           type="button"
                           onClick={() => openEdit(r)}
                           data-testid="reminder-row-edit-button"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                          className="p-2 min-w-9 min-h-9 inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
                           aria-label="Edit reminder"
                         >
                           ✎
@@ -429,7 +429,7 @@ export default function RemindersPage() {
                           type="button"
                           onClick={() => setDeleteTarget(r)}
                           data-testid="reminder-row-delete-button"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
+                          className="p-2 min-w-9 min-h-9 inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50"
                           aria-label="Delete reminder"
                         >
                           🗑

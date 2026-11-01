@@ -90,7 +90,7 @@ export default function ProposalRespondPage() {
     <div className="min-h-screen bg-slate-50 p-4 sm:p-8 pb-28">
       <div className="max-w-3xl mx-auto">
         <div className="flex items-center gap-3 mb-6">
-          <Logo className="h-10 w-auto" />
+          {businessInfo.logo && <img src={businessInfo.logo} alt="" className="h-10 w-auto max-w-[8rem] object-contain" />}
           <div>
             <div className="font-bold text-slate-800">{businessInfo.name || 'Event Proposal'}</div>
             <div className="text-xs text-slate-400">Proposal for {client.firstName} {client.lastName}</div>

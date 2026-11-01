@@ -32,7 +32,17 @@ const DUMMY_PASSWORD_HASH = bcrypt.hashSync('not-a-real-password', SALT_ROUNDS);
 const credentialsLimiter = createRateLimiter('auth-credentials', {
   windowMs: 15 * 60 * 1000,
   limit: 20,
-  message: { error: 'Too many attempts. Please try again later.' },
+  message: { error: 'Too many attempts. Please wait about 15 minutes and try again.' },
+});
+
+// Sign-in only counts failures. Guessing passwords is what this exists to stop, and counting successful
+// sign-ins as well meant a team of people behind one office address could lock each other out just by
+// starting work at the same time.
+const loginLimiter = createRateLimiter('auth-login', {
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  skipSuccessfulRequests: true,
+  message: { error: 'Too many attempts. Please wait about 15 minutes and try again.' },
 });
 
 // Stricter — bounds both reset-token guessing and using someone else's
@@ -40,7 +50,7 @@ const credentialsLimiter = createRateLimiter('auth-credentials', {
 const passwordResetLimiter = createRateLimiter('auth-password-reset', {
   windowMs: 60 * 60 * 1000,
   limit: 5,
-  message: { error: 'Too many attempts. Please try again later.' },
+  message: { error: 'Too many attempts. Please wait about an hour and try again.' },
 });
 
 function sanitize(user, membership) {
@@ -128,7 +138,7 @@ router.post('/signup', credentialsLimiter, asyncHandler(async (req, res) => {
   }
 }));
 
-router.post('/login', credentialsLimiter, asyncHandler(async (req, res) => {
+router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
   const { email, password } = req.body || {};
   if (typeof email !== 'string' || !email.trim() || typeof password !== 'string' || !password) {
     return res.status(400).json({ error: 'Email and password are required.' });
@@ -153,13 +163,16 @@ router.post('/logout', (req, res) => {
   });
 });
 
+// `?optional=1` is the app's own "is anyone signed in?" check on page load. Answering it with a 200 and no
+// user keeps every public page (a client opening a proposal or invoice) from logging a red 401 in their console.
 router.get('/me', asyncHandler(async (req, res) => {
+  const optional = req.query.optional === '1';
   if (!req.session.userId) {
-    return res.status(401).json({ error: 'Not authenticated.' });
+    return optional ? res.json({ user: null }) : res.status(401).json({ error: 'Not authenticated.' });
   }
   const user = await prisma.user.findUnique({ where: { id: req.session.userId } });
   if (!user) {
-    return res.status(401).json({ error: 'Not authenticated.' });
+    return optional ? res.json({ user: null }) : res.status(401).json({ error: 'Not authenticated.' });
   }
   const membership = await getMembershipWithAccount(user.id);
   res.json({ user: sanitize(user, membership) });
@@ -171,7 +184,7 @@ const changePasswordLimiter = createRateLimiter('auth-change-password', {
   windowMs: 15 * 60 * 1000,
   limit: 10,
   keyGenerator: (req) => `user:${req.session.userId}`,
-  message: { error: 'Too many attempts. Please try again later.' },
+  message: { error: 'Too many attempts. Please wait about 15 minutes and try again.' },
 });
 
 router.post('/change-password', requireAuth, changePasswordLimiter, asyncHandler(async (req, res) => {

@@ -63,13 +63,15 @@ async function sendReminderEmail(reminder) {
     ...(reminder.ruleKey !== 'inbox-unread' ? { tracking: { accountId: reminder.accountId, bookingId: invoice?.bookingId || (reminder.relatedType === 'booking' ? reminder.relatedId : undefined) } } : {}),
     from: await resolveFromHeader({ accountId: reminder.accountId, fromName, localPart: 'reminders' }),
     to,
-    subject: `${reminder.ruleKey === INQUIRY_RULE ? 'New inquiry' : 'Reminder'}: ${reminder.note.slice(0, 80)}`,
+    subject: reminder.ruleKey === INQUIRY_RULE
+      ? `New inquiry from ${reminder.relatedName && reminder.relatedName !== 'New inquiry' ? reminder.relatedName : 'a prospective client'}`
+      : `Reminder: ${reminder.note.slice(0, 80)}`,
     html: buildActionEmailHtml({
       businessInfo,
       ...(reminder.ruleKey === 'inbox-unread' ? { buttonText: 'Open inbox', buttonUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/inbox?thread=${encodeURIComponent(reminder.relatedId)}` } : {}),
       heading: reminder.ruleKey === INQUIRY_RULE ? 'New inquiry response' : 'Reminder',
       ...(reminder.ruleKey === INQUIRY_RULE ? { buttonText: 'Review inquiry', buttonUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/bookings` } : {}),
-      bodyHtml: `${relatedLine}<p>${escapeHtml(reminder.note)}</p>${reminder.ruleKey === 'inbox-unread' ? '' : `<p style="color:#94a3b8;">Was due ${escapeHtml(formatRemindAt(reminder.remindAt, reminder.emailTimeZone))}</p>`}`,
+      bodyHtml: `${relatedLine}<p>${escapeHtml(reminder.note)}</p>${reminder.ruleKey === 'inbox-unread' ? '' : `<p style="color:#94a3b8;">${reminder.ruleKey === INQUIRY_RULE ? 'Received' : 'Was due'} ${escapeHtml(formatRemindAt(reminder.remindAt, reminder.emailTimeZone))}</p>`}`,
     }),
   });
   return true;

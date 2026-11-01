@@ -460,7 +460,9 @@ function rejectUnavailable(found, res) {
 publicContractsRouter.get('/:token', asyncHandler(async (req, res) => {
   const found = await findByToken(req.params.token);
   if (!found) return res.status(404).json({ error: 'This link is invalid or has expired.' });
-  return res.status(401).json({ error: 'Confirm the email address this contract was sent to.', requiresEmail: true });
+  // Not a failure: the page needs to know a confirmation step comes first, and who the contract is from so
+  // the client sees the sender's name rather than a bare product logo. The link itself is the credential.
+  return res.json({ requiresEmail: true, businessName: found.contract.snapshot?.businessInfo?.name || null });
 }));
 
 publicContractsRouter.post('/:token/view', asyncHandler(async (req, res) => {

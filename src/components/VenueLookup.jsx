@@ -43,7 +43,7 @@ export default function VenueLookup({ venue, onSelect }) {
     finally { setBusy(false); }
   }
   return <>
-    <button type="button" className="mt-2 text-sm font-semibold text-indigo-600" onClick={() => { setSource('geoapify'); setSourceUrl(''); setWebsite(''); setQuery(venue.name || ''); setPlaces(null); setSelected(null); setError(''); setOpen(true); }}>Find venue details</button>
+    <button type="button" className="mt-2 py-2 text-sm font-semibold text-indigo-600" onClick={() => { setSource('geoapify'); setSourceUrl(''); setWebsite(''); setQuery(venue.name || ''); setPlaces(null); setSelected(null); setError(''); setOpen(true); }}>Find venue details</button>
     <Modal open={open} onClose={() => { if (!busy) { setOpen(false); setPlaces(null); setSelected(null); } }} title="Find venue details">
       <div className="space-y-4">
         <p className="text-sm text-slate-500">Enter the venue name, then choose the match with the correct address. Available details fill empty fields only.</p>

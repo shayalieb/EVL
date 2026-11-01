@@ -38,7 +38,7 @@ function PanelHeading({ children, color, icon }) {
 
 function StatTile({ label, value, color = '#64748b', icon, testId }) {
   return (
-    <div data-testid={testId} className="relative bg-white rounded-xl border border-slate-200 px-5 py-4 overflow-hidden shadow-xs hover:shadow-md transition-shadow duration-200">
+    <div data-testid={testId} className="relative bg-white rounded-xl border border-slate-200 px-5 py-4 overflow-hidden shadow-xs hover:shadow-md transition-shadow duration-200 flex flex-col justify-between">
       <span className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: color }} />
       <div className="flex items-start justify-between gap-2 mb-1.5">
         <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</div>

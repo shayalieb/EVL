@@ -242,12 +242,18 @@ export default function BookingsPage() {
                   {link.response?.firstName} {link.response?.lastName}
                   {link.response?.eventType ? ` — ${link.response.eventType}` : ''}
                   {link.response?.eventDate ? ` on ${formatEventDate(link.response.eventDate)}` : ''}
+                  {/* Two submissions from the same person for the same date read identically without these. */}
+                  {(link.response?.email || link.submittedAt) && (
+                    <span className="block text-xs text-amber-700/80">
+                      {[link.response?.email, link.submittedAt ? `received ${new Date(link.submittedAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}` : null].filter(Boolean).join(' · ')}
+                    </span>
+                  )}
                 </span>
                 <button
                   type="button"
                   onClick={() => setReviewingInquiry(link)}
                   data-testid="bookings-review-inquiry-button"
-                  className="text-indigo-600 font-semibold hover:underline"
+                  className="py-2 px-2 -my-1 text-indigo-600 font-semibold hover:underline"
                 >
                   Review
                 </button>
@@ -507,7 +513,7 @@ export default function BookingsPage() {
                             type="button"
                             onClick={() => handleRestore(b)}
                             data-testid="booking-row-restore-button"
-                            className="px-2 py-1 rounded-lg text-xs font-semibold text-indigo-600 hover:bg-indigo-50 whitespace-nowrap"
+                            className="px-2.5 py-2 rounded-lg text-xs font-semibold text-indigo-600 hover:bg-indigo-50 whitespace-nowrap"
                           >
                             ↺ Restore
                           </button>
@@ -519,7 +525,7 @@ export default function BookingsPage() {
                               type="button"
                               onClick={() => navigate(`/events/${b.convertedEventId}`)}
                               data-testid="booking-row-view-event-link"
-                              className="px-2 py-1 rounded-lg text-xs font-semibold text-indigo-600 hover:bg-indigo-50 whitespace-nowrap"
+                              className="px-2.5 py-2 rounded-lg text-xs font-semibold text-indigo-600 hover:bg-indigo-50 whitespace-nowrap"
                             >
                               View Event →
                             </button>
@@ -528,7 +534,7 @@ export default function BookingsPage() {
                               type="button"
                               onClick={() => handleConvert(b)}
                               data-testid="booking-row-convert-button"
-                              className="px-2 py-1 rounded-lg text-xs font-semibold text-indigo-600 hover:bg-indigo-50 whitespace-nowrap"
+                              className="px-2.5 py-2 rounded-lg text-xs font-semibold text-indigo-600 hover:bg-indigo-50 whitespace-nowrap"
                             >
                               Create Event →
                             </button>
@@ -537,7 +543,7 @@ export default function BookingsPage() {
                             type="button"
                             onClick={() => openEdit(b)}
                             data-testid="booking-row-edit-button"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                            className="p-2 min-w-9 min-h-9 inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
                             aria-label="Edit booking"
                           >
                             ✎
@@ -546,7 +552,7 @@ export default function BookingsPage() {
                             type="button"
                             onClick={() => handleMarkComplete(b)}
                             data-testid="booking-row-complete-button"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"
+                            className="p-2 min-w-9 min-h-9 inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
                             aria-label="Mark booking complete"
                           >
                             ✓
@@ -555,7 +561,7 @@ export default function BookingsPage() {
                             type="button"
                             onClick={() => setDeleteTarget(b)}
                             data-testid="booking-row-delete-button"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
+                            className="p-2 min-w-9 min-h-9 inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50"
                             aria-label="Delete booking"
                           >
                             🗑

@@ -1,9 +1,9 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import Logo from '../components/ui/Logo';
 import SubmitButton from '../components/ui/SubmitButton';
 import ContractDocument from '../components/ContractDocument';
-import { viewContractByToken, submitContractSignature } from '../lib/contracts';
+import { getContractGateByToken, viewContractByToken, submitContractSignature } from '../lib/contracts';
 import { generateContractPdf } from '../lib/contractPdf';
 import { contractReference, documentReferenceLabel } from '../lib/documentReferences';
 
@@ -16,6 +16,7 @@ function toSignature(name, image, signedAt) {
 export default function ContractSignPage() {
   const { token } = useParams();
   const [email, setEmail] = useState('');
+  const [senderName, setSenderName] = useState('');
   const [verifiedEmail, setVerifiedEmail] = useState('');
   const [contract, setContract] = useState(null);
   const [error, setError] = useState('');
@@ -26,6 +27,13 @@ export default function ContractSignPage() {
   const [submitting, setSubmitting] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const signHereRef = useRef(null);
+  const consentRef = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getContractGateByToken(token).then((gate) => { if (!cancelled) setSenderName(gate?.businessName || ''); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [token]);
 
   async function handleVerify(e) {
     e.preventDefault();
@@ -55,7 +63,7 @@ export default function ContractSignPage() {
       return;
     }
     if (!consentAccepted) {
-      signHereRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      consentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setError('Please accept the electronic signature consent before signing.');
       return;
     }
@@ -97,7 +105,8 @@ export default function ContractSignPage() {
         <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
           <div className="text-center mb-6">
             <Logo className="h-12 w-auto mx-auto mb-3" />
-            <p className="text-sm text-slate-500">Confirm your email to view this contract</p>
+            {senderName && <p className="text-base font-semibold text-slate-800 mb-1" data-testid="contract-sign-sender-name">{senderName}</p>}
+            <p className="text-sm text-slate-500">{senderName ? 'sent you a contract. ' : ''}Confirm your email to view this contract</p>
           </div>
           <form onSubmit={handleVerify} className="space-y-3">
             {error && (
@@ -129,10 +138,10 @@ export default function ContractSignPage() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-8 pb-28">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between gap-3 mb-6">
-          <div className="flex items-center gap-3">
-            <Logo className="h-10 w-auto" />
-            <div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+          <div className="flex items-center gap-3 min-w-0">
+            {snapshot.businessInfo?.logo && <img src={snapshot.businessInfo.logo} alt="" className="h-10 w-auto max-w-[8rem] object-contain shrink-0" />}
+            <div className="min-w-0">
               <div className="font-bold text-slate-800">{snapshot.businessInfo?.name || 'Event Contract'}</div>
               <div className="text-xs text-slate-400">Contract for {snapshot.client?.firstName} {snapshot.client?.lastName}</div>
               <div className="break-all font-mono text-[11px] text-slate-500">{documentReferenceLabel(contractReference(contract))}</div>
@@ -144,7 +153,7 @@ export default function ContractSignPage() {
             onClick={handleDownload}
             disabled={downloading}
             data-testid="contract-sign-download-button"
-            className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-white disabled:opacity-60 shrink-0"
+            className="px-3 py-2 sm:py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-white disabled:opacity-60 shrink-0 self-start sm:self-auto"
           >
             {downloading ? 'Preparing…' : 'Download a copy (PDF)'}
           </button>
@@ -181,7 +190,7 @@ export default function ContractSignPage() {
           signHereRef={signHereRef}
         />
         {canSignNow && (
-          <label className="mt-4 flex items-start gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-slate-700">
+          <label ref={consentRef} className="mt-4 flex items-start gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-slate-700">
             <input type="checkbox" checked={consentAccepted} onChange={(event) => setConsentAccepted(event.target.checked)} data-testid="contract-sign-consent-checkbox" className="mt-1 h-4 w-4" />
             <span>I have reviewed Contract Version {contract.revisionNumber || 1}, intend to sign it, consent to use electronic records and signatures for this transaction, and can access or download a copy. I understand I may request a paper copy from the sender.</span>
           </label>
@@ -190,16 +199,19 @@ export default function ContractSignPage() {
 
       {canSignNow && (
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
-          <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
-            <span className="text-xs text-slate-400 hidden sm:block">
-              {role === 'client' ? 'Review the contract, then sign in the box above.' : 'Review the contract, then countersign in the box above.'}
+          <div className="max-w-4xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
+            <span className="text-xs text-slate-500 sm:text-slate-400" data-testid="contract-sign-hint">
+              {!consentAccepted
+                ? 'Tick the consent box below the contract to sign.'
+                : role === 'client' ? 'Review the contract, then sign in the box above.' : 'Review the contract, then countersign in the box above.'}
             </span>
             <button
               type="button"
               onClick={handleSignClick}
-              disabled={submitting || !consentAccepted}
+              disabled={submitting}
+              aria-disabled={!consentAccepted || undefined}
               data-testid="contract-sign-submit-button"
-              className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-700 disabled:opacity-60 flex items-center justify-center gap-2"
+              className={`w-full sm:w-auto px-5 py-2.5 rounded-lg bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-700 disabled:opacity-60 flex items-center justify-center gap-2 ${consentAccepted ? '' : 'opacity-60'}`}
             >
               {submitting && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
               Sign Contract

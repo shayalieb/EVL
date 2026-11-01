@@ -21,6 +21,8 @@ import { uid } from '../lib/storage';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
 import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, bookingDocumentDownloadUrl } from '../lib/bookingDocuments';
 import { generateProposalPdf, generateProposalPdfAttachment, getProposalPdfDataUrl, getProposalPdfBlob } from '../lib/proposalPdf';
+import { getConnectStatus } from '../lib/billing';
+import { escapeHtml } from '../lib/htmlEscape';
 import { getContractForBooking, getContractDocumentsForBooking, sendContract, ownerSignContract, addContractLogNote, regenerateClientSignLink } from '../lib/contracts';
 import { getProposalResponseForBooking, sendProposalResponseLink, getProposalResponseHistory, withdrawProposalResponse } from '../lib/proposalResponses';
 import { listInquiryLinks } from '../lib/inquiryLinks';
@@ -145,6 +147,22 @@ function DocumentSection({ category, docs, uploading, onUpload, onRequestDelete 
 // they never go on a document the client receives. Client-facing text belongs in custom sections.
 function clientFacingBooking(booking) {
   return { ...booking, notes: undefined };
+}
+
+// The email a client gets with their proposal: what it is for, the total, and a real button to open it.
+function buildProposalEmailBody({ client, fromName, reference, respondLink, booking, total }) {
+  const event = [
+    booking?.eventType ? `your ${booking.eventType.toLowerCase()}` : 'your event',
+    booking?.eventDate ? `on ${formatEventDate(booking.eventDate)}` : null,
+    formatVenueLine(booking?.venue) ? `at ${formatVenueLine(booking.venue)}` : null,
+  ].filter(Boolean).join(' ');
+  const button = 'display:inline-block;padding:10px 18px;background:#4f46e5;color:#ffffff;border-radius:8px;text-decoration:none;font-weight:600;';
+  return `<p>Hi ${escapeHtml(client.firstName)},</p>`
+    + `<p>${escapeHtml(fromName)} has sent you proposal ${escapeHtml(reference)} for ${escapeHtml(event)}.</p>`
+    + (total > 0 ? `<p><strong>Proposal total: ${escapeHtml(currency(total))}</strong></p>` : '')
+    + `<p><a href="${escapeHtml(respondLink)}" style="${button}">Review and respond to the proposal</a></p>`
+    + '<p>The proposal is also attached as a PDF. Let us know if you have any questions!</p>'
+    + `<p>${escapeHtml(fromName)}</p>`;
 }
 
 function computeGrandTotal(lineItems, offerings) {
@@ -534,6 +552,10 @@ export default function BookingFormPage() {
   // sending skips the Stripe-connected gate and the public pay page shows
   // no Pay button, just the document. Defaults on for every new invoice.
   const [newInvoiceAcceptPayment, setNewInvoiceAcceptPayment] = useState(true);
+  // null until known. Online payment needs a connected Stripe account, so an invoice starts as document-only
+  // when there is none instead of failing on the first send.
+  const [stripeReady, setStripeReady] = useState(null);
+  const [emptyProposalConfirmOpen, setEmptyProposalConfirmOpen] = useState(false);
   // Set right after one of the quick-create buttons (Full/Deposit/Final)
   // pre-fills the composer, so the "Copied from your Proposal" note below
   // shows the right explanation instead for offerings that actually came
@@ -713,6 +735,19 @@ export default function BookingFormPage() {
     getProposalResponseForBooking(booking.id).then((pr) => { if (!cancelled) setProposalResponse(pr); }).catch(() => {});
     return () => { cancelled = true; };
   }, [booking]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getConnectStatus()
+      .then((status) => {
+        if (cancelled) return;
+        const ready = !!status?.chargesEnabled;
+        setStripeReady(ready);
+        if (!ready) setNewInvoiceAcceptPayment(false);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!booking) { setProposalHistory([]); return; }
@@ -1117,6 +1152,15 @@ export default function BookingFormPage() {
     };
   }
 
+  // A proposal with no pricing is almost always a mistake; make the owner say so before it goes to a client.
+  function requestSendProposal() {
+    if (!(computeGrandTotal(form.proposal?.lineItems, form.proposal?.offerings) > 0)) {
+      setEmptyProposalConfirmOpen(true);
+      return;
+    }
+    handleSendProposal();
+  }
+
   async function handleSendProposal() {
     if (!client?.email) {
       showToast("This client doesn't have an email address on file", 'error');
@@ -1146,7 +1190,7 @@ export default function BookingFormPage() {
           bookingId: booking.id,
           to: client.email,
           subject: `Proposal ${documentReferenceLabel(proposalReference(createdResponse))} from ${fromName}`,
-          body: `<p>Hi ${client.firstName},</p><p>Please find attached proposal ${documentReferenceLabel(proposalReference(createdResponse))} for your event.</p><p><a href="${respondLink}">Click here to review and respond to the proposal</a></p><p>Let us know if you have any questions!</p><p>${fromName}</p>`,
+          body: buildProposalEmailBody({ client, fromName, reference: documentReferenceLabel(proposalReference(createdResponse)), respondLink, booking: patch, total: computeGrandTotal(patch.proposal?.lineItems, patch.proposal?.offerings) }),
           fromName,
           pdfAttachment,
         });
@@ -1279,7 +1323,7 @@ export default function BookingFormPage() {
     setEditingInvoiceId(null);
     setNewInvoiceOfferings([]);
     setNewInvoiceDueDate('');
-    setNewInvoiceAcceptPayment(true);
+    setNewInvoiceAcceptPayment(stripeReady !== false);
     setNewInvoicePrefillKind(null);
     setShowInvoicePreview(false);
     setInvoiceSubmitAttempted(false);
@@ -1444,6 +1488,7 @@ export default function BookingFormPage() {
         memo: newInvoiceMemo,
         status: 'draft',
         number: editingInvoiceId ? invoices.find((inv) => inv.id === editingInvoiceId)?.displayNumber : null,
+        acceptPayment: newInvoiceAcceptPayment,
       });
     } catch (err) {
       showToast(err.message || 'Failed to generate PDF', 'error');
@@ -1465,6 +1510,7 @@ export default function BookingFormPage() {
         paidAmount: inv.paidAmount,
         number: inv.displayNumber || inv.number,
         issueDate: inv.sentAt || inv.createdAt,
+        acceptPayment: inv.acceptPayment,
       });
     } catch (err) {
       showToast(err.message || 'Failed to generate PDF', 'error');
@@ -1754,6 +1800,7 @@ export default function BookingFormPage() {
             paidAmount: record.paidAmount,
             number: record.displayNumber || record.number,
             issueDate: record.sentAt || record.createdAt,
+            acceptPayment: record.acceptPayment,
           });
       const title = kind === 'invoice' ? `Invoice ${documentReferenceLabel(reference)}` : `${kind === 'contract' ? (record.documentType === 'addendum' ? 'Addendum' : 'Contract') : 'Proposal'} ${documentReferenceLabel(reference)}`;
       setSavedDocumentPreview({ url: URL.createObjectURL(blob), filename: `${reference}.pdf`, title });
@@ -1777,17 +1824,20 @@ export default function BookingFormPage() {
       contract.snapshot.hours ? `Estimated hours: ${contract.snapshot.hours}` : null,
       `Contract total: ${currency(grandTotal)}`,
     ].filter(Boolean);
+    // A fully signed contract means the event is confirmed; leaving the status blank showed "Status required" in the list.
+    const confirmedStatus = (currentUser?.eventStatuses || []).find((status) => String(status.label || status.id).toLowerCase() === 'confirmed');
     const event = await addEvent({
       id: uid('evt'),
       groupId: booking.groupId || '',
       name,
+      ...(confirmedStatus ? { eventStatus: confirmedStatus.id } : {}),
       eventType: contractBooking.eventType || '',
       eventDate: contractBooking.eventDate || '',
       clientId: booking.clientId || '',
       venue: { ...emptyVenue(), ...(contractBooking.venue || booking.venue) },
       contactEmail: client?.email || '',
       contactPhone: client?.phone || '',
-      eventNote: noteLines.join(' '),
+      eventNote: noteLines.join('\n'),
     });
     await enqueueBookingUpdate(booking.id, { convertedEventId: event.id });
     if (navigateAfter) {
@@ -2618,7 +2668,7 @@ export default function BookingFormPage() {
                     </OverflowMenu>
                     <button
                       type="button"
-                      onClick={handleSendProposal}
+                      onClick={requestSendProposal}
                       disabled={sendingProposal || !client?.email}
                       title={!client?.email ? "Add an email address for this client first" : undefined}
                       data-testid="booking-form-proposal-send-button"
@@ -2886,6 +2936,9 @@ export default function BookingFormPage() {
                 />
                 <p className="mt-1 text-xs text-slate-400">After sending, changes create a separate linked version. Once the client signs, the contract becomes view-only.</p>
               </div>
+              <div className="mb-4 max-w-sm">
+                <LinkExpirationPicker value={contractLinkExpiration} onChange={setContractLinkExpiration} label="Contract signing link expiration" testId="booking-form-contract-expiration" />
+              </div>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -2918,9 +2971,6 @@ export default function BookingFormPage() {
                   {sendingContract && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
                   {revisionDraft ? (revisionDraft.status === 'fully_signed' ? 'Send Addendum for Signature' : 'Send Replacement for Signature') : 'Send Contract for Signature'}
                 </button>
-              </div>
-              <div className="mt-4 max-w-sm">
-                <LinkExpirationPicker value={contractLinkExpiration} onChange={setContractLinkExpiration} label="Contract signing link expiration" testId="booking-form-contract-expiration" />
               </div>
               {markingContractSentManually && (
                 <div className="mt-4 pt-4 border-t border-slate-100 max-w-2xl">
@@ -3325,58 +3375,61 @@ export default function BookingFormPage() {
                     </label>
                   </div>
                 </div>
+                {/* Once the contract is signed the invoice form below offers deposit / full / remaining balance itself, so these shortcuts only help while a draft is being edited. */}
+                {editingInvoiceId && contract?.status === 'fully_signed' && (
                 <div className="flex justify-end gap-2 mt-3">
-                  {alreadyInvoiced > 0 ? (
-                    <button
-                      type="button"
-                      onClick={handleCreateFinalInvoice}
-                      disabled={!booking || contract?.status !== 'fully_signed' || remainingBalance <= 0}
-                      title={
-                        !booking ? 'Save this booking first'
-                          : contract?.status !== 'fully_signed' ? 'Available once the contract is fully signed'
-                          : remainingBalance <= 0 ? 'Nothing left to invoice'
-                          : undefined
-                      }
-                      data-testid="booking-form-create-final-invoice-button"
-                      className="px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                    >
-                      Create Final Invoice →
-                    </button>
-                  ) : (
-                    <>
+                    {alreadyInvoiced > 0 ? (
                       <button
                         type="button"
-                        onClick={handleCreateFullInvoice}
-                        disabled={!booking || grandTotal <= 0 || contract?.status !== 'fully_signed'}
+                        onClick={handleCreateFinalInvoice}
+                        disabled={!booking || contract?.status !== 'fully_signed' || remainingBalance <= 0}
                         title={
                           !booking ? 'Save this booking first'
-                            : grandTotal <= 0 ? 'Add pricing to your Proposal or Contract first'
                             : contract?.status !== 'fully_signed' ? 'Available once the contract is fully signed'
+                            : remainingBalance <= 0 ? 'Nothing left to invoice'
                             : undefined
                         }
-                        data-testid="booking-form-create-full-invoice-button"
-                        className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                      >
-                        Create Full Invoice →
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleCreateDepositInvoice}
-                        disabled={!booking || !invoiceContextFromContract(contract, booking, client, businessInfo).depositAmount || grandTotal <= 0 || contract?.status !== 'fully_signed'}
-                        title={
-                          !booking ? 'Save this booking first'
-                            : !invoiceContextFromContract(contract, booking, client, businessInfo).depositAmount ? 'Set a deposit in the contract first'
-                            : contract?.status !== 'fully_signed' ? 'Available once the contract is fully signed'
-                            : undefined
-                        }
-                        data-testid="booking-form-create-deposit-invoice-button"
+                        data-testid="booking-form-create-final-invoice-button"
                         className="px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                       >
-                        Create Deposit Invoice →
+                        Create Final Invoice →
                       </button>
-                    </>
-                  )}
-                </div>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleCreateFullInvoice}
+                          disabled={!booking || grandTotal <= 0 || contract?.status !== 'fully_signed'}
+                          title={
+                            !booking ? 'Save this booking first'
+                              : grandTotal <= 0 ? 'Add pricing to your Proposal or Contract first'
+                              : contract?.status !== 'fully_signed' ? 'Available once the contract is fully signed'
+                              : undefined
+                          }
+                          data-testid="booking-form-create-full-invoice-button"
+                          className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                        >
+                          Create Full Invoice →
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCreateDepositInvoice}
+                          disabled={!booking || !invoiceContextFromContract(contract, booking, client, businessInfo).depositAmount || grandTotal <= 0 || contract?.status !== 'fully_signed'}
+                          title={
+                            !booking ? 'Save this booking first'
+                              : !invoiceContextFromContract(contract, booking, client, businessInfo).depositAmount ? 'Set a deposit in the contract first'
+                              : contract?.status !== 'fully_signed' ? 'Available once the contract is fully signed'
+                              : undefined
+                          }
+                          data-testid="booking-form-create-deposit-invoice-button"
+                          className="px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 text-xs font-semibold hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                        >
+                          Create Deposit Invoice →
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               {!editingInvoiceId && contract?.status !== 'fully_signed' ? (
@@ -3504,6 +3557,16 @@ export default function BookingFormPage() {
                               ? 'Recipient can pay online via Stripe. Turn off if this invoice is being paid outside GigWorks.'
                               : 'This invoice will be sent as a document only — no online payment option, no Stripe required.'}
                           </span>
+                          {stripeReady === false && (
+                            <span className="block text-xs text-slate-500 mt-1" data-testid="booking-form-invoice-stripe-not-connected-note">
+                              Online payment is off because Stripe is not connected yet. You can connect it in Settings → Billing.
+                            </span>
+                          )}
+                          {!newInvoiceAcceptPayment && !(businessInfo?.paymentInstructions || '').trim() && (
+                            <span className="block text-xs text-amber-700 mt-1" data-testid="booking-form-invoice-no-payment-instructions-warning">
+                              Your client will only see your contact details. Add payment instructions in Settings → Business Info so they know how to pay.
+                            </span>
+                          )}
                         </span>
                       </label>
                     </div>
@@ -3567,6 +3630,7 @@ export default function BookingFormPage() {
                           memo={newInvoiceMemo}
                           status="draft"
                           number={editingInvoiceId ? invoices.find((inv) => inv.id === editingInvoiceId)?.displayNumber : null}
+                          acceptPayment={newInvoiceAcceptPayment}
                         />
                       </div>
                     </Modal>
@@ -3830,6 +3894,16 @@ export default function BookingFormPage() {
           setInvoices((prev) => prev.map((inv) => (inv.id === updated.id ? updated : inv)));
           showToast('Payment accepted');
         }}
+      />
+
+      <ConfirmDialog
+        open={emptyProposalConfirmOpen}
+        onClose={() => setEmptyProposalConfirmOpen(false)}
+        onConfirm={() => { setEmptyProposalConfirmOpen(false); handleSendProposal(); }}
+        title="Send a proposal with no pricing?"
+        confirmLabel="Send anyway"
+        danger={false}
+        description="This proposal totals $0.00 because no offerings have been added. Your client will see it exactly as it is."
       />
 
       <ConfirmDialog

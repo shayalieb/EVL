@@ -1,6 +1,7 @@
 import { formatCurrency as currency, formatEventDate } from './format';
 import { computeOfferingTotal, computeOfferingsTotal, packageLineSummary } from './offerings';
 import { getDocumentStyle } from './documentLayouts';
+import { offlinePaymentText, showsOfflinePayment } from './invoicePayment';
 import { scaleFont, setFontStyle, drawLetterhead, drawHeaderRule, getAutoTableStyle } from './documentPdfKit';
 
 const STATUS_LABELS = {
@@ -15,7 +16,7 @@ const STATUS_LABELS = {
 // invoice meta, bill-to/event/due-date row, line items, totals, memo,
 // footer) so the PDF matches what the composer preview and the public pay
 // page show on-screen.
-async function buildInvoiceDoc({ businessInfo, client, event, contractReference, lineItems, dueDate, memo, total, status, paidAmount, number, issueDate, reference }) {
+async function buildInvoiceDoc({ businessInfo, client, event, contractReference, lineItems, dueDate, memo, total, status, paidAmount, number, issueDate, reference, acceptPayment }) {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable'),
@@ -139,6 +140,18 @@ async function buildInvoiceDoc({ businessInfo, client, event, contractReference,
   doc.text(currency(status === 'partial' ? balanceDue : grandTotal), pageWidth - marginX, y, { align: 'right' });
   setFontStyle(doc, layout, 'normal');
   y += 10;
+
+  if (showsOfflinePayment({ acceptPayment, status })) {
+    doc.setFontSize(scaleFont(9, scale));
+    doc.setTextColor(140);
+    doc.text('HOW TO PAY', marginX, y);
+    y += 5;
+    doc.setFontSize(scaleFont(10, scale));
+    doc.setTextColor(60);
+    const payLines = doc.splitTextToSize(offlinePaymentText(businessInfo), pageWidth - marginX * 2);
+    doc.text(payLines, marginX, y);
+    y += payLines.length * 5 + 6;
+  }
 
   if (memo) {
     doc.setFontSize(scaleFont(10, scale));

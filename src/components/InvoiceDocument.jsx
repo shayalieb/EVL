@@ -3,6 +3,7 @@ import { computeOfferingTotal, computeOfferingsTotal, packageLineSummary } from 
 import { formatCurrency as currency, formatEventDate } from '../lib/format';
 import { DEFAULT_ACCENT_COLOR } from '../lib/colorTheme';
 import { getLayout, getLayoutClasses, DEFAULT_TEXT_SCALE } from '../lib/documentLayouts';
+import { offlinePaymentText, showsOfflinePayment } from '../lib/invoicePayment';
 
 const STATUS_META = {
   draft: { label: 'Draft', color: '#94a3b8' },
@@ -33,9 +34,11 @@ function ruleStyle(rule, accent) {
 // previews is exactly what the client will see.
 export default function InvoiceDocument({
   businessInfo, client, event, contractReference, lineItems, dueDate, memo, total,
-  status, paidAmount, number, issueDate,
+  status, paidAmount, number, issueDate, acceptPayment,
 }) {
   const items = lineItems || [];
+  // Qty and Rate only mean something for per-unit lines; without any, those two columns just squeeze the description.
+  const showUnitColumns = items.some((item) => item.type === 'perUnit');
   const grandTotal = total ?? computeOfferingsTotal(items);
   const statusMeta = status ? STATUS_META[status] : null;
   const balanceDue = grandTotal - (paidAmount || 0);
@@ -114,21 +117,21 @@ export default function InvoiceDocument({
             <thead>
               <tr className="text-left text-[0.75em] font-semibold text-slate-400 uppercase tracking-wide" style={rule}>
                 <th className="pb-2 font-semibold">Description</th>
-                <th className="pb-2 font-semibold text-right w-16">Qty</th>
-                <th className="pb-2 font-semibold text-right w-24">Rate</th>
+                {showUnitColumns && <th className="pb-2 font-semibold text-right w-16">Qty</th>}
+                {showUnitColumns && <th className="pb-2 font-semibold text-right w-24">Rate</th>}
                 <th className="pb-2 font-semibold text-right w-28">Amount</th>
               </tr>
             </thead>
             <tbody>
               {items.map((item, index) => (
                 <tr key={item.id || `${item.name || 'item'}-${index}`} className={rowBorderClass}>
-                  <td className="py-3 pr-4">
+                  <td className="py-3 pr-4 min-w-[9rem]">
                     <div className="font-semibold text-slate-700">{item.name || 'Item'}</div>
                     {item.details && <div className="text-[0.75em] text-slate-400 mt-0.5">{item.details}</div>}
                     {item.type === 'package' && packageLineSummary(item, { includeAdditional: false }) && <div className="whitespace-pre-line text-[0.75em] text-slate-400 mt-0.5">{packageLineSummary(item, { includeAdditional: false })}</div>}
                   </td>
-                  <td className="py-3 text-right text-slate-500">{item.type === 'perUnit' ? item.unitCount : '—'}</td>
-                  <td className="py-3 text-right text-slate-500">{item.type === 'perUnit' ? currency(item.ratePerUnit) : '—'}</td>
+                  {showUnitColumns && <td className="py-3 text-right text-slate-500">{item.type === 'perUnit' ? item.unitCount : '—'}</td>}
+                  {showUnitColumns && <td className="py-3 text-right text-slate-500">{item.type === 'perUnit' ? currency(item.ratePerUnit) : '—'}</td>}
                   <td className="py-3 text-right font-semibold text-slate-700 whitespace-nowrap">{currency(computeOfferingTotal(item))}</td>
                 </tr>
               ))}
@@ -155,6 +158,13 @@ export default function InvoiceDocument({
           </div>
         </div>
       </div>
+
+      {showsOfflinePayment({ acceptPayment, status }) && (
+        <div className="mt-6 rounded-lg bg-slate-50 px-4 py-3 text-[0.875em]" data-testid="invoice-offline-payment-instructions">
+          <div className="text-[0.75em] font-semibold text-slate-400 uppercase tracking-wide mb-1">How to pay</div>
+          <div className="text-slate-700 whitespace-pre-wrap">{offlinePaymentText(businessInfo)}</div>
+        </div>
+      )}
 
       {memo && (
         <div className="mt-6 pt-6 border-t border-slate-100 text-[0.875em] text-slate-600 whitespace-pre-wrap">{memo}</div>

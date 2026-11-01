@@ -129,7 +129,7 @@ export default function VenuesPage() {
                             type="button"
                             onClick={() => openEdit(v)}
                             data-testid="venue-row-edit-button"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                            className="p-2 min-w-9 min-h-9 inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
                             aria-label="Edit venue"
                           >
                             ✎
@@ -138,7 +138,7 @@ export default function VenuesPage() {
                             type="button"
                             onClick={() => setDeleteTarget(v)}
                             data-testid="venue-row-delete-button"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
+                            className="p-2 min-w-9 min-h-9 inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50"
                             aria-label="Delete venue"
                           >
                             🗑

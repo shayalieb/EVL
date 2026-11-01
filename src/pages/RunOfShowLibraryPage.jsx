@@ -163,7 +163,7 @@ export default function RunOfShowLibraryPage() {
                             type="button"
                             onClick={() => openEdit(item)}
                             data-testid="run-of-show-library-row-edit-button"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                            className="p-2 min-w-9 min-h-9 inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
                             aria-label={`Edit ${item.name}`}
                           >
                             ✎
@@ -172,7 +172,7 @@ export default function RunOfShowLibraryPage() {
                             type="button"
                             onClick={() => setDeleteTarget(item)}
                             data-testid="run-of-show-library-row-delete-button"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
+                            className="p-2 min-w-9 min-h-9 inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50"
                             aria-label={`Delete ${item.name}`}
                           >
                             🗑

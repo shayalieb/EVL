@@ -107,10 +107,10 @@ export default function SignatureCanvas({ onChange, height = 160 }) {
           </div>
         )}
       </div>
-      <div className="flex items-center justify-between mt-1.5">
+      <div className="flex items-start justify-between gap-3 mt-1.5">
         <span className="text-xs text-slate-400">Sign above with your mouse, trackpad, or finger</span>
         {hasDrawn && (
-          <button type="button" onClick={handleClear} data-testid="signature-canvas-clear-button" className="text-xs font-semibold text-slate-400 hover:text-red-600">
+          <button type="button" onClick={handleClear} data-testid="signature-canvas-clear-button" className="shrink-0 py-1 px-2 -my-1 -mr-2 text-xs font-semibold text-slate-500 hover:text-red-600">
             Clear
           </button>
         )}

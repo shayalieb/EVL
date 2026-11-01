@@ -62,9 +62,9 @@ export async function ownerSignContract(contractId, { signatureName, signatureIm
 
 // ---- Public (unauthenticated, token-based — used by ContractSignPage) ----
 
-export async function getContractByToken(token) {
-  const data = await apiFetch(`/contract-sign/${encodeURIComponent(token)}`);
-  return data.contract;
+// Who the contract is from, before the client confirms their email.
+export async function getContractGateByToken(token) {
+  return apiFetch(`/contract-sign/${encodeURIComponent(token)}`);
 }
 
 export async function viewContractByToken(token, email) {

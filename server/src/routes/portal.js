@@ -21,7 +21,7 @@ function frontendUrl() {
 const requestLinkLimiter = createRateLimiter('portal-request-link', {
   windowMs: 60 * 60 * 1000,
   limit: 5,
-  message: { error: 'Too many attempts. Please try again later.' },
+  message: { error: 'Too many attempts. Please wait about an hour and try again.' },
 });
 
 function serializeClient(c) {

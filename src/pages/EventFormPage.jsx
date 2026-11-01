@@ -31,6 +31,8 @@ import { listDocuments, uploadDocument, deleteDocument, documentDownloadUrl } fr
 import { getBookingByEvent } from '../lib/bookings';
 import { getDashboard } from '../lib/dashboard';
 import { listInvoices, markInvoicePayment } from '../lib/invoices';
+import { getContractForBooking } from '../lib/contracts';
+import { computeOfferingsTotal } from '../lib/offerings';
 import { listGuests, createGuest, updateGuest, deleteGuest, getRsvpLink } from '../lib/guests';
 import { getPrepFormLink, emailPrepFormLink, markPrepFormReviewed } from '../lib/prepForms';
 import { InfoIcon, MapPinIcon, ClockIcon, UsersIcon, ClipboardIcon, NoteIcon, FileIcon } from '../components/ui/icons';
@@ -397,7 +399,8 @@ export default function EventFormPage() {
       const prepGroups = event.prepGroups?.length ? event.prepGroups : bookedCategories();
       setForm({
         id: event.id,
-        name: event.name, eventType: event.eventType, eventDate: event.eventDate,
+        // ?? '' throughout: a saved event can hold null for any of these, and a null value turns a controlled field uncontrolled.
+        name: event.name ?? '', eventType: event.eventType ?? '', eventDate: event.eventDate ?? '',
         eventDayOfTheWeek: event.eventDayOfTheWeek || dayOfWeekFromDate(event.eventDate),
         clientId: event.clientId || '',
         brideName: event.brideName || '',
@@ -407,8 +410,8 @@ export default function EventFormPage() {
         // contactEmail existed still get controlled ('') instead of
         // undefined values for them.
         venue: { name: '', address1: '', address2: '', city: '', state: '', zip: '', locationNote: '', loadInInfo: '', contactName: '', contactPhone: '', contactPhoneExt: '', contactEmail: '', ...event.venue },
-        contactPhone: event.contactPhone, contactPhoneExt: event.contactPhoneExt || '', contactEmail: event.contactEmail,
-        startTime: event.startTime, endTime: event.endTime,
+        contactPhone: event.contactPhone ?? '', contactPhoneExt: event.contactPhoneExt || '', contactEmail: event.contactEmail ?? '',
+        startTime: event.startTime ?? '', endTime: event.endTime ?? '',
         eventNote: event.eventNote || '',
         noOutsideContractorsNeeded: normalizeNoOutsideContractorsNeeded(event.noOutsideContractorsNeeded, event.contractorBookings, inquiryStatuses),
         contractorBookings: [...event.contractorBookings],
@@ -561,6 +564,15 @@ export default function EventFormPage() {
     () => (sourceBookingId ? allInvoices.filter((inv) => inv.bookingId === sourceBookingId) : []),
     [allInvoices, sourceBookingId]
   );
+  // The signed contract is what the deal is actually worth; revenue below only counts invoices that have gone out,
+  // so without this a $4,700 contract with one $500 deposit invoice reads as a $500 event.
+  const [signedContract, setSignedContract] = useState(null);
+  useEffect(() => {
+    if (!sourceBookingId) { setSignedContract(null); return; }
+    let cancelled = false;
+    getContractForBooking(sourceBookingId).then((contract) => { if (!cancelled) setSignedContract(contract?.status === 'fully_signed' ? contract : null); }).catch(() => { if (!cancelled) setSignedContract(null); });
+    return () => { cancelled = true; };
+  }, [sourceBookingId]);
 
   // Vendor email activity folded into the History popup — fetched lazily,
   // only while the modal is actually open, rather than on every page load,
@@ -745,6 +757,10 @@ export default function EventFormPage() {
   const revenueTotal = eventInvoices.filter((inv) => inv.status !== 'void' && inv.status !== 'draft').reduce((sum, inv) => sum + (inv.total || 0), 0);
   const draftTotal = eventInvoices.filter((inv) => inv.status === 'draft').reduce((sum, inv) => sum + (inv.total || 0), 0);
   const collectedTotal = eventInvoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0);
+  const contractValue = signedContract
+    ? (signedContract.snapshot?.lineItems || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0) + computeOfferingsTotal(signedContract.snapshot?.offerings)
+    : 0;
+  const notYetInvoiced = contractValue > 0 ? Math.max(0, contractValue - revenueTotal - draftTotal) : 0;
   // Deposit lives on the sourceBooking (Booking.depositAmount/depositPaid/
   // depositDueDate), not the invoice — a business collects it up front,
   // often before any invoice exists, so it's the one piece of pre-gig cash
@@ -1567,7 +1583,7 @@ export default function EventFormPage() {
             type="button"
             onClick={() => navigate(`/bookings/${sourceBooking.id}`)}
             data-testid="event-form-source-booking-view-button"
-            className="font-semibold hover:underline shrink-0"
+            className="py-2 font-semibold hover:underline shrink-0"
           >
             View Booking →
           </button>
@@ -2690,6 +2706,12 @@ export default function EventFormPage() {
                   <>
                     <div className="text-xl font-bold text-slate-800" data-testid="event-form-financials-revenue">{currency(revenueTotal)}</div>
                     <div className="text-xs text-slate-400 mt-1">{currency(collectedTotal)} collected so far</div>
+                    {contractValue > 0 && (
+                      <div data-testid="event-form-financials-contract-value" className="text-xs text-slate-500 mt-1">
+                        Signed contract {currency(contractValue)}
+                        {notYetInvoiced > 0.005 && <span className="text-amber-600 font-medium"> · {currency(notYetInvoiced)} not yet invoiced</span>}
+                      </div>
+                    )}
                     {draftTotal > 0 && (
                       <div data-testid="event-form-financials-draft-total" className="text-xs text-slate-400 mt-1">
                         {currency(draftTotal)} in draft (not yet sent)
@@ -2775,6 +2797,11 @@ export default function EventFormPage() {
                   {profitMargin !== null && <span className="text-sm font-semibold text-slate-400 ml-2">({profitMargin.toFixed(1)}% margin)</span>}
                 </span>
               </div>
+              {notYetInvoiced > 0.005 && (
+                <div data-testid="event-form-financials-uninvoiced-note" className="text-xs text-slate-500 mt-2">
+                  Counts invoices that have been sent. {currency(notYetInvoiced)} of the signed contract has not been invoiced yet, so profit will rise as you invoice it.
+                </div>
+              )}
               {profitMargin !== null && marginBenchmark !== null && (
                 <div data-testid="event-form-financials-benchmark" className="text-xs text-slate-400 mt-2 text-right">
                   Your average across other gigs:{' '}

@@ -114,6 +114,7 @@ export default function InvoicePayPage() {
         paidAmount,
         number: displayNumber || number,
         issueDate: sentAt || createdAt,
+        acceptPayment,
       });
     } catch (err) {
       setError(err.message || 'Failed to generate PDF');
@@ -123,9 +124,11 @@ export default function InvoicePayPage() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-8 pb-28">
       <div className="max-w-2xl mx-auto">
-        <div className="mb-6">
-          <Logo className="h-10 w-auto" />
-        </div>
+        {snapshot.businessInfo?.logo && (
+          <div className="mb-6">
+            <img src={snapshot.businessInfo.logo} alt="" className="h-10 w-auto max-w-[8rem] object-contain" />
+          </div>
+        )}
 
         {error && <div data-testid="invoice-pay-error-banner" className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
@@ -169,6 +172,7 @@ export default function InvoicePayPage() {
           paidAmount={paidAmount}
           number={displayNumber || number}
           issueDate={sentAt || createdAt}
+          acceptPayment={acceptPayment}
         />
       </div>
 

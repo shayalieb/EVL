@@ -209,10 +209,13 @@ router.post('/:id/regenerate', asyncHandler(async (req, res) => {
   res.json({ link: serializeForOwner(updated), inquiryLink: inquiryUrl, emailSent, emailError });
 }));
 
-function inquiryEventName(response) {
+export function inquiryEventName(response) {
   if (response.eventName?.trim()) return response.eventName.trim();
   const lastWord = (value) => String(value || '').trim().split(/\s+/).filter(Boolean).at(-1) || '';
-  return [[lastWord(response.groomName), lastWord(response.brideName)].filter(Boolean).join(' & '), response.eventType].filter(Boolean).join(' — ');
+  const couple = [lastWord(response.groomName), lastWord(response.brideName)].filter(Boolean).join(' & ');
+  // With no event name or couple, a booking named only "Wedding" is indistinguishable from the next one; lead with who it is for.
+  const contact = [response.firstName, response.lastName].map((part) => String(part || '').trim()).filter(Boolean).join(' ');
+  return [couple || contact, response.eventType].filter(Boolean).join(' — ');
 }
 
 function mergeInquiryNotes(existing, details) {

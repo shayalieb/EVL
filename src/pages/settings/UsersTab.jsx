@@ -229,7 +229,7 @@ export default function UsersTab() {
                       type="button"
                       onClick={() => setRemoveTarget(m)}
                       data-testid="settings-users-row-remove-button"
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
+                      className="p-2 min-w-9 min-h-9 inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50"
                       aria-label={`Remove ${m.firstName}`}
                     >
                       🗑

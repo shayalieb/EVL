@@ -326,7 +326,12 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     (async () => {
       try {
-        const data = await apiFetch('/auth/me');
+        const data = await apiFetch('/auth/me?optional=1');
+        if (!data.user) {
+          setServerUser(null);
+          setLocalBlob(null);
+          return;
+        }
         // A pending (not-yet-approved) account can log in fine, but every
         // account-scoped route including /account-data 403s for it (see
         // server/src/lib/membership.js's attachMembership) — hydrate() would

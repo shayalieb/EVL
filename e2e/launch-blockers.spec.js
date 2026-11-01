@@ -53,6 +53,10 @@ test('a proposal whose email fails is withdrawn instead of being left marked Sen
   await page.goto('/bookings/blk-proposal?tab=proposal');
   await page.getByTestId('booking-form-push-to-proposal-button').click();
   await page.getByTestId('booking-form-proposal-send-button').click();
+  // An empty proposal asks first; nothing has been created yet while the question is open.
+  await expect(page.getByText('Send a proposal with no pricing?')).toBeVisible();
+  expect(await prisma.proposalResponse.count({ where: { bookingId: 'blk-proposal' } })).toBe(0);
+  await page.getByRole('button', { name: 'Send anyway' }).click();
 
   await expect(page.getByText(/The proposal was not sent/)).toBeVisible();
   await expect(page.getByText('Proposal: Sent')).toHaveCount(0);
@@ -71,6 +75,7 @@ test('a failed proposal send restores the earlier proposal it had replaced', asy
   await page.goto('/bookings/blk-proposal?tab=proposal');
   await page.getByTestId('booking-form-push-to-proposal-button').click();
   await page.getByTestId('booking-form-proposal-send-button').click();
+  await page.getByRole('button', { name: 'Send anyway' }).click();
   await expect(page.getByText(/The proposal was not sent/)).toBeVisible();
 
   const rows = await prisma.proposalResponse.findMany({ where: { bookingId: 'blk-proposal' } });

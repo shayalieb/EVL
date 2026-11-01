@@ -128,3 +128,12 @@ details > summary::-webkit-details-marker { display: none; }
     text-align: center;
   }
 }
+
+/* iOS Safari zooms the whole page when a field under 16px gets focus. Phones get 16px fields everywhere. */
+@media (max-width: 639px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
