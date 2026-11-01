@@ -29,6 +29,16 @@ test('security: errors the caller causes become 4xx, and genuine faults stay 500
   for (const fault of [new Error('boom'), new TypeError('x is not a function'), named('PrismaClientInitializationError'), named('PrismaClientKnownRequestError', { code: 'P1001', message: "Can't reach database server" }), named('PrismaClientUnknownRequestError', { message: 'connection reset' }), null, undefined]) {
     assert.equal(clientFaultResponse(fault), null, `${fault?.name} was treated as the caller's fault`);
   }
+  // A request that sent nothing (no query, body or path parameter) cannot have sent a wrong value, so the
+  // same errors there are our bugs and stay 500s. This once hid a broken Home dashboard as "Invalid request".
+  const noInput = { carriesInput: false };
+  assert.equal(clientFaultResponse(new TypeError('i.dueDate.slice is not a function'), noInput), null);
+  assert.equal(clientFaultResponse(named('PrismaClientValidationError'), noInput), null);
+  assert.equal(clientFaultResponse(named('PrismaClientKnownRequestError', { code: 'P2000' }), noInput), null);
+  assert.equal(clientFaultResponse(named('PrismaClientUnknownRequestError', { message: 'invalid byte sequence for encoding "UTF8": 0x00' }), noInput), null);
+  // Errors that do not depend on a value the caller sent are unchanged.
+  assert.equal(clientFaultResponse(new URIError('URI malformed'), noInput).status, 400);
+  assert.equal(clientFaultResponse(named('PrismaClientKnownRequestError', { code: 'P2025' }), noInput).status, 404);
   // The response never repeats what the caller sent or what the database said.
   assert.doesNotMatch(JSON.stringify(clientFaultResponse(named('PrismaClientValidationError', { message: 'Argument `where` SECRET' }))), /SECRET/);
 });

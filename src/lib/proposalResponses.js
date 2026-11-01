@@ -32,6 +32,11 @@ export async function sendProposalResponseLink({ bookingId, recipientEmail, reci
   });
 }
 
+// Withdraws a proposal whose email never went out, so it is not left marked "Sent".
+export async function withdrawProposalResponse(id) {
+  return apiFetch(`/proposal-responses/${encodeURIComponent(id)}/rollback`, { method: 'POST' });
+}
+
 // ---- Public (unauthenticated, token-based — used by ProposalRespondPage) ----
 
 export async function getProposalResponseByToken(token) {

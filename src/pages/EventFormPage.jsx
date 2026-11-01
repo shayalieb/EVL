@@ -30,7 +30,7 @@ import { generatePrepSheetPdf, generatePrepSheetPdfAttachment } from '../lib/pre
 import { listDocuments, uploadDocument, deleteDocument, documentDownloadUrl } from '../lib/documents';
 import { getBookingByEvent } from '../lib/bookings';
 import { getDashboard } from '../lib/dashboard';
-import { listInvoices } from '../lib/invoices';
+import { listInvoices, markInvoicePayment } from '../lib/invoices';
 import { listGuests, createGuest, updateGuest, deleteGuest, getRsvpLink } from '../lib/guests';
 import { getPrepFormLink, emailPrepFormLink, markPrepFormReviewed } from '../lib/prepForms';
 import { InfoIcon, MapPinIcon, ClockIcon, UsersIcon, ClipboardIcon, NoteIcon, FileIcon } from '../components/ui/icons';
@@ -310,6 +310,8 @@ export default function EventFormPage() {
   const [documents, setDocuments] = useState([]);
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [markingDepositPaid, setMarkingDepositPaid] = useState(false);
+  // null = closed; { invoice } = confirming; invoice is the open invoice the deposit payment is recorded on (or null).
+  const [depositPayConfirm, setDepositPayConfirm] = useState(null);
   const [docPendingDelete, setDocPendingDelete] = useState(null);
   const [prepEmailModalOpen, setPrepEmailModalOpen] = useState(false);
   const [sendingPrepEmail, setSendingPrepEmail] = useState(false);
@@ -803,16 +805,37 @@ export default function EventFormPage() {
     || settledInvoices.length > 0 || (form.otherExpenses || []).length > 0;
   const isActualFinancials = hasFinancialActivity && costsSettled && revenueSettled && expensesSettled;
 
-  // Writes straight to the booking (not local form state, unlike most of
-  // this page) — deposit fields live on sourceBooking, a different record
-  // from the event this form is editing, so there's nothing to save here
-  // beyond the one field.
-  async function handleMarkDepositPaid() {
+  // The deposit is also what the deposit invoice asks for. Marking only the booking's flag left that
+  // invoice "Sent" and "collected" at $0, so the screen contradicted itself. When exactly one open invoice
+  // matches the deposit amount the payment is recorded on that invoice as well (which also writes the
+  // payment ledger entry). Several matches can't be told apart, so the owner picks the invoice themselves.
+  function handleMarkDepositPaid() {
+    if (!sourceBooking || !depositInfo) return;
+    const matches = eventInvoices.filter((inv) => ['sent', 'partial'].includes(inv.status) && Math.abs((inv.total || 0) - depositInfo.amount) < 0.005);
+    if (matches.length > 1) {
+      showToast('More than one open invoice matches this deposit. Record the payment on the right one from the booking’s Invoices tab.', 'error');
+      return;
+    }
+    setDepositPayConfirm({ invoice: matches[0] || null });
+  }
+
+  // Writes to the booking (deposit fields live on sourceBooking, a different record from the event this
+  // form edits) and, when there is a matching open invoice, records the payment on it first.
+  async function confirmDepositPaid() {
+    const target = depositPayConfirm?.invoice || null;
+    setDepositPayConfirm(null);
     if (!sourceBooking) return;
     setMarkingDepositPaid(true);
     try {
-      await updateBooking(sourceBooking.id, { depositPaid: true });
-      showToast('Deposit marked paid');
+      if (target) {
+        const saved = await markInvoicePayment(target.id, { status: 'paid' });
+        setAllInvoices((list) => list.map((inv) => (inv.id === saved.id ? saved : inv)));
+      }
+      const savedBooking = await updateBooking(sourceBooking.id, { depositPaid: true });
+      // sourceBooking is this page's own copy (loaded once); without this the screen kept saying
+      // "due in N days" with the button still showing until the page was reloaded.
+      setSourceBooking((current) => (current ? { ...current, ...(savedBooking || {}), depositPaid: true } : current));
+      showToast(target ? `Deposit marked paid and invoice #${target.displayNumber ?? target.number} recorded as paid` : 'Deposit marked paid');
     } catch (err) {
       showToast(err.message || 'Failed to mark deposit paid', 'error');
     } finally {
@@ -2776,7 +2799,8 @@ export default function EventFormPage() {
                       className="w-full flex items-center justify-between gap-3 text-sm px-3 py-2 rounded-lg border border-slate-100 bg-slate-50/60 hover:bg-slate-100/60 text-left"
                     >
                       <div className="min-w-0 truncate">
-                        <span className="font-medium text-slate-700">{inv.recipientName || `Invoice #${inv.displayNumber ?? inv.number ?? '—'}`}</span>
+                        <span className="font-medium text-slate-700">{`Invoice #${inv.displayNumber ?? inv.number ?? '—'}`}</span>
+                        {inv.recipientName && <span className="text-xs text-slate-400 ml-1.5">{inv.recipientName}</span>}
                         {inv.dueDate && <span className="text-xs text-slate-400 ml-1.5">Due {formatEventDate(inv.dueDate.slice(0, 10))}</span>}
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
@@ -3072,6 +3096,18 @@ export default function EventFormPage() {
         initialBody={prepEmailDraft.body}
         sending={sendingPrepEmail}
         onConfirm={handleSendPrepEmail}
+      />
+
+      <ConfirmDialog
+        open={!!depositPayConfirm}
+        onClose={() => setDepositPayConfirm(null)}
+        onConfirm={confirmDepositPaid}
+        title="Mark deposit paid?"
+        confirmLabel="Mark Paid"
+        danger={false}
+        description={depositPayConfirm?.invoice
+          ? `This records ${currency(depositInfo?.amount || 0)} as received today and marks invoice #${depositPayConfirm.invoice.displayNumber ?? depositPayConfirm.invoice.number} as paid. The payment method won't be recorded.`
+          : `This records the ${currency(depositInfo?.amount || 0)} deposit as received. No invoice is linked to it.`}
       />
 
       <ConfirmDialog

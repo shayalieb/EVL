@@ -22,7 +22,7 @@ import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
 import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, bookingDocumentDownloadUrl } from '../lib/bookingDocuments';
 import { generateProposalPdf, generateProposalPdfAttachment, getProposalPdfDataUrl, getProposalPdfBlob } from '../lib/proposalPdf';
 import { getContractForBooking, getContractDocumentsForBooking, sendContract, ownerSignContract, addContractLogNote, regenerateClientSignLink } from '../lib/contracts';
-import { getProposalResponseForBooking, sendProposalResponseLink, getProposalResponseHistory } from '../lib/proposalResponses';
+import { getProposalResponseForBooking, sendProposalResponseLink, getProposalResponseHistory, withdrawProposalResponse } from '../lib/proposalResponses';
 import { listInquiryLinks } from '../lib/inquiryLinks';
 import { buildBookingMergePatch } from '../lib/applyInquiry';
 import { listInvoices, createInvoice, updateInvoice, sendInvoice, markInvoicePayment, sendReceipt, voidInvoice, getNextInvoiceInfo } from '../lib/invoices';
@@ -140,6 +140,12 @@ function DocumentSection({ category, docs, uploading, onUpload, onRequestDelete 
 // see OfferingPickerModal's "+ One-time item"), but computeGrandTotal and
 // the PDF builders still read this field so proposals/contracts sent before
 // that change keep rendering their stored line items correctly.
+
+// Booking notes are the owner's private working notes (the inquiry's message lands there too), so
+// they never go on a document the client receives. Client-facing text belongs in custom sections.
+function clientFacingBooking(booking) {
+  return { ...booking, notes: undefined };
+}
 
 function computeGrandTotal(lineItems, offerings) {
   const itemsTotal = (lineItems || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
@@ -1056,7 +1062,7 @@ export default function BookingFormPage() {
     const { patch, promise } = persistBooking();
     promise.catch((err) => showToast(err.message || 'Failed to save changes.', 'error'));
     try {
-      await generateProposalPdf({ booking: patch, client, businessInfo, reference: 'DRAFT — Not sent' });
+      await generateProposalPdf({ booking: clientFacingBooking(patch), client, businessInfo, reference: 'DRAFT — Not sent' });
     } catch (err) {
       showToast(err.message || 'Failed to generate PDF', 'error');
     }
@@ -1075,7 +1081,7 @@ export default function BookingFormPage() {
     try {
       const { patch, promise } = persistBooking();
       promise.catch((err) => showToast(err.message || 'Failed to save changes.', 'error'));
-      const url = await getProposalPdfDataUrl({ booking: patch, client, businessInfo, reference: 'DRAFT — Not sent' });
+      const url = await getProposalPdfDataUrl({ booking: clientFacingBooking(patch), client, businessInfo, reference: 'DRAFT — Not sent' });
       setProposalPreviewUrl(url);
       setShowProposalPreview(true);
     } catch (err) {
@@ -1096,7 +1102,6 @@ export default function BookingFormPage() {
         eventType: patch.eventType,
         eventDate: patch.eventDate,
         venue: patch.venue,
-        notes: patch.notes,
         depositAmount: patch.depositAmount,
         depositDueDate: patch.depositDueDate,
         depositPaid: patch.depositPaid,
@@ -1133,16 +1138,28 @@ export default function BookingFormPage() {
         snapshot: buildProposalSnapshot(patch),
         expiration: serializeLinkExpiration(proposalLinkExpiration),
       });
+      const previousResponse = proposalResponse;
       setProposalResponse(createdResponse);
-      const pdfAttachment = await generateProposalPdfAttachment({ booking: patch, client, businessInfo, reference: proposalReference(createdResponse), issuedAt: createdResponse.sentAt });
-      await sendEmail({
-        bookingId: booking.id,
-        to: client.email,
-        subject: `Proposal ${documentReferenceLabel(proposalReference(createdResponse))} from ${fromName}`,
-        body: `<p>Hi ${client.firstName},</p><p>Please find attached proposal ${documentReferenceLabel(proposalReference(createdResponse))} for your event.</p><p><a href="${respondLink}">Click here to review and respond to the proposal</a></p><p>Let us know if you have any questions!</p><p>${fromName}</p>`,
-        fromName,
-        pdfAttachment,
-      });
+      try {
+        const pdfAttachment = await generateProposalPdfAttachment({ booking: clientFacingBooking(patch), client, businessInfo, reference: proposalReference(createdResponse), issuedAt: createdResponse.sentAt });
+        await sendEmail({
+          bookingId: booking.id,
+          to: client.email,
+          subject: `Proposal ${documentReferenceLabel(proposalReference(createdResponse))} from ${fromName}`,
+          body: `<p>Hi ${client.firstName},</p><p>Please find attached proposal ${documentReferenceLabel(proposalReference(createdResponse))} for your event.</p><p><a href="${respondLink}">Click here to review and respond to the proposal</a></p><p>Let us know if you have any questions!</p><p>${fromName}</p>`,
+          fromName,
+          pdfAttachment,
+        });
+      } catch (sendErr) {
+        // The proposal row already exists, but the client never got it. Withdraw it so nothing
+        // anywhere (status badge, log, stage) claims it was sent.
+        let withdrawn = true;
+        try { await withdrawProposalResponse(createdResponse.id); } catch { withdrawn = false; }
+        if (withdrawn) setProposalResponse(previousResponse);
+        throw new Error(withdrawn
+          ? `The proposal was not sent: ${sendErr.message || 'the email could not be delivered'}. Nothing was recorded, so you can fix the problem and send it again.`
+          : `The email could not be delivered (${sendErr.message || 'unknown error'}), and the proposal may still show as sent. Reload this booking to check its status.`);
+      }
       const sentProposal = {
         ...(patch.proposal || {}),
         sentAt: new Date().toISOString(),
@@ -1206,14 +1223,14 @@ export default function BookingFormPage() {
     return {
       businessInfo: accepted?.businessInfo || businessInfo,
       client: accepted?.client || (client ? { firstName: client.firstName, lastName: client.lastName, email: client.email, phone: client.phone } : {}),
-      booking: accepted?.booking || {
+      // A proposal accepted before notes were kept off client documents still carries them in its snapshot.
+      booking: accepted?.booking ? clientFacingBooking(accepted.booking) : {
         eventType: form.eventType,
         eventDate: form.eventDate,
         venue: form.venue,
         depositAmount: form.depositAmount === '' ? null : Number(form.depositAmount),
         depositDueDate: form.depositDueDate,
         depositPaid: form.depositPaid,
-        notes: form.notes,
         brideName: form.brideName,
         groomName: form.groomName,
       },
@@ -2234,6 +2251,7 @@ export default function BookingFormPage() {
             <div>
               <label className={labelClass}>Notes</label>
               <textarea rows={3} value={form.notes} onChange={(e) => update('notes', e.target.value)} data-testid="booking-form-notes-textarea" className={inputClass} />
+              <p className="text-xs text-slate-400 mt-1">Private to your team. Never shown on proposals, contracts or invoices.</p>
             </div>
 
             {booking && (

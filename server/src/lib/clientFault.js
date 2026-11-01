@@ -12,16 +12,23 @@ const UNSTORABLE_VALUE = /code: "22[0-9A-Z]{3}"|invalid byte sequence|0x00|unsup
 const STRING_METHODS = 'trim|trimStart|trimEnd|toLowerCase|toUpperCase|startsWith|endsWith|split|replace|replaceAll|match|normalize|localeCompare|padStart|padEnd|charAt|slice|substring';
 const WRONG_TYPE = new RegExp(`\\.(${STRING_METHODS})(\\?\\.)? is not a function$|Cannot read properties of (null|undefined) \\(reading '(trim|toLowerCase|toUpperCase|startsWith|endsWith|split)'\\)`);
 
-export function clientFaultResponse(err) {
+// carriesInput says whether the request held anything the caller could have got wrong: a query
+// string, a body, or a path parameter. A bad value can only be the caller's fault if one was sent.
+// A plain GET with none of those that hits a TypeError or a rejected query is a bug in our code, and
+// it has to stay a 500 so it is visible (it once hid a broken Home dashboard behind "Invalid request").
+export function clientFaultResponse(err, { carriesInput = true } = {}) {
   if (!err) return null;
-  if (err instanceof TypeError && WRONG_TYPE.test(String(err.message))) return { status: 400, message: 'Invalid request.' };
   if (err instanceof URIError || (err.status === 400 && /decode/i.test(err.message || ''))) return { status: 400, message: 'Bad request.' };
   const status = err.status || err.statusCode;
   if (status >= 400 && status < 500) return { status, message: 'Bad request.' };
-  if (err.name === 'PrismaClientValidationError') return { status: 400, message: 'Invalid request.' };
   if (err.name === 'PrismaClientKnownRequestError') {
     if (err.code === 'P2002') return { status: 409, message: 'That value is already in use.' };
     if (err.code === 'P2025') return { status: 404, message: 'Not found.' };
+  }
+  if (!carriesInput) return null;
+  if (err instanceof TypeError && WRONG_TYPE.test(String(err.message))) return { status: 400, message: 'Invalid request.' };
+  if (err.name === 'PrismaClientValidationError') return { status: 400, message: 'Invalid request.' };
+  if (err.name === 'PrismaClientKnownRequestError') {
     if (INVALID_VALUE_CODES.has(err.code)) return { status: 400, message: 'Invalid request.' };
     if (err.code === 'P2010' && UNSTORABLE_VALUE.test(String(err.message))) return { status: 400, message: 'Invalid request.' };
   }

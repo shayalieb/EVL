@@ -123,9 +123,10 @@ router.get('/', asyncHandler(async (req, res) => {
     .sort((a, b) => b.counts.pending - a.counts.pending)
     .slice(0, 5);
 
+  // Invoice.dueDate is a DateTime column, so Prisma hands back a Date. The client reads it as an ISO string.
   const overdueInvoices = scopedInvoices
-    .filter((invoice) => ['sent', 'partial'].includes(invoice.status) && invoice.dueDate && invoice.dueDate.slice(0, 10) < today)
-    .map((invoice) => ({ ...invoice, total: invoiceTotal(invoice), paidAmount: invoice.paidAmount ?? 0 }))
+    .filter((invoice) => ['sent', 'partial'].includes(invoice.status) && invoice.dueDate && invoice.dueDate.toISOString().slice(0, 10) < today)
+    .map((invoice) => ({ ...invoice, dueDate: invoice.dueDate.toISOString(), total: invoiceTotal(invoice), paidAmount: invoice.paidAmount ?? 0 }))
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
     .slice(0, 5);
 

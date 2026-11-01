@@ -5,7 +5,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { attachMembership } from '../lib/membership.js';
+import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { sendMail, resolveFromHeader, escapeHtml, buildActionEmailHtml } from '../lib/mailer.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 import { normalizeValidEmail } from '../lib/emailAddress.js';
@@ -61,6 +61,13 @@ function serializeForPublic(pr) {
 // ---- Authenticated (owner-side) ----
 
 router.use(requireAuth, asyncHandler(attachMembership));
+
+// Reading is open to the team; sending or withdrawing a proposal needs booking permission, like invoices.
+router.use((req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD') return next();
+  if (!effectivePermissions(req.membership).manageBookings) return res.status(403).json({ error: 'Not authorized.' });
+  next();
+});
 
 // bookingId scopes to that one booking's most recent response (a resend —
 // e.g. after a revision request — creates a new row rather than
@@ -120,13 +127,19 @@ router.post('/', asyncHandler(async (req, res) => {
   const displayNumber = await nextDocumentDisplayNumber();
 
   // Only the newest unanswered proposal may receive a response. Older
-  // versions remain available as an accurate view-only record.
-  const [, proposalResponse] = await prisma.$transaction([
-    prisma.proposalResponse.updateMany({
+  // versions remain available as an accurate view-only record. The ids it
+  // replaces are kept in the log entry so a delivery failure can restore them.
+  const proposalResponse = await prisma.$transaction(async (tx) => {
+    const replaced = await tx.proposalResponse.findMany({
       where: { accountId: req.membership.accountId, bookingId, status: 'sent' },
+      select: { id: true },
+    });
+    await tx.proposalResponse.updateMany({
+      where: { id: { in: replaced.map((row) => row.id) } },
       data: { status: 'superseded' },
-    }),
-    prisma.proposalResponse.create({ data: {
+    });
+    const supersedes = replaced.map((row) => row.id);
+    return tx.proposalResponse.create({ data: {
       id,
       documentNumber: String(displayNumber),
       displayNumber,
@@ -141,15 +154,42 @@ router.post('/', asyncHandler(async (req, res) => {
       expiresAt: resolvedExpiration.expiresAt,
       sentAt,
       log: manual
-        ? withLogEntry([], { type: 'manual_sent', actorEmail: normalizedOwnerEmail, note: reason.trim() })
-        : withLogEntry([], { type: 'sent', actorEmail: normalizedOwnerEmail, note: null }),
-    } }),
-  ]);
+        ? withLogEntry([], { type: 'manual_sent', actorEmail: normalizedOwnerEmail, note: reason.trim(), supersedes })
+        : withLogEntry([], { type: 'sent', actorEmail: normalizedOwnerEmail, note: null, supersedes }),
+    } });
+  });
 
   res.status(201).json({
     proposalResponse: serializeForOwner(proposalResponse),
     respondLink: `${frontendUrl()}/proposal/${token}`,
   });
+}));
+
+// The proposal email is built and sent by the browser (the PDF is generated there), after the
+// response row above exists. If that email fails, the owner must not be left looking at a
+// proposal marked "Sent" that the client never received. This withdraws it, and puts back any
+// earlier proposal it had replaced. Only an unanswered proposal sent moments ago can be withdrawn.
+const ROLLBACK_WINDOW_MS = 15 * 60 * 1000;
+
+router.post('/:id/rollback', asyncHandler(async (req, res) => {
+  const accountId = req.membership.accountId;
+  const result = await prisma.$transaction(async (tx) => {
+    const pr = await tx.proposalResponse.findFirst({ where: { id: String(req.params.id), accountId } });
+    if (!pr) return { status: 404, error: 'Proposal not found.' };
+    const fresh = pr.sentAt && Date.now() - pr.sentAt.getTime() <= ROLLBACK_WINDOW_MS;
+    if (pr.status !== 'sent' || pr.respondedAt || !fresh) {
+      return { status: 409, error: 'This proposal can no longer be withdrawn.' };
+    }
+    const entry = (Array.isArray(pr.log) ? pr.log : []).find((item) => item?.type === 'sent' || item?.type === 'manual_sent');
+    const supersedes = Array.isArray(entry?.supersedes) ? entry.supersedes.filter((value) => typeof value === 'string') : [];
+    await tx.proposalResponse.delete({ where: { id: pr.id } });
+    if (supersedes.length) {
+      await tx.proposalResponse.updateMany({ where: { id: { in: supersedes }, accountId, bookingId: pr.bookingId, status: 'superseded' }, data: { status: 'sent' } });
+    }
+    return { status: 200 };
+  });
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  res.json({ ok: true });
 }));
 
 // ---- Public (unauthenticated, token-based) ----

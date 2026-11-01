@@ -340,7 +340,11 @@ app.use((err, req, res, next) => {
   // does not mark the message safe to show), a value of the wrong type or length, a NUL byte that
   // the database cannot store, or a duplicate. Reporting these as 500s makes real faults harder to
   // see and invites probing. Sentry has already recorded the error above this point.
-  const clientFault = clientFaultResponse(err);
+  const carriesInput = Object.keys(req.query || {}).length > 0
+    || Number(req.headers['content-length'] || 0) > 0
+    || Boolean(req.headers['transfer-encoding'])
+    || String(req.route?.path ?? '').includes(':');
+  const clientFault = clientFaultResponse(err, { carriesInput });
   if (clientFault) {
     console.log(JSON.stringify({ level: 'warn', type: 'invalid_input', requestId: req.requestId, method: req.method, path: safeLogPath(req.path), error: err instanceof Error ? err.name : 'UnknownError', code: typeof err.code === 'string' && /^[A-Z0-9_]+$/.test(err.code) ? err.code : undefined }));
     return res.status(clientFault.status).json({ error: clientFault.message });
