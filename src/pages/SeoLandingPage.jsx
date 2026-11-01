@@ -52,7 +52,7 @@ export default function SeoLandingPage() {
         </section>
 
         {page.details && (
-          <section aria-label="DJ booking workflow in detail" className="mx-auto max-w-5xl px-4 pb-16 sm:px-6">
+          <section aria-label={`${page.eyebrow} workflow in detail`} className="mx-auto max-w-5xl px-4 pb-16 sm:px-6">
             <div className="grid gap-8 md:grid-cols-2">
               {page.details.map((detail) => (
                 <article key={detail.heading}>
@@ -72,7 +72,7 @@ export default function SeoLandingPage() {
 
         {page.faqs && (
           <section aria-labelledby="booking-questions" className="mx-auto max-w-5xl px-4 pb-16 sm:px-6">
-            <h2 id="booking-questions" className="text-3xl font-bold tracking-tight">DJ booking questions</h2>
+            <h2 id="booking-questions" className="text-3xl font-bold tracking-tight">{page.faqHeading || 'Questions about this workflow'}</h2>
             <div className="mt-6 divide-y divide-slate-200">
               {page.faqs.map((faq) => (
                 <article key={faq.question} className="py-6">
