@@ -41,6 +41,19 @@ export const SEO_LANDING_PAGES = [
     summary: 'Turn incoming requests into organized events with reusable offerings, clear client documents, payment tracking, and day-of details.',
     benefits: ['Respond to inquiries with consistent packages', 'Create proposals and contracts from booking details', 'Track deposits and open invoice balances', 'Keep venue, timeline, and contact information together'],
     workflow: ['Receive the request', 'Build and send the offer', 'Collect signatures and deposits', 'Run the event from one record'],
+    details: [
+      { heading: 'Build the offer around the event', body: 'Keep the client, venue, event date, and requested services together. Use your saved offerings to prepare a proposal with consistent pricing, then carry the booking details into the contract and invoice instead of retyping them in separate documents.' },
+      { heading: 'Keep staffing connected to the booking', body: 'For a DJ company booking multiple performers, assign contractors to the event and track confirmed, declined, and pending replies. Keep the roster and event information in the same workspace so your office can see which assignments still need attention.' },
+      { heading: 'Prepare the handoff before event day', body: 'Keep venue contacts, schedules, and production details attached to the event. When a booking needs extra performers or a specific setup, connect the roster and stage plot to the gig rather than maintaining a separate file for each team.' },
+      { heading: 'Follow the money through the booking', body: 'Track deposits, invoice balances, and due dates alongside the client documents. Clients can accept proposals, sign contracts electronically, and pay invoices through Stripe, while your team keeps the payment status connected to the event.' },
+    ],
+    screenshot: { src: '/landing/event-roster.png', caption: 'The GigWorks event roster shows contractor confirmations alongside the event.' },
+    faqs: [
+      { question: 'Is GigWorks for a solo DJ or a company with several DJs?', answer: 'GigWorks supports independent performers and teams coordinating multiple contractors. The shared roster and event assignments are especially useful when your company staffs more than one performer. Compare the plans for team access and agency options.' },
+      { question: 'Can I handle proposals, contracts, and invoices together?', answer: 'Yes. GigWorks connects these documents to the booking, keeping client, event, and pricing details in one workflow. Clients can accept a proposal online, sign electronically, and pay an invoice through Stripe.' },
+      { question: 'Can I track which performers have confirmed?', answer: 'Yes. Each event has a contractor roster with confirmation statuses. Contractors can confirm or decline from their own link, helping the office see outstanding responses without maintaining a separate spreadsheet.' },
+      { question: 'How can I try GigWorks?', answer: 'GigWorks is onboarding an initial group of agencies and bandleaders. Join the waitlist on the homepage or use the contact form to discuss your DJ business and availability.' },
+    ],
     related: ['/entertainment-agency-software', '/proposal-contract-invoice-software', '/contractor-management-software'],
   },
   {
