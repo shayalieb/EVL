@@ -3,7 +3,7 @@ import { createRateLimiter } from '../lib/rateLimiter.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { attachMembership } from '../lib/membership.js';
+import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createSignedUpload, uploadedFileSize, getSignedDownloadUrl, getSignedPreviewUrl, deleteFile, copyFile } from '../lib/fileStorage.js';
 import { hashToken, generateToken } from '../lib/resetToken.js';
 
@@ -11,6 +11,14 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
+
+// Reading follows the same rules as the rest of the event data; adding, copying or deleting
+// a file is a change to the event, so it needs the same permission as editing it.
+router.use((req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD') return next();
+  if (!effectivePermissions(req.membership).manageEvents) return res.status(403).json({ error: 'Not authorized.' });
+  next();
+});
 
 router.get('/', asyncHandler(async (req, res) => {
   const { eventId } = req.query;

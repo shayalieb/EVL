@@ -71,6 +71,10 @@ async function notifyPendingSignup(user) {
 
 router.post('/signup', credentialsLimiter, asyncHandler(async (req, res) => {
   const { firstName, lastName, email, phone, password, vertical, selectedPlan, billingInterval, groupCount } = req.body || {};
+  // JSON can carry any type; every value below is used as text.
+  if (![firstName, lastName, email, password].every((value) => typeof value === 'string') || (phone != null && typeof phone !== 'string')) {
+    return res.status(400).json({ error: 'First name, last name, a valid email address, and password are required.' });
+  }
   const websiteConfig = await getWebsiteConfig();
   if (!websiteConfig.publicSignupsEnabled) {
     return res.status(403).json({ error: 'Public signup is not currently available. Please join the waitlist or use your admin invitation link.' });
@@ -126,7 +130,7 @@ router.post('/signup', credentialsLimiter, asyncHandler(async (req, res) => {
 
 router.post('/login', credentialsLimiter, asyncHandler(async (req, res) => {
   const { email, password } = req.body || {};
-  if (!email?.trim() || !password) {
+  if (typeof email !== 'string' || !email.trim() || typeof password !== 'string' || !password) {
     return res.status(400).json({ error: 'Email and password are required.' });
   }
 
@@ -161,9 +165,18 @@ router.get('/me', asyncHandler(async (req, res) => {
   res.json({ user: sanitize(user, membership) });
 }));
 
-router.post('/change-password', requireAuth, asyncHandler(async (req, res) => {
+// A hijacked session must not be able to guess the current password at full speed
+// (the login limiter is per address and never sees this route).
+const changePasswordLimiter = createRateLimiter('auth-change-password', {
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  keyGenerator: (req) => `user:${req.session.userId}`,
+  message: { error: 'Too many attempts. Please try again later.' },
+});
+
+router.post('/change-password', requireAuth, changePasswordLimiter, asyncHandler(async (req, res) => {
   const { currentPassword, newPassword } = req.body || {};
-  if (!newPassword) {
+  if (typeof newPassword !== 'string' || !newPassword || (currentPassword != null && typeof currentPassword !== 'string')) {
     return res.status(400).json({ error: 'New password is required.' });
   }
   if (passwordTooWeak(newPassword)) {
@@ -178,12 +191,16 @@ router.post('/change-password', requireAuth, asyncHandler(async (req, res) => {
 
   const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+  // Same rule as a reset: a session someone else may hold must not outlive the old
+  // password. Every session of this user is ended, then the caller gets a fresh one.
+  await prisma.session.deleteMany({ where: { data: { contains: `"userId":"${user.id}"` } } });
+  await establishSession(req, { userId: user.id });
   res.json({ ok: true });
 }));
 
 router.post('/forgot-password', passwordResetLimiter, asyncHandler(async (req, res) => {
   const { email } = req.body || {};
-  if (!email?.trim()) {
+  if (typeof email !== 'string' || !email.trim()) {
     return res.status(400).json({ error: 'Email is required.' });
   }
 
@@ -218,7 +235,7 @@ router.post('/forgot-password', passwordResetLimiter, asyncHandler(async (req, r
 
 router.post('/reset-password', passwordResetLimiter, asyncHandler(async (req, res) => {
   const { token, newPassword } = req.body || {};
-  if (!token || !newPassword) {
+  if (typeof token !== 'string' || !token || typeof newPassword !== 'string' || !newPassword) {
     return res.status(400).json({ error: 'Token and new password are required.' });
   }
   if (passwordTooWeak(newPassword)) {

@@ -68,6 +68,7 @@ import { startEmailDomainHealthScheduler } from './lib/emailDomainHealthSchedule
 import { ensureCsrfCookie } from './lib/csrf.js';
 import { asyncHandler } from './lib/asyncHandler.js';
 import { validateRuntimeConfig } from './lib/runtimeConfig.js';
+import { clientFaultResponse } from './lib/clientFault.js';
 import { safeLogPath, scrubTelemetryEvent } from './lib/securityPrivacy.js';
 import { requestContext, securityHeaders } from './lib/httpOperations.js';
 import { closeRedis, pingRedis } from './lib/rateLimiter.js';
@@ -311,6 +312,10 @@ app.use('/api/contractor-calendar', publicContractorCalendarRouter);
 // while logged into the app, and it's fully stateless (see calendar.js).
 app.use('/api/calendar', calendarRouter);
 
+// Anything under /api that no router claimed. Without this Express answers with its
+// own HTML page, which also replaces the app's Content-Security-Policy header.
+app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));
+
 // Reports to Sentry (a no-op if SENTRY_DSN isn't set) and forwards to the
 // catch-all below, which is unchanged — it still decides the actual HTTP
 // response, Sentry just gets a copy for reporting first.
@@ -330,6 +335,15 @@ app.use((err, req, res, next) => {
   const status = err.status || err.statusCode;
   if (err.expose && status && status < 500) {
     return res.status(status).json({ error: err.message });
+  }
+  // Failures the caller caused are the caller's to fix: a malformed URL (Express marks it 400 but
+  // does not mark the message safe to show), a value of the wrong type or length, a NUL byte that
+  // the database cannot store, or a duplicate. Reporting these as 500s makes real faults harder to
+  // see and invites probing. Sentry has already recorded the error above this point.
+  const clientFault = clientFaultResponse(err);
+  if (clientFault) {
+    console.log(JSON.stringify({ level: 'warn', type: 'invalid_input', requestId: req.requestId, method: req.method, path: safeLogPath(req.path), error: err instanceof Error ? err.name : 'UnknownError', code: typeof err.code === 'string' && /^[A-Z0-9_]+$/.test(err.code) ? err.code : undefined }));
+    return res.status(clientFault.status).json({ error: clientFault.message });
   }
   console.error(JSON.stringify({
     level: 'error',

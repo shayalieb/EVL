@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { attachMembership } from '../lib/membership.js';
+import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createSignedUpload, uploadedFileSize, getSignedDownloadUrl, deleteFile } from '../lib/fileStorage.js';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -10,6 +10,14 @@ const CATEGORIES = ['proposal', 'contract'];
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
+
+// Reading follows the same rules as the rest of the booking data; adding, copying or deleting
+// a file is a change to the booking, so it needs the same permission as editing it.
+router.use((req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD') return next();
+  if (!effectivePermissions(req.membership).manageBookings) return res.status(403).json({ error: 'Not authorized.' });
+  next();
+});
 
 router.get('/', asyncHandler(async (req, res) => {
   const { bookingId, category } = req.query;

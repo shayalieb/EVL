@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { normalizeValidEmail } from '../lib/emailAddress.js';
 
 const router = Router();
 
@@ -46,6 +47,11 @@ router.get('/invite.ics', (req, res) => {
     return res.status(400).send('Missing or invalid calendar parameters.');
   }
 
+  // The address goes into the file verbatim (mailto:...), so anything that is not a
+  // plain valid address — in particular anything with a line break — is dropped.
+  const attendee = typeof attendeeEmail === 'string' ? normalizeValidEmail(attendeeEmail) : null;
+  // CN is a quoted parameter value: it may hold ':' ';' ',' but never '"' or a control character.
+  const commonName = [...String(typeof attendeeName === 'string' && attendeeName ? attendeeName : attendee || '')].filter((character) => character !== '"' && character.charCodeAt(0) > 31 && character.charCodeAt(0) !== 127).join('');
   const dtstamp = `${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z`;
 
   const lines = [
@@ -62,7 +68,7 @@ router.get('/invite.ics', (req, res) => {
     `SUMMARY:${escapeText(summary)}`,
     location ? `LOCATION:${escapeText(location)}` : null,
     description ? `DESCRIPTION:${escapeText(description)}` : null,
-    attendeeEmail ? `ATTENDEE;CN=${escapeText(attendeeName || attendeeEmail)};RSVP=TRUE:mailto:${attendeeEmail}` : null,
+    attendee ? `ATTENDEE;CN="${commonName}";RSVP=TRUE:mailto:${attendee}` : null,
     'STATUS:CONFIRMED',
     'END:VEVENT',
     'END:VCALENDAR',

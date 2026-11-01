@@ -174,7 +174,15 @@ export function buildInlineImageAttachments(inlineImages) {
 
 // Throws if RESEND_API_KEY isn't configured — callers catch and respond 503,
 // matching the existing lazy-init behavior in resend.js.
-export async function sendMail({ from, to, subject, html, replyTo, headers, attachments, tracking }) {
+// Anything that ends up in a header (subject, sender, recipients) must be one line.
+// Subjects and display names routinely contain text typed by someone else (a guest's
+// name on a public RSVP page, a client's name on an inquiry form).
+const oneLine = (value) => (typeof value === 'string' ? [...value].map((character) => (character === '\r' || character === '\n' || character === '\u2028' || character === '\u2029' ? ' ' : character)).filter((character) => character !== String.fromCharCode(0)).join('').replace(/ {2,}/g, ' ').trim() : value);
+
+export async function sendMail({ from: rawFrom, to: rawTo, subject: rawSubject, html, replyTo, headers, attachments, tracking }) {
+  const from = oneLine(rawFrom);
+  const to = Array.isArray(rawTo) ? rawTo.map(oneLine) : oneLine(rawTo);
+  const subject = oneLine(rawSubject);
   const resend = getResendClient();
   const finalHtml = typeof html === 'object' && html !== null ? html.toString() : html;
   const embeddedAttachments = (typeof html === 'object' && html !== null && Array.isArray(html.attachments)) ? html.attachments : [];

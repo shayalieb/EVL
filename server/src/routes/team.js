@@ -93,12 +93,20 @@ router.post('/members', asyncHandler(async (req, res) => {
 
   const accountName = 'your GigWorks team';
   const setupUrl = `${frontendUrl()}/reset-password?token=${encodeURIComponent(token)}&invite=1`;
-  await sendMail({
-    from: await resolveFromHeader({ accountId: req.membership.accountId, fromName: accountName, localPart: 'team' }),
-    to: normalizedEmail,
-    subject: `You're invited to join ${accountName}`,
-    html: buildActionEmailHtml({ heading: `Join ${escapeHtml(accountName)}`, bodyHtml: '<p>Set your password to accept your invitation and access the account.</p>', buttonText: 'Accept invitation', buttonUrl: setupUrl }),
-  });
+  try {
+    await sendMail({
+      from: await resolveFromHeader({ accountId: req.membership.accountId, fromName: accountName, localPart: 'team' }),
+      to: normalizedEmail,
+      subject: `You're invited to join ${accountName}`,
+      html: buildActionEmailHtml({ heading: `Join ${escapeHtml(accountName)}`, bodyHtml: '<p>Set your password to accept your invitation and access the account.</p>', buttonText: 'Accept invitation', buttonUrl: setupUrl }),
+    });
+  } catch (err) {
+    // Without the email the invitee has no way in, and a retry would hit "already exists".
+    // Take the half-created member back out so the owner can simply try again.
+    console.error(`Failed to email team invitation to user ${membership.userId}:`, err);
+    await prisma.user.delete({ where: { id: membership.userId } }).catch(() => {});
+    return res.status(502).json({ error: 'The invitation email could not be sent. Please try again.' });
+  }
 
   const invitedMembership = await prisma.membership.findUnique({
     where: { id: membership.id },

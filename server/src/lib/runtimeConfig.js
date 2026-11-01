@@ -15,6 +15,11 @@ export function validateRuntimeConfig(env = process.env) {
     if ((env.SESSION_SECRET || '').length < 32) errors.push('SESSION_SECRET must be at least 32 characters in production.');
     if (!isHttpsUrl(env.FRONTEND_URL)) errors.push('FRONTEND_URL must be a valid HTTPS URL in production.');
     if (!(env.EXTRA_CLIENT_ORIGINS || '').trim()) errors.push('EXTRA_CLIENT_ORIGINS must list at least one production frontend origin.');
+    // Every listed origin is trusted for credentialed cross-origin requests, so each must be an
+    // exact https origin: no wildcard, no http, no path or trailing slash (those never match anyway).
+    for (const origin of (env.EXTRA_CLIENT_ORIGINS || '').split(',').map((entry) => entry.trim()).filter(Boolean)) {
+      if (!/^https:\/\/[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:\d{1,5})?$/i.test(origin)) errors.push(`EXTRA_CLIENT_ORIGINS entry "${origin}" must be an exact https origin (no wildcard, path or trailing slash).`);
+    }
     if (!(env.REDIS_URL || '').trim()) errors.push('REDIS_URL is required in production for shared rate limiting.');
     const quickBooksConfigured = !!(env.QUICKBOOKS_CLIENT_ID || env.QUICKBOOKS_CLIENT_SECRET || env.QUICKBOOKS_REDIRECT_URI || env.QUICKBOOKS_TOKEN_ENCRYPTION_KEY);
     if (quickBooksConfigured) {
