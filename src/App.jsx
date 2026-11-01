@@ -194,6 +194,7 @@ function AppRoutes() {
       <Route path="/terms" element={<TermsOfServicePage />} />
       <Route path="/privacy" element={<PrivacyPolicyPage />} />
       <Route path="/cookies" element={<CookiePolicyPage />} />
+      <Route path="/wedding-band-management-software" element={<SeoLandingPage />} />
       <Route path="/band-management-software" element={<SeoLandingPage />} />
       <Route path="/entertainment-agency-software" element={<SeoLandingPage />} />
       <Route path="/dj-booking-software" element={<SeoLandingPage />} />
