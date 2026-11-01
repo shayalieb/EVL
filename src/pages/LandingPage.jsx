@@ -9,6 +9,7 @@ import {
   StarIcon, ShieldIcon, ChartIcon, BoltIcon, SparkleIcon,
 } from '../components/ui/icons';
 import { getLandingConfig, joinWaitlist, sendContactMessage } from '../lib/landing';
+import { SEO_LANDING_PAGES } from '../lib/seoPages';
 
 const inputClass = 'w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 outline-none transition';
 const DEFAULT_PUBLIC_SIGNUPS_ENABLED = import.meta.env.VITE_PUBLIC_SIGNUPS_ENABLED === 'true';
@@ -894,6 +895,20 @@ export default function LandingPage({ previewConfig } = {}) {
               </form>
             )}
           </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="workflow-pages-heading" className="border-t border-slate-100 bg-white">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16">
+          <h2 id="workflow-pages-heading" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Find the workflow for your business</h2>
+          <p className="mt-3 text-slate-600">Explore the tools for your team, from booking the first gig to preparing the final lineup.</p>
+          <nav aria-label="GigWorks workflows" className="mt-8 grid gap-4 sm:grid-cols-2">
+            {SEO_LANDING_PAGES.map((page) => (
+              <Link key={page.path} to={page.path} className="rounded-2xl border border-slate-200 p-5 font-semibold text-indigo-700 hover:border-indigo-300 hover:bg-indigo-50 transition-colors">
+                {page.headline} <span aria-hidden="true">→</span>
+              </Link>
+            ))}
+          </nav>
         </div>
       </section>
 

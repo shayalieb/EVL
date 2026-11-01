@@ -8,6 +8,7 @@
     { "source": "/privacy", "destination": "/privacy/index.html" },
     { "source": "/terms", "destination": "/terms/index.html" },
     { "source": "/cookies", "destination": "/cookies/index.html" },
+    { "source": "/wedding-band-management-software", "destination": "/wedding-band-management-software/index.html" },
     { "source": "/band-management-software", "destination": "/band-management-software/index.html" },
     { "source": "/entertainment-agency-software", "destination": "/entertainment-agency-software/index.html" },
     { "source": "/dj-booking-software", "destination": "/dj-booking-software/index.html" },

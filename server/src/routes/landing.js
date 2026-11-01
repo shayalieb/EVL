@@ -28,6 +28,7 @@ publicLandingRouter.get('/sitemap.xml', asyncHandler(async (_req, res) => {
   const lastmod = '2026-10-01';
   const urls = [
     'https://www.gigworks.io/',
+    'https://www.gigworks.io/wedding-band-management-software',
     'https://www.gigworks.io/band-management-software',
     'https://www.gigworks.io/entertainment-agency-software',
     'https://www.gigworks.io/dj-booking-software',
@@ -42,7 +43,16 @@ publicLandingRouter.get('/sitemap.xml', asyncHandler(async (_req, res) => {
     'https://www.gigworks.io/terms',
     'https://www.gigworks.io/cookies',
   ];
-  const entries = urls.map((loc) => `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${lastmod}</lastmod>\n  </url>`).join('\n');
+  const updatedUrls = new Set([
+    'https://www.gigworks.io/',
+    'https://www.gigworks.io/dj-booking-software',
+    'https://www.gigworks.io/band-management-software',
+    'https://www.gigworks.io/entertainment-agency-software',
+    'https://www.gigworks.io/musician-scheduling-software',
+    'https://www.gigworks.io/stage-plot-software',
+    'https://www.gigworks.io/wedding-band-management-software',
+  ]);
+  const entries = urls.map((loc) => `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${updatedUrls.has(loc) ? '2026-11-01' : lastmod}</lastmod>\n  </url>`).join('\n');
   res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries}\n</urlset>\n`);
 }));
 
