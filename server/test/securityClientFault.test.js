@@ -13,6 +13,10 @@ test('security: errors the caller causes become 4xx, and genuine faults stay 500
   assert.equal(clientFaultResponse(named('PrismaClientKnownRequestError', { code: 'P2000' })).status, 400);
   assert.equal(clientFaultResponse(named('PrismaClientUnknownRequestError', { message: 'invalid byte sequence for encoding "UTF8": 0x00' })).status, 400);
   assert.equal(clientFaultResponse(named('PrismaClientKnownRequestError', { code: 'P2010', message: 'invalid input syntax for type integer' })).status, 400);
+  assert.equal(clientFaultResponse(named('PrismaClientUnknownRequestError', { message: 'ConnectorError { kind: QueryError(PostgresError { code: "22P05", message: "unsupported Unicode escape sequence" }) }' })).status, 400);
+  assert.equal(clientFaultResponse(named('PrismaClientUnknownRequestError', { message: 'PostgresError { code: "22003", message: "value out of range" }' })).status, 400);
+  // Class 22 only: other SQLSTATEs (connection, deadlock, constraint) are not the caller's doing.
+  for (const code of ['08006', '40P01', '53300', '57P01', '23505']) assert.equal(clientFaultResponse(named('PrismaClientUnknownRequestError', { message: `PostgresError { code: "${code}", message: "x" }` })), null, code);
   // Wrong-typed input that reaches a string method is the caller's mistake.
   for (const message of ['name?.trim is not a function', 'body.firstName.trim is not a function', '(intermediate value).toLowerCase is not a function', "Cannot read properties of null (reading 'trim')", "Cannot read properties of undefined (reading 'toLowerCase')", 'req.body.note.split is not a function']) {
     assert.equal(clientFaultResponse(new TypeError(message))?.status, 400, message);

@@ -723,3 +723,20 @@ test('security: email: hostile text from public forms is escaped in the owner no
     assert.ok(!('bcc' in mail) && !('cc' in mail), 'a Bcc/Cc field was set from user input');
   }
 });
+
+test('security: values the database cannot store (NUL bytes) are a client error in text and JSON columns alike', async () => {
+  const owner = await makeUser();
+  const cookie = await loginAs(owner);
+  const contract = await prisma.contract.create({ data: { accountId: owner.account.id, bookingId: 'nul-booking', snapshot: {}, status: 'sent', recipientEmail: 'r@example.test', ownerEmail: 'o@example.test', clientTokenHash: hashToken(generateToken()) } });
+  const attempts = [
+    ['POST', '/api/clients', { id: `nul-${Date.now()}`, firstName: 'a\u0000b', lastName: 'c' }], // text column
+    ['POST', `/api/contracts/${contract.id}/log`, { note: 'a\u0000b' }], // JSON column
+    ['POST', '/api/reminders', { note: 'a\u0000b', remindAt: new Date(Date.now() + 86_400_000).toISOString() }],
+  ];
+  for (const [method, path, body] of attempts) {
+    const response = await call(method, path, { cookie, body });
+    assert.ok(response.status >= 400 && response.status < 500, `${method} ${path} with a NUL byte -> ${response.status}`);
+  }
+  assert.equal(await call('GET', '/api/clients/%00', { cookie }).then((response) => response.status), 400, 'a NUL byte in a URL path was not a client error');
+  assert.equal(await call('GET', '/api/clients/%ff%fe', { cookie }).then((response) => response.status), 400, 'malformed percent-encoding was not a client error');
+});

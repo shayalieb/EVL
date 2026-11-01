@@ -2,7 +2,9 @@
 // not recognised here stays a 500 and keeps being treated as a server fault.
 const INVALID_VALUE_CODES = new Set(['P2000', 'P2005', 'P2006', 'P2007', 'P2008', 'P2009', 'P2011', 'P2012', 'P2013', 'P2020']);
 // Postgres messages for values that can never be stored (a NUL byte, text that is not UTF-8, out of range numbers).
-const UNSTORABLE_VALUE = /invalid byte sequence|0x00|invalid input syntax|out of range|value too long|cannot be cast|incorrect .* value/i;
+// SQLSTATE class 22 is Postgres's "data exception" family: bad bytes, unsupported escapes (a NUL inside JSON),
+// out-of-range or oversized values, malformed text. The value is invalid by construction, so it is the caller's.
+const UNSTORABLE_VALUE = /code: "22[0-9A-Z]{3}"|invalid byte sequence|0x00|unsupported Unicode escape|invalid input syntax|out of range|value too long|cannot be cast|incorrect .* value/i;
 
 // "x.trim is not a function" means a string was expected and an object, array or number arrived:
 // the caller sent the wrong type. The same method called on a null/undefined value the caller
