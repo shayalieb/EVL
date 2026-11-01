@@ -8,7 +8,7 @@ Each finding says how it was confirmed: **Verified** (reproduced, plus database 
 
 No application code was changed by the audit itself.
 
-**Status update.** The four items under "Fix first" were fixed afterwards and are covered by tests (`server/integration-tests/launchBlockers.integration.js`, `e2e/launch-blockers.spec.js`). Each is marked **FIXED** below with what changed. Everything else is still open.
+**Status update.** The four items under "Fix first" were fixed first (`server/integration-tests/launchBlockers.integration.js`, `e2e/launch-blockers.spec.js`). The remaining items were then fixed too, with tests in `e2e/open-items.spec.js`, `server/integration-tests/openItems.integration.js` and `server/integration-tests/permissions.integration.js`; the section "Second round: what was fixed and what was left" at the bottom lists each one, including the few deliberately not changed.
 
 ---
 
@@ -137,3 +137,44 @@ See `p20_m_sign_ready.png` and `p18_m_contract_public.png`.
 
 ## How to reproduce
 Run the app against a throwaway database (`createdb evl_ui_audit`, `prisma migrate deploy`, seed with `seedE2e`), start the API on 4100 and Vite on 4173, and walk the flow above. To exercise the email paths without a provider, point `RESEND_BASE_URL` at a local capture server (see `testing_environment_quirks` in memory).
+
+---
+
+## Second round: what was fixed and what was left
+
+**Fixed (numbers match the lists above)**
+
+| # | What changed |
+|---|---|
+| 5 | Invoice table: Qty and Rate columns only appear when a line is per-unit; the description keeps a minimum width, so it no longer wraps one word per line on a phone. |
+| 6 | An invoice that is not paid online prints a "How to pay" block: the owner's new **Payment instructions** (Settings → Business Info), or their contact details if none are set. Also in the PDF. The composer warns when instructions are missing. |
+| 7 | "Accept Payment" starts off when Stripe is not connected, with a note pointing to Settings → Billing, so the first send no longer fails. |
+| 8 | Sending a $0 proposal asks "Send a proposal with no pricing?" first. |
+| 9 | Contract signing on a phone: the Sign button stays clickable and says what is missing ("Tick the consent box…"); clicking scrolls to the consent box; the header wraps instead of squeezing; the signature hint and Clear no longer collide. |
+| 10 | The contract link expiration now sits above the Send buttons, like the proposal. |
+| 11 | One email when a proposal is accepted (the duplicate "Reminder:" email is gone; the in-app reminder remains). |
+| 12 | New-inquiry email subject reads "New inquiry from Jordan Rivera"; the body says "Received", not "Was due". |
+| 13 | A booking created from an inquiry with no event name is named "Jordan Rivera — Wedding" instead of just "Wedding". |
+| 14 | Pending inquiry rows show the email and when they were received. |
+| 15 | On laptops the header stays fixed and the sidebar and the page content scroll on their own, so Settings is always reachable. |
+| 16 | Phone header logo is smaller, so it no longer touches the AI button. |
+| 17 | The contract email gate names the sender; public proposal, contract and invoice pages show the sender's own logo, or just their name, instead of the GigWorks logo. |
+| 18 | Row action icons are larger and higher contrast; "Create Event →", "Review" and other text links have bigger tap areas. |
+| 19 | An event created from a signed contract starts as "Confirmed" (no more "Status required"), and its note is one line per fact. |
+| 20 | The event page no longer passes null into form fields. |
+| 21 | Rate-limit messages say how long to wait. |
+| 22 | Fields are 16px on phones, so iOS no longer zooms in. |
+| 23 | Form labels are linked to their fields everywhere (a small helper links each label to the field after it), and filter dropdowns have names. |
+| Financials | Event Financials shows the signed contract value and what has not been invoiced yet, with a note under projected profit. |
+| Lows | Proposal email names the event, shows the total and has a button; Venmo and Zelle fields only appear when relevant; duplicate offering names are flagged; the 401 console error on every public page is gone (the signed-in check no longer fails for visitors); duplicate invoice shortcut buttons are hidden; stat cards line up; sidebar headings are 12px. |
+
+**Also fixed along the way**
+- Per-area **read permissions** and **reminder ownership** (see the permissions commit).
+- The login limiter counted successful sign-ins and shared its counter with signup, so people behind one office address could lock each other out. It now counts failed sign-ins only.
+- The proposal email no longer inserts the client's name unescaped.
+
+**Deliberately left**
+- The event "History" tab opens a modal while Stage Plot opens a full-screen overlay. It is inconsistent but consistent within each feature; changing it is a design decision.
+- "Send Inquiry Link" still appears on a booking created from an inquiry. There is no reliable record on the booking that it came from one, and sending another link is still valid for a booking made by phone.
+- `/agency/groups` returns 403 for accounts without the agency plan. It is not reachable from the menu, so only someone typing the address sees it.
+- The proposal **Preview** modal rendered blank in headless Chromium; I could not tell whether that is a real bug, so it is unchanged.
