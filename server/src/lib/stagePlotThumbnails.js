@@ -7,12 +7,14 @@ export function decodeStagePlotThumbnail(dataUrl) {
   if (!/^data:image\/png;base64,/.test(dataUrl || '')) {
     const error = new Error('Stage plot thumbnail must be a PNG.');
     error.status = 400;
+    error.expose = true;
     throw error;
   }
   const buffer = Buffer.from(dataUrl.replace(/^data:image\/png;base64,/, ''), 'base64');
   if (!buffer.length || buffer.length > MAX_THUMBNAIL_BYTES) {
     const error = new Error('Stage plot thumbnail is too large.');
     error.status = 413;
+    error.expose = true;
     throw error;
   }
   return buffer;

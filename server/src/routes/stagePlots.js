@@ -6,6 +6,7 @@ import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { requireVertical } from '../lib/verticals.js';
 import { uploadFile, getSignedDownloadUrl, isFileStorageConfigured } from '../lib/fileStorage.js';
 import { withSerializableTransaction } from '../lib/serializableTransaction.js';
+import { isText, isNonEmptyText, isSceneObject, isChannelNumber } from '../lib/stagePlotInput.js';
 import { decodeStagePlotThumbnail, deleteStagePlotThumbnailIfUnused } from '../lib/stagePlotThumbnails.js';
 import { createRateLimiter } from '../lib/rateLimiter.js';
 import { parseStagePlotEquipmentPrompt } from '../lib/stagePlotItemParser.js';
@@ -433,6 +434,8 @@ router.patch('/:eventId/pages/:pageId', asyncHandler(async (req, res) => {
   if (!page) return res.status(404).json({ error: 'Page not found.' });
 
   const { scene, name, thumbnailBase64, expectedUpdatedAt } = req.body || {};
+  if (scene !== undefined && !isSceneObject(scene)) return res.status(400).json({ error: 'scene must be an object.' });
+  if (name !== undefined && !isNonEmptyText(name)) return res.status(400).json({ error: 'name must be a non-empty string.' });
   const data = {};
   if (scene !== undefined) data.scene = scene;
   if (name !== undefined) data.name = name;
@@ -485,6 +488,7 @@ router.post('/:eventId/pages', asyncHandler(async (req, res) => {
   }
   const plot = await loadOwnedPlot(req.membership.accountId, req.params.eventId);
   if (!plot) return res.status(404).json({ error: 'Stage plot not found.' });
+  if (req.body?.name !== undefined && !isNonEmptyText(req.body.name)) return res.status(400).json({ error: 'name must be a non-empty string.' });
   let page;
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const pages = await prisma.stagePlotPage.findMany({ where: { stagePlotId: plot.id }, select: { order: true } });
@@ -550,7 +554,7 @@ router.post('/:eventId/channels', asyncHandler(async (req, res) => {
   });
   if (!plot) return res.status(404).json({ error: 'Stage plot not found.' });
   const { source, musicianName, phantomPower, powerNeeded, monitorNotes, elementId } = req.body || {};
-  if (!source?.trim()) return res.status(400).json({ error: 'source is required.' });
+  if (!isNonEmptyText(source)) return res.status(400).json({ error: 'source is required.' });
 
   // "Next available" is read-then-write, not atomic — two requests close
   // enough together (e.g. duplicating several icons at once) can both read
@@ -602,7 +606,7 @@ router.post('/:eventId/channels/reorder', asyncHandler(async (req, res) => {
 
   const { orderedIds } = req.body || {};
   const ownedIds = new Set(plot.channels.map((c) => c.id));
-  if (!Array.isArray(orderedIds) || orderedIds.length !== plot.channels.length || !orderedIds.every((id) => ownedIds.has(id))) {
+  if (!Array.isArray(orderedIds) || new Set(orderedIds).size !== orderedIds.length || orderedIds.length !== plot.channels.length || !orderedIds.every((id) => ownedIds.has(id))) {
     return res.status(400).json({ error: 'orderedIds must list exactly this stage plot\'s channels, once each.' });
   }
 
@@ -629,6 +633,8 @@ router.patch('/:eventId/channels/:channelId', asyncHandler(async (req, res) => {
   if (!channel) return res.status(404).json({ error: 'Channel not found.' });
 
   const { channelNumber, source, musicianName, phantomPower, powerNeeded, monitorNotes, elementId } = req.body || {};
+  if (channelNumber !== undefined && !isChannelNumber(channelNumber)) return res.status(400).json({ error: 'channelNumber must be a positive whole number.' });
+  if (source !== undefined && !isNonEmptyText(source)) return res.status(400).json({ error: 'source cannot be blank.' });
   const data = {};
   if (channelNumber !== undefined) data.channelNumber = channelNumber;
   if (source !== undefined) data.source = source;
@@ -667,7 +673,7 @@ router.post('/:eventId/backline-items', asyncHandler(async (req, res) => {
   const plot = await loadOwnedPlot(req.membership.accountId, req.params.eventId);
   if (!plot) return res.status(404).json({ error: 'Stage plot not found.' });
   const { item, quantity, providedBy, notesHtml } = req.body || {};
-  if (!item?.trim()) return res.status(400).json({ error: 'item is required.' });
+  if (!isNonEmptyText(item)) return res.status(400).json({ error: 'item is required.' });
 
   const created = await prisma.stagePlotBacklineItem.create({
     data: {
@@ -695,6 +701,7 @@ router.patch('/:eventId/backline-items/:itemId', asyncHandler(async (req, res) =
   if (!item) return res.status(404).json({ error: 'Backline item not found.' });
 
   const { item: name, quantity, providedBy, notesHtml } = req.body || {};
+  if (name !== undefined && !isText(name)) return res.status(400).json({ error: 'item must be a string.' });
   const data = {};
   if (name !== undefined) data.item = name;
   if (quantity !== undefined) data.quantity = Number.isFinite(Number(quantity)) && Number(quantity) > 0 ? Math.trunc(Number(quantity)) : 1;
