@@ -51,6 +51,39 @@ export default function SeoLandingPage() {
           </div>
         </section>
 
+        {page.details && (
+          <section aria-label="DJ booking workflow in detail" className="mx-auto max-w-5xl px-4 pb-16 sm:px-6">
+            <div className="grid gap-8 md:grid-cols-2">
+              {page.details.map((detail) => (
+                <article key={detail.heading}>
+                  <h2 className="text-2xl font-bold tracking-tight">{detail.heading}</h2>
+                  <p className="mt-3 leading-7 text-slate-600">{detail.body}</p>
+                </article>
+              ))}
+            </div>
+            {page.screenshot && (
+              <figure className="mt-12">
+                <img src={page.screenshot.src} alt={page.screenshot.caption} loading="lazy" className="w-full rounded-2xl border border-slate-200 shadow-sm" />
+                <figcaption className="mt-3 text-sm text-slate-600">{page.screenshot.caption}</figcaption>
+              </figure>
+            )}
+          </section>
+        )}
+
+        {page.faqs && (
+          <section aria-labelledby="booking-questions" className="mx-auto max-w-5xl px-4 pb-16 sm:px-6">
+            <h2 id="booking-questions" className="text-3xl font-bold tracking-tight">DJ booking questions</h2>
+            <div className="mt-6 divide-y divide-slate-200">
+              {page.faqs.map((faq) => (
+                <article key={faq.question} className="py-6">
+                  <h3 className="text-lg font-semibold">{faq.question}</h3>
+                  <p className="mt-2 leading-7 text-slate-600">{faq.answer}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
         <section className="border-y border-slate-200 bg-slate-50">
           <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6">
             <h2 className="text-3xl font-bold tracking-tight">Explore more GigWorks workflows</h2>
