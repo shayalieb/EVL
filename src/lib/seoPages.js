@@ -19,7 +19,40 @@ export const SEO_LANDING_PAGES = [
     summary: 'Move from inquiry to paid invoice without rebuilding the same event in spreadsheets, email threads, and separate production tools.',
     benefits: ['Track leads, holds, and confirmed bookings', 'Staff musicians and follow contractor replies', 'Send proposals, contracts, invoices, and reminders', 'Build reusable set lists and stage plots'],
     workflow: ['Capture an inquiry and client details', 'Price the event and send a proposal', 'Confirm the roster and contract', 'Share production details and collect payment'],
-    related: ['/musician-scheduling-software', '/stage-plot-software', '/proposal-contract-invoice-software'],
+    details: [
+      {
+        "heading": "Keep bookings separate from the musicians playing them",
+        "body": "A band booking involves more than a date on the calendar. Keep client requirements, venue details, proposals, and payments connected to the event while tracking the musicians assigned to play it. Your office can review the booking without searching individual text threads."
+      },
+      {
+        "heading": "Reuse your lineup without rebuilding it for every gig",
+        "body": "Save regular groups as ensembles and add their members to an event together. Track each contractor’s confirmation status and keep the final lineup connected to the set list and production details. For wedding-specific preparation, explore the wedding band management workflow."
+      },
+      {
+        "heading": "Carry the offer through to payment",
+        "body": "Use your offerings to prepare a proposal, collect an electronic signature, and issue an invoice from the booking. Keep deposits and outstanding balances visible alongside the work your team still needs to do before the gig."
+      }
+    ],
+    screenshot: {
+      "src": "/landing/home-dashboard.png",
+      "caption": "The GigWorks dashboard brings upcoming events and items needing attention into one view."
+    },
+    faqHeading: "Band management questions",
+    faqs: [
+      {
+        "question": "What does band management software help organize?",
+        "answer": "GigWorks brings bookings, client documents, contractor confirmations, payments, set lists, and stage plots into one workspace. It is designed for the operational work behind live performances."
+      },
+      {
+        "question": "Can I save a regular band lineup?",
+        "answer": "Yes. Ensembles let you save a group and add its members to an event together. Individual confirmation statuses remain connected to the event roster."
+      },
+      {
+        "question": "Can I use it for wedding bands?",
+        "answer": "Yes. The wedding band workflow connects client bookings and deposits with musician confirmations, set lists, venue details, and stage plots."
+      }
+    ],
+    related: ["/wedding-band-management-software","/musician-scheduling-software","/stage-plot-software"],
   },
   {
     path: '/entertainment-agency-software',
@@ -30,9 +63,43 @@ export const SEO_LANDING_PAGES = [
     summary: 'Give agents and operations teams a shared view of sales, staffing, documents, payments, and event details across multiple acts.',
     benefits: ['Manage multiple groups and offerings', 'Keep client and venue records organized', 'Coordinate contractors across events', 'See proposals, contracts, invoices, and balances together'],
     workflow: ['Qualify the inquiry', 'Match the right offering', 'Staff and confirm the event', 'Deliver documents and track payment'],
+    details: [
+      {
+        "heading": "Give every act its own identity",
+        "body": "An agency can coordinate multiple groups while each band or act keeps its own bookings, events, logo, and document branding. Shared clients, venues, and contractors help the office work across the portfolio without rebuilding the same contact records."
+      },
+      {
+        "heading": "Connect the sales desk with the people delivering the event",
+        "body": "Match an inquiry to an offering, prepare the client documents, and track the contractors assigned to the gig. Proposal, signature, payment, and roster status remain part of the same workflow, giving agents and operations staff a shared record to work from."
+      },
+      {
+        "heading": "Review the work across your groups",
+        "body": "Use the agency workspace to review the managed groups and their booking activity. Keep each group’s event preparation with that group while sharing the business contacts and contractor directory the wider office needs."
+      }
+    ],
+    screenshot: {
+      "src": "/landing/contractors-list.png",
+      "caption": "A searchable contractor roster keeps performer contact details and rates available to the team."
+    },
+    faqHeading: "Entertainment agency questions",
+    faqs: [
+      {
+        "question": "Can one agency manage multiple bands or acts?",
+        "answer": "Yes. The Agency plan supports managed groups with their own booking workflows and branding, alongside shared agency contacts, venues, contractors, and search."
+      },
+      {
+        "question": "Can the office track performer confirmations?",
+        "answer": "Yes. Event rosters show confirmation statuses so staff can review confirmed, declined, and outstanding responses for the performers assigned to a gig."
+      },
+      {
+        "question": "Does GigWorks connect contracts and invoices to bookings?",
+        "answer": "Yes. Client documents and payment tracking stay connected to the booking instead of living in separate tools and email threads."
+      }
+    ],
     related: ['/contractor-management-software', '/dj-booking-software', '/proposal-contract-invoice-software'],
   },
   {
+    faqHeading: 'DJ booking questions',
     path: '/dj-booking-software',
     title: 'DJ Booking Software for Events, Contracts & Invoices | GigWorks',
     description: 'Organize DJ inquiries, packages, bookings, contracts, invoices, client details, and event timelines in one workspace.',
@@ -65,6 +132,39 @@ export const SEO_LANDING_PAGES = [
     summary: 'Request availability, see replies, fill roles, and give each musician the details they need without maintaining a separate staffing spreadsheet.',
     benefits: ['Send availability requests by role', 'Track accepted, declined, and pending replies', 'Reuse contractor and instrument details', 'Connect the confirmed roster to the event'],
     workflow: ['Define the roles for the gig', 'Invite the right musicians', 'Follow outstanding replies', 'Publish the confirmed roster'],
+    details: [
+      {
+        "heading": "Start with the roles the gig needs",
+        "body": "Build the event roster around the musicians and instruments required for the performance. Keep contractor contacts and assignments in one workspace so the office can see who has been asked and which responses still need follow-up."
+      },
+      {
+        "heading": "Turn outstanding replies into a clear confirmation list",
+        "body": "Track confirmed, declined, and pending contractors against the event. Musicians can confirm or decline from their own link, while staff can review the status in the roster rather than reconstructing it from a collection of messages."
+      },
+      {
+        "heading": "Keep the confirmed roster with the event details",
+        "body": "The lineup is part of the gig’s operational record. Keep the venue, schedule, set list, and production preparation connected so the people organizing the performance can work from the event rather than a separate staffing spreadsheet."
+      }
+    ],
+    screenshot: {
+      "src": "/landing/event-roster.png",
+      "caption": "The event roster makes individual contractor confirmation statuses visible alongside the gig."
+    },
+    faqHeading: "Musician scheduling questions",
+    faqs: [
+      {
+        "question": "Can musicians confirm from their phone?",
+        "answer": "Yes. Contractors can use their own confirmation link to accept or decline a gig, and the response is reflected in the event roster."
+      },
+      {
+        "question": "Can I reuse a regular ensemble?",
+        "answer": "Yes. Save an ensemble and add the group’s members to an event together, then track each member’s response for that performance."
+      },
+      {
+        "question": "Is this a general employee shift scheduler?",
+        "answer": "GigWorks focuses on live entertainment bookings and contractor rosters, connecting musician confirmations to client bookings and event preparation."
+      }
+    ],
     related: ['/band-management-software', '/contractor-management-software', '/stage-plot-software'],
   },
   {
@@ -87,6 +187,39 @@ export const SEO_LANDING_PAGES = [
     summary: 'Build visual stage layouts and production requirements without losing the client, venue, personnel, and schedule context around them.',
     benefits: ['Create and reuse stage plot templates', 'Place performers and production equipment visually', 'Maintain a production input list', 'Share a public view with the event team'],
     workflow: ['Start from a saved layout', 'Adjust it for the event', 'Review the production list', 'Share the current version'],
+    details: [
+      {
+        "heading": "Build the layout around the people playing the gig",
+        "body": "Use the visual stage plot builder to place performers and production equipment. Keep the layout connected to the event and its lineup so production preparation has the same booking context as the office’s other work."
+      },
+      {
+        "heading": "Start from a layout you already use",
+        "body": "Save layouts in your stage plot library and reuse them for future events. Adjust the setup for the current gig rather than drawing a familiar band arrangement again every time the venue or lineup changes."
+      },
+      {
+        "heading": "Share the current production view",
+        "body": "Keep the stage layout and production input list with the event. Share a public view with the event team so the venue or sound engineer can review the setup without needing your private account access."
+      }
+    ],
+    screenshot: {
+      "src": "/landing/stage-plot.png",
+      "caption": "The GigWorks stage plot builder connects a visual layout to the event’s production preparation."
+    },
+    faqHeading: "Stage plot questions",
+    faqs: [
+      {
+        "question": "Can I reuse a stage plot?",
+        "answer": "Yes. Save layouts in the stage plot library, then adjust a saved layout for a new event’s setup."
+      },
+      {
+        "question": "Can the sound engineer view the stage plot?",
+        "answer": "Yes. You can share a public stage plot view with the event team without giving them access to your private workspace."
+      },
+      {
+        "question": "Is the stage plot connected to the booking?",
+        "answer": "Yes. Stage plots sit within the event workflow alongside its roster, venue, schedule, and production requirements."
+      }
+    ],
     related: ['/band-management-software', '/musician-scheduling-software', '/proposal-contract-invoice-software'],
   },
   {
@@ -100,6 +233,72 @@ export const SEO_LANDING_PAGES = [
     workflow: ['Create the priced proposal', 'Turn approval into a contract', 'Issue the invoice and collect a deposit', 'Follow open balances automatically'],
     related: ['/band-management-software', '/dj-booking-software', '/entertainment-agency-software'],
   },
+{
+  "path": "/wedding-band-management-software",
+  "title": "Wedding Band Management Software for Bookings & Musicians | GigWorks",
+  "description": "Manage wedding band bookings, musician confirmations, proposals, contracts, deposits, set lists, and stage plots in one connected workspace.",
+  "eyebrow": "For wedding bandleaders and entertainment offices",
+  "headline": "Wedding band management software from inquiry to last dance",
+  "summary": "Keep the client booking and the band’s preparation together: proposals, contracts, payments, confirmed musicians, set lists, and production details for every wedding.",
+  "benefits": [
+    "Keep client and venue details with the wedding booking",
+    "Send proposals, e-sign contracts, and invoices",
+    "Confirm the musicians assigned to each wedding",
+    "Prepare set lists, stage plots, and production details"
+  ],
+  "workflow": [
+    "Capture the wedding inquiry and venue details",
+    "Agree on the offering, contract, and deposit",
+    "Confirm the band and prepare the music and setup",
+    "Review the event details and outstanding balance"
+  ],
+  "details": [
+    {
+      "heading": "Move the wedding inquiry into a clear booking",
+      "body": "Record the client, date, venue, and requested offering together. Build a proposal around your services and keep the accepted offer connected to the contract and invoice, so the office can follow the booking from the first conversation through the deposit."
+    },
+    {
+      "heading": "Know which musicians are actually confirmed",
+      "body": "Add your regular ensemble or assign individual contractors to the wedding. Track confirmed, declined, and pending responses on the event roster. When staffing changes, keep the current assignments attached to the gig instead of maintaining a separate lineup document."
+    },
+    {
+      "heading": "Prepare the music and production together",
+      "body": "Pull a saved set list into the event and adjust it for the performance. Keep stage plots, backline requirements, schedules, and venue contacts with the wedding, giving your team one place to prepare the handoff before load-in."
+    },
+    {
+      "heading": "Keep deposits and balances in view",
+      "body": "Follow invoice due dates and payment status alongside the wedding booking. Clients can pay through Stripe, and the office can review what remains outstanding while it finishes the staffing and production preparation."
+    }
+  ],
+  "screenshot": {
+    "src": "/landing/event-roster.png",
+    "caption": "A wedding event roster keeps each musician’s confirmation status connected to the booking."
+  },
+  "faqHeading": "Wedding band management questions",
+  "faqs": [
+    {
+      "question": "Is GigWorks built for wedding bands?",
+      "answer": "Yes. GigWorks supports bandleaders and agencies booking musicians for weddings and other live events. It connects the client booking with contractor confirmations, payments, and performance preparation."
+    },
+    {
+      "question": "Can I book the same ensemble for different weddings?",
+      "answer": "Yes. Save your regular band as an ensemble and add its members to each event. Confirmation statuses are tracked for the individual wedding."
+    },
+    {
+      "question": "Can I manage the contract and deposit together?",
+      "answer": "Yes. Proposals, electronic signatures, invoices, and payment tracking are connected to the booking, keeping client documents and balances in the same workflow."
+    },
+    {
+      "question": "How can my wedding band get started?",
+      "answer": "Join the waitlist on the homepage or contact GigWorks to discuss your band’s booking and staffing workflow. GigWorks is onboarding an initial group of agencies and bandleaders."
+    }
+  ],
+  "related": [
+    "/band-management-software",
+    "/musician-scheduling-software",
+    "/proposal-contract-invoice-software"
+  ]
+}
 ];
 
 export const SEO_PAGE_BY_PATH = Object.fromEntries(SEO_LANDING_PAGES.map((page) => [page.path, page]));
