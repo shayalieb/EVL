@@ -71,9 +71,15 @@ router.use(requireAuth, asyncHandler(attachMembership));
 router.use(viewGuard('viewBookings'));
 
 router.get('/', asyncHandler(async (req, res) => {
-  const { status, bookingId } = req.query;
+  const { status, bookingId, appliedBookingId } = req.query;
   const links = await prisma.inquiryLink.findMany({
-    where: { accountId: req.membership.accountId, ...(status ? { status } : {}), ...(bookingId ? { bookingId } : {}) },
+    where: {
+      accountId: req.membership.accountId,
+      ...(status ? { status } : {}),
+      ...(bookingId ? { bookingId } : {}),
+      // The booking an inquiry response was turned into, so that booking can say where it came from.
+      ...(typeof appliedBookingId === 'string' && appliedBookingId ? { appliedBookingId } : {}),
+    },
     orderBy: { createdAt: 'desc' },
   });
   res.json({ links: links.map(serializeForOwner) });

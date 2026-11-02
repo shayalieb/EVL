@@ -5,6 +5,7 @@ import { useData } from '../context/DataContext';
 import { useToast } from '../components/ui/Toast';
 import ColorPicker from '../components/ui/ColorPicker';
 import Badge from '../components/ui/Badge';
+import UnderlineTabs from '../components/ui/UnderlineTabs';
 import UsersTab from './settings/UsersTab';
 import BillingTab from './settings/BillingTab';
 import PlanTab from './settings/PlanTab';
@@ -51,21 +52,12 @@ export default function SettingsPage() {
   return (
     <div>
       <h2 className="text-2xl font-bold text-slate-800 mb-4">Settings</h2>
-      <div className="flex overflow-x-auto border-b border-slate-200 mb-6">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            data-testid={`settings-tab-${t.id}`}
-            className={`shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px ${
-              tab === t.id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <UnderlineTabs
+        label="Settings sections"
+        active={tab}
+        onSelect={setTab}
+        tabs={TABS.map((t) => ({ id: t.id, label: t.label, testId: `settings-tab-${t.id}` }))}
+      />
 
       {tab === 'user' && <UserInfoTab />}
       {tab === 'business' && <BusinessInfoTab />}

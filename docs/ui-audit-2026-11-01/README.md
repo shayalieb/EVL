@@ -173,8 +173,14 @@ Run the app against a throwaway database (`createdb evl_ui_audit`, `prisma migra
 - The login limiter counted successful sign-ins and shared its counter with signup, so people behind one office address could lock each other out. It now counts failed sign-ins only.
 - The proposal email no longer inserts the client's name unescaped.
 
+**Looked at again and fixed (these four were first set aside)**
+
+| Item | What the second look found | What changed |
+|---|---|---|
+| Proposal preview popup | In real Chrome it renders correctly; the blank box was the headless test browser, which has no PDF viewer. But the same blank box would appear in any browser without one, the viewer title read "pdf;filename=generat…", and the preview used a giant inline data address. | Previews (proposal and contract) use proper downloadable blobs, carry a real document title, and where a browser cannot show a PDF inline they say so and offer "Open in new tab" and "Download". |
+| Event "History" tab | The whole tab strip, on events, bookings and settings, had no tab semantics (a screen reader heard plain buttons and never which section was selected), and Stage Plot, Set Lists, Run of Show and History looked like tabs but open overlays. | One shared tab component: real tabs with selected state and arrow-key navigation; the four overlay openers sit apart as buttons marked with an arrow (on their own row on a phone, where they used to scroll off-screen unseen). |
+| "Send Inquiry Link" on an inquiry booking | The booking had no way to know it came from an inquiry. | The booking looks up the inquiry it was created from and shows "Created from an inquiry… sent these details on {date}" with "Ask for updated details" instead. Bookings made another way are unchanged. |
+| Agency groups | Without the Agency plan the page looked fully usable but could not work and showed the same red error twice; on an Agency account the add-group form was always open, pushing the groups to the bottom on a phone, and "No groups match these filters" appeared when there were no groups at all. (The "clipped text" my scanner flagged was hidden screen-reader labels, not a bug.) | Non-agency accounts get a plain explanation with a link to plans and no API call; agency accounts see their groups first and open the form with "+ Add group" or "Add your first group" (with Cancel); a real empty state; the duplicate toast is gone. |
+
 **Deliberately left**
-- The event "History" tab opens a modal while Stage Plot opens a full-screen overlay. It is inconsistent but consistent within each feature; changing it is a design decision.
-- "Send Inquiry Link" still appears on a booking created from an inquiry. There is no reliable record on the booking that it came from one, and sending another link is still valid for a booking made by phone.
-- `/agency/groups` returns 403 for accounts without the agency plan. It is not reachable from the menu, so only someone typing the address sees it.
-- The proposal **Preview** modal rendered blank in headless Chromium; I could not tell whether that is a real bug, so it is unchanged.
+- Nothing from the audit is outstanding. Items that were judgement calls (such as the 11px stepper numbers) were left as designed.

@@ -140,3 +140,19 @@ test('many successful sign-ins from one address are never rate limited, while fa
   assert.ok(limitedAt && limitedAt <= 21, `failures were not limited (stopped at ${limitedAt})`);
   assert.equal((await login('password-123')).status, 429);
 });
+
+test('inquiry links can be listed by the booking they became, and only within the account', async () => {
+  const { account } = await identity({ email: 'owner@example.com' });
+  const other = await identity({ email: 'other-owner@example.com' });
+  const link = (accountId, tokenHash, extra) => prisma.inquiryLink.create({ data: { accountId, tokenHash: hash(tokenHash), ownerEmail: 'o@example.com', status: 'applied', response: { firstName: 'A' }, ...extra } });
+  await link(account.id, 'mine', { appliedBookingId: 'booking-1' });
+  await link(account.id, 'unrelated', { appliedBookingId: 'booking-2' });
+  await link(other.account.id, 'foreign', { appliedBookingId: 'booking-1' });
+  const cookie = await login('owner@example.com');
+
+  const { links } = await (await call('/api/inquiry-links?status=applied&appliedBookingId=booking-1', { cookie })).json();
+  assert.equal(links.length, 1);
+  assert.equal(links[0].appliedBookingId, 'booking-1');
+  // A filter that is not a plain string is ignored rather than breaking the query.
+  assert.equal((await call('/api/inquiry-links?appliedBookingId[a]=1', { cookie })).status, 200);
+});

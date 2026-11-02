@@ -1,9 +1,10 @@
 import { apiFetch } from '../context/AuthContext';
 
-export async function listInquiryLinks({ status, bookingId } = {}) {
+export async function listInquiryLinks({ status, bookingId, appliedBookingId } = {}) {
   const params = new URLSearchParams();
   if (status) params.set('status', status);
   if (bookingId) params.set('bookingId', bookingId);
+  if (appliedBookingId) params.set('appliedBookingId', appliedBookingId);
   const q = params.toString() ? `?${params.toString()}` : '';
   const data = await apiFetch(`/inquiry-links${q}`);
   return data.links;

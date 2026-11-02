@@ -11,6 +11,7 @@ import { getMessagingProfile } from '../lib/messaging';
 import PrepEmailModal from '../components/PrepEmailModal';
 import GroupChipSelector from '../components/GroupChipSelector';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import UnderlineTabs from '../components/ui/UnderlineTabs';
 import Modal from '../components/ui/Modal';
 import SidePanel from '../components/ui/SidePanel';
 import HistoryModal from '../components/HistoryModal';
@@ -1590,115 +1591,41 @@ export default function EventFormPage() {
         </div>
       )}
 
-      <div className="flex overflow-x-auto border-b border-slate-200 mb-6">
-        <button
-          type="button"
-          onClick={() => setActiveTab('details')}
-          data-testid="event-form-tab-details"
-          className={`shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px ${
-            activeTab === 'details' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          Details
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('contractors')}
-          data-testid="event-form-tab-contractors"
-          className={`shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px flex items-center gap-2 ${
-            activeTab === 'contractors' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          Contractors
-          {form.contractorBookings.length > 0 && (
-            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">
-              {form.contractorBookings.length}
-            </span>
-          )}
-        </button>
-        {isPartyPlanning && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('guests')}
-            data-testid="event-form-tab-guests"
-            className={`shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px flex items-center gap-2 ${
-              activeTab === 'guests' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            Guests
-            {guests.length > 0 && (
-              <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">
-                {guests.length}
-              </span>
-            )}
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => setActiveTab('prep')}
-          data-testid="event-form-tab-prep"
-          className={`shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px ${
-            activeTab === 'prep' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          Prep
-          {Number(form.prepFormUnreadCount) > 0 && (
-            <span title="New client form data" className="ml-2 inline-flex min-w-[20px] items-center justify-center rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-bold text-amber-800">● {form.prepFormUnreadCount}</span>
-          )}
-        </button>
-        {isEditing && currentUser.activeVerticals?.includes('band_orchestra') && (
-          <button
-            type="button"
-            onClick={() => setStagePlotPanelOpen(true)}
-            data-testid="event-form-tab-stage-plot"
-            className="shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px border-transparent text-slate-500 hover:text-slate-700"
-          >
-            Stage Plot
-          </button>
-        )}
-        {isEditing && currentUser.activeVerticals?.includes('band_orchestra') && (
-          <button
-            type="button"
-            onClick={() => setSetListPanelOpen(true)}
-            data-testid="event-form-tab-set-lists"
-            className="shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px border-transparent text-slate-500 hover:text-slate-700"
-          >
-            Set Lists
-          </button>
-        )}
-        {isEditing && currentUser.activeVerticals?.includes('band_orchestra') && (
-          <button
-            type="button"
-            onClick={() => setRunOfShowPanelOpen(true)}
-            data-testid="event-form-tab-run-of-show"
-            className="shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px border-transparent text-slate-500 hover:text-slate-700"
-          >
-            Run of Show
-          </button>
-        )}
-        {isEditing && (
-          <button
-            type="button"
-            onClick={() => setHistoryModalOpen(true)}
-            data-testid="event-form-tab-history"
-            className="shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px border-transparent text-slate-500 hover:text-slate-700"
-          >
-            History
-          </button>
-        )}
-        {isAdminOrOwner && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('financials')}
-            data-testid="event-form-tab-financials"
-            className={`shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px ${
-              activeTab === 'financials' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            Financials
-          </button>
-        )}
-      </div>
+      <UnderlineTabs
+        label="Event sections"
+        active={activeTab}
+        onSelect={setActiveTab}
+        tabs={[
+          { id: 'details', label: 'Details', testId: 'event-form-tab-details' },
+          {
+            id: 'contractors', label: 'Contractors', testId: 'event-form-tab-contractors',
+            badge: form.contractorBookings.length > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">{form.contractorBookings.length}</span>
+            ),
+          },
+          ...(isPartyPlanning ? [{
+            id: 'guests', label: 'Guests', testId: 'event-form-tab-guests',
+            badge: guests.length > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">{guests.length}</span>
+            ),
+          }] : []),
+          {
+            id: 'prep', label: 'Prep', testId: 'event-form-tab-prep',
+            badge: Number(form.prepFormUnreadCount) > 0 && (
+              <span title="New client form data" className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-bold text-amber-800">● {form.prepFormUnreadCount}</span>
+            ),
+          },
+          ...(isAdminOrOwner ? [{ id: 'financials', label: 'Financials', testId: 'event-form-tab-financials' }] : []),
+        ]}
+        tools={[
+          ...(isEditing && currentUser.activeVerticals?.includes('band_orchestra') ? [
+            { id: 'stage-plot', label: 'Stage Plot', testId: 'event-form-tab-stage-plot', onClick: () => setStagePlotPanelOpen(true) },
+            { id: 'set-lists', label: 'Set Lists', testId: 'event-form-tab-set-lists', onClick: () => setSetListPanelOpen(true) },
+            { id: 'run-of-show', label: 'Run of Show', testId: 'event-form-tab-run-of-show', onClick: () => setRunOfShowPanelOpen(true) },
+          ] : []),
+          ...(isEditing ? [{ id: 'history', label: 'History', testId: 'event-form-tab-history', onClick: () => setHistoryModalOpen(true) }] : []),
+        ]}
+      />
 
       {error && <div data-testid="event-form-error-banner" className="mb-6 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 

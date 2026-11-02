@@ -13,6 +13,8 @@ import HistoryModal from '../components/HistoryModal';
 import Modal from '../components/ui/Modal';
 import OverflowMenu from '../components/ui/OverflowMenu';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import PdfPreview from '../components/PdfPreview';
+import UnderlineTabs from '../components/ui/UnderlineTabs';
 import Badge from '../components/ui/Badge';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
@@ -20,7 +22,7 @@ import { useToast } from '../components/ui/Toast';
 import { uid } from '../lib/storage';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draftStorage';
 import { listBookingDocuments, uploadBookingDocument, deleteBookingDocument, bookingDocumentDownloadUrl } from '../lib/bookingDocuments';
-import { generateProposalPdf, generateProposalPdfAttachment, getProposalPdfDataUrl, getProposalPdfBlob } from '../lib/proposalPdf';
+import { generateProposalPdf, generateProposalPdfAttachment, getProposalPdfBlob } from '../lib/proposalPdf';
 import { getConnectStatus } from '../lib/billing';
 import { escapeHtml } from '../lib/htmlEscape';
 import { getContractForBooking, getContractDocumentsForBooking, sendContract, ownerSignContract, addContractLogNote, regenerateClientSignLink } from '../lib/contracts';
@@ -28,7 +30,7 @@ import { getProposalResponseForBooking, sendProposalResponseLink, getProposalRes
 import { listInquiryLinks } from '../lib/inquiryLinks';
 import { buildBookingMergePatch } from '../lib/applyInquiry';
 import { listInvoices, createInvoice, updateInvoice, sendInvoice, markInvoicePayment, sendReceipt, voidInvoice, getNextInvoiceInfo } from '../lib/invoices';
-import { generateContractPdf, getContractPdfDataUrl, getContractPdfBlob } from '../lib/contractPdf';
+import { generateContractPdf, getContractPdfBlob } from '../lib/contractPdf';
 import { generateInvoicePdf, getInvoicePdfBlob } from '../lib/invoicePdf';
 import { sendEmail } from '../lib/email/send';
 import { formatCurrency as currency, formatEventDate, formatVenueLine, formatEventTime, formatEmailInput, formatPhoneNumber } from '../lib/format';
@@ -163,6 +165,15 @@ function buildProposalEmailBody({ client, fromName, reference, respondLink, book
     + `<p><a href="${escapeHtml(respondLink)}" style="${button}">Review and respond to the proposal</a></p>`
     + '<p>The proposal is also attached as a PDF. Let us know if you have any questions!</p>'
     + `<p>${escapeHtml(fromName)}</p>`;
+}
+
+// Previews are blob URLs, not inline data strings: no size limit on the address, and the old one is released
+// whenever it is replaced or closed.
+function swapPreviewUrl(setter, blob) {
+  setter((previous) => {
+    if (previous) URL.revokeObjectURL(previous);
+    return blob ? URL.createObjectURL(blob) : '';
+  });
 }
 
 function computeGrandTotal(lineItems, offerings) {
@@ -491,6 +502,8 @@ export default function BookingFormPage() {
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [sendInquiryModalOpen, setSendInquiryModalOpen] = useState(false);
   const [submittedInquiryLink, setSubmittedInquiryLink] = useState(null);
+  // The inquiry response this booking was created from, if any.
+  const [appliedInquiryLink, setAppliedInquiryLink] = useState(null);
   const [reviewingInquiry, setReviewingInquiry] = useState(false);
   const [addingType, setAddingType] = useState(false);
   const [newTypeLabel, setNewTypeLabel] = useState('');
@@ -711,8 +724,12 @@ export default function BookingFormPage() {
   // link sent from it yet.
   const refreshSubmittedInquiry = useCallback(async (id) => {
     try {
-      const links = await listInquiryLinks({ status: 'submitted', bookingId: id });
-      setSubmittedInquiryLink(links[0] || null);
+      const [submitted, applied] = await Promise.all([
+        listInquiryLinks({ status: 'submitted', bookingId: id }),
+        listInquiryLinks({ status: 'applied', appliedBookingId: id }),
+      ]);
+      setSubmittedInquiryLink(submitted[0] || null);
+      setAppliedInquiryLink(applied[0] || null);
     } catch {
       // best-effort — the widget just shows no pending response if this fails
     }
@@ -1116,8 +1133,8 @@ export default function BookingFormPage() {
     try {
       const { patch, promise } = persistBooking();
       promise.catch((err) => showToast(err.message || 'Failed to save changes.', 'error'));
-      const url = await getProposalPdfDataUrl({ booking: clientFacingBooking(patch), client, businessInfo, reference: 'DRAFT — Not sent' });
-      setProposalPreviewUrl(url);
+      const blob = await getProposalPdfBlob({ booking: clientFacingBooking(patch), client, businessInfo, reference: 'DRAFT — Not sent' });
+      swapPreviewUrl(setProposalPreviewUrl, blob);
       setShowProposalPreview(true);
     } catch (err) {
       showToast(err.message || 'Failed to build preview', 'error');
@@ -1586,7 +1603,7 @@ export default function BookingFormPage() {
     }
     setLoadingContractPreview(true);
     try {
-      const url = await getContractPdfDataUrl({
+      const blob = await getContractPdfBlob({
         snapshot: buildContractSnapshot(),
         terms: contractTerms,
         expiration: serializeLinkExpiration(contractLinkExpiration),
@@ -1594,7 +1611,7 @@ export default function BookingFormPage() {
         ownerSignature: null,
         reference: 'DRAFT — Not sent',
       });
-      setContractPreviewUrl(url);
+      swapPreviewUrl(setContractPreviewUrl, blob);
       setShowContractPreview(true);
     } catch (err) {
       showToast(err.message || 'Failed to build preview', 'error');
@@ -2012,29 +2029,20 @@ export default function BookingFormPage() {
         <Badge color={contractStatusInfo(contract).color}>Contract: {contractStatusInfo(contract).label}</Badge>
       </div>
 
-      <div className="flex overflow-x-auto border-b border-slate-200 mb-6">
-        {TABS.map((t) => {
+      <UnderlineTabs
+        label="Booking sections"
+        active={activeTab}
+        onSelect={setActiveTab}
+        tabs={TABS.map((t) => {
           const count = t.id === 'proposal' ? proposalDocs.length : t.id === 'contract' ? contractDocs.length : 0;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setActiveTab(t.id)}
-              data-testid={`booking-form-tab-${t.id}`}
-              className={`shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px flex items-center gap-2 ${
-                activeTab === t.id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              {t.label}
-              {count > 0 && (
-                <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">
-                  {count}
-                </span>
-              )}
-            </button>
-          );
+          return {
+            id: t.id, label: t.label, testId: `booking-form-tab-${t.id}`,
+            badge: count > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">{count}</span>
+            ),
+          };
         })}
-      </div>
+      />
 
       {error && <div data-testid="booking-form-error-banner" className="mb-6 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
@@ -2064,6 +2072,24 @@ export default function BookingFormPage() {
                   className="shrink-0 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
                 >
                   Review Response
+                </button>
+              </div>
+            ) : appliedInquiryLink ? (
+              <div className="flex items-center justify-between gap-3" data-testid="booking-form-created-from-inquiry">
+                <div>
+                  <h3 className={`${cardTitleClass} mb-1`}>Created from an inquiry</h3>
+                  <p className="text-sm text-slate-500">
+                    {[appliedInquiryLink.response?.firstName, appliedInquiryLink.response?.lastName].filter(Boolean).join(' ') || 'The client'} sent these details through your booking link
+                    {appliedInquiryLink.submittedAt ? ` on ${new Date(appliedInquiryLink.submittedAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}` : ''}.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSendInquiryModalOpen(true)}
+                  data-testid="booking-form-send-inquiry-link-button"
+                  className="shrink-0 text-sm font-semibold text-indigo-600 hover:underline"
+                >
+                  Ask for updated details
                 </button>
               </div>
             ) : (
@@ -2731,7 +2757,7 @@ export default function BookingFormPage() {
                   </div>
                 )}
                 <Modal open={showProposalPreview} onClose={() => setShowProposalPreview(false)} title="Proposal Preview" widthClass="max-w-4xl" bodyClassName="p-0">
-                  {proposalPreviewUrl && <iframe title="Proposal preview" src={proposalPreviewUrl} data-testid="booking-form-proposal-preview-frame" className="h-[calc(100dvh-4.75rem)] w-full border-0 sm:h-[70vh]" />}
+                  <PdfPreview url={proposalPreviewUrl} title="Proposal preview" filename="Proposal-draft.pdf" frameTestId="booking-form-proposal-preview-frame" />
                 </Modal>
               </div>
 
@@ -3011,7 +3037,7 @@ export default function BookingFormPage() {
                 </div>
               )}
               <Modal open={showContractPreview} onClose={() => setShowContractPreview(false)} title="Contract Preview" widthClass="max-w-4xl" bodyClassName="p-0">
-                {contractPreviewUrl && <iframe title="Contract preview" src={contractPreviewUrl} data-testid="booking-form-contract-preview-frame" className="h-[calc(100dvh-4.75rem)] w-full border-0 sm:h-[70vh]" />}
+                <PdfPreview url={contractPreviewUrl} title="Contract preview" filename="Contract-draft.pdf" frameTestId="booking-form-contract-preview-frame" />
               </Modal>
             </div>
           ) : (

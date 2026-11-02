@@ -167,6 +167,7 @@ async function buildInvoiceDoc({ businessInfo, client, event, contractReference,
 
   const clientLabel = client ? `${client.firstName}-${client.lastName}` : 'Client';
   const filename = `Invoice-${clientLabel}.pdf`.replace(/\s+/g, '-');
+  doc.setProperties({ title: `Invoice ${clientLabel.replace(/-/g, ' ')}`.trim() });
   return { doc, filename };
 }
 

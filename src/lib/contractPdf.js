@@ -274,6 +274,7 @@ async function buildContractDoc({ snapshot, terms, clientSignature, ownerSignatu
 
   const clientLabel = client?.firstName ? `${client.firstName}-${client.lastName || ''}` : 'Client';
   const filename = `${reference || 'Contract'}-${clientLabel}.pdf`.replace(/\s+/g, '-');
+  doc.setProperties({ title: `Contract ${clientLabel.replace(/-/g, ' ')}`.trim() });
   return { doc, filename };
 }
 

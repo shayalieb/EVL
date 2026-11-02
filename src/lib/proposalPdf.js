@@ -164,6 +164,7 @@ async function buildProposalDoc({ booking, client, businessInfo, reference, issu
 
   const clientLabel = client ? `${client.firstName}-${client.lastName}` : 'Client';
   const filename = `${reference || 'Proposal'}-${clientLabel}.pdf`.replace(/\s+/g, '-');
+  doc.setProperties({ title: `Proposal ${clientLabel.replace(/-/g, ' ')}`.trim() });
   return { doc, filename };
 }
 

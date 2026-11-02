@@ -31,10 +31,11 @@ test('multiple custom proposal items and sections survive saving and PDF preview
     await page.getByTestId('booking-form-section-add-button').filter({ visible: true }).click();
   }
   await page.getByTestId('booking-form-proposal-preview-button').click();
-  const frame = page.getByTestId('booking-form-proposal-preview-frame');
-  await expect(frame).toBeVisible();
-  const source = await frame.getAttribute('src');
-  const pdf = Buffer.from(source.split(',')[1], 'base64').toString('latin1');
+  // The preview's own "Open in new tab" link points at the same PDF the frame shows (this headless browser has no
+  // PDF viewer, so the frame is replaced by an explanation; real browsers show the frame).
+  const openLink = page.getByTestId('pdf-preview-open-link');
+  await expect(openLink).toBeVisible();
+  const pdf = await page.evaluate(async (url) => new TextDecoder('latin1').decode(await (await fetch(url)).arrayBuffer()), await openLink.getAttribute('href'));
   for (let i = 1; i <= 3; i++) {
     expect(pdf).toContain(`Custom service ${i}`);
     expect(pdf).toContain(`Custom section ${i}`);
