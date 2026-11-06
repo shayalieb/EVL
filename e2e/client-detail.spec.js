@@ -37,6 +37,13 @@ test('client detail page: notes, pinned banner, follow-up, timeline and tabs', a
   await page.getByTestId('client-followup-save').click();
   await expect(page.getByTestId('client-followup-item')).toContainText('Send proposal');
 
+  // Tags and stage
+  await page.getByTestId('client-tag-input').fill('Wedding');
+  await page.getByTestId('client-tag-input').press('Enter');
+  await expect(page.getByTestId('client-tag')).toContainText('wedding');
+  await page.getByTestId('client-stage-select').selectOption('vip');
+  await expect(page.getByTestId('client-stage-select')).toHaveValue('vip');
+
   // Timeline carries the note; other tabs render.
   await page.getByTestId('client-tab-timeline').click();
   await expect(page.getByTestId('client-timeline-item').first()).toContainText('Prefers evening calls');
@@ -50,4 +57,27 @@ test('client detail page: notes, pinned banner, follow-up, timeline and tabs', a
   await page.goto('/clients');
   await page.getByTestId('clients-search-input').fill('Detail Tester');
   await expect(page.getByTestId('client-row-followup')).toBeVisible();
+  // Stage badge shows, and the tag + stage filters and saved views work.
+  await expect(page.getByTestId('client-row-stage')).toHaveText('VIP');
+  await page.getByTestId('clients-search-input').fill('');
+  await page.getByTestId('clients-tag-filter').selectOption('wedding');
+  await expect(page.getByTestId('client-row')).toHaveCount(1);
+  await page.getByTestId('clients-stage-filter').selectOption('lead');
+  await expect(page.getByText('No clients match your search.')).toBeVisible();
+  await page.getByTestId('clients-stage-filter').selectOption('vip');
+  await expect(page.getByTestId('client-row')).toHaveCount(1);
+
+  await page.getByTestId('clients-save-view-button').click();
+  await page.getByTestId('clients-view-name-input').fill('Wedding VIPs');
+  await page.getByTestId('clients-view-save-confirm').click();
+  await page.getByTestId('clients-clear-filters-button').click();
+  await expect(page.getByTestId('client-row').nth(1)).toBeVisible();
+  await page.getByTestId('clients-views-select').selectOption({ label: 'Wedding VIPs' });
+  await expect(page.getByTestId('client-row')).toHaveCount(1);
+  await expect(page.getByTestId('clients-tag-filter')).toHaveValue('wedding');
+
+  // A ready-made view applies its filters.
+  await page.getByTestId('clients-views-select').selectOption({ label: 'Leads' });
+  await expect(page.getByTestId('clients-stage-filter')).toHaveValue('lead');
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
 });

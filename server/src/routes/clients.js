@@ -9,6 +9,7 @@ import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPage
 import { normalizeValidEmail } from '../lib/emailAddress.js';
 import { summarizeClientMoney, buildClientTimeline } from '../lib/clientOverview.js';
 import { invoiceTotal } from './invoices.js';
+import { CLIENT_STAGES, EMPTY_SIGNALS, effectiveStage, loadClientSignals, normalizeTags, sanitizeSavedViewFilters } from '../lib/clientInsights.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -34,6 +35,8 @@ function serializeClient(c) {
     state: c.state,
     zip: c.zip,
     notes: c.notes,
+    tags: c.tags || [],
+    stage: c.stage || null,
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
   };
@@ -96,8 +99,38 @@ router.get('/', asyncHandler(async (req, res) => {
       if (req.query.engagement === 'has-pending') engagementIds = [...buckets].filter(([, set]) => set.has('pending')).map(([id]) => id);
       if (req.query.engagement === 'no-events') engagementIds = { notIn: [...buckets.keys()] };
     }
+    const accountId = req.membership.accountId;
+    const canMoney = !!effectivePermissions(req.membership).viewBookings;
+    const stageFilter = CLIENT_STAGES.includes(req.query.stage) ? req.query.stage : null;
+    const owesFilter = req.query.owes === '1' || req.query.owes === 'true';
+    const noContactDays = Math.min(3650, Math.floor(Number(req.query.noContactDays) || 0)) || null;
+    const overdueFollowUp = req.query.followUp === 'overdue';
+    const tagFilter = String(req.query.tag || '').trim().toLowerCase();
+    if (owesFilter && !canMoney) return res.status(403).json({ error: 'Not authorized.' });
+    let aggregateIds = null;
+    if (stageFilter || owesFilter || noContactDays) {
+      const [signals, everyone] = await Promise.all([
+        loadClientSignals(prisma, accountId),
+        prisma.client.findMany({ where: { accountId }, select: { id: true, stage: true, createdAt: true } }),
+      ]);
+      const cutoff = noContactDays ? new Date(Date.now() - noContactDays * 86_400_000) : null;
+      aggregateIds = everyone.filter((c) => {
+        const sig = signals.get(c.id) || EMPTY_SIGNALS;
+        if (stageFilter && effectiveStage({ stage: c.stage, ...sig }) !== stageFilter) return false;
+        if (owesFilter && !(sig.money.outstanding > 0)) return false;
+        if (cutoff && (sig.lastContactAt || c.createdAt) >= cutoff) return false;
+        return true;
+      }).map((c) => c.id);
+    }
+    if (overdueFollowUp) {
+      const due = await prisma.reminder.findMany({ where: { accountId, relatedType: 'client', completedAt: null, remindAt: { lt: new Date() } }, select: { relatedId: true } });
+      const dueIds = new Set(due.map((r) => r.relatedId));
+      aggregateIds = aggregateIds ? aggregateIds.filter((id) => dueIds.has(id)) : [...dueIds];
+    }
     const where = {
       accountId: req.membership.accountId,
+      ...(aggregateIds ? { AND: [{ id: { in: aggregateIds } }] } : {}),
+      ...(tagFilter ? { tags: { has: tagFilter } } : {}),
       ...(Array.isArray(engagementIds) ? { id: { in: engagementIds } } : engagementIds ? { id: engagementIds } : {}),
       ...(search ? { OR: [
         ...['firstName', 'lastName', 'email', 'phone'].map((field) => ({ [field]: { contains: search, mode: 'insensitive' } })),
@@ -119,6 +152,7 @@ router.get('/', asyncHandler(async (req, res) => {
     const noteCountByClient = new Map(noteCounts.map((row) => [row.clientId, row._count._all]));
     const followUpByClient = new Map();
     for (const reminder of followUps) if (!followUpByClient.has(reminder.relatedId)) followUpByClient.set(reminder.relatedId, reminder.remindAt);
+    const signals = await loadClientSignals(prisma, accountId, itemIds);
     const [clientEvents, accountData] = await Promise.all([
       prisma.event.findMany({ where: { accountId: req.membership.accountId, deletedAt: null, clientId: { in: items.map((item) => item.id) } }, select: { clientId: true, eventStatus: true } }),
       prisma.accountData.findUnique({ where: { accountId: req.membership.accountId }, select: { data: true } }),
@@ -132,6 +166,9 @@ router.get('/', asyncHandler(async (req, res) => {
     return res.json({ clients: listPageResponse(items.map((item) => ({
       ...serializeClient(item),
       eventCounts: countsByClient.get(item.id),
+      effectiveStage: effectiveStage({ stage: item.stage, ...(signals.get(item.id) || EMPTY_SIGNALS) }),
+      lastContactAt: signals.get(item.id)?.lastContactAt || null,
+      money: canMoney ? { paid: (signals.get(item.id) || EMPTY_SIGNALS).money.paid, outstanding: (signals.get(item.id) || EMPTY_SIGNALS).money.outstanding, overdue: (signals.get(item.id) || EMPTY_SIGNALS).money.overdue } : null,
       noteCount: noteCountByClient.get(item.id) || 0,
       pinnedNote: pinnedByClient.get(item.id) || null,
       nextFollowUpAt: followUpByClient.get(item.id) || null,
@@ -151,6 +188,47 @@ router.get('/', asyncHandler(async (req, res) => {
 // Indexed, bounded candidate lookup for inquiry reconciliation. Exact
 // email/phone matches rank first; pg_trgm handles spelling differences in
 // names without loading an account's entire client roster into the browser.
+router.get('/tags', asyncHandler(async (req, res) => {
+  const rows = await prisma.$queryRaw`SELECT DISTINCT unnest("tags") AS "tag" FROM "Client" WHERE "accountId" = ${req.membership.accountId} ORDER BY 1 LIMIT 200`;
+  res.json({ tags: rows.map((row) => row.tag) });
+}));
+
+function serializeView(view) {
+  return { id: view.id, name: view.name, filters: view.filters, createdByUserId: view.createdByUserId, createdAt: view.createdAt };
+}
+
+router.get('/views', asyncHandler(async (req, res) => {
+  const views = await prisma.clientSavedView.findMany({ where: { accountId: req.membership.accountId }, orderBy: { name: 'asc' } });
+  res.json({ views: views.map(serializeView) });
+}));
+
+router.post('/views', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageClients) return res.status(403).json({ error: 'Not authorized.' });
+  const name = String(req.body?.name || '').trim();
+  if (!name || name.length > 60) return res.status(400).json({ error: 'Give the view a name of up to 60 characters.' });
+  const filters = sanitizeSavedViewFilters(req.body?.filters);
+  if (!Object.keys(filters).length) return res.status(400).json({ error: 'Choose at least one filter before saving a view.' });
+  const accountId = req.membership.accountId;
+  if (await prisma.clientSavedView.count({ where: { accountId } }) >= 50) return res.status(409).json({ error: 'You can save up to 50 views.' });
+  try {
+    const view = await prisma.clientSavedView.create({ data: { accountId, createdByUserId: req.session.userId, name, filters } });
+    res.status(201).json({ view: serializeView(view) });
+  } catch (err) {
+    if (err?.code === 'P2002') return res.status(409).json({ error: 'A view with that name already exists.' });
+    throw err;
+  }
+}));
+
+router.delete('/views/:viewId', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageClients) return res.status(403).json({ error: 'Not authorized.' });
+  const view = await prisma.clientSavedView.findUnique({ where: { id: req.params.viewId } });
+  if (!view || view.accountId !== req.membership.accountId) return res.status(404).json({ error: 'View not found.' });
+  const isAdmin = req.membership.role === 'owner' || req.membership.role === 'admin';
+  if (!isAdmin && view.createdByUserId !== req.session.userId) return res.status(403).json({ error: 'You can only delete views you created.' });
+  await prisma.clientSavedView.delete({ where: { id: view.id } });
+  res.json({ ok: true });
+}));
+
 router.get('/matches/inquiry', asyncHandler(async (req, res) => {
   const email = String(req.query.email || '').trim().toLowerCase();
   const phone = String(req.query.phone || '').replace(/\D/g, '');
@@ -223,8 +301,10 @@ router.get('/:id/overview', asyncHandler(async (req, res) => {
   const upcoming = liveEvents.filter((e) => !e.completedAt && e.eventDate && e.eventDate >= today).sort((a, b) => (a.eventDate < b.eventDate ? -1 : 1))[0] || null;
   const lastContactAt = [...messages.map((m) => m.createdAt), ...notes.filter((n) => n.type === 'call' || n.type === 'meeting').map((n) => n.createdAt)].sort((a, b) => b - a)[0] || null;
 
+  const signal = (await loadClientSignals(prisma, accountId, [client.id])).get(client.id) || EMPTY_SIGNALS;
   res.json({
     client: serializeClient(client),
+    effectiveStage: effectiveStage({ stage: client.stage, ...signal }),
     access: { bookings: canBookings, events: canEvents, email: canEmail },
     stats: { eventCounts: counts, bookingCount: liveBookings.length, eventCount: liveEvents.length, money, nextEvent: upcoming ? { id: upcoming.id, name: upcoming.name, eventDate: upcoming.eventDate } : null, lastContactAt },
     followUps: reminders,
@@ -244,6 +324,25 @@ router.get('/:id/notes', asyncHandler(async (req, res) => {
     orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }],
   });
   res.json({ notes: notes.map(serializeNote) });
+}));
+
+router.patch('/:id/classification', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageClients) return res.status(403).json({ error: 'Not authorized.' });
+  const client = await ownedClient(req, res);
+  if (!client) return;
+  const data = {};
+  if (req.body?.tags !== undefined) {
+    const result = normalizeTags(req.body.tags);
+    if (result.error) return res.status(400).json({ error: result.error });
+    data.tags = result.tags;
+  }
+  if (req.body?.stage !== undefined) {
+    const stage = req.body.stage || null;
+    if (stage !== null && !CLIENT_STAGES.includes(stage)) return res.status(400).json({ error: 'Invalid stage.' });
+    data.stage = stage;
+  }
+  const updated = await prisma.client.update({ where: { id: client.id }, data });
+  res.json({ client: serializeClient(updated) });
 }));
 
 router.post('/:id/notes', asyncHandler(async (req, res) => {

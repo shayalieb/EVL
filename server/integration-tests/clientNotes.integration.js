@@ -133,3 +133,82 @@ test('client overview: aggregates one client, respects view permissions and tena
   assert.equal(limited.json.stats.money, null);
   assert.ok(limited.json.timeline.every((x) => ['client', 'note'].includes(x.kind)), 'only client/note entries without area access');
 });
+
+test('client tags, stage, list filters and saved views', { timeout: 120_000 }, async () => {
+  await resetAllTables(prisma);
+  const a = await seedTenant(rawPrisma, 'A', 'band_orchestra');
+  const b = await seedTenant(rawPrisma, 'B', 'band_orchestra');
+  const cookieA = await login(a);
+  const cookieB = await login(b);
+  const clientId = a.ids.get('Client');
+  const accountId = a.account.id;
+  const list = async (query) => (await send('GET', `/api/clients?page=1&pageSize=25${query}`, { cookie: cookieA })).json.clients.items;
+
+  // A second, untouched client so filters have something to exclude.
+  const other = await rawPrisma.client.create({ data: { id: 'CN-other', accountId, firstName: 'Other', lastName: 'Person', email: 'other@example.test', emailNormalized: 'other@example.test', nameNormalized: 'other person' } });
+
+  // Classification
+  const set = await send('PATCH', `/api/clients/${clientId}/classification`, { cookie: cookieA, body: { tags: [' VIP ', 'Wedding', 'vip'], stage: 'vip' } });
+  assert.equal(set.status, 200);
+  assert.deepEqual(set.json.client.tags, ['vip', 'wedding']);
+  assert.equal(set.json.client.stage, 'vip');
+  assert.equal((await send('PATCH', `/api/clients/${clientId}/classification`, { cookie: cookieA, body: { stage: 'nonsense' } })).status, 400);
+  assert.equal((await send('PATCH', `/api/clients/${clientId}/classification`, { cookie: cookieA, body: { tags: 'x' } })).status, 400);
+  assert.equal((await send('PATCH', `/api/clients/${clientId}/classification`, { cookie: cookieB, body: { tags: ['intrude'] } })).status, 404);
+  assert.deepEqual((await send('GET', '/api/clients/tags', { cookie: cookieA })).json.tags, ['vip', 'wedding']);
+  assert.deepEqual((await send('GET', '/api/clients/tags', { cookie: cookieB })).json.tags, [], 'tags are per tenant');
+
+  // Filters
+  assert.deepEqual((await list('&tag=VIP')).map((c) => c.id), [clientId]);
+  assert.deepEqual((await list('&stage=vip')).map((c) => c.id), [clientId]);
+  const leads = await list('&stage=lead');
+  assert.ok(leads.some((c) => c.id === other.id) && !leads.some((c) => c.id === clientId));
+  assert.equal((await list('')).find((c) => c.id === other.id).effectiveStage, 'lead');
+  assert.equal((await list('')).find((c) => c.id === clientId).effectiveStage, 'vip');
+  await send('PATCH', `/api/clients/${clientId}/classification`, { cookie: cookieA, body: { stage: null } });
+  assert.notEqual((await list('')).find((c) => c.id === clientId).effectiveStage, 'vip', 'clearing the override returns to automatic');
+
+  // Money: one sent, part-paid invoice.
+  const bookingId = (await rawPrisma.booking.findFirst({ where: { accountId, clientId } })).id;
+  await rawPrisma.invoice.updateMany({ where: { accountId, bookingId }, data: { status: 'partial', paidAmount: 200, snapshot: { lineItems: [{ type: 'package', amount: 500 }] } } });
+  const row = (await list('')).find((c) => c.id === clientId);
+  assert.equal(row.money.paid, 200);
+  assert.equal(row.money.outstanding, 300);
+  assert.deepEqual((await list('&owes=1')).map((c) => c.id), [clientId]);
+
+  // No contact: both are brand new, so neither is "silent" yet; a back-dated client is.
+  assert.equal((await list('&noContactDays=30')).length, 0);
+  await rawPrisma.client.update({ where: { id: other.id }, data: { createdAt: new Date(Date.now() - 90 * 86_400_000) } });
+  assert.deepEqual((await list('&noContactDays=30')).map((c) => c.id), [other.id]);
+  await send('POST', `/api/clients/${other.id}/notes`, { cookie: cookieA, body: { body: 'Rang them', type: 'call' } });
+  assert.equal((await list('&noContactDays=30')).length, 0, 'a logged call counts as contact');
+  assert.ok((await list('')).find((c) => c.id === other.id).lastContactAt);
+
+  // Overdue follow-up
+  await rawPrisma.reminder.create({ data: { accountId, relatedType: 'client', relatedId: other.id, relatedName: 'Other', note: 'Ring', remindAt: new Date(Date.now() - 3_600_000) } });
+  assert.deepEqual((await list('&followUp=overdue')).map((c) => c.id), [other.id]);
+
+  // Saved views
+  const viewsBefore = (await send('GET', '/api/clients/views', { cookie: cookieA })).json.views.length; // the harness seeds one per tenant
+  const viewsBeforeB = (await send('GET', '/api/clients/views', { cookie: cookieB })).json.views.length;
+  const view = await send('POST', '/api/clients/views', { cookie: cookieA, body: { name: 'Owes money', filters: { owes: true, junk: 'x' } } });
+  assert.equal(view.status, 201);
+  assert.deepEqual(view.json.view.filters, { owes: true });
+  assert.equal((await send('POST', '/api/clients/views', { cookie: cookieA, body: { name: 'Owes money', filters: { owes: true } } })).status, 409);
+  assert.equal((await send('POST', '/api/clients/views', { cookie: cookieA, body: { name: 'Empty', filters: {} } })).status, 400);
+  assert.equal((await send('GET', '/api/clients/views', { cookie: cookieA })).json.views.length, viewsBefore + 1);
+  assert.equal((await send('GET', '/api/clients/views', { cookie: cookieB })).json.views.length, viewsBeforeB, 'views are per tenant');
+  assert.equal((await send('DELETE', `/api/clients/views/${view.json.view.id}`, { cookie: cookieB })).status, 404);
+  assert.equal((await send('DELETE', `/api/clients/views/${view.json.view.id}`, { cookie: cookieA })).status, 200);
+
+  // A member without booking access cannot see money or filter by it.
+  const bcrypt = (await import('bcrypt')).default;
+  const member = await rawPrisma.user.create({ data: { id: 'CN-m2', firstName: 'M', lastName: 'Two', email: 'cn-m2@example.test', passwordHash: await bcrypt.hash('password-123', 4) } });
+  await rawPrisma.membership.create({ data: { userId: member.id, accountId, role: 'member', permissions: { viewClients: true, viewBookings: false, viewEvents: false, viewContractors: false, viewVenues: false, viewOfferings: false } } });
+  const lr = await send('POST', '/api/auth/login', { body: { email: member.email, password: 'password-123' } });
+  const memberCookie = lr.cookies.map((v) => v.split(';', 1)[0]).join('; ');
+  const limited = await send('GET', '/api/clients?page=1&pageSize=25', { cookie: memberCookie });
+  assert.ok(limited.json.clients.items.every((c) => c.money === null));
+  assert.equal((await send('GET', '/api/clients?page=1&pageSize=25&owes=1', { cookie: memberCookie })).status, 403);
+  assert.equal((await send('PATCH', `/api/clients/${clientId}/classification`, { cookie: memberCookie, body: { tags: ['x'] } })).status, 403);
+});

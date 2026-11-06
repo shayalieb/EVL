@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import ClientModal from '../components/ClientModal';
 import ClientNotesPanel from '../components/ClientNotesPanel';
+import ClientClassification from '../components/ClientClassification';
 import UnderlineTabs from '../components/ui/UnderlineTabs';
 import Badge from '../components/ui/Badge';
 import { getClientOverview } from '../lib/clients';
@@ -105,6 +106,7 @@ export default function ClientDetailPage() {
             {client.phone && <a href={`tel:${client.phone}`} className="hover:text-indigo-600">{client.phone}</a>}
             {address && <span>{address}</span>}
           </div>
+          <ClientClassification client={client} effectiveStage={overview.effectiveStage} canEdit={canEdit} onSaved={load} />
         </div>
         {canEdit && (
           <div className="flex gap-2">

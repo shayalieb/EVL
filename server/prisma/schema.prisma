@@ -1656,6 +1656,11 @@ model Client {
   state           String?
   zip             String?
   notes           String? @db.Text
+  // Free-form labels (VIP, Wedding, Corporate…), stored lower-cased. `stage`
+  // is a manual override of the lifecycle stage; null means "work it out from
+  // their bookings and events" (see lib/clientInsights.js).
+  tags            String[] @default([])
+  stage           String?
 
   portalTokens ClientPortalToken[]
   clientNotes  ClientNote[]
@@ -1667,6 +1672,7 @@ model Client {
   @@index([accountId, createdAt, id])
   @@index([accountId, emailNormalized])
   @@index([accountId, phoneNormalized])
+  @@index([accountId, stage])
 }
 
 // Saved venue address book. Bookings and Events deliberately keep a copied
@@ -1932,6 +1938,20 @@ model ClientNote {
 
   @@index([accountId, clientId, createdAt])
   @@index([clientId, pinned])
+}
+
+// A named, shared set of Clients-list filters. `filters` holds only the
+// whitelisted keys in lib/clientInsights.js (SAVED_VIEW_FILTER_KEYS).
+model ClientSavedView {
+  id            String   @id @default(cuid())
+  accountId     String
+  createdByUserId String?
+  name          String
+  filters       Json     @default("{}")
+  createdAt     DateTime @default(now())
+
+  @@unique([accountId, name])
+  @@index([accountId])
 }
 
 model ClientPortalToken {
