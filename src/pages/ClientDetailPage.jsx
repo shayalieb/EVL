@@ -5,6 +5,7 @@ import { useData } from '../context/DataContext';
 import ClientModal from '../components/ClientModal';
 import ClientNotesPanel from '../components/ClientNotesPanel';
 import ClientClassification from '../components/ClientClassification';
+import ClientContactsPanel from '../components/ClientContactsPanel';
 import UnderlineTabs from '../components/ui/UnderlineTabs';
 import Badge from '../components/ui/Badge';
 import { getClientOverview } from '../lib/clients';
@@ -106,7 +107,7 @@ export default function ClientDetailPage() {
             {client.phone && <a href={`tel:${client.phone}`} className="hover:text-indigo-600">{client.phone}</a>}
             {address && <span>{address}</span>}
           </div>
-          <ClientClassification client={client} effectiveStage={overview.effectiveStage} canEdit={canEdit} onSaved={load} />
+          <ClientClassification client={client} company={overview.company} effectiveStage={overview.effectiveStage} canEdit={canEdit} onSaved={load} />
         </div>
         {canEdit && (
           <div className="flex gap-2">
@@ -132,6 +133,7 @@ export default function ClientDetailPage() {
             />
             <Stat label="Last contact" value={stats.lastContactAt ? new Date(stats.lastContactAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—'} testId="client-stat-last-contact" />
           </div>
+          <ClientContactsPanel clientId={client.id} contacts={overview.contacts} canEdit={canEdit} onChanged={load} />
           <div className="rounded-xl border border-slate-200 bg-white px-4 pb-4">
             <ClientNotesPanel client={client} canEdit={canEdit} onChanged={load} bare />
           </div>

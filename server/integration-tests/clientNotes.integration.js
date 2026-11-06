@@ -212,3 +212,96 @@ test('client tags, stage, list filters and saved views', { timeout: 120_000 }, a
   assert.equal((await send('GET', '/api/clients?page=1&pageSize=25&owes=1', { cookie: memberCookie })).status, 403);
   assert.equal((await send('PATCH', `/api/clients/${clientId}/classification`, { cookie: memberCookie, body: { tags: ['x'] } })).status, 403);
 });
+
+test('client contacts and companies', { timeout: 120_000 }, async () => {
+  await resetAllTables(prisma);
+  const a = await seedTenant(rawPrisma, 'A', 'band_orchestra');
+  const b = await seedTenant(rawPrisma, 'B', 'band_orchestra');
+  const cookieA = await login(a);
+  const cookieB = await login(b);
+  const accountId = a.account.id;
+  const clientId = a.ids.get('Client');
+  const other = await rawPrisma.client.create({ data: { id: 'CC-other', accountId, firstName: 'Olive', lastName: 'Second', email: 'olive@example.test', emailNormalized: 'olive@example.test', nameNormalized: 'olive second' } });
+
+  // Contacts
+  const c1 = await send('POST', `/api/clients/${clientId}/contacts`, { cookie: cookieA, body: { name: ' Pat Planner ', role: 'planner', email: 'PAT@Example.test', phone: '555-0100' } });
+  assert.equal(c1.status, 201);
+  assert.equal(c1.json.contact.name, 'Pat Planner');
+  assert.equal(c1.json.contact.email, 'pat@example.test');
+  assert.equal((await send('POST', `/api/clients/${clientId}/contacts`, { cookie: cookieA, body: { name: '' } })).status, 400);
+  assert.equal((await send('POST', `/api/clients/${clientId}/contacts`, { cookie: cookieA, body: { name: 'X', role: 'boss' } })).status, 400);
+  assert.equal((await send('POST', `/api/clients/${clientId}/contacts`, { cookie: cookieA, body: { name: 'X', email: 'not-an-email' } })).status, 400);
+  const edited = await send('PATCH', `/api/clients/${clientId}/contacts/${c1.json.contact.id}`, { cookie: cookieA, body: { role: 'payer', email: '' } });
+  assert.equal(edited.json.contact.role, 'payer');
+  assert.equal(edited.json.contact.email, null);
+  assert.equal((await send('GET', `/api/clients/${clientId}/contacts`, { cookie: cookieB })).status, 404);
+  assert.equal((await send('POST', `/api/clients/${clientId}/contacts`, { cookie: cookieB, body: { name: 'Intruder' } })).status, 404);
+  assert.equal((await send('PATCH', `/api/clients/${clientId}/contacts/${c1.json.contact.id}`, { cookie: cookieB, body: { name: 'Intruder' } })).status, 404);
+  assert.equal((await send('DELETE', `/api/clients/${clientId}/contacts/${c1.json.contact.id}`, { cookie: cookieB })).status, 404);
+  const wrongClient = await send('PATCH', `/api/clients/${other.id}/contacts/${c1.json.contact.id}`, { cookie: cookieA, body: { name: 'Moved' } });
+  assert.equal(wrongClient.status, 404, 'a contact cannot be edited through a different client');
+
+  // Search finds a client through their contact
+  const byContact = await send('GET', '/api/clients?page=1&pageSize=25&search=pat%20planner', { cookie: cookieA });
+  assert.ok(byContact.json.clients.items.some((c) => c.id === clientId), 'search matches contact name');
+
+  // Companies: create-or-reuse, case-insensitive
+  const co = await send('POST', '/api/client-companies', { cookie: cookieA, body: { name: '  Acme   Events ' } });
+  assert.equal(co.status, 201);
+  const again = await send('POST', '/api/client-companies', { cookie: cookieA, body: { name: 'acme events' } });
+  assert.equal(again.status, 200);
+  assert.equal(again.json.company.id, co.json.company.id);
+  assert.equal((await send('POST', '/api/client-companies', { cookie: cookieA, body: { name: '  ' } })).status, 400);
+  const coB = await send('POST', '/api/client-companies', { cookie: cookieB, body: { name: 'Acme Events' } });
+  assert.notEqual(coB.json.company.id, co.json.company.id, 'the same name in another tenant is a different company');
+
+  // Assign members; other tenants' companies are rejected
+  const companyId = co.json.company.id;
+  assert.equal((await send('PATCH', `/api/clients/${clientId}/classification`, { cookie: cookieA, body: { companyId: coB.json.company.id } })).status, 400);
+  const assigned = await send('PATCH', `/api/clients/${clientId}/classification`, { cookie: cookieA, body: { companyId } });
+  assert.equal(assigned.json.client.company.name, 'Acme Events');
+  await send('PATCH', `/api/clients/${other.id}/classification`, { cookie: cookieA, body: { companyId } });
+  const row = (await send('GET', '/api/clients?page=1&pageSize=25', { cookie: cookieA })).json.clients.items.find((c) => c.id === clientId);
+  assert.equal(row.company.id, companyId);
+  const byCompany = await send('GET', '/api/clients?page=1&pageSize=25&search=acme', { cookie: cookieA });
+  assert.deepEqual(byCompany.json.clients.items.map((c) => c.id).sort(), [clientId, other.id].sort());
+  const ov = await send('GET', `/api/clients/${clientId}/overview`, { cookie: cookieA });
+  assert.equal(ov.json.company.id, companyId);
+  assert.ok(ov.json.contacts.some((c) => c.id === c1.json.contact.id), 'overview carries contacts');
+
+  // Company roll-up
+  const bookingId = (await rawPrisma.booking.findFirst({ where: { accountId, clientId } })).id;
+  await rawPrisma.invoice.updateMany({ where: { accountId, bookingId }, data: { status: 'partial', paidAmount: 200, snapshot: { lineItems: [{ type: 'package', amount: 500 }] } } });
+  const detail = await send('GET', `/api/client-companies/${companyId}`, { cookie: cookieA });
+  assert.equal(detail.status, 200);
+  assert.equal(detail.json.stats.memberCount, 2);
+  assert.equal(detail.json.stats.money.paid, 200);
+  assert.equal(detail.json.stats.money.outstanding, 300);
+  assert.equal(detail.json.members.length, 2);
+  assert.equal((await send('GET', `/api/client-companies/${companyId}`, { cookie: cookieB })).status, 404);
+  const list = await send('GET', '/api/client-companies?search=acme', { cookie: cookieA });
+  assert.equal(list.json.companies.find((c) => c.id === companyId).memberCount, 2);
+  assert.ok(!list.json.companies.some((c) => c.id === coB.json.company.id), 'company list is per tenant');
+
+  // Rename conflict, then permissions for a member without booking access
+  const second = await send('POST', '/api/client-companies', { cookie: cookieA, body: { name: 'Globex' } });
+  assert.equal((await send('PATCH', `/api/client-companies/${second.json.company.id}`, { cookie: cookieA, body: { name: 'ACME events' } })).status, 409);
+  const bcrypt = (await import('bcrypt')).default;
+  const member = await rawPrisma.user.create({ data: { id: 'CC-m', firstName: 'M', lastName: 'Three', email: 'cc-m@example.test', passwordHash: await bcrypt.hash('password-123', 4) } });
+  await rawPrisma.membership.create({ data: { userId: member.id, accountId, role: 'member', permissions: { viewClients: true, viewBookings: false, viewEvents: false, viewContractors: false, viewVenues: false, viewOfferings: false } } });
+  const lr = await send('POST', '/api/auth/login', { body: { email: member.email, password: 'password-123' } });
+  const memberCookie = lr.cookies.map((v) => v.split(';', 1)[0]).join('; ');
+  assert.equal((await send('GET', `/api/client-companies/${companyId}`, { cookie: memberCookie })).json.stats.money, null);
+  assert.equal((await send('POST', '/api/client-companies', { cookie: memberCookie, body: { name: 'Nope' } })).status, 403);
+  assert.equal((await send('POST', `/api/clients/${clientId}/contacts`, { cookie: memberCookie, body: { name: 'Nope' } })).status, 403);
+
+  // Deleting a company detaches members but keeps them
+  assert.equal((await send('DELETE', `/api/client-companies/${companyId}`, { cookie: cookieA })).status, 200);
+  const after = await rawPrisma.client.findUnique({ where: { id: clientId } });
+  assert.equal(after.companyId, null);
+
+  // Deleting a client removes its contacts
+  await send('POST', `/api/clients/${other.id}/contacts`, { cookie: cookieA, body: { name: 'Temp' } });
+  await rawPrisma.client.delete({ where: { id: other.id } });
+  assert.equal(await rawPrisma.clientContact.count({ where: { clientId: other.id } }), 0);
+});

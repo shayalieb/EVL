@@ -28,6 +28,7 @@ const SignAgreementsPage = lazy(() => import('./pages/SignAgreementsPage'));
 const ContractorsPage = lazy(() => import('./pages/ContractorsPage'));
 const ClientsPage = lazy(() => import('./pages/ClientsPage'));
 const ClientDetailPage = lazy(() => import('./pages/ClientDetailPage'));
+const ClientCompanyPage = lazy(() => import('./pages/ClientCompanyPage'));
 const VenuesPage = lazy(() => import('./pages/VenuesPage'));
 const OfferingsPage = lazy(() => import('./pages/OfferingsPage'));
 const BookingsPage = lazy(() => import('./pages/BookingsPage'));
@@ -225,6 +226,7 @@ function AppRoutes() {
         <Route path="financials" element={<PermissionGate permission="viewFinancials"><FinancialsPage /></PermissionGate>} />
         <Route path="contractors" element={<PermissionGate permission="viewContractors"><ContractorsPage /></PermissionGate>} />
         <Route path="clients" element={<PermissionGate permission="viewClients"><ClientsPage /></PermissionGate>} />
+        <Route path="clients/company/:companyId" element={<PermissionGate permission="viewClients"><ClientCompanyPage /></PermissionGate>} />
         <Route path="clients/:clientId" element={<PermissionGate permission="viewClients"><ClientDetailPage /></PermissionGate>} />
         <Route path="venues" element={<PermissionGate permission="viewVenues"><VenuesPage /></PermissionGate>} />
         <Route path="offerings" element={<PermissionGate permission="viewOfferings"><OfferingsPage /></PermissionGate>} />

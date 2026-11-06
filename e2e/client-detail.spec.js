@@ -44,6 +44,20 @@ test('client detail page: notes, pinned banner, follow-up, timeline and tabs', a
   await page.getByTestId('client-stage-select').selectOption('vip');
   await expect(page.getByTestId('client-stage-select')).toHaveValue('vip');
 
+  // Contacts around the client
+  await page.getByTestId('client-add-contact-button').click();
+  await page.getByTestId('client-contact-name').fill('Pat Planner');
+  await page.getByTestId('client-contact-role').selectOption('planner');
+  await page.getByTestId('client-contact-email').fill('pat@example.test');
+  await page.getByTestId('client-contact-save').click();
+  await expect(page.getByTestId('client-contact-item')).toContainText('Pat Planner');
+  await expect(page.getByTestId('client-contact-item')).toContainText('Planner');
+
+  // Company: created by typing a name, then listed on its own page
+  await page.getByTestId('client-company-input').fill('Acme Events');
+  await page.getByTestId('client-company-input').press('Enter');
+  await expect(page.getByTestId('client-company-link')).toHaveText('Acme Events');
+
   // Timeline carries the note; other tabs render.
   await page.getByTestId('client-tab-timeline').click();
   await expect(page.getByTestId('client-timeline-item').first()).toContainText('Prefers evening calls');
@@ -75,6 +89,31 @@ test('client detail page: notes, pinned banner, follow-up, timeline and tabs', a
   await page.getByTestId('clients-views-select').selectOption({ label: 'Wedding VIPs' });
   await expect(page.getByTestId('client-row')).toHaveCount(1);
   await expect(page.getByTestId('clients-tag-filter')).toHaveValue('wedding');
+
+  // Company shows on the row and finds the client by search; searching a contact's name does too.
+  await page.getByTestId('clients-clear-filters-button').click();
+  await expect(page.getByTestId('client-row-company')).toHaveText('Acme Events');
+  await page.getByTestId('clients-search-input').fill('Pat Planner');
+  await expect(page.getByTestId('client-row')).toHaveCount(1);
+  await page.getByTestId('client-row-company').click();
+  await expect(page.getByTestId('client-company-name')).toHaveText('Acme Events');
+  await expect(page.getByTestId('client-company-member')).toHaveCount(1);
+  await expect(page.getByTestId('client-company-stat-people')).toHaveText('1');
+  await page.getByTestId('client-company-edit').click();
+  await page.getByTestId('client-company-name-input').fill('Acme Events Group');
+  await page.getByTestId('client-company-save').click();
+  await expect(page.getByTestId('client-company-name')).toHaveText('Acme Events Group');
+  await page.goto('/clients');
+  await page.getByTestId('clients-search-input').fill('Detail Tester');
+  await page.getByRole('link', { name: 'Detail Tester' }).click();
+  await page.getByRole('button', { name: 'Remove company' }).click();
+  await expect(page.getByTestId('client-company-input')).toBeVisible();
+  await page.goto('/clients');
+  await page.getByTestId('clients-search-input').fill('Detail Tester');
+  await expect(page.getByTestId('client-row-company')).toHaveCount(0);
+  await page.getByTestId('clients-search-input').fill('');
+  await page.getByTestId('clients-tag-filter').selectOption('wedding');
+  await page.getByTestId('clients-stage-filter').selectOption('vip');
 
   // A ready-made view applies its filters.
   await page.getByTestId('clients-views-select').selectOption({ label: 'Leads' });

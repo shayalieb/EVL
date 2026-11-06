@@ -192,6 +192,7 @@ export default function ClientsPage() {
                       <Link to={`/clients/${c.id}`} data-testid="client-row-name-link" className="inline-block py-1 text-left hover:text-indigo-600 hover:underline">
                         {c.firstName} {c.lastName}
                       </Link>
+                      {c.company && <Link to={`/clients/company/${c.company.id}`} data-testid="client-row-company" className="block text-xs font-normal text-slate-400 hover:text-indigo-600 hover:underline">{c.company.name}</Link>}
                       <div className="flex flex-wrap items-center gap-1">
                         {c.effectiveStage && c.effectiveStage !== 'active' && (
                           <span data-testid="client-row-stage" className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ backgroundColor: `${stage.color}1f`, color: stage.color }}>{stage.label}</span>

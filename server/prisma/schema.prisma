@@ -92,6 +92,8 @@ model Account {
   contractors               Contractor[]
   contractorPaymentRequests ContractorPaymentRequest[]
   clients                   Client[]
+  clientCompanies           ClientCompany[]
+  clientSavedViews          ClientSavedView[]
   venues                    Venue[]
   offerings                 Offering[]
   contractorGroups          ContractorGroup[]
@@ -1661,9 +1663,12 @@ model Client {
   // their bookings and events" (see lib/clientInsights.js).
   tags            String[] @default([])
   stage           String?
+  companyId       String?
+  company         ClientCompany? @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
   portalTokens ClientPortalToken[]
   clientNotes  ClientNote[]
+  contacts     ClientContact[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1673,6 +1678,7 @@ model Client {
   @@index([accountId, emailNormalized])
   @@index([accountId, phoneNormalized])
   @@index([accountId, stage])
+  @@index([companyId])
 }
 
 // Saved venue address book. Bookings and Events deliberately keep a copied
@@ -1945,6 +1951,7 @@ model ClientNote {
 model ClientSavedView {
   id            String   @id @default(cuid())
   accountId     String
+  account       Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   createdByUserId String?
   name          String
   filters       Json     @default("{}")
@@ -1952,6 +1959,44 @@ model ClientSavedView {
 
   @@unique([accountId, name])
   @@index([accountId])
+}
+
+// An organisation that several client contacts belong to (a venue group, a
+// corporate account). Clients stay individual records; this only groups them
+// so money and activity can be rolled up. Deleting a company detaches members.
+model ClientCompany {
+  id             String   @id @default(cuid())
+  accountId      String
+  account        Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name           String
+  nameNormalized String
+  phone          String?
+  website        String?
+  notes          String?  @db.Text
+  clients        Client[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([accountId, nameNormalized])
+  @@index([accountId])
+}
+
+// Other people around a client — partner, planner, the parent paying, the
+// day-of contact. Informational: documents and email still go to the client.
+model ClientContact {
+  id        String   @id @default(cuid())
+  accountId String
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name      String
+  role      String   @default("other") // partner | planner | payer | day_of | assistant | other
+  email     String?
+  phone     String?
+  notes     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([accountId, clientId])
 }
 
 model ClientPortalToken {

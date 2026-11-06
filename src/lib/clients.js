@@ -106,3 +106,50 @@ export async function createClientView(name, filters) {
 export async function deleteClientView(id) {
   return apiFetch(`/clients/views/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
+
+export const CONTACT_ROLES = [
+  { value: 'partner', label: 'Partner' },
+  { value: 'planner', label: 'Planner' },
+  { value: 'payer', label: 'Paying the bill' },
+  { value: 'day_of', label: 'Day-of contact' },
+  { value: 'assistant', label: 'Assistant' },
+  { value: 'other', label: 'Other' },
+];
+
+export async function createClientContact(clientId, contact) {
+  const data = await apiFetch(`/clients/${encodeURIComponent(clientId)}/contacts`, { method: 'POST', body: JSON.stringify(contact) });
+  return data.contact;
+}
+
+export async function updateClientContact(clientId, contactId, patch) {
+  const data = await apiFetch(`/clients/${encodeURIComponent(clientId)}/contacts/${encodeURIComponent(contactId)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  return data.contact;
+}
+
+export async function deleteClientContact(clientId, contactId) {
+  return apiFetch(`/clients/${encodeURIComponent(clientId)}/contacts/${encodeURIComponent(contactId)}`, { method: 'DELETE' });
+}
+
+export async function listClientCompanies(search = '') {
+  const data = await apiFetch(`/client-companies${search ? `?search=${encodeURIComponent(search)}` : ''}`);
+  return data.companies;
+}
+
+// Names are unique per account, so this returns the existing company when there is one.
+export async function ensureClientCompany(name) {
+  const data = await apiFetch('/client-companies', { method: 'POST', body: JSON.stringify({ name }) });
+  return data.company;
+}
+
+export async function getClientCompany(id) {
+  return apiFetch(`/client-companies/${encodeURIComponent(id)}`);
+}
+
+export async function updateClientCompany(id, patch) {
+  const data = await apiFetch(`/client-companies/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  return data.company;
+}
+
+export async function deleteClientCompany(id) {
+  return apiFetch(`/client-companies/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}

@@ -37,6 +37,7 @@ function serializeClient(c) {
     notes: c.notes,
     tags: c.tags || [],
     stage: c.stage || null,
+    companyId: c.companyId || null,
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
   };
@@ -48,6 +49,40 @@ const NOTE_MAX_LENGTH = 5000;
 async function authorNameFor(req) {
   const user = await prisma.user.findUnique({ where: { id: req.session.userId }, select: { firstName: true, lastName: true } });
   return user ? `${user.firstName} ${user.lastName}`.trim() || null : null;
+}
+
+const CONTACT_ROLES = new Set(['partner', 'planner', 'payer', 'day_of', 'assistant', 'other']);
+const MAX_CONTACTS = 25;
+
+function serializeContact(c) {
+  return { id: c.id, clientId: c.clientId, name: c.name, role: c.role, email: c.email, phone: c.phone, notes: c.notes, createdAt: c.createdAt };
+}
+
+// Shared validation for create and update. Returns { data } or { error }.
+function contactFields(body, { partial }) {
+  const data = {};
+  const has = (key) => body?.[key] !== undefined;
+  if (!partial || has('name')) {
+    const name = String(body?.name ?? '').trim();
+    if (!name) return { error: 'A name is required.' };
+    if (name.length > 120) return { error: 'Names are limited to 120 characters.' };
+    data.name = name;
+  }
+  if (has('role')) {
+    if (!CONTACT_ROLES.has(body.role)) return { error: 'Invalid role.' };
+    data.role = body.role;
+  }
+  if (has('email')) {
+    const raw = String(body.email ?? '').trim();
+    if (raw) {
+      const email = normalizeValidEmail(raw);
+      if (!email) return { error: 'Enter a valid email address.' };
+      data.email = email;
+    } else data.email = null;
+  }
+  if (has('phone')) data.phone = String(body.phone ?? '').trim().slice(0, 40) || null;
+  if (has('notes')) data.notes = String(body.notes ?? '').trim().slice(0, 2000) || null;
+  return { data };
 }
 
 function serializeNote(n) {
@@ -135,11 +170,13 @@ router.get('/', asyncHandler(async (req, res) => {
       ...(search ? { OR: [
         ...['firstName', 'lastName', 'email', 'phone'].map((field) => ({ [field]: { contains: search, mode: 'insensitive' } })),
         { nameNormalized: { contains: search.toLowerCase().replace(/\s+/g, ' ') } },
+        { company: { nameNormalized: { contains: search.toLowerCase().replace(/\s+/g, ' ') } } },
+        { contacts: { some: { OR: ['name', 'email', 'phone'].map((field) => ({ [field]: { contains: search, mode: 'insensitive' } })) } } },
         { clientNotes: { some: { body: { contains: search, mode: 'insensitive' } } } },
       ] } : {}),
     };
     const [items, total] = await Promise.all([
-      prisma.client.findMany({ where, orderBy: [{ [pagination.sort]: pagination.direction }, { id: pagination.direction }], skip: pagination.skip, take: pagination.pageSize }),
+      prisma.client.findMany({ where, orderBy: [{ [pagination.sort]: pagination.direction }, { id: pagination.direction }], skip: pagination.skip, take: pagination.pageSize, include: { company: { select: { id: true, name: true } } } }),
       prisma.client.count({ where }),
     ]);
     const itemIds = items.map((item) => item.id);
@@ -166,6 +203,7 @@ router.get('/', asyncHandler(async (req, res) => {
     return res.json({ clients: listPageResponse(items.map((item) => ({
       ...serializeClient(item),
       eventCounts: countsByClient.get(item.id),
+      company: item.company || null,
       effectiveStage: effectiveStage({ stage: item.stage, ...(signals.get(item.id) || EMPTY_SIGNALS) }),
       lastContactAt: signals.get(item.id)?.lastContactAt || null,
       money: canMoney ? { paid: (signals.get(item.id) || EMPTY_SIGNALS).money.paid, outstanding: (signals.get(item.id) || EMPTY_SIGNALS).money.outstanding, overdue: (signals.get(item.id) || EMPTY_SIGNALS).money.overdue } : null,
@@ -264,7 +302,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
 // Everything about one client in a single read. Each section is included only
 // when the member may view that area, so this never widens what they can see.
 router.get('/:id/overview', asyncHandler(async (req, res) => {
-  const client = await prisma.client.findUnique({ where: { id: req.params.id } });
+  const client = await prisma.client.findUnique({ where: { id: req.params.id }, include: { company: { select: { id: true, name: true } }, contacts: { orderBy: { createdAt: 'asc' } } } });
   if (!client || client.accountId !== req.membership.accountId) return res.status(404).json({ error: 'Client not found.' });
   const accountId = client.accountId;
   const perms = effectivePermissions(req.membership);
@@ -305,6 +343,8 @@ router.get('/:id/overview', asyncHandler(async (req, res) => {
   res.json({
     client: serializeClient(client),
     effectiveStage: effectiveStage({ stage: client.stage, ...signal }),
+    company: client.company || null,
+    contacts: client.contacts.map(serializeContact),
     access: { bookings: canBookings, events: canEvents, email: canEmail },
     stats: { eventCounts: counts, bookingCount: liveBookings.length, eventCount: liveEvents.length, money, nextEvent: upcoming ? { id: upcoming.id, name: upcoming.name, eventDate: upcoming.eventDate } : null, lastContactAt },
     followUps: reminders,
@@ -341,8 +381,57 @@ router.patch('/:id/classification', asyncHandler(async (req, res) => {
     if (stage !== null && !CLIENT_STAGES.includes(stage)) return res.status(400).json({ error: 'Invalid stage.' });
     data.stage = stage;
   }
-  const updated = await prisma.client.update({ where: { id: client.id }, data });
-  res.json({ client: serializeClient(updated) });
+  if (req.body?.companyId !== undefined) {
+    if (req.body.companyId === null || req.body.companyId === '') {
+      data.companyId = null;
+    } else {
+      const company = await prisma.clientCompany.findUnique({ where: { id: String(req.body.companyId) }, select: { accountId: true } });
+      if (!company || company.accountId !== client.accountId) return res.status(400).json({ error: 'That company does not exist.' });
+      data.companyId = String(req.body.companyId);
+    }
+  }
+  const updated = await prisma.client.update({ where: { id: client.id }, data, include: { company: { select: { id: true, name: true } } } });
+  res.json({ client: { ...serializeClient(updated), company: updated.company || null } });
+}));
+
+router.get('/:id/contacts', asyncHandler(async (req, res) => {
+  const client = await ownedClient(req, res);
+  if (!client) return;
+  const contacts = await prisma.clientContact.findMany({ where: { accountId: client.accountId, clientId: client.id }, orderBy: { createdAt: 'asc' } });
+  res.json({ contacts: contacts.map(serializeContact) });
+}));
+
+router.post('/:id/contacts', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageClients) return res.status(403).json({ error: 'Not authorized.' });
+  const client = await ownedClient(req, res);
+  if (!client) return;
+  const { data, error } = contactFields(req.body, { partial: false });
+  if (error) return res.status(400).json({ error });
+  if (await prisma.clientContact.count({ where: { clientId: client.id } }) >= MAX_CONTACTS) return res.status(409).json({ error: `A client can have up to ${MAX_CONTACTS} contacts.` });
+  const contact = await prisma.clientContact.create({ data: { accountId: client.accountId, clientId: client.id, role: 'other', ...data } });
+  res.status(201).json({ contact: serializeContact(contact) });
+}));
+
+router.patch('/:id/contacts/:contactId', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageClients) return res.status(403).json({ error: 'Not authorized.' });
+  const client = await ownedClient(req, res);
+  if (!client) return;
+  const existing = await prisma.clientContact.findUnique({ where: { id: req.params.contactId } });
+  if (!existing || existing.clientId !== client.id || existing.accountId !== client.accountId) return res.status(404).json({ error: 'Contact not found.' });
+  const { data, error } = contactFields(req.body, { partial: true });
+  if (error) return res.status(400).json({ error });
+  const contact = await prisma.clientContact.update({ where: { id: existing.id }, data });
+  res.json({ contact: serializeContact(contact) });
+}));
+
+router.delete('/:id/contacts/:contactId', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).manageClients) return res.status(403).json({ error: 'Not authorized.' });
+  const client = await ownedClient(req, res);
+  if (!client) return;
+  const existing = await prisma.clientContact.findUnique({ where: { id: req.params.contactId } });
+  if (!existing || existing.clientId !== client.id || existing.accountId !== client.accountId) return res.status(404).json({ error: 'Contact not found.' });
+  await prisma.clientContact.delete({ where: { id: existing.id } });
+  res.json({ ok: true });
 }));
 
 router.post('/:id/notes', asyncHandler(async (req, res) => {
