@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import Modal from './ui/Modal';
+import ClientNotesPanel from './ClientNotesPanel';
+import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { formatPhoneNumber, formatEmailInput } from '../lib/format';
 
@@ -14,6 +16,7 @@ const emptyForm = {
 
 export default function ClientModal({ open, onClose, client, onSaved }) {
   const { addClient, updateClient } = useData();
+  const { can } = useAuth();
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
 
@@ -46,7 +49,7 @@ export default function ClientModal({ open, onClose, client, onSaved }) {
       return;
     }
     try {
-      const record = client ? await updateClient(client.id, form) : await addClient(form);
+      const record = client ? await updateClient(client.id, (({ notes: _notes, ...rest }) => rest)(form)) : await addClient(form);
       onSaved?.(record);
       onClose();
     } catch (err) {
@@ -55,7 +58,7 @@ export default function ClientModal({ open, onClose, client, onSaved }) {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={client ? 'Edit Client' : 'Add Client'}>
+    <Modal open={open} onClose={onClose} title={client ? 'Edit Client' : 'Add Client'} widthClass={client ? 'max-w-2xl' : 'max-w-lg'}>
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <div data-testid="client-modal-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
@@ -123,10 +126,12 @@ export default function ClientModal({ open, onClose, client, onSaved }) {
           </div>
         </div>
 
-        <div>
-          <label className={labelClass}>Client Notes</label>
-          <textarea rows={2} value={form.notes} onChange={(e) => update('notes', e.target.value)} data-testid="client-modal-notes-textarea" className={inputClass} />
-        </div>
+        {!client && (
+          <div>
+            <label className={labelClass}>Client Notes</label>
+            <textarea rows={2} value={form.notes} onChange={(e) => update('notes', e.target.value)} data-testid="client-modal-notes-textarea" className={inputClass} />
+          </div>
+        )}
 
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} data-testid="client-modal-cancel-button" className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
@@ -135,6 +140,7 @@ export default function ClientModal({ open, onClose, client, onSaved }) {
           </button>
         </div>
       </form>
+      {client && <ClientNotesPanel client={client} canEdit={can('manageClients')} />}
     </Modal>
   );
 }

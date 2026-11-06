@@ -1658,6 +1658,7 @@ model Client {
   notes           String? @db.Text
 
   portalTokens ClientPortalToken[]
+  clientNotes  ClientNote[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1910,6 +1911,29 @@ model StagePlotLibraryBacklineItem {
 // not built instead: Client.email is optional/unenforced/non-unique today,
 // which is a poor foundation for a durable password account but a fine one
 // for a short-lived, single-use link re-requested each time.
+// Dated, authored note log for a client. Replaces the single free-text
+// Client.notes field (which is kept only so older records and the inquiry
+// compare view keep working; the migration copied each existing value in as
+// a first entry). authorName is a snapshot so entries still read sensibly if
+// the author's account is later removed. At most one note per client is
+// pinned (enforced in the route, not the DB) and shows as a banner.
+model ClientNote {
+  id            String   @id @default(cuid())
+  accountId     String
+  clientId      String
+  client        Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  authorUserId  String?
+  authorName    String?
+  type          String   @default("general") // general | call | meeting | preference | issue
+  body          String   @db.Text
+  pinned        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([accountId, clientId, createdAt])
+  @@index([clientId, pinned])
+}
+
 model ClientPortalToken {
   id        String    @id @default(cuid())
   clientId  String

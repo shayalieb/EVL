@@ -29,3 +29,30 @@ export async function updateClientApi(id, patch) {
 export async function deleteClientApi(id) {
   return apiFetch(`/clients/${id}`, { method: 'DELETE' });
 }
+
+export const CLIENT_NOTE_TYPES = [
+  { value: 'general', label: 'General' },
+  { value: 'call', label: 'Call' },
+  { value: 'meeting', label: 'Meeting' },
+  { value: 'preference', label: 'Preference' },
+  { value: 'issue', label: 'Issue' },
+];
+
+export async function listClientNotes(clientId) {
+  const data = await apiFetch(`/clients/${encodeURIComponent(clientId)}/notes`);
+  return data.notes;
+}
+
+export async function createClientNote(clientId, note) {
+  const data = await apiFetch(`/clients/${encodeURIComponent(clientId)}/notes`, { method: 'POST', body: JSON.stringify(note) });
+  return data.note;
+}
+
+export async function updateClientNote(clientId, noteId, patch) {
+  const data = await apiFetch(`/clients/${encodeURIComponent(clientId)}/notes/${encodeURIComponent(noteId)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  return data.note;
+}
+
+export async function deleteClientNote(clientId, noteId) {
+  return apiFetch(`/clients/${encodeURIComponent(clientId)}/notes/${encodeURIComponent(noteId)}`, { method: 'DELETE' });
+}
