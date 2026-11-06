@@ -7,6 +7,8 @@ import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createWithPreservedId } from '../lib/idPreservingCreate.js';
 import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPageResponse } from '../lib/pagination.js';
 import { normalizeValidEmail } from '../lib/emailAddress.js';
+import { summarizeClientMoney, buildClientTimeline } from '../lib/clientOverview.js';
+import { invoiceTotal } from './invoices.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -99,6 +101,7 @@ router.get('/', asyncHandler(async (req, res) => {
       ...(Array.isArray(engagementIds) ? { id: { in: engagementIds } } : engagementIds ? { id: engagementIds } : {}),
       ...(search ? { OR: [
         ...['firstName', 'lastName', 'email', 'phone'].map((field) => ({ [field]: { contains: search, mode: 'insensitive' } })),
+        { nameNormalized: { contains: search.toLowerCase().replace(/\s+/g, ' ') } },
         { clientNotes: { some: { body: { contains: search, mode: 'insensitive' } } } },
       ] } : {}),
     };
@@ -178,6 +181,59 @@ router.get('/:id', asyncHandler(async (req, res) => {
   const client = await prisma.client.findUnique({ where: { id: req.params.id } });
   if (!client || client.accountId !== req.membership.accountId) return res.status(404).json({ error: 'Client not found.' });
   res.json({ client: serializeClient(client) });
+}));
+
+// Everything about one client in a single read. Each section is included only
+// when the member may view that area, so this never widens what they can see.
+router.get('/:id/overview', asyncHandler(async (req, res) => {
+  const client = await prisma.client.findUnique({ where: { id: req.params.id } });
+  if (!client || client.accountId !== req.membership.accountId) return res.status(404).json({ error: 'Client not found.' });
+  const accountId = client.accountId;
+  const perms = effectivePermissions(req.membership);
+  const canBookings = !!perms.viewBookings;
+  const canEvents = !!perms.viewEvents;
+  const canEmail = !!perms.manageBookings;
+
+  const [bookings, events, notes, reminders, accountData] = await Promise.all([
+    canBookings ? prisma.booking.findMany({ where: { accountId, clientId: client.id }, orderBy: { createdAt: 'desc' }, select: { id: true, eventName: true, eventDate: true, eventType: true, bookingStatus: true, completedAt: true, deletedAt: true, convertedEventId: true, createdAt: true, proposal: true } }) : [],
+    canEvents ? prisma.event.findMany({ where: { accountId, clientId: client.id }, orderBy: { createdAt: 'desc' }, select: { id: true, name: true, eventDate: true, eventType: true, eventStatus: true, completedAt: true, deletedAt: true, createdAt: true } }) : [],
+    prisma.clientNote.findMany({ where: { accountId, clientId: client.id }, orderBy: { createdAt: 'desc' }, take: 100 }),
+    prisma.reminder.findMany({ where: { accountId, relatedType: 'client', relatedId: client.id, completedAt: null }, orderBy: { remindAt: 'asc' }, select: { id: true, note: true, remindAt: true } }),
+    prisma.accountData.findUnique({ where: { accountId }, select: { data: true } }),
+  ]);
+  const liveBookings = bookings.filter((b) => !b.deletedAt);
+  const liveEvents = events.filter((e) => !e.deletedAt);
+  const bookingIds = bookings.map((b) => b.id);
+  const [contracts, invoices, threads] = await Promise.all([
+    canBookings && bookingIds.length ? prisma.contract.findMany({ where: { accountId, bookingId: { in: bookingIds } }, select: { id: true, bookingId: true, displayNumber: true, status: true, sentAt: true, createdAt: true, clientSignedAt: true, ownerSignedAt: true } }) : [],
+    canBookings && bookingIds.length ? prisma.invoice.findMany({ where: { accountId, bookingId: { in: bookingIds } }, orderBy: { createdAt: 'desc' } }) : [],
+    canEmail ? prisma.inboxThread.findMany({ where: { accountId, clientId: client.id }, select: { id: true } }) : [],
+  ]);
+  const messages = threads.length ? await prisma.inboxMessage.findMany({ where: { threadId: { in: threads.map((t) => t.id) } }, orderBy: { createdAt: 'desc' }, take: 60, select: { direction: true, subject: true, createdAt: true } }) : [];
+
+  const statuses = accountData?.data?.eventStatuses || [];
+  const counts = { pending: 0, confirmed: 0, declined: 0 };
+  for (const event of liveEvents) counts[eventCountBucket(statuses, event.eventStatus)] += 1;
+
+  const bookingStatuses = accountData?.data?.bookingStatuses || [];
+  const labelOf = (list, id) => (id ? list.find((status) => status.id === id)?.label || null : null);
+  const bookingName = new Map(bookings.map((b) => [b.id, b.eventName || 'Untitled booking']));
+  const money = canBookings ? summarizeClientMoney(invoices) : null;
+  const today = new Date().toISOString().slice(0, 10);
+  const upcoming = liveEvents.filter((e) => !e.completedAt && e.eventDate && e.eventDate >= today).sort((a, b) => (a.eventDate < b.eventDate ? -1 : 1))[0] || null;
+  const lastContactAt = [...messages.map((m) => m.createdAt), ...notes.filter((n) => n.type === 'call' || n.type === 'meeting').map((n) => n.createdAt)].sort((a, b) => b - a)[0] || null;
+
+  res.json({
+    client: serializeClient(client),
+    access: { bookings: canBookings, events: canEvents, email: canEmail },
+    stats: { eventCounts: counts, bookingCount: liveBookings.length, eventCount: liveEvents.length, money, nextEvent: upcoming ? { id: upcoming.id, name: upcoming.name, eventDate: upcoming.eventDate } : null, lastContactAt },
+    followUps: reminders,
+    bookings: liveBookings.map((b) => ({ id: b.id, eventName: b.eventName, eventDate: b.eventDate, eventType: b.eventType, bookingStatus: b.bookingStatus, statusLabel: labelOf(bookingStatuses, b.bookingStatus), completedAt: b.completedAt, convertedEventId: b.convertedEventId, createdAt: b.createdAt })),
+    events: liveEvents.map((e) => ({ id: e.id, name: e.name, eventDate: e.eventDate, eventType: e.eventType, eventStatus: e.eventStatus, statusLabel: labelOf(statuses, e.eventStatus), completedAt: e.completedAt })),
+    invoices: invoices.map((i) => ({ id: i.id, bookingId: i.bookingId, bookingName: bookingName.get(i.bookingId), displayNumber: i.displayNumber, status: i.status, total: invoiceTotal(i), paidAmount: i.paidAmount ?? 0, dueDate: i.dueDate, sentAt: i.sentAt, paidAt: i.paidAt })),
+    contracts: contracts.map((c) => ({ id: c.id, bookingId: c.bookingId, bookingName: bookingName.get(c.bookingId), displayNumber: c.displayNumber, status: c.status, sentAt: c.sentAt || c.createdAt, clientSignedAt: c.clientSignedAt })),
+    timeline: buildClientTimeline({ client, bookings: liveBookings, events: liveEvents, contracts: contracts.filter((c) => c.status !== 'superseded'), invoices, messages, notes }),
+  });
 }));
 
 router.get('/:id/notes', asyncHandler(async (req, res) => {

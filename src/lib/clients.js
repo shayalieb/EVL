@@ -16,6 +16,10 @@ export async function getClient(id) {
   return data.client;
 }
 
+export async function getClientOverview(id) {
+  return apiFetch(`/clients/${encodeURIComponent(id)}/overview`);
+}
+
 export async function createClient(patch) {
   const data = await apiFetch('/clients', { method: 'POST', body: JSON.stringify(patch) });
   return data.client;

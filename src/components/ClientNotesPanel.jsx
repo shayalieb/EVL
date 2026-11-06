@@ -32,7 +32,7 @@ function tomorrow() {
 // Notes log + follow-up reminders for one saved client. Lives inside the
 // client modal, so follow-ups are created inline rather than by stacking the
 // Reminder modal on top of it.
-export default function ClientNotesPanel({ client, canEdit }) {
+export default function ClientNotesPanel({ client, canEdit, onChanged, bare = false }) {
   const { currentUser, role } = useAuth();
   const clientId = client.id;
   const clientName = `${client.firstName} ${client.lastName}`.trim();
@@ -69,6 +69,8 @@ export default function ClientNotesPanel({ client, canEdit }) {
 
   useEffect(() => { setLoading(true); load(); }, [load]);
 
+  const reload = useCallback(async () => { await load(); onChanged?.(); }, [load, onChanged]);
+
   async function addNote(e) {
     e.preventDefault();
     if (!draft.trim()) return;
@@ -76,12 +78,12 @@ export default function ClientNotesPanel({ client, canEdit }) {
     try {
       await createClientNote(clientId, { body: draft, type: draftType, pinned: draftPinned });
       setDraft(''); setDraftType('general'); setDraftPinned(false);
-      await load();
+      await reload();
     } catch (err) { setError(err.message); } finally { setSaving(false); }
   }
 
   async function run(action) {
-    try { await action(); await load(); } catch (err) { setError(err.message); }
+    try { await action(); await reload(); } catch (err) { setError(err.message); }
   }
 
   async function addFollowUp(e) {
@@ -101,7 +103,7 @@ export default function ClientNotesPanel({ client, canEdit }) {
         emailTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
       setFollowNote(''); setFollowOpen(false); setFollowEmail(false); setFollowDate(tomorrow());
-      await load();
+      await reload();
     } catch (err) { setError(err.message); } finally { setSaving(false); }
   }
 
@@ -109,7 +111,7 @@ export default function ClientNotesPanel({ client, canEdit }) {
   const canModify = (note) => canEdit && (isManager || note.authorUserId === currentUser?.id);
 
   return (
-    <section data-testid="client-notes-panel" className="mt-6 border-t border-slate-100 pt-4 space-y-4">
+    <section data-testid="client-notes-panel" className={`space-y-4 ${bare ? 'pt-4' : 'mt-6 border-t border-slate-100 pt-4'}`}>
       {error && <div role="alert" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
       {pinned && (

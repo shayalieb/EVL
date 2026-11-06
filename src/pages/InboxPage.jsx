@@ -29,7 +29,7 @@ function RecordPicker({ type, value, onChange }) {
       {value && !items.some((item) => item.id === value) && <option value={value}>Current {label}</option>}
       {items.map((item) => <option key={item.id} value={item.id}>{type === 'clients' ? `${item.firstName} ${item.lastName}` : item.eventName || 'Untitled booking'}</option>)}
     </select>
-    {value && <Link className="text-sm text-indigo-600" to={type === 'clients' ? `/clients?open=${encodeURIComponent(value)}` : `/bookings/${encodeURIComponent(value)}`}>Open {label} ↗</Link>}
+    {value && <Link className="text-sm text-indigo-600" to={type === 'clients' ? `/clients/${encodeURIComponent(value)}` : `/bookings/${encodeURIComponent(value)}`}>Open {label} ↗</Link>}
     {error && <span className="text-xs text-red-600">{error}</span>}
   </div>;
 }

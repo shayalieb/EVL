@@ -18,7 +18,7 @@ export async function fetchReminders({ all = false } = {}) {
 export function relatedRecordPath(reminder) {
   if (!reminder?.relatedType || !reminder?.relatedId) return null;
   switch (reminder.relatedType) {
-    case 'client': return `/clients?open=${reminder.relatedId}`;
+    case 'client': return `/clients/${reminder.relatedId}`;
     case 'contractor': return `/contractors?open=${reminder.relatedId}`;
     case 'venue': return `/venues?open=${reminder.relatedId}`;
     case 'event': return `/events/${reminder.relatedId}`;

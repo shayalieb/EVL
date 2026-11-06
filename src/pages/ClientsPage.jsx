@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import ClientModal from '../components/ClientModal';
@@ -150,18 +150,9 @@ export default function ClientsPage() {
                 return (
                   <tr key={c.id} data-testid="client-row" className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                     <td className="px-4 py-3 font-medium text-slate-800">
-                      {canEdit ? (
-                        <button
-                          type="button"
-                          onClick={() => openEdit(c)}
-                          data-testid="client-row-name-link"
-                          className="py-2 hover:text-indigo-600 hover:underline text-left"
-                        >
-                          {c.firstName} {c.lastName}
-                        </button>
-                      ) : (
-                        <span>{c.firstName} {c.lastName}</span>
-                      )}
+                      <Link to={`/clients/${c.id}`} data-testid="client-row-name-link" className="inline-block py-2 text-left hover:text-indigo-600 hover:underline">
+                        {c.firstName} {c.lastName}
+                      </Link>
                     </td>
                     <td className="px-4 py-3 text-slate-500">{c.phone || '—'}</td>
                     <td className="hidden sm:table-cell px-4 py-3 text-slate-500">{c.email || '—'}</td>

@@ -14,7 +14,7 @@ const emptyForm = {
   notes: '',
 };
 
-export default function ClientModal({ open, onClose, client, onSaved }) {
+export default function ClientModal({ open, onClose, client, onSaved, hideNotes = false }) {
   const { addClient, updateClient } = useData();
   const { can } = useAuth();
   const [form, setForm] = useState(emptyForm);
@@ -58,7 +58,7 @@ export default function ClientModal({ open, onClose, client, onSaved }) {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={client ? 'Edit Client' : 'Add Client'} widthClass={client ? 'max-w-2xl' : 'max-w-lg'}>
+    <Modal open={open} onClose={onClose} title={client ? 'Edit Client' : 'Add Client'} widthClass={client && !hideNotes ? 'max-w-2xl' : 'max-w-lg'}>
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <div data-testid="client-modal-error-banner" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</div>}
 
@@ -126,7 +126,7 @@ export default function ClientModal({ open, onClose, client, onSaved }) {
           </div>
         </div>
 
-        {!client && (
+        {!client && !hideNotes && (
           <div>
             <label className={labelClass}>Client Notes</label>
             <textarea rows={2} value={form.notes} onChange={(e) => update('notes', e.target.value)} data-testid="client-modal-notes-textarea" className={inputClass} />
@@ -140,7 +140,7 @@ export default function ClientModal({ open, onClose, client, onSaved }) {
           </button>
         </div>
       </form>
-      {client && <ClientNotesPanel client={client} canEdit={can('manageClients')} />}
+      {client && !hideNotes && <ClientNotesPanel client={client} canEdit={can('manageClients')} />}
     </Modal>
   );
 }

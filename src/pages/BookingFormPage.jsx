@@ -487,7 +487,7 @@ export default function BookingFormPage() {
     return () => { cancelled = true; };
   }, [bookingId, loadBooking]);
 
-  const [form, setForm] = useState(() => ({ ...emptyForm(), groupId: initialTabSearchParams.get('groupId') || '' }));
+  const [form, setForm] = useState(() => ({ ...emptyForm(), groupId: initialTabSearchParams.get('groupId') || '', clientId: initialTabSearchParams.get('clientId') || '' }));
   const businessInfo = useAgencyBranding(form.groupId, currentUser?.businessInfo, currentUser?.planTier === 'agency');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
