@@ -21,6 +21,13 @@ const RULES = [
   { key: 'proposalNoResponseDays', default: 5, label: 'Proposal awaiting response', description: 'Remind when a sent proposal has gone this many days without a client response.' },
 ];
 
+// Client-level rules: an on/off switch plus how far to look. These have their own
+// limits (rebooking looks back months, not days), so they sit outside RULES.
+const CLIENT_RULES = [
+  { enabledKey: 'clientRebookEnabled', key: 'clientRebookMonths', default: 11, min: 1, max: 36, unit: 'months', label: 'Past client — time to rebook', description: 'Remind when a client’s latest event was this long ago and nothing new is booked or in progress.' },
+  { enabledKey: 'clientAnniversaryEnabled', key: 'clientAnniversaryLeadDays', default: 7, min: 0, max: 30, unit: 'days ahead', label: 'Event anniversary', description: 'Remind this many days before the anniversary of a client’s past event, so you can send a note.' },
+];
+
 const TOGGLES = [
   { key: 'inquiryEmailEnabled', label: 'Email me about new inquiries', description: 'Notify the account member who created the link, falling back to the account owner.' },
   { key: 'inquiryReminderEnabled', label: 'Keep an inquiry reminder in GigWorks', description: 'Keep the reminder open until the inquiry is applied to a booking or removed.' },
@@ -33,7 +40,7 @@ export default function ReminderRulesTab() {
   const { showToast } = useToast();
   const [form, setForm] = useState(() => {
     const saved = currentUser.reminderSettings || {};
-    return { ...saved, ...Object.fromEntries(RULES.map((r) => [r.key, saved[r.key] ?? r.default])), ...Object.fromEntries(TOGGLES.map((r) => [r.key, saved[r.key] ?? true])), invoiceReminderRecipient: saved.invoiceReminderRecipient || 'owner' };
+    return { ...saved, ...Object.fromEntries(RULES.map((r) => [r.key, saved[r.key] ?? r.default])), ...Object.fromEntries(TOGGLES.map((r) => [r.key, saved[r.key] ?? true])), ...Object.fromEntries(CLIENT_RULES.flatMap((r) => [[r.enabledKey, saved[r.enabledKey] ?? true], [r.key, saved[r.key] ?? r.default]])), invoiceReminderRecipient: saved.invoiceReminderRecipient || 'owner' };
   });
 
   function update(key, value) {
@@ -43,7 +50,11 @@ export default function ReminderRulesTab() {
 
   function handleSubmit(e) {
     e.preventDefault();
-    const cleaned = { ...form, ...Object.fromEntries(RULES.map((r) => [r.key, form[r.key] === '' ? r.default : Math.max(r.min || 0, form[r.key])])) };
+    const cleaned = {
+      ...form,
+      ...Object.fromEntries(RULES.map((r) => [r.key, form[r.key] === '' ? r.default : Math.max(r.min || 0, form[r.key])])),
+      ...Object.fromEntries(CLIENT_RULES.map((r) => [r.key, form[r.key] === '' ? r.default : Math.min(r.max, Math.max(r.min, Number(form[r.key]) || r.default))])),
+    };
     updateCurrentUser({ reminderSettings: cleaned });
     showToast('Reminder rules saved');
   }
@@ -68,6 +79,31 @@ export default function ReminderRulesTab() {
             <option value="both">Both</option>
           </select>
         </label>
+        {CLIENT_RULES.map((r) => (
+          <div key={r.key} className="flex items-center justify-between gap-4 px-4 py-3">
+            <label className="flex min-w-0 items-start gap-3">
+              <input type="checkbox" className="mt-1" checked={form[r.enabledKey]} disabled={!canEdit} onChange={(e) => setForm((f) => ({ ...f, [r.enabledKey]: e.target.checked }))} data-testid={`reminder-rules-${r.enabledKey}-toggle`} />
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-slate-700">{r.label}</span>
+                <span className="mt-0.5 block text-xs text-slate-400">{r.description}</span>
+              </span>
+            </label>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <input
+                type="number"
+                aria-label={r.label}
+                min={r.min}
+                max={r.max}
+                disabled={!canEdit || !form[r.enabledKey]}
+                value={form[r.key]}
+                onChange={(e) => setForm((f) => ({ ...f, [r.key]: e.target.value === '' ? '' : Math.max(r.min, Math.min(r.max, Number(e.target.value) || 0)) }))}
+                data-testid={`reminder-rules-${r.key}-input`}
+                className={`${inputClass} disabled:bg-slate-50 disabled:text-slate-400`}
+              />
+              <span className="w-16 text-xs text-slate-400">{r.unit}</span>
+            </div>
+          </div>
+        ))}
         {RULES.map((r) => (
           <div key={r.key} className="flex items-center justify-between gap-4 px-4 py-3">
             <div className="min-w-0">

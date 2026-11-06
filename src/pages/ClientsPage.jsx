@@ -11,7 +11,7 @@ import SearchInput from '../components/ui/SearchInput';
 import FilterSelect from '../components/ui/FilterSelect';
 import Pagination from '../components/ui/Pagination';
 import { useToast } from '../components/ui/Toast';
-import { CLIENT_STAGES, listClientTags, queryClients, stageInfo } from '../lib/clients';
+import { CLIENT_STAGES, getClientInsights, listClientTags, queryClients, stageInfo } from '../lib/clients';
 import { formatCurrency } from '../lib/format';
 import { useServerList } from '../lib/useServerList';
 
@@ -41,6 +41,7 @@ export default function ClientsPage() {
   const [followUp, setFollowUp] = useState('');
   const [noContactDays, setNoContactDays] = useState('');
   const [tagOptions, setTagOptions] = useState([]);
+  const [insights, setInsights] = useState(null);
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState('lastName');
   const [searchParams, setSearchParams] = useSearchParams();
@@ -56,6 +57,7 @@ export default function ClientsPage() {
   }, [searchParams, loadClient]);
 
   useEffect(() => { listClientTags().then(setTagOptions).catch(() => {}); }, []);
+  useEffect(() => { if (canSeeMoney) getClientInsights().then(setInsights).catch(() => {}); }, [canSeeMoney]);
 
   const filters = {
     search, engagement: engagementFilter, stage: stageFilter, tag: tagFilter, owes,
@@ -122,6 +124,23 @@ export default function ClientsPage() {
           + Add Client
         </button>
       </div>
+
+      {insights && insights.clientsWithEvents > 0 && (
+        <div data-testid="clients-insights" className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[
+            ['Repeat clients', insights.repeatRate == null ? '—' : `${Math.round(insights.repeatRate * 100)}%`, `${insights.repeatClients} of ${insights.clientsWithEvents} with events`],
+            ['Avg booking value', insights.avgBookingValue == null ? '—' : formatCurrency(insights.avgBookingValue), 'per invoiced booking'],
+            ['Avg days to pay', insights.avgDaysToPay == null ? '—' : String(insights.avgDaysToPay), 'invoice sent to paid'],
+            ['Outstanding', formatCurrency(insights.outstanding), insights.overdue > 0 ? `${formatCurrency(insights.overdue)} overdue` : 'nothing overdue'],
+          ].map(([label, value, sub]) => (
+            <div key={label} className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</div>
+              <div className="mt-1 text-lg font-bold text-slate-800">{value}</div>
+              <div className="text-xs text-slate-400">{sub}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="flex items-center gap-2 flex-wrap mb-4">
         <SearchInput value={search} onChange={setSearch} placeholder="Search name, phone, email, notes…" className="w-full sm:w-80" testId="clients-search-input" />

@@ -23,6 +23,49 @@ export function summarizeClientMoney(invoices) {
   return { billed: money(billed), paid: money(paid), outstanding: money(outstanding), overdue: money(overdue) };
 }
 
+const round1 = (n) => Math.round(n * 10) / 10;
+
+// How a client pays: average booking value (billed per invoiced booking) and
+// average days from sending an invoice to it being paid. Drafts and voids are ignored.
+export function summarizeClientPayments(invoices) {
+  const billedByBooking = new Map();
+  const days = [];
+  for (const invoice of invoices) {
+    if (invoice.status === 'draft' || invoice.status === 'void') continue;
+    billedByBooking.set(invoice.bookingId, (billedByBooking.get(invoice.bookingId) || 0) + invoiceTotal(invoice));
+    if (invoice.paidAt && invoice.sentAt) {
+      const elapsed = (new Date(invoice.paidAt).getTime() - new Date(invoice.sentAt).getTime()) / 86_400_000;
+      if (Number.isFinite(elapsed) && elapsed >= 0) days.push(elapsed);
+    }
+  }
+  const bookings = [...billedByBooking.values()];
+  return {
+    avgBookingValue: bookings.length ? money(bookings.reduce((a, b) => a + b, 0) / bookings.length) : null,
+    avgDaysToPay: days.length ? round1(days.reduce((a, b) => a + b, 0) / days.length) : null,
+    paidInvoiceCount: days.length,
+  };
+}
+
+export const SLOW_PAYER_DAYS = 14;
+export const SILENT_ACTIVE_DAYS = 45;
+export const UNSIGNED_CONTRACT_DAYS = 3;
+
+// Things worth a glance before you contact this client. Each flag is a key plus
+// a detail the UI words; none of them is a verdict, just a prompt.
+export function clientFlags({ money: m, payments, openWork, lastContactAt, createdAt, contracts = [], now = Date.now() }) {
+  const flags = [];
+  if (m?.overdue > 0) flags.push({ key: 'overdue_balance', detail: m.overdue });
+  if (payments && payments.paidInvoiceCount >= 2 && payments.avgDaysToPay > SLOW_PAYER_DAYS) flags.push({ key: 'slow_payer', detail: payments.avgDaysToPay });
+  const stale = contracts.find((c) => c.status !== 'fully_signed' && c.status !== 'superseded' && c.sentAt && now - new Date(c.sentAt).getTime() > UNSIGNED_CONTRACT_DAYS * 86_400_000);
+  if (stale) flags.push({ key: 'unsigned_contract', detail: stale.displayNumber });
+  if (openWork) {
+    const since = new Date(lastContactAt || createdAt).getTime();
+    const quiet = Math.floor((now - since) / 86_400_000);
+    if (quiet > SILENT_ACTIVE_DAYS) flags.push({ key: 'silent', detail: quiet });
+  }
+  return flags;
+}
+
 // One chronological feed across everything that happened with a client. Every
 // input is optional because each source is gated by its own permission.
 export function buildClientTimeline({ client, bookings = [], events = [], contracts = [], invoices = [], messages = [], notes = [], limit = 150 }) {

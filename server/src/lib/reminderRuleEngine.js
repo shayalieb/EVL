@@ -1,6 +1,11 @@
 import { syncNotificationAutomations } from './notificationAutomation.js';
 import { prisma } from './prisma.js';
 import { withBackgroundJobLease } from './backgroundJobLease.js';
+import { EMPTY_SIGNALS, loadClientSignals } from './clientInsights.js';
+import {
+  ANNIVERSARY_KEY_PREFIX, MAX_REBOOK_MONTHS, REBOOK_KEY_PREFIX, addMonthsISO, anniversaryKey,
+  anniversaryWindow, boundedInt, parseAnniversaryKey, parseRebookKey, rebookKey, yearsBetween,
+} from './clientReminderRules.js';
 
 // Deliberately much slower than reminderScheduler.js's 60s send-loop — these
 // conditions (an event's date, an invoice's due date, a vendor's confirmed
@@ -20,6 +25,11 @@ const DEFAULT_THRESHOLDS = {
   followUpGraceDays: 0,
   eventNotCompletedGraceDays: 1,
   proposalNoResponseDays: 5,
+  // Client-level rules (see createClientRebookReminders / createClientAnniversaryReminders).
+  clientRebookEnabled: true,
+  clientRebookMonths: 11,
+  clientAnniversaryEnabled: true,
+  clientAnniversaryLeadDays: 7,
 };
 
 const EVENT_RULE_KEY = 'event-unconfirmed';
@@ -344,6 +354,178 @@ async function createProposalNoResponseReminders(thresholdsByAccount) {
   await createAutoReminders(toCreate);
 }
 
+
+const CLOSED_EVENT_LABELS = new Set(['cancelled', 'canceled', 'declined', 'lost']);
+function isClosedEvent(statuses, statusId) {
+  const label = statuses.find((s) => s.id === statusId)?.label || statusId || '';
+  return CLOSED_EVENT_LABELS.has(String(label).trim().toLowerCase());
+}
+async function eventStatusesByAccount(accountIds) {
+  const rows = accountIds.length ? await prisma.accountData.findMany({ where: { accountId: { in: accountIds } }, select: { accountId: true, data: true } }) : [];
+  return new Map(rows.map((row) => [row.accountId, row.data?.eventStatuses || []]));
+}
+const clientLabel = (c) => `${c.firstName || ''} ${c.lastName || ''}`.trim() || 'This client';
+
+// A past client who has gone quiet: their latest real event was N+ months ago
+// and nothing is open. One reminder per "last event" date, so a new event
+// re-arms the rule for next time. Stops after MAX_REBOOK_MONTHS.
+async function createClientRebookReminders(thresholdsByAccount) {
+  const today = todayISO();
+  const events = await prisma.event.findMany({
+    where: { deletedAt: null, clientId: { not: null }, eventDate: { gte: addMonthsISO(today, -MAX_REBOOK_MONTHS) } },
+    select: { accountId: true, clientId: true, eventDate: true, eventStatus: true },
+  });
+  if (!events.length) return;
+  const accountIds = [...new Set(events.map((e) => e.accountId))];
+  const [statusesByAccount, ownerUserIdsByAccount] = await Promise.all([eventStatusesByAccount(accountIds), getOwnerUserIdsByAccount(accountIds)]);
+
+  const byClient = new Map();
+  for (const e of events) {
+    if (isClosedEvent(statusesByAccount.get(e.accountId) || [], e.eventStatus)) continue;
+    const key = `${e.accountId}:${e.clientId}`;
+    const entry = byClient.get(key) || { accountId: e.accountId, clientId: e.clientId, last: null, upcoming: false };
+    if (e.eventDate > today) entry.upcoming = true;
+    else if (!entry.last || e.eventDate > entry.last) entry.last = e.eventDate;
+    byClient.set(key, entry);
+  }
+
+  const dueByAccount = new Map();
+  for (const entry of byClient.values()) {
+    if (entry.upcoming || !entry.last) continue;
+    if (!thresholdFor(thresholdsByAccount, entry.accountId, 'clientRebookEnabled')) continue;
+    const months = boundedInt(thresholdFor(thresholdsByAccount, entry.accountId, 'clientRebookMonths'), 11, 1, MAX_REBOOK_MONTHS);
+    if (entry.last > addMonthsISO(today, -months)) continue;
+    if (!dueByAccount.has(entry.accountId)) dueByAccount.set(entry.accountId, []);
+    dueByAccount.get(entry.accountId).push({ ...entry, months });
+  }
+
+  const toCreate = [];
+  for (const [accountId, entries] of dueByAccount) {
+    const createdByUserId = ownerUserIdsByAccount.get(accountId);
+    if (!createdByUserId) continue;
+    const ids = entries.map((e) => e.clientId);
+    const [clients, signals] = await Promise.all([
+      prisma.client.findMany({ where: { accountId, id: { in: ids } }, select: { id: true, firstName: true, lastName: true, stage: true } }),
+      loadClientSignals(prisma, accountId, ids),
+    ]);
+    const clientById = new Map(clients.map((c) => [c.id, c]));
+    for (const entry of entries) {
+      const client = clientById.get(entry.clientId);
+      if (!client || client.stage === 'do_not_contact') continue;
+      if ((signals.get(entry.clientId) || EMPTY_SIGNALS).openWork) continue;
+      toCreate.push({
+        accountId, createdByUserId,
+        relatedType: 'client', relatedId: client.id, relatedName: clientLabel(client),
+        ruleKey: rebookKey(entry.last),
+        note: `${clientLabel(client)}'s last event was on ${entry.last}, over ${entry.months} month${entry.months === 1 ? '' : 's'} ago and nothing new is booked. A good time to reach out about rebooking.`,
+      });
+    }
+  }
+  await createAutoReminders(toCreate);
+}
+
+// "A year ago this week you worked X's event" — a prompt to send a note.
+// One reminder per event per year, created `clientAnniversaryLeadDays` ahead.
+async function createClientAnniversaryReminders(thresholdsByAccount) {
+  const today = todayISO();
+  const window = anniversaryWindow(today, 30);
+  const events = await prisma.event.findMany({
+    where: { deletedAt: null, clientId: { not: null }, eventDate: { lt: today }, OR: window.map((w) => ({ eventDate: { endsWith: w.suffix } })) },
+    select: { id: true, accountId: true, clientId: true, name: true, eventDate: true, eventStatus: true },
+  });
+  if (!events.length) return;
+  const accountIds = [...new Set(events.map((e) => e.accountId))];
+  const [statusesByAccount, ownerUserIdsByAccount] = await Promise.all([eventStatusesByAccount(accountIds), getOwnerUserIdsByAccount(accountIds)]);
+
+  const due = [];
+  for (const event of events) {
+    if (!thresholdFor(thresholdsByAccount, event.accountId, 'clientAnniversaryEnabled')) continue;
+    if (isClosedEvent(statusesByAccount.get(event.accountId) || [], event.eventStatus)) continue;
+    const lead = boundedInt(thresholdFor(thresholdsByAccount, event.accountId, 'clientAnniversaryLeadDays'), 7, 0, 30);
+    const slot = window.slice(0, lead + 1).find((w) => event.eventDate.endsWith(w.suffix));
+    if (!slot) continue;
+    const years = yearsBetween(event.eventDate, slot.date);
+    if (years < 1) continue;
+    due.push({ event, anniversary: slot.date, years });
+  }
+  if (!due.length) return;
+
+  const clients = await prisma.client.findMany({ where: { id: { in: [...new Set(due.map((d) => d.event.clientId))] } }, select: { id: true, accountId: true, firstName: true, lastName: true, stage: true } });
+  const clientById = new Map(clients.map((c) => [`${c.accountId}:${c.id}`, c]));
+  const toCreate = [];
+  for (const { event, anniversary, years } of due) {
+    const client = clientById.get(`${event.accountId}:${event.clientId}`);
+    const createdByUserId = ownerUserIdsByAccount.get(event.accountId);
+    if (!client || !createdByUserId || client.stage === 'do_not_contact') continue;
+    toCreate.push({
+      accountId: event.accountId, createdByUserId,
+      relatedType: 'client', relatedId: client.id, relatedName: clientLabel(client),
+      ruleKey: anniversaryKey(event.id, Number(anniversary.slice(0, 4))),
+      note: `${years === 1 ? 'One year' : `${years} years`} ago (${event.eventDate}) you did ${event.name || 'an event'} for ${clientLabel(client)}. The anniversary is ${anniversary} — a nice moment to send a note.`,
+    });
+  }
+  await createAutoReminders(toCreate);
+}
+
+// Same promise as completeResolvedReminders: never email about something that
+// has since stopped being true. Rebook reminders resolve when the client books
+// again (or is marked do-not-contact); anniversaries resolve once the day has passed.
+async function completeResolvedClientReminders() {
+  const pending = await prisma.reminder.findMany({
+    where: {
+      autoGenerated: true, emailSentAt: null, emailClaimedAt: null, completedAt: null,
+      OR: [{ ruleKey: { startsWith: REBOOK_KEY_PREFIX } }, { ruleKey: { startsWith: ANNIVERSARY_KEY_PREFIX } }],
+    },
+    select: { id: true, accountId: true, relatedId: true, ruleKey: true },
+  });
+  if (!pending.length) return;
+  const today = todayISO();
+
+  const clientIds = [...new Set(pending.map((r) => r.relatedId))];
+  const clients = await prisma.client.findMany({ where: { id: { in: clientIds } }, select: { id: true, accountId: true, stage: true } });
+  const clientByKey = new Map(clients.map((c) => [`${c.accountId}:${c.id}`, c]));
+
+  const rebook = pending.filter((r) => parseRebookKey(r.ruleKey));
+  const openWorkByKey = new Map();
+  const newerEventByKey = new Set();
+  for (const accountId of [...new Set(rebook.map((r) => r.accountId))]) {
+    const mine = rebook.filter((r) => r.accountId === accountId);
+    const ids = [...new Set(mine.map((r) => r.relatedId))];
+    const signals = await loadClientSignals(prisma, accountId, ids);
+    for (const id of ids) openWorkByKey.set(`${accountId}:${id}`, !!signals.get(id)?.openWork);
+    const earliest = mine.map((r) => parseRebookKey(r.ruleKey)).sort()[0];
+    const later = await prisma.event.findMany({ where: { accountId, clientId: { in: ids }, deletedAt: null, eventDate: { gt: earliest } }, select: { clientId: true, eventDate: true } });
+    for (const r of mine) {
+      const last = parseRebookKey(r.ruleKey);
+      if (later.some((e) => e.clientId === r.relatedId && e.eventDate > last)) newerEventByKey.add(r.id);
+    }
+  }
+
+  const anniversary = pending.filter((r) => parseAnniversaryKey(r.ruleKey));
+  const annEvents = anniversary.length
+    ? await prisma.event.findMany({ where: { id: { in: anniversary.map((r) => parseAnniversaryKey(r.ruleKey).eventId) } }, select: { id: true, accountId: true, eventDate: true, deletedAt: true } })
+    : [];
+  const annEventById = new Map(annEvents.map((e) => [e.id, e]));
+
+  const toComplete = [];
+  for (const r of pending) {
+    const client = clientByKey.get(`${r.accountId}:${r.relatedId}`);
+    if (!client || client.stage === 'do_not_contact') { toComplete.push(r.id); continue; }
+    if (parseRebookKey(r.ruleKey)) {
+      if (openWorkByKey.get(`${r.accountId}:${r.relatedId}`) || newerEventByKey.has(r.id)) toComplete.push(r.id);
+      continue;
+    }
+    const parsed = parseAnniversaryKey(r.ruleKey);
+    const event = parsed && annEventById.get(parsed.eventId);
+    if (!event || event.accountId !== r.accountId || event.deletedAt || `${parsed.year}${event.eventDate.slice(4)}` < today) toComplete.push(r.id);
+  }
+  if (!toComplete.length) return;
+  await prisma.reminder.updateMany({
+    where: { id: { in: toComplete }, emailClaimedAt: null, emailSentAt: null, completedAt: null },
+    data: { completedAt: new Date() },
+  });
+}
+
 // Auto-generated reminders whose underlying condition has since resolved
 // (event fully confirmed, invoice paid/void/deleted, deposit paid, contract
 // signed, follow-up done, event completed, proposal responded to) get
@@ -474,7 +656,10 @@ export async function tick() {
       await createFollowUpReminders(thresholdsByAccount);
       await createEventNotCompletedReminders(thresholdsByAccount);
       await createProposalNoResponseReminders(thresholdsByAccount);
+      await createClientRebookReminders(thresholdsByAccount);
+      await createClientAnniversaryReminders(thresholdsByAccount);
       await completeResolvedReminders();
+      await completeResolvedClientReminders();
     });
   } catch (err) {
     console.error('Reminder rule engine tick failed:', err);

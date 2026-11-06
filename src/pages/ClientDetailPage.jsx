@@ -26,6 +26,13 @@ const KIND_STYLES = {
 const INVOICE_COLORS = { draft: '#94a3b8', sent: '#0ea5e9', partial: '#d97706', paid: '#059669', void: '#94a3b8' };
 const CONTRACT_LABELS = { sent: 'Sent', owner_signed: 'Countersigned', client_signed: 'Signed by client', fully_signed: 'Fully signed' };
 
+const FLAG_TEXT = {
+  overdue_balance: (d) => `Overdue balance of ${formatCurrency(d)}`,
+  slow_payer: (d) => `Usually pays about ${Math.round(d)} days after the invoice is sent`,
+  unsigned_contract: (d) => `Contract #${d} is still waiting for their signature`,
+  silent: (d) => `Open work, but no contact for ${d} days`,
+};
+
 function formatDateTime(value) {
   return new Date(value).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
@@ -123,6 +130,11 @@ export default function ClientDetailPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-6">
+          {overview.flags?.length > 0 && (
+            <ul data-testid="client-flags" className="space-y-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {overview.flags.map((f) => <li key={f.key} data-testid="client-flag">⚠ {FLAG_TEXT[f.key]?.(f.detail) || f.key}</li>)}
+            </ul>
+          )}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {money && <Stat label="Lifetime paid" value={formatCurrency(money.paid)} testId="client-stat-paid" />}
             {money && <Stat label="Balance due" value={formatCurrency(money.outstanding)} tone={money.overdue > 0 ? 'text-rose-600' : money.outstanding > 0 ? 'text-amber-600' : ''} testId="client-stat-balance" />}
@@ -133,6 +145,14 @@ export default function ClientDetailPage() {
             />
             <Stat label="Last contact" value={stats.lastContactAt ? new Date(stats.lastContactAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—'} testId="client-stat-last-contact" />
           </div>
+          {overview.insights && (
+            <div data-testid="client-insights" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <Stat label="Events" value={<>{overview.insights.eventCount}{overview.insights.repeatClient && <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 align-middle text-[11px] font-semibold text-emerald-700">Repeat client</span>}</>} testId="client-insight-events" />
+              <Stat label="Avg booking value" value={overview.insights.avgBookingValue == null ? '—' : formatCurrency(overview.insights.avgBookingValue)} testId="client-insight-avg-value" />
+              <Stat label="Avg days to pay" value={overview.insights.avgDaysToPay == null ? '—' : `${overview.insights.avgDaysToPay} days`} testId="client-insight-days-to-pay" />
+              <Stat label="Billed to date" value={formatCurrency(money?.billed || 0)} />
+            </div>
+          )}
           <ClientContactsPanel clientId={client.id} contacts={overview.contacts} canEdit={canEdit} onChanged={load} />
           <div className="rounded-xl border border-slate-200 bg-white px-4 pb-4">
             <ClientNotesPanel client={client} canEdit={canEdit} onChanged={load} bare />

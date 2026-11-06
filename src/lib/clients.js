@@ -153,3 +153,8 @@ export async function updateClientCompany(id, patch) {
 export async function deleteClientCompany(id) {
   return apiFetch(`/client-companies/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
+
+export async function getClientInsights() {
+  const data = await apiFetch('/clients/insights');
+  return data.insights;
+}

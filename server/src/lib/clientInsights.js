@@ -1,4 +1,4 @@
-import { summarizeClientMoney } from './clientOverview.js';
+import { summarizeClientMoney, summarizeClientPayments } from './clientOverview.js';
 
 export const CLIENT_STAGES = ['lead', 'active', 'past', 'vip', 'do_not_contact'];
 export const MAX_TAGS = 12;
@@ -54,14 +54,17 @@ const closedLabel = (statuses, id) => CLOSED_LABELS.has(String(statuses.find((s)
 export async function loadClientSignals(prisma, accountId, clientIds = null) {
   const clientFilter = clientIds ? { in: clientIds } : { not: null };
   const [bookings, events, notes, accountData] = await Promise.all([
-    prisma.booking.findMany({ where: { accountId, clientId: clientFilter }, select: { id: true, clientId: true, completedAt: true, deletedAt: true, convertedEventId: true, bookingStatus: true } }),
-    prisma.event.findMany({ where: { accountId, clientId: clientFilter, deletedAt: null }, select: { clientId: true, completedAt: true, eventStatus: true } }),
+    prisma.booking.findMany({ where: { accountId, clientId: clientFilter }, select: { id: true, clientId: true, eventDate: true, completedAt: true, deletedAt: true, convertedEventId: true, bookingStatus: true } }),
+    prisma.event.findMany({ where: { accountId, clientId: clientFilter, deletedAt: null }, select: { clientId: true, eventDate: true, completedAt: true, eventStatus: true } }),
     prisma.clientNote.findMany({ where: { accountId, ...(clientIds ? { clientId: { in: clientIds } } : {}), type: { in: ['call', 'meeting'] } }, select: { clientId: true, createdAt: true } }),
     prisma.accountData.findUnique({ where: { accountId }, select: { data: true } }),
   ]);
   const eventStatuses = accountData?.data?.eventStatuses || [];
   const bookingStatuses = accountData?.data?.bookingStatuses || [];
 
+  // Work whose date has passed is no longer in progress, even if nobody marked it complete.
+  const today = new Date().toISOString().slice(0, 10);
+  const isCurrent = (eventDate) => !eventDate || eventDate >= today;
   const signals = new Map();
   const get = (id) => {
     if (!signals.has(id)) signals.set(id, { openWork: false, anyWork: false, invoices: [], lastContactAt: null });
@@ -75,12 +78,12 @@ export async function loadClientSignals(prisma, accountId, clientIds = null) {
     s.anyWork = true;
     const label = bookingStatuses.find((x) => x.id === b.bookingStatus)?.label || b.bookingStatus;
     const closed = b.completedAt || b.convertedEventId || closedLabel([], label);
-    if (!closed) s.openWork = true;
+    if (!closed && isCurrent(b.eventDate)) s.openWork = true;
   }
   for (const e of events) {
     const s = get(e.clientId);
     s.anyWork = true;
-    if (!e.completedAt && !closedLabel(eventStatuses, e.eventStatus)) s.openWork = true;
+    if (!e.completedAt && !closedLabel(eventStatuses, e.eventStatus) && isCurrent(e.eventDate)) s.openWork = true;
   }
 
   const bookingIds = [...bookingOwner.keys()];
@@ -110,3 +113,29 @@ export async function loadClientSignals(prisma, accountId, clientIds = null) {
 }
 
 export const EMPTY_SIGNALS = Object.freeze({ openWork: false, anyWork: false, lastContactAt: null, money: { billed: 0, paid: 0, outstanding: 0, overdue: 0 } });
+
+// Account-wide figures for the Clients page: how many clients come back, how
+// big their bookings are and how quickly they pay.
+export async function loadAccountClientInsights(prisma, accountId) {
+  const [clientCount, perClient, bookings] = await Promise.all([
+    prisma.client.count({ where: { accountId } }),
+    prisma.event.groupBy({ by: ['clientId'], where: { accountId, deletedAt: null, clientId: { not: null } }, _count: { _all: true } }),
+    prisma.booking.findMany({ where: { accountId }, select: { id: true } }),
+  ]);
+  const invoices = bookings.length
+    ? await prisma.invoice.findMany({ where: { accountId, bookingId: { in: bookings.map((b) => b.id) } }, select: { bookingId: true, status: true, paidAmount: true, snapshot: true, dueDate: true, sentAt: true, paidAt: true } })
+    : [];
+  const money = summarizeClientMoney(invoices);
+  const payments = summarizeClientPayments(invoices);
+  const repeatClients = perClient.filter((row) => row._count._all >= 2).length;
+  return {
+    clientCount,
+    clientsWithEvents: perClient.length,
+    repeatClients,
+    repeatRate: perClient.length ? Math.round((repeatClients / perClient.length) * 1000) / 1000 : null,
+    avgBookingValue: payments.avgBookingValue,
+    avgDaysToPay: payments.avgDaysToPay,
+    outstanding: money.outstanding,
+    overdue: money.overdue,
+  };
+}

@@ -7,9 +7,9 @@ import { attachMembership, effectivePermissions } from '../lib/membership.js';
 import { createWithPreservedId } from '../lib/idPreservingCreate.js';
 import { paginationFromRequest, paginatedResponse, listPageFromRequest, listPageResponse } from '../lib/pagination.js';
 import { normalizeValidEmail } from '../lib/emailAddress.js';
-import { summarizeClientMoney, buildClientTimeline } from '../lib/clientOverview.js';
+import { summarizeClientMoney, summarizeClientPayments, clientFlags, buildClientTimeline } from '../lib/clientOverview.js';
 import { invoiceTotal } from './invoices.js';
-import { CLIENT_STAGES, EMPTY_SIGNALS, effectiveStage, loadClientSignals, normalizeTags, sanitizeSavedViewFilters } from '../lib/clientInsights.js';
+import { CLIENT_STAGES, EMPTY_SIGNALS, effectiveStage, loadAccountClientInsights, loadClientSignals, normalizeTags, sanitizeSavedViewFilters } from '../lib/clientInsights.js';
 
 const router = Router();
 router.use(requireAuth, asyncHandler(attachMembership));
@@ -226,6 +226,11 @@ router.get('/', asyncHandler(async (req, res) => {
 // Indexed, bounded candidate lookup for inquiry reconciliation. Exact
 // email/phone matches rank first; pg_trgm handles spelling differences in
 // names without loading an account's entire client roster into the browser.
+router.get('/insights', asyncHandler(async (req, res) => {
+  if (!effectivePermissions(req.membership).viewBookings) return res.status(403).json({ error: 'Not authorized.' });
+  res.json({ insights: await loadAccountClientInsights(prisma, req.membership.accountId) });
+}));
+
 router.get('/tags', asyncHandler(async (req, res) => {
   const rows = await prisma.$queryRaw`SELECT DISTINCT unnest("tags") AS "tag" FROM "Client" WHERE "accountId" = ${req.membership.accountId} ORDER BY 1 LIMIT 200`;
   res.json({ tags: rows.map((row) => row.tag) });
@@ -340,6 +345,9 @@ router.get('/:id/overview', asyncHandler(async (req, res) => {
   const lastContactAt = [...messages.map((m) => m.createdAt), ...notes.filter((n) => n.type === 'call' || n.type === 'meeting').map((n) => n.createdAt)].sort((a, b) => b - a)[0] || null;
 
   const signal = (await loadClientSignals(prisma, accountId, [client.id])).get(client.id) || EMPTY_SIGNALS;
+  const payments = canBookings ? summarizeClientPayments(invoices) : null;
+  const flags = canBookings ? clientFlags({ money, payments, openWork: signal.openWork, lastContactAt, createdAt: client.createdAt, contracts }) : [];
+  const repeat = liveEvents.length >= 2;
   res.json({
     client: serializeClient(client),
     effectiveStage: effectiveStage({ stage: client.stage, ...signal }),
@@ -347,6 +355,8 @@ router.get('/:id/overview', asyncHandler(async (req, res) => {
     contacts: client.contacts.map(serializeContact),
     access: { bookings: canBookings, events: canEvents, email: canEmail },
     stats: { eventCounts: counts, bookingCount: liveBookings.length, eventCount: liveEvents.length, money, nextEvent: upcoming ? { id: upcoming.id, name: upcoming.name, eventDate: upcoming.eventDate } : null, lastContactAt },
+    insights: canBookings ? { ...payments, eventCount: liveEvents.length, repeatClient: repeat } : null,
+    flags,
     followUps: reminders,
     bookings: liveBookings.map((b) => ({ id: b.id, eventName: b.eventName, eventDate: b.eventDate, eventType: b.eventType, bookingStatus: b.bookingStatus, statusLabel: labelOf(bookingStatuses, b.bookingStatus), completedAt: b.completedAt, convertedEventId: b.convertedEventId, createdAt: b.createdAt })),
     events: liveEvents.map((e) => ({ id: e.id, name: e.name, eventDate: e.eventDate, eventType: e.eventType, eventStatus: e.eventStatus, statusLabel: labelOf(statuses, e.eventStatus), completedAt: e.completedAt })),

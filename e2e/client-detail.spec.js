@@ -58,6 +58,10 @@ test('client detail page: notes, pinned banner, follow-up, timeline and tabs', a
   await page.getByTestId('client-company-input').press('Enter');
   await expect(page.getByTestId('client-company-link')).toHaveText('Acme Events');
 
+  // Insights tiles render (no invoices yet, so no averages)
+  await expect(page.getByTestId('client-insights')).toBeVisible();
+  await expect(page.getByTestId('client-insight-days-to-pay')).toHaveText('—');
+
   // Timeline carries the note; other tabs render.
   await page.getByTestId('client-tab-timeline').click();
   await expect(page.getByTestId('client-timeline-item').first()).toContainText('Prefers evening calls');
